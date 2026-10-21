@@ -5,16 +5,17 @@ import { NavSidebar } from './NavSidebar';
 import { MainFeed } from './MainFeed';
 import { ConnectedStackPanel } from './ConnectedStackPanel';
 import { MobileTabBar } from './MobileTabBar';
-import type { MicroTask } from '@/types/database.types';
+import type { ConnectedAppPublic, MicroTask } from '@/types/database.types';
 import type { WorkspaceView } from './panels';
 
 interface AppShellProps {
   focusTask: MicroTask | null;
+  connectedApps: ConnectedAppPublic[];
 }
 
 // Owns only the mobile view selection. The initial state is a constant, so the
 // server render and first client render match (no hydration mismatch).
-export function AppShell({ focusTask }: AppShellProps) {
+export function AppShell({ focusTask, connectedApps }: AppShellProps) {
   const [view, setView] = useState<WorkspaceView>('feed');
 
   // Below lg only the active panel shows; from lg up all three show in a grid.
@@ -24,7 +25,7 @@ export function AppShell({ focusTask }: AppShellProps) {
     <div className="flex h-dvh flex-col lg:grid lg:grid-cols-[16rem_minmax(0,1fr)_22rem]">
       <NavSidebar className={panelClass('channels')} onNavigate={() => setView('feed')} />
       <MainFeed focusTask={focusTask} className={panelClass('feed')} />
-      <ConnectedStackPanel className={panelClass('stack')} />
+      <ConnectedStackPanel connectedApps={connectedApps} className={panelClass('stack')} />
       <MobileTabBar active={view} onChange={setView} />
     </div>
   );
