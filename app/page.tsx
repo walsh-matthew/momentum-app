@@ -1,6 +1,8 @@
 import { AppShell } from '@/components/layout/AppShell';
+import { listGoalChannels } from '@/lib/services/goals';
 import { listConnectedApps } from '@/lib/services/integrations';
-import { getFocusTask } from '@/lib/services/tasks';
+import { getFocusTask, listMicroTasks } from '@/lib/services/tasks';
+import { computeVelocity, currentPlanWeek, type VelocitySnapshot } from '@/lib/utils/velocity';
 import type { ConnectedAppPublic, MicroTask } from '@/types/database.types';
 
 // Reads the signed-in user's session, so this page renders per request.
@@ -25,7 +27,27 @@ async function loadConnectedApps(): Promise<ConnectedAppPublic[]> {
   }
 }
 
+// Velocity is measured against the plan week of the first active goal (the default goal sorts
+// first). null hides the hero when there is no goal or the data cannot be read.
+async function loadVelocity(): Promise<VelocitySnapshot | null> {
+  try {
+    const [goals, tasks] = await Promise.all([listGoalChannels(), listMicroTasks()]);
+    if (!goals.ok || !tasks.ok) return null;
+    const goal = goals.data.find((g) => g.status === 'active');
+    if (!goal) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    const week = currentPlanWeek(goal.start_date, today);
+    return week === null ? null : computeVelocity(tasks.data, week, today);
+  } catch {
+    return null;
+  }
+}
+
 export default async function HomePage() {
-  const [focusTask, connectedApps] = await Promise.all([loadFocusTask(), loadConnectedApps()]);
-  return <AppShell focusTask={focusTask} connectedApps={connectedApps} />;
+  const [focusTask, velocity, connectedApps] = await Promise.all([
+    loadFocusTask(),
+    loadVelocity(),
+    loadConnectedApps(),
+  ]);
+  return <AppShell focusTask={focusTask} velocity={velocity} connectedApps={connectedApps} />;
 }
