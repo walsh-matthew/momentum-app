@@ -1,8 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { IntegrationCardList } from '@/components/integrations/IntegrationCardList';
+import type { ConnectedAppPublic } from '@/types/database.types';
 
 interface ConnectedStackPanelProps {
+  connectedApps: ConnectedAppPublic[];
   className?: string;
 }
 
@@ -13,7 +16,7 @@ const PANEL_TABS: Record<PanelTab, string> = {
   assistant: 'AI Assistant',
 };
 
-export function ConnectedStackPanel({ className = '' }: ConnectedStackPanelProps) {
+export function ConnectedStackPanel({ connectedApps, className = '' }: ConnectedStackPanelProps) {
   const [tab, setTab] = useState<PanelTab>('stack');
 
   return (
@@ -36,7 +39,7 @@ export function ConnectedStackPanel({ className = '' }: ConnectedStackPanelProps
         ))}
       </div>
       <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-muted">
-        {tab === 'stack' ? 'No apps connected yet.' : 'Assistant coming soon.'}
+        {tab === 'stack' ? <IntegrationCardList connectedApps={connectedApps} /> : 'Assistant coming soon.'}
       </div>
     </aside>
   );
