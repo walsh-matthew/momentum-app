@@ -12,12 +12,23 @@ Momentum is an AI-powered Life Operating System designed around guided Goal Chan
 
 ---
 
+## Domain Directives (Binding Source of Truth)
+
+Before writing or changing any domain logic, read these files. They override assumptions and defaults.
+
+- **`docs/NINETY_DAY_PLAN_CONTEXT.md`**: the 90-day plan structure, task anatomy, invariants, schema mapping, and seed data. Read it before MOM-9 (seed data), MOM-11 (wizard prompt chips), MOM-14 (velocity), and MOM-15 (rebalancing). Its invariants (e.g., never cut unfinished work, user owns completion) must be encoded in the code.
+- **`docs/INTEGRATIONS_SPEC.md`**: the integration layer, the `InboundActivityPayload` contract, provider mapping rules, and the Phase 1 vs. Phase 2 scope boundary. All provider adapters must output this contract.
+- If code and these docs disagree, stop and flag it. Do not silently pick one.
+- Known gaps and deferred work go in `BACKLOG.md`. Planned work beyond the MVP goes in `ROADMAP.md`.
+
 ## Architectural Directives for Iteration-Friendly Architecture
 
 1. **Service Layer Isolation (`@/lib/services/`):**
    - React UI components must **never** call raw Supabase database queries directly (e.g., `supabase.from('goal_channels').select()`).
    - Place all database interactions inside dedicated service modules (e.g., `@/lib/services/goals.ts`, `@/lib/services/tasks.ts`, `@/lib/services/integrations.ts`).
    - UI components must call these service methods to fetch or mutate data.
+   - Provider adapters and the ingestion engine follow the same isolation: adapters normalize payloads in `@/lib/services/integrations.ts`, and only services touch Supabase. No component calls a third-party API (Hevy, Google, Anthropic) directly.
+   - Secrets (`SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `HEVY_API_KEY`) are read only in server-side service code. Never import them into a client component.
 
 2. **Centralized Types (`@/types/database.types.ts`):**
    - Data models (`GoalChannel`, `MicroTask`, `ConnectedApp`) must be imported from a single source of truth in `@/types/database.types.ts`.

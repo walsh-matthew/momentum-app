@@ -9,7 +9,7 @@ Momentum is built from a working 90-day career-pivot plan, which is its proof of
 - Read it before MOM-9 (seed data), MOM-11 (wizard prompt chips), MOM-14 (velocity), and MOM-15 (rebalancing).
 - Elements are tagged **[core]** (reusable for any goal) or **[career]** (specific to a career pivot). Build core patterns into the schema and UI; keep career items in seed data and optional modules.
 - This describes the plan's design. It contains no personal data, and none should be added (section 11).
-- The specific builds in the plan may be replaced by Momentum itself, which then becomes the plan's main case study. Treat Build-track contents as variable and the structure as fixed.
+- **Momentum has officially replaced the first build as the plan's main case study.** The original Phase 1 prototype is no longer the case study; Momentum is. Build-track contents are variable and the structure is fixed, so future builds are judged against this same structure.
 
 ## 1. Goal and definition of done
 
@@ -47,7 +47,7 @@ There is also a non-checklist test: the user can predict where a model will fail
 
 **Tracks and rough weekly weight [core]:** Build about 7 hours, Learn 3, Certify 6 (while active), Position 2. Hours are a sizing guide only (see invariants).
 
-**Current position:** Phase 1, Week 2 of 13.
+**Current position:** Phase 1, Week 2 of 13: Momentum kickoff (MOM-8 to MOM-15).
 
 ## 3. Task anatomy
 
