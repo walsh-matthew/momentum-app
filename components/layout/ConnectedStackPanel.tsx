@@ -2,10 +2,14 @@
 
 import { useState } from 'react';
 import { IntegrationCardList } from '@/components/integrations/IntegrationCardList';
+import { RebalanceSideCard } from '@/components/rebalance/RebalanceSideCard';
 import type { ConnectedAppPublic } from '@/types/database.types';
+import type { RebalanceProposalView } from '@/types/rebalance';
 
 interface ConnectedStackPanelProps {
   connectedApps: ConnectedAppPublic[];
+  rebalance: RebalanceProposalView | null;
+  onOpenRebalance: () => void;
   className?: string;
 }
 
@@ -16,7 +20,12 @@ const PANEL_TABS: Record<PanelTab, string> = {
   assistant: 'AI Assistant',
 };
 
-export function ConnectedStackPanel({ connectedApps, className = '' }: ConnectedStackPanelProps) {
+export function ConnectedStackPanel({
+  connectedApps,
+  rebalance,
+  onOpenRebalance,
+  className = '',
+}: ConnectedStackPanelProps) {
   const [tab, setTab] = useState<PanelTab>('stack');
 
   return (
@@ -39,7 +48,14 @@ export function ConnectedStackPanel({ connectedApps, className = '' }: Connected
         ))}
       </div>
       <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-muted">
-        {tab === 'stack' ? <IntegrationCardList connectedApps={connectedApps} /> : 'Assistant coming soon.'}
+        {tab === 'stack' ? (
+          <IntegrationCardList connectedApps={connectedApps} />
+        ) : (
+          <div className="flex flex-col gap-4">
+            <RebalanceSideCard view={rebalance} onOpen={onOpenRebalance} />
+            <p>Assistant chat coming soon.</p>
+          </div>
+        )}
       </div>
     </aside>
   );

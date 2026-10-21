@@ -9,7 +9,7 @@
 // - A plan is only additive: there is no delete or cut action in the schema.
 
 import { z } from 'zod';
-import { TASK_TYPES, type TaskType } from '@/types/database.types';
+import { PLAN_WEEKS, TASK_TYPES, type TaskType } from '@/types/database.types';
 import {
   CONSTRAINTS,
   GOAL_TYPES,
@@ -24,7 +24,6 @@ import {
 
 export const TITLE_MAX_LENGTH = 80;
 export const DEFAULT_HORIZON_DAYS = 90;
-const MAX_WEEKS = 13;
 
 export const WizardInputSchema = z.object({
   title: z.string().trim().min(1, 'Give the goal a title.').max(TITLE_MAX_LENGTH, 'Keep the title under 80 characters.'),
@@ -42,7 +41,7 @@ export const GeneratedTaskSchema = z
     title: z.string().trim().min(1).max(200),
     taskType: z.enum(TASK_TYPES),
     minutes: z.number().int().min(1).max(480),
-    weekOf: z.number().int().min(1).max(MAX_WEEKS),
+    weekOf: z.number().int().min(1).max(PLAN_WEEKS),
   })
   .strict();
 export type GeneratedTask = z.infer<typeof GeneratedTaskSchema>;

@@ -29,6 +29,16 @@
   --color-accent: var(--accent);
 }
 
+/* Slide-in for side drawers built on <dialog> (components/rebalance). */
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

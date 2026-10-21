@@ -1,9 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { setTaskStatus } from '@/lib/services/tasks';
+import { applyRebalance, setTaskStatus } from '@/lib/services/tasks';
 import type { ServiceResult } from '@/lib/services/result';
 import type { MicroTask } from '@/types/database.types';
+import type { RebalanceApplyResult } from '@/types/rebalance';
 
 // Server Actions are reachable by direct POST, so this takes `unknown` and the service validates
 // and authenticates (via the session cookie). Only a user's own toggle reaches this action;
@@ -11,5 +12,14 @@ import type { MicroTask } from '@/types/database.types';
 export async function toggleTaskStatus(taskId: unknown, status: unknown): Promise<ServiceResult<MicroTask>> {
   const result = await setTaskStatus(taskId, status);
   if (result.ok) revalidatePath('/');
+  return result;
+}
+
+// Runs only when the user clicks Apply in the rebalance drawer; nothing applies a proposal on their
+// behalf. Takes `unknown` for the same reason as above: the service validates the proposal against
+// the schema (no delete action exists), authenticates, and re-checks each task before moving it.
+export async function applyRebalanceProposal(rawProposal: unknown): Promise<ServiceResult<RebalanceApplyResult>> {
+  const result = await applyRebalance(rawProposal);
+  if (result.ok && result.data.moved.length > 0) revalidatePath('/');
   return result;
 }

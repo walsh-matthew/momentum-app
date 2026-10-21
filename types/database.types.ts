@@ -36,6 +36,10 @@ export const TASK_TYPES = [
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
+// Weeks in a 90-day plan (docs/NINETY_DAY_PLAN_CONTEXT.md §2). micro_tasks.week_of only requires >= 1;
+// the plan itself ends here, so generators and rebalancing must not place work past it.
+export const PLAN_WEEKS = 13;
+
 export const FITS = ['strong', 'good', 'stretch'] as const;
 export type Fit = (typeof FITS)[number];
 

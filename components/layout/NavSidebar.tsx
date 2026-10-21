@@ -6,12 +6,13 @@ import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
 interface NavSidebarProps {
   className?: string;
   onNavigate?: () => void;
+  onAdjustPace: () => void;
 }
 
 // Placeholder items until goal channels are wired to @/lib/services/goals (MOM-11).
 const NAV_ITEMS = ['Today', 'Career Pivot', 'Health', 'Finances'] as const;
 
-export function NavSidebar({ className = '', onNavigate }: NavSidebarProps) {
+export function NavSidebar({ className = '', onNavigate, onAdjustPace }: NavSidebarProps) {
   const [selected, setSelected] = useState<string>(NAV_ITEMS[0]);
   const [wizardOpen, setWizardOpen] = useState(false);
 
@@ -45,6 +46,14 @@ export function NavSidebar({ className = '', onNavigate }: NavSidebarProps) {
         className="mt-2 min-h-11 rounded-md border border-dashed border-border px-3 text-left text-sm text-muted hover:bg-foreground/5"
       >
         + New Goal Wizard
+      </button>
+      {/* docs/NINETY_DAY_PLAN_CONTEXT.md §9: opens the rebalance drawer, which uses the carry-over language of §5 rule 1. */}
+      <button
+        type="button"
+        onClick={onAdjustPace}
+        className="min-h-11 rounded-md border border-dashed border-border px-3 text-left text-sm text-muted hover:bg-foreground/5"
+      >
+        Adjust Weekly Pace
       </button>
       <GoalBuilderWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
     </aside>
