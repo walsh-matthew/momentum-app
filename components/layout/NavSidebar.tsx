@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
 
 interface NavSidebarProps {
   className?: string;
@@ -12,6 +13,7 @@ const NAV_ITEMS = ['Today', 'Career Pivot', 'Health', 'Finances'] as const;
 
 export function NavSidebar({ className = '', onNavigate }: NavSidebarProps) {
   const [selected, setSelected] = useState<string>(NAV_ITEMS[0]);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   return (
     <aside
@@ -37,6 +39,14 @@ export function NavSidebar({ className = '', onNavigate }: NavSidebarProps) {
           {item}
         </button>
       ))}
+      <button
+        type="button"
+        onClick={() => setWizardOpen(true)}
+        className="mt-2 min-h-11 rounded-md border border-dashed border-border px-3 text-left text-sm text-muted hover:bg-foreground/5"
+      >
+        + New Goal Wizard
+      </button>
+      <GoalBuilderWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
     </aside>
   );
 }
