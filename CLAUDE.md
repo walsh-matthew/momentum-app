@@ -12,6 +12,23 @@ Momentum is an AI-powered Life Operating System designed around guided Goal Chan
 
 ---
 
+## Architectural Directives for Iteration-Friendly Architecture
+
+1. **Service Layer Isolation (`@/lib/services/`):**
+   - React UI components must **never** call raw Supabase database queries directly (e.g., `supabase.from('goal_channels').select()`).
+   - Place all database interactions inside dedicated service modules (e.g., `@/lib/services/goals.ts`, `@/lib/services/tasks.ts`, `@/lib/services/integrations.ts`).
+   - UI components must call these service methods to fetch or mutate data.
+
+2. **Centralized Types (`@/types/database.types.ts`):**
+   - Data models (`GoalChannel`, `MicroTask`, `ConnectedApp`) must be imported from a single source of truth in `@/types/database.types.ts`.
+   - Do not define duplicate inline interface definitions inside individual UI component files.
+
+3. **Modular Component Structure:**
+   - Organize UI domain components inside `@/components/[domain]` (e.g., `@/components/goals`, `@/components/tasks`).
+   - Every component must export clear, strongly-typed props (`interface ComponentProps`).
+
+---
+
 ## Development & Jira Workflow Hygiene
 
 ### 1. Jira Project Configuration
@@ -40,8 +57,9 @@ Momentum is an AI-powered Life Operating System designed around guided Goal Chan
 
 ### 4. Definition of Done (Per Ticket)
 - [ ] Feature branch created off clean `main`.
-- [ ] Code implemented in Next.js / Supabase without TypeScript or build errors.
-- [ ] Verified locally via `npm run dev` / `npm run build`.
+- [ ] Code implemented in Next.js / Supabase with clean service abstractions and central types.
+- [ ] Static type verification passes (`npx tsc --noEmit`).
+- [ ] Verified locally via `npm run dev`.
 - [ ] Code committed using `feat(MOM-X)` message format.
 - [ ] Branch merged to `main` and Jira ticket moved to `Done`.
 
