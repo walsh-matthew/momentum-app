@@ -17,3 +17,9 @@ Items found while working on tickets. Add new items at the bottom with the ticke
 - [ ] "The system never marks a task done" is not enforced in the database: the service role bypasses RLS. Enforce it in `@/lib/services/tasks.ts` (MOM-14/MOM-15). *Source: MOM-9, `docs/NINETY_DAY_PLAN_CONTEXT.md` §3, §5.*
 - [ ] Completion criteria live in `goal_channels.criteria` (jsonb). Move to a `goal_criteria` table if per-criterion history, evidence links, or velocity scoring need it. *Source: MOM-9.*
 - [ ] Replace the hand-written `Database` block in `types/database.types.ts` with `supabase gen types typescript` output once the Supabase CLI is set up; keep the domain aliases. *Source: MOM-9.*
+- [ ] Layout: add shadcn/ui (not installed yet) and replace the hand-rolled tab buttons in `ConnectedStackPanel` and `MobileTabBar` with its primitives. *Source: MOM-10.*
+- [ ] Layout: `NavSidebar` items and `MainFeed` content are placeholders; wire them to `@/lib/services/goals` and `tasks` (MOM-11/MOM-14). *Source: MOM-10.*
+- [ ] Layout: mobile view state is local to `AppShell` and resets on reload. Consider a URL param or route per view so back/forward and deep links work. *Source: MOM-10.*
+- [ ] Layout: the Connected Stack / AI Assistant panel is a shared tab; split into two when the assistant chat (Vercel AI SDK) ships. *Source: MOM-10.*
+- [ ] Layout: dark mode follows `prefers-color-scheme` only; add a manual toggle. *Source: MOM-10.*
+- [ ] Layout: add an automated hydration check (Playwright console assertion at 390px and 1280px). Verified manually via headless Chrome for MOM-10. *Source: MOM-10.*
