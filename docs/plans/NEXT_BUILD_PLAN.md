@@ -43,7 +43,7 @@ SESSION 4: CI PROTECTION & COST GOVERNANCE (MOM-67, MOM-73)
   - GitHub Actions CI with a disposable database, then durable LLM rate limits, usage logging and spend caps
 ```
 
-*Order matters. In Session 1, MOM-19 comes last: the seed must not be removed until a new user can build a plan (MOM-34, MOM-35) and sees a sensible empty state (MOM-18). MOM-62 comes before MOM-38 because the adapters need the connect flows. Safe stopping points: after Block 1.2 (the core loop works), after each session.*
+*Order matters. In Session 1, MOM-19 comes last: the seed must not be removed until a new user can build a plan (MOM-34, MOM-35) and sees a sensible empty state (MOM-18). MOM-62 comes before MOM-38 because the adapters need the connect flows. Safe stopping points: after Block 1.2 (the core loop works), after each session. If the day runs short, stop after Session 2; Block 3.2 is the first to drop (it also waits on Hevy samples from you).*
 
 ---
 
@@ -98,12 +98,12 @@ Task Instructions:
 1. Read ticket MOM-35 in Jira first; its acceptance criteria are the definition of done. NOTE: the ticket says "Vercel AI SDK"; this repo standardised on the official @anthropic-ai/sdk in lib/ai/rebalance.ts (CLAUDE.md allows "Claude API / Vercel AI SDK"). Follow lib/ai/rebalance.ts and say so; do not add a second SDK. If anything else disagrees with these instructions, stop and flag it.
 2. Read CLAUDE.md, PRODUCT_STRATEGY.md section 4, docs/NINETY_DAY_PLAN_CONTEXT.md, lib/goals/taskPlan.ts, lib/ai/rebalance.ts, tests/rebalance-ai.test.ts, tests/rebalance-model.test.ts, lib/services/tasks.ts and components/goals/GoalBuilderWizard.tsx. MOM-34 must already be merged; if not, stop and tell me.
 3. Create the feature branch `feature/MOM-35-wizard-week-one-plan` off a clean `main`.
-4. Persist: add a service function in lib/services/tasks.ts (there is no lib/services/plans.ts; do not create one) that inserts the validated week-1 plan for the signed-in user in ONE database call (all tasks or none), status 'todo', week_of 1, in a goal channel the user owns. The wizard flow creates the goal and its tasks together or fails with no partial data. Use the user's session client (RLS), never the service role.
+4. Persist: add a service function in lib/services/tasks.ts (there is no lib/services/plans.ts; do not create one) that inserts the validated week-1 plan for the signed-in user in ONE database call (all tasks or none), status 'todo', week_of 1, in a goal channel the user owns. The wizard flow creates the goal and its tasks together or fails with no partial data. Use the user's session client (RLS), never the service role. Creating the goal and its tasks atomically will most likely need a Postgres function (see step 9).
 5. Generate: add a server-only module lib/ai/taskPlan.ts modelled on lib/ai/rebalance.ts: official SDK, claude-opus-5-5, structured output, raw JSON through parseTaskPlan() unchanged, no `thinking` setting, no forced tool_choice, a fixed system prompt, and a rate limit like requestModelRebalance. Fire it only from the wizard's confirm/generate click, never on load. The model sees only what the user typed into the wizard; say so on screen.
 6. Invalid or refused model output is rejected with a user-visible message and a retry button. The rule-based stub (buildStubTaskPlan) may remain as an explicit fallback only if the user chooses it. Never silently substitute.
 7. Tests: mocked model (valid; schema-invalid; a plan trying status 'done'; unknown task type; week 14; empty plan; refusal; API errors), the persist function (all-or-nothing, every row todo, owned by the session user), a source-level test that nothing in the plan path writes status or completed_at, and a boundary test that no component imports the new AI module.
 8. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. Check the build output contains no key or prompt text.
-9. No database migration is expected. If you find one is needed, stop and ask me before writing it.
+9. A migration is expected: two separate inserts through the API cannot be all-or-nothing. Design before coding and wait for my OK: a function in the next migration that creates the goal channel and its week-1 tasks in one transaction, SECURITY INVOKER (so RLS applies) with search_path = '', user_id taken from auth.uid() and never from an argument, no status or completed_at parameter (every row is 'todo'), EXECUTE revoked from public, anon and service_role and granted to authenticated only. Update types/database.types.ts and the fake in tests/helpers/fakeSupabase.ts, and add supabase/verify/<n>_wizard_plan.sql (another user's channel is refused, a failing task rolls back the goal, no row arrives done). STOP before production: show the migration and `npx supabase db push --dry-run`, wait for my go-ahead, then push and run ALL scripts in supabase/verify/; all must pass. If you find a way that needs no migration, explain it and wait for my OK.
 10. Update BACKLOG.md for MOM-35 (tick resolved items, add findings with Jira keys).
 11. Commit with "feat(MOM-35): persist the wizard week 1 plan and generate it with Claude" and merge into main with --no-ff. Do not push.
 12. Update MOM-35 in Jira: Done only if all acceptance criteria are met; say clearly that the live model call is unverified until I run the smoke test, and leave the ticket open until I confirm it.
@@ -161,7 +161,7 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 Implement MOM-19: remove the Career Pivot seed from new-account signup.
 
 Task Instructions:
-1. Read ticket MOM-19 in Jira first; its acceptance criteria are the definition of done. MOM-34, MOM-35 and MOM-18 must already be merged so a new user can build a plan and sees a wizard link; if not, stop and tell me. If the ticket disagrees with these instructions, stop and flag it.
+1. Read ticket MOM-19 in Jira first; its acceptance criteria are the definition of done. MOM-34, MOM-35 and MOM-18 must already be merged so a new user can build a plan and sees a wizard link; if not, stop and tell me. If the ticket disagrees with these instructions, stop and flag it. Also read MOM-65: if it is still open, its second acceptance criterion ("signing up still seeds the default goal") stops being true after this ticket. Add a Jira comment on MOM-65 saying that criterion should now read "signing up still creates the users row, and a fresh signup has no goals", and leave MOM-65 otherwise unchanged.
 2. Read CLAUDE.md, docs/NINETY_DAY_PLAN_CONTEXT.md (seed data section; if the docs say the seed is required, flag it), migration 001 (seed_career_pivot and handle_new_user), migrations 002 to the latest, and every file in supabase/verify/.
 3. Create the feature branch `feature/MOM-19-remove-signup-seed` off a clean `main`.
 4. Inventory first: list every verify script and unit test that depends on the seeded Career Pivot channel or its 11 tasks. Show me the list.
@@ -197,7 +197,7 @@ Implement MOM-61: Playwright E2E, hydration checks and component tests, plus loc
 
 Task Instructions:
 1. Read ticket MOM-61 in Jira first (its description is three bullets; treat them as the criteria). Also read MOM-54 and MOM-55 to MOM-59 and the BACKLOG.md "Tests" items. The auth specs below are an extension agreed in the build plan: add a Jira comment on MOM-61 saying so. If anything else disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, package.json, vitest.config.mts, tests/rebalance-drawer.test.tsx, components/, app/login/page.tsx, app/auth/callback/route.ts, lib/supabase/proxy.ts (PUBLIC_PATHS) and supabase/config.toml if present.
+2. Read CLAUDE.md, package.json, vitest.config.mts, tests/rebalance-drawer.test.tsx, components/, app/login/page.tsx, app/auth/callback/route.ts and lib/supabase/proxy.ts (PUBLIC_PATHS). The repo has no supabase/config.toml today, and `supabase start` needs one: run `npx supabase init` (do not run `supabase link` or change the linked project), enable local email confirmations and keep the local inbox on, and commit the generated supabase/config.toml. Show me the file before committing; it must hold no secrets or production project ref.
 3. Create the feature branch `feature/MOM-61-e2e-and-component-tests` off a clean `main`.
 4. Component tests: add jsdom and Testing Library to Vitest (a separate environment for *.test.tsx files, keeping node for the rest). Cover FocusTaskCard (carry-over marker, move-chain line, toggle error state), the risk badge at each level, and RebalanceDrawer including clicking "Ask Claude to review" with the server action mocked.
 5. Playwright: install it and add `npm run test:e2e`. The hydration check loads /login at 390px and 1280px and fails on any console error or warning that mentions hydration.
@@ -310,7 +310,7 @@ Implement MOM-67: run the SQL verify scripts, type check, tests and build in CI.
 
 Task Instructions:
 1. Read ticket MOM-67 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, package.json, every file in supabase/verify/ and supabase/migrations/, and how the scripts report results (a table with a `passed` column).
+2. Read CLAUDE.md, package.json, supabase/config.toml, every file in supabase/verify/ and supabase/migrations/, and how the scripts report results (a table with a `passed` column). If supabase/config.toml is missing (MOM-61 normally adds it), run `npx supabase init` without linking, show me the file, and commit it; `supabase start` in CI needs it.
 3. Create the feature branch `feature/MOM-67-ci-pipeline` off a clean `main`.
 4. Add .github/workflows/ci.yml with two jobs. Job 1: install, `npx tsc --noEmit`, `npm test`, `npm run build` with dummy NEXT_PUBLIC_SUPABASE_* values and no real secrets (add `npm run test:e2e` if it exists, against the local stack). Job 2: supabase/setup-cli plus `supabase start`, apply every migration, run every file in supabase/verify/ against the local database, and fail if any script returns passed = false or errors. No production credentials, tokens or project ref anywhere in the workflow.
 5. Put the verify runner in scripts/ (not inline YAML) so it runs locally too, with a test of its pass/fail parsing.
@@ -422,13 +422,14 @@ Task Instructions:
    a. Read each candidate ticket's acceptance criteria and check them against the code and tests before judging. A ticket is obsolete, redundant or fully satisfied only if EVERY criterion is met or moot. Partly satisfied is not obsolete: add a comment saying what is done and what remains.
    b. Transition truly obsolete or redundant tickets to "Closed" with a brief comment explaining why; use "Done" only for delivered work.
    c. Annotate or remove the matching entries in BACKLOG.md (tick resolved items, re-key items pinned to closed tickets to the ticket that now owns the work).
+   d. Check every epic in the MOM project, including the Phase 1 epics MOM-4 to MOM-7: if every child is Done or Closed, move the epic to Done with a comment listing its children. Leave an epic with any open child alone.
 3. Confirm the active Phase Epic key and that every ticket created today is its child.
 4. For each un-ticketed item found, group related items, then:
    a. Write the ticket in our format (Title, Summary, Technical Scope, Acceptance Criteria);
    b. Create it in Jira under the active Phase Epic (check for duplicates first; if a call times out, search before retrying);
    c. Add the new Jira key to the item in BACKLOG.md and to the ticket table.
 5. Audit today's tickets: everything finished today must be Done in Jira; anything with unmet acceptance criteria must say so in a comment. Report any mismatch between a Jira ticket's real scope and its key in BACKLOG.md instead of guessing.
-6. Create a feature branch (`feature/MOM-16-eod-backlog-sync`), commit BACKLOG.md (and ROADMAP.md if changed) with "chore: sync end-of-day backlog, prune obsolete tickets, and update Jira", merge into main with --no-ff. Do not push; the push is step E.
+6. Create a feature branch (`feature/MOM-16-eod-backlog-sync`), commit BACKLOG.md (and ROADMAP.md if changed) with "chore(MOM-16): sync end-of-day backlog, prune obsolete tickets, and update Jira", merge into main with --no-ff. Do not push; the push is step E.
 
 Definition of Done: tsc --noEmit passes; npm test passes; npm run plan reports every open item has a Jira key; merged to main.
 ```
@@ -450,7 +451,7 @@ Task Instructions:
    - User Verification Gates for each block.
    - Final Day-End Build Verification & Remote Push section.
 4. Save the generated plan to `docs/plans/NEXT_BUILD_PLAN.md`.
-5. Create a feature branch `feature/MOM-XX-next-build-plan-doc`, commit `docs/plans/NEXT_BUILD_PLAN.md` with "docs: add generated next build plan", merge to main (--no-ff). Do not push; the push is step F.
+5. Create a feature branch `feature/MOM-XX-next-build-plan-doc`, commit `docs/plans/NEXT_BUILD_PLAN.md` with "docs(MOM-XX): add generated next build plan" (MOM-XX is the active Phase Epic), merge to main (--no-ff). Do not push; the push is step F.
 ```
 
 ## F. Synchronize Remote Repository (PowerShell)
@@ -468,9 +469,10 @@ git push origin main
 | Item | Why it matters |
 | --- | --- |
 | **Hevy API samples** | Block 3.2 cannot build the Hevy adapter honestly without Hevy's API docs or a redacted `/v1/workouts` response. The prompt stops without them. |
-| **Docker** | Blocks 2.1 and 4.1 need Docker for a local Supabase stack. Without it, the auth specs and the CI database job cannot be tested locally. |
+| **Docker** | Blocks 2.1 and 4.1 need Docker for a local Supabase stack, and the repo has no `supabase/config.toml` yet (Block 2.1 creates it with `supabase init`). Without Docker, the auth specs and the CI database job cannot be tested locally. |
+| **MOM-35 migration** | Saving the goal and its week-1 tasks all-or-nothing needs a Postgres function, so Block 1.2 will stop for your approval of a migration. |
 | **Google verification** | Calendar read-only is a sensitive scope. Testing mode (test users) is fine for you; wider use needs Google's app verification and a verified domain. |
 | **MOM-19 touches every verify script** | The 91 checks currently rely on the signup seed. The prompt makes the CLI rewrite them first; review that diff. |
-| **Not scheduled today, still recommended** | MOM-65 (revoke EXECUTE on `handle_new_user` and `rls_auto_enable`), MOM-66 (table grants check), MOM-68 (`.env*` gitignore), MOM-74 (retire `HEVY_API_KEY`; delete it from Vercel Production afterwards). |
+| **Not scheduled today, still recommended** | MOM-65 (revoke EXECUTE on `handle_new_user` and `rls_auto_enable`; low risk, since `handle_new_user` returns `trigger` and cannot be called directly. Block 1.4 comments on its outdated seed criterion), MOM-66 (table grants check), MOM-68 (`.env*` gitignore), MOM-74 (retire `HEVY_API_KEY`; delete it from Vercel Production afterwards). |
 | **Direct pushes to `main`** | Today every change is merged and pushed to `main` by hand. After MOM-67 and branch protection are on, step C becomes a pull request. |
 | **Model cost** | MOM-35's generator and MOM-47's rebalance call Claude Opus 5.5 per click; MOM-73 is what bounds that. Until it ships, do not invite real users. |
