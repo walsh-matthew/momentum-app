@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
+import { SignOutButton } from '@/components/auth/SignOutButton';
 
 interface NavSidebarProps {
   className?: string;
@@ -55,6 +56,7 @@ export function NavSidebar({ className = '', onNavigate, onAdjustPace }: NavSide
       >
         Adjust Weekly Pace
       </button>
+      <SignOutButton className="mt-auto pt-2" />
       <GoalBuilderWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
     </aside>
   );
