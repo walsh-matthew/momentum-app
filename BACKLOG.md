@@ -17,6 +17,7 @@ Items below were triaged into Jira on 2026-10-21 under `MOM-16` (EPIC 5: Phase 2
 | Velocity | MOM-42, MOM-43, MOM-44, MOM-45, MOM-46 |
 | Rebalance | MOM-47, MOM-48, MOM-49, MOM-50, MOM-51, MOM-52, MOM-53 |
 | Tests | MOM-54, MOM-55, MOM-56, MOM-57, MOM-58, MOM-59 |
+| Deployment | MOM-60 |
 
 ## Discovered In-Flight
 
