@@ -215,6 +215,20 @@ describe('a ticket plan', () => {
     expect(prompt).toMatch(/Move MOM-47 to Done in Jira only if its acceptance criteria are met/);
   });
 
+  it('sends an obsolete or redundant ticket to Closed, not Done', () => {
+    const { prompt } = buildTicketPlan('MOM-47', backlog, standards);
+    expect(prompt).toMatch(/obsolete or redundant, move it to Closed instead, with a comment saying why/);
+  });
+
+  it('names only statuses that CLAUDE.md lists as workflow statuses', () => {
+    const listed = /\*\*Workflow Statuses:\*\*([^\n]*)/.exec(realClaude)?.[1] ?? '';
+    const { prompt } = buildTicketPlan('MOM-47', backlog, standards);
+    for (const status of ['Done', 'Closed']) {
+      expect(prompt).toContain(status);
+      expect(listed).toContain(`\`${status}\``);
+    }
+  });
+
   it('prints CLAUDE.md’s Definition of Done verbatim', () => {
     const { prompt } = buildTicketPlan('MOM-47', backlog, standards);
     for (const bullet of standards.definitionOfDone) expect(prompt).toContain(`- [ ] ${bullet}`);

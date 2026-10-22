@@ -44,7 +44,7 @@ Before writing or changing any domain logic, read these files. They override ass
 
 ### 1. Jira Project Configuration
 - **Project Key:** `MOM`
-- **Workflow Statuses:** `To Do` | `In Progress` | `In Review` | `Done`
+- **Workflow Statuses:** `To Do` | `In Progress` | `In Review` | `Done` | `Closed` (use `Closed`, with a comment saying why, for a ticket that is obsolete or redundant; `Done` means the work was delivered)
 - **Core Epics:**
   - `MOM-4`: EPIC 1: Architecture & OS Layout
   - `MOM-5`: EPIC 2: Goal Channel Architect

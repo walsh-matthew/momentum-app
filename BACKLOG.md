@@ -41,7 +41,7 @@ Items found while working on tickets. Add new items at the bottom with the ticke
 - [ ] Layout: the Connected Stack / AI Assistant panel is a shared tab; split into two when the assistant chat (Vercel AI SDK) ships. *Source: MOM-10.* *Jira: MOM-33.*
 - [ ] Layout: dark mode follows `prefers-color-scheme` only; add a manual toggle. *Source: MOM-10.* *Jira: MOM-30.*
 - [ ] Layout: add an automated hydration check (Playwright console assertion at 390px and 1280px). Verified manually via headless Chrome for MOM-10. *Source: MOM-10.* *Jira: MOM-61.*
-- [ ] Wizard: sign-in shipped in MOM-17, but the insert path is still unverified against a live Supabase project. *Source: MOM-11.* *Jira: MOM-17.*
+- [ ] Wizard: sign-in shipped in MOM-17, but the insert path is still unverified against a live Supabase project. *Source: MOM-11.* *Jira: MOM-35.*
 - [ ] Wizard: goal type, constraints and pace are not stored (no columns on `goal_channels`); they only shape the stub plan. Decide whether to add `goal_type` and a `preferences` jsonb. Wizard goals also start with empty `criteria`. *Source: MOM-11.* *Jira: MOM-34.*
 - [ ] Wizard: the generated week 1 task plan is validated and previewed but not saved. Persist it through `@/lib/services/tasks.ts` (MOM-14), and replace `buildStubTaskPlan` with the Claude generator, which must pass `parseTaskPlan`. *Source: MOM-11, `PRODUCT_STRATEGY.md` §4.* *Jira: MOM-35.*
 - [ ] Wizard: `NavSidebar` still lists placeholder channels. Wire it to `listGoalChannels()` (fetch in a server component, pass down) so a created goal appears. *Source: MOM-11.* *Jira: MOM-31.*
