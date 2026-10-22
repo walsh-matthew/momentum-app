@@ -5,8 +5,10 @@
 // too:
 // - the micro_tasks CHECK constraints from supabase/migrations/001_initial_schema.sql,
 // - the task_rebalance_history CHECK constraints from migration 003,
-// - row level security: a signed-in user only sees and changes their own rows (switch off with
-//   db.rls = false to prove the service filters by user id itself),
+// - the micro_tasks source columns from migration 007 (a source is a provider plus an id, both or
+//   neither, and unique per user),
+// - row level security: a signed-in user only sees and changes their own rows, and an insert for another
+//   user fails (switch off with db.rls = false to prove the service filters by user id itself),
 // - apply_task_move() from migration 003: moves one unfinished task and records it together.
 // It has no working delete(): calling it throws and is counted, so tests can prove nothing is cut.
 // tests/migrations.test.ts keeps this file honest by checking each rule exists in the SQL.
@@ -25,7 +27,18 @@ export interface TaskRow {
   carried_from_week: number | null;
   pulled_from_week: number | null;
   completed_at: string | null;
+  source_provider: string | null;
+  source_external_id: string | null;
+  source_evidence: Record<string, unknown> | null;
   created_at: string;
+}
+
+export interface ChannelRow {
+  id: string;
+  user_id: string;
+  channel_key: string;
+  status: 'active' | 'paused' | 'done';
+  start_date: string;
 }
 
 export interface HistoryRow {
@@ -43,12 +56,16 @@ type Row = Record<string, unknown>;
 export const db = {
   tasks: [] as TaskRow[],
   history: [] as HistoryRow[],
+  channels: [] as ChannelRow[],
   user: null as { id: string } | null,
   rls: true,
   updates: [] as Array<Record<string, unknown>>,
   rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   reads: 0,
   deleteCalls: 0,
+  inserts: [] as Array<Record<string, unknown>>,
+  // When set, the next insert fails with this message (a stand-in for a database error, which can quote the row).
+  failNextInsert: null as string | null,
   // Runs after each read, to simulate another request changing a row mid-flight.
   afterRead: undefined as (() => void) | undefined,
   clock: 0,
@@ -57,12 +74,15 @@ export const db = {
 export function resetDb(tasks: TaskRow[] = [], user: { id: string } | null = null): void {
   db.tasks = tasks.map((t) => ({ ...t }));
   db.history = [];
+  db.channels = [];
   db.user = user;
   db.rls = true;
   db.updates = [];
   db.rpcCalls = [];
   db.reads = 0;
   db.deleteCalls = 0;
+  db.inserts = [];
+  db.failNextInsert = null;
   db.afterRead = undefined;
   db.clock = 0;
 }
@@ -76,6 +96,10 @@ function taskViolation(r: TaskRow): string | null {
   if (r.pulled_from_week !== null && !(r.pulled_from_week > r.week_of)) return 'micro_tasks_pulled_from_later_week';
   if (r.carried_from_week !== null && r.pulled_from_week !== null) return 'micro_tasks_single_move_marker';
   if ((r.status === 'done') !== (r.completed_at !== null)) return 'micro_tasks_completed_at_matches_status';
+  if ((r.source_provider === null) !== (r.source_external_id === null)) return 'micro_tasks_source_pair';
+  if (r.source_evidence !== null && r.source_provider === null) return 'micro_tasks_source_evidence_object';
+  if (r.source_external_id !== null && r.source_external_id.trim() === '') return 'micro_tasks_source_external_id_not_blank';
+  if (r.minutes <= 0) return 'micro_tasks_minutes_positive';
   return null;
 }
 
@@ -86,11 +110,11 @@ function historyViolation(h: HistoryRow): string | null {
   return forward || back ? null : 'task_rebalance_history_direction';
 }
 
-type Table = 'micro_tasks' | 'task_rebalance_history';
+type Table = 'micro_tasks' | 'task_rebalance_history' | 'goal_channels';
 
 class Query {
-  private op: 'select' | 'update' = 'select';
-  private patch: Row = {};
+  private op: 'select' | 'update' | 'insert' = 'select';
+  private payload: Row = {};
   private cols: string | undefined;
   private filters: Array<(r: Row) => boolean> = [];
   private orders: Array<{ col: string; ascending: boolean; nullsFirst: boolean }> = [];
@@ -100,7 +124,9 @@ class Query {
   constructor(private readonly table: Table) {}
 
   private rows(): Row[] {
-    const all = (this.table === 'micro_tasks' ? db.tasks : db.history) as unknown as Row[];
+    const all = (
+      this.table === 'micro_tasks' ? db.tasks : this.table === 'goal_channels' ? db.channels : db.history
+    ) as unknown as Row[];
     // RLS: a signed-in user sees only their own rows; a signed-out client sees none.
     if (!db.rls) return all;
     return all.filter((r) => db.user !== null && r.user_id === db.user.id);
@@ -111,9 +137,15 @@ class Query {
     if (this.op === 'update') this.returning = true;
     return this;
   }
+  insert(row: Row) {
+    this.op = 'insert';
+    this.payload = row;
+    db.inserts.push(row);
+    return this;
+  }
   update(patch: Row) {
     this.op = 'update';
-    this.patch = patch;
+    this.payload = patch;
     db.updates.push(patch);
     return this;
   }
@@ -164,7 +196,7 @@ class Query {
     return this.max === undefined ? out : out.slice(0, this.max);
   }
 
-  private run(): { data: Row[]; error: { message: string } | null } {
+  private run(): { data: Row[]; error: { message: string; code?: string } | null } {
     const matched = this.rows().filter((r) => this.filters.every((f) => f(r)));
     if (this.op === 'select') {
       db.reads++;
@@ -172,11 +204,12 @@ class Query {
       db.afterRead?.();
       return { data: out, error: null };
     }
-    // Only micro_tasks is updatable by a client in these tests; history is append-only.
+    if (this.op === 'insert') return this.runInsert();
+    // Only micro_tasks is updatable by a client in these tests; history and channels are not.
     if (this.table !== 'micro_tasks') return { data: [], error: { message: 'permission denied for table' } };
     const changed: Row[] = [];
     for (const r of matched) {
-      const next = { ...r, ...this.patch } as unknown as TaskRow;
+      const next = { ...r, ...this.payload } as unknown as TaskRow;
       const violated = taskViolation(next);
       if (violated) return { data: [], error: { message: `new row violates check constraint "${violated}"` } };
       Object.assign(r, next);
@@ -185,11 +218,66 @@ class Query {
     return { data: this.returning ? changed.map((r) => this.project(r)) : [], error: null };
   }
 
+  // An insert into micro_tasks as a signed-in user: row level security (the new row must be theirs),
+  // the table's defaults, its CHECK constraints and the unique source per user (migration 007).
+  private runInsert(): { data: Row[]; error: { message: string; code?: string } | null } {
+    if (this.table !== 'micro_tasks') return { data: [], error: { message: 'permission denied for table', code: '42501' } };
+    const input = this.payload;
+    if (db.failNextInsert) {
+      const message = db.failNextInsert;
+      db.failNextInsert = null;
+      return { data: [], error: { message, code: 'XX000' } };
+    }
+    if (db.rls && (db.user === null || input.user_id !== db.user.id)) {
+      return { data: [], error: { message: 'new row violates row-level security policy for table "micro_tasks"', code: '42501' } };
+    }
+    const row: TaskRow = {
+      id: newId(),
+      goal_channel_id: '',
+      title: '',
+      task_type: 'build',
+      minutes: 1,
+      status: 'todo',
+      fit: null,
+      week_of: 1,
+      due_date: null,
+      carried_from_week: null,
+      pulled_from_week: null,
+      completed_at: null,
+      source_provider: null,
+      source_external_id: null,
+      source_evidence: null,
+      created_at: '2026-10-14T00:00:00Z',
+      ...(input as unknown as Partial<TaskRow>),
+      user_id: input.user_id as string,
+    };
+    const violated = taskViolation(row);
+    if (violated) return { data: [], error: { message: `new row violates check constraint "${violated}"`, code: '23514' } };
+    if (!db.channels.some((c) => c.id === row.goal_channel_id && c.user_id === row.user_id)) {
+      return { data: [], error: { message: 'violates foreign key constraint "micro_tasks_goal_channel_fk"', code: '23503' } };
+    }
+    if (
+      row.source_provider !== null &&
+      db.tasks.some(
+        (t) => t.user_id === row.user_id && t.source_provider === row.source_provider && t.source_external_id === row.source_external_id,
+      )
+    ) {
+      return { data: [], error: { message: 'duplicate key value violates unique constraint "micro_tasks_source_unique"', code: '23505' } };
+    }
+    db.tasks.push(row);
+    return { data: [this.project(row as unknown as Row)], error: null };
+  }
+
+  single() {
+    const { data, error } = this.run();
+    if (error) return Promise.resolve({ data: null, error });
+    return Promise.resolve(data[0] ? { data: data[0], error: null } : { data: null, error: { message: 'no row' } });
+  }
   maybeSingle() {
     const { data, error } = this.run();
     return Promise.resolve({ data: data[0] ?? null, error });
   }
-  then<T>(resolve: (v: { data: Row[]; error: { message: string } | null }) => T, reject?: (e: unknown) => T) {
+  then<T>(resolve: (v: { data: Row[]; error: { message: string; code?: string } | null }) => T, reject?: (e: unknown) => T) {
     return Promise.resolve(this.run()).then(resolve, reject);
   }
 }
@@ -250,7 +338,9 @@ export async function createSupabaseServerClient() {
           : { data: { user: null }, error: { message: 'Auth session missing' } },
     },
     from: (table: string) => {
-      if (table !== 'micro_tasks' && table !== 'task_rebalance_history') throw new Error(`unexpected table ${table}`);
+      if (table !== 'micro_tasks' && table !== 'task_rebalance_history' && table !== 'goal_channels') {
+        throw new Error(`unexpected table ${table}`);
+      }
       return new Query(table);
     },
     rpc: async (fn: string, args: Record<string, unknown>) => {
@@ -286,9 +376,16 @@ export function taskRow(week_of: number, over: Partial<TaskRow> = {}): TaskRow {
     carried_from_week: null,
     pulled_from_week: null,
     completed_at: null,
+    source_provider: null,
+    source_external_id: null,
+    source_evidence: null,
     created_at: '2026-10-14T00:00:00Z',
     ...over,
   };
+}
+
+export function channelRow(over: Partial<ChannelRow> = {}): ChannelRow {
+  return { id: newId(), user_id: USER, channel_key: 'career_pivot', status: 'active', start_date: '2026-10-14', ...over };
 }
 
 export const taskById = (id: string): TaskRow => {

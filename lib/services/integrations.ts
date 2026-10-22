@@ -2,6 +2,7 @@
 // (CLAUDE.md, Architectural Directive 1). Server-side only: it reads the request's auth cookies.
 //
 // Phase 1 (MOM-13): the payload contract, mock adapters, and the toggle state in connected_apps.
+// MOM-40: turning normalized activity into tasks lives in @/lib/services/ingestion.ts.
 // MOM-37: provider tokens and API keys (storage, retrieval, refresh) in integration_credentials. The
 // only network request to a third party is the OAuth token refresh in refreshAccessToken().
 

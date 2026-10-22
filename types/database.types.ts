@@ -61,6 +61,23 @@ export type Fit = (typeof FITS)[number];
 // Open-ended, matching INTEGRATIONS_SPEC.md §2. Stored as a lowercase key.
 export type ExternalProviderId = 'hevy' | 'apple_health' | 'google_calendar' | 'github' | (string & {});
 
+// What an external activity looked like when it was ingested (migration 007). Kept on the task it
+// created as evidence the user can see when deciding whether to tick it. Mirrors
+// InboundActivityPayload (docs/INTEGRATIONS_SPEC.md §2) without the fields stored in columns.
+export interface TaskSourceEvidence {
+  activityType: string;
+  // ISO-8601 UTC time the activity ended.
+  occurredAt: string;
+  durationMinutes: number;
+  metrics: {
+    volumeLbs?: number;
+    setsCompleted?: number;
+    activeCalories?: number;
+    eventCompleted?: boolean;
+    metadata?: Record<string, unknown>;
+  };
+}
+
 // One item of goal_channels.criteria. The user ticks criteria; the system never does.
 export interface GoalCriterion {
   key: string;
@@ -162,6 +179,10 @@ export type Database = {
           carried_from_week: number | null;
           pulled_from_week: number | null;
           completed_at: string | null;
+          // Set only on tasks the ingestion pipeline created from an external activity (migration 007).
+          source_provider: ExternalProviderId | null;
+          source_external_id: string | null;
+          source_evidence: TaskSourceEvidence | null;
           created_at: string;
           updated_at: string;
         };
@@ -179,6 +200,9 @@ export type Database = {
           carried_from_week?: number | null;
           pulled_from_week?: number | null;
           completed_at?: string | null;
+          source_provider?: ExternalProviderId | null;
+          source_external_id?: string | null;
+          source_evidence?: TaskSourceEvidence | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -196,6 +220,9 @@ export type Database = {
           carried_from_week?: number | null;
           pulled_from_week?: number | null;
           completed_at?: string | null;
+          source_provider?: ExternalProviderId | null;
+          source_external_id?: string | null;
+          source_evidence?: TaskSourceEvidence | null;
           created_at?: string;
           updated_at?: string;
         };

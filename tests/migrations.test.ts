@@ -191,3 +191,35 @@ describe('the service role is granted the credential table explicitly (migration
     expect(sql).not.toMatch(/\bto\b[^;]*\b(anon|authenticated|public)\b/i);
   });
 });
+
+describe('ingested tasks record their source (migration 007)', () => {
+  const sql = sqlOf('007');
+
+  it('adds the three source columns to micro_tasks', () => {
+    for (const [column, type] of [
+      ['source_provider', 'text'],
+      ['source_external_id', 'text'],
+      ['source_evidence', 'jsonb'],
+    ]) {
+      expect(sql).toMatch(new RegExp(`add column\\s+${column}\\s+${type}\\b`, 'i'));
+    }
+  });
+  it.each([
+    'micro_tasks_source_pair',
+    'micro_tasks_source_evidence_object',
+    'micro_tasks_source_external_id_not_blank',
+    'micro_tasks_source_unique',
+  ])('has the %s constraint the fake enforces', (name) => expect(sql).toMatch(new RegExp(`constraint ${name}\\b`, 'i')));
+
+  it('a source is a provider plus an id, both or neither', () => {
+    expect(sql).toMatch(/\(source_provider is null\) = \(source_external_id is null\)/);
+  });
+  it('is unique per user, as a plain constraint so an insert can name it', () => {
+    expect(sql).toMatch(/unique \(user_id, source_provider, source_external_id\)/i);
+    expect(sql).not.toMatch(/create (unique )?index/i);
+  });
+  it('only adds structure: it does not touch status or completed_at', () => {
+    expect(sql).not.toMatch(/\b(status|completed_at)\b/i);
+    expect(sql).not.toMatch(/\b(update|delete|insert)\b/i);
+  });
+});
