@@ -21,6 +21,11 @@ export type GoalChannelStatus = (typeof GOAL_CHANNEL_STATUSES)[number];
 export const TASK_STATUSES = ['todo', 'done'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+// How a rebalance moved a task: later (carry_over) or earlier (pull_forward). Matches
+// task_rebalance_history.shift_type and the actions in types/rebalance.ts.
+export const SHIFT_TYPES = ['carry_over', 'pull_forward'] as const;
+export type ShiftType = (typeof SHIFT_TYPES)[number];
+
 export const TASK_TYPES = [
   'job_search',
   'interview_fill_in',
@@ -252,10 +257,55 @@ export type Database = {
           },
         ];
       };
+      // Append-only audit trail of every rebalance move (migration 003). Clients can only read it;
+      // apply_task_move writes it, so Insert and Update are typed `never`.
+      task_rebalance_history: {
+        Row: {
+          id: string;
+          user_id: string;
+          task_id: string;
+          source_week: number;
+          target_week: number;
+          shift_type: ShiftType;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: 'task_rebalance_history_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'task_rebalance_history_task_fk';
+            columns: ['task_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'micro_tasks';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
-    // seed_career_pivot and handle_new_user are not executable by API roles, so none are exposed.
-    Functions: Record<never, never>;
+    // seed_career_pivot, handle_new_user and the trigger functions are not executable by API roles, so
+    // they are not exposed. apply_task_move is the only one a signed-in user can call.
+    Functions: {
+      // Moves one unfinished task to another week and records it, in one transaction. Returns false
+      // when the task is not eligible (not theirs, already done, or not in p_from_week).
+      apply_task_move: {
+        Args: {
+          p_task_id: string;
+          p_from_week: number;
+          p_to_week: number;
+          p_action: ShiftType;
+          p_due_date: string | null;
+        };
+        Returns: boolean;
+      };
+    };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;
   };
@@ -274,6 +324,7 @@ export type TablesUpdate<T extends keyof PublicTables> = PublicTables[T]['Update
 export type User = Tables<'users'>;
 export type GoalChannel = Tables<'goal_channels'>;
 export type MicroTask = Tables<'micro_tasks'>;
+export type TaskRebalanceHistory = Tables<'task_rebalance_history'>;
 // `credentials` is server-only (INTEGRATIONS_SPEC.md §5). Client components should use ConnectedAppPublic.
 export type ConnectedApp = Tables<'connected_apps'>;
 export type ConnectedAppPublic = Omit<ConnectedApp, 'credentials'>;
@@ -282,13 +333,5 @@ export type GoalChannelInsert = TablesInsert<'goal_channels'>;
 export type GoalChannelUpdate = TablesUpdate<'goal_channels'>;
 export type MicroTaskInsert = TablesInsert<'micro_tasks'>;
 export type MicroTaskUpdate = TablesUpdate<'micro_tasks'>;
-// What automated code (rebalancing, ingestion, LLM suggestions) may change on a task. Deliberately
-// omits status and completed_at: completion is human-only (NINETY_DAY_PLAN_CONTEXT.md §3), and
-// migration 002's trigger enforces it in the database too. Use this, not MicroTaskUpdate, in any
-// code that has no signed-in user acting on a task.
-export type MicroTaskSchedulePatch = Pick<
-  MicroTaskUpdate,
-  'week_of' | 'due_date' | 'carried_from_week' | 'pulled_from_week'
->;
 export type ConnectedAppInsert = TablesInsert<'connected_apps'>;
 export type ConnectedAppUpdate = TablesUpdate<'connected_apps'>;
