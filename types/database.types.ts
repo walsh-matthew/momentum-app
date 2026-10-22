@@ -282,5 +282,13 @@ export type GoalChannelInsert = TablesInsert<'goal_channels'>;
 export type GoalChannelUpdate = TablesUpdate<'goal_channels'>;
 export type MicroTaskInsert = TablesInsert<'micro_tasks'>;
 export type MicroTaskUpdate = TablesUpdate<'micro_tasks'>;
+// What automated code (rebalancing, ingestion, LLM suggestions) may change on a task. Deliberately
+// omits status and completed_at: completion is human-only (NINETY_DAY_PLAN_CONTEXT.md §3), and
+// migration 002's trigger enforces it in the database too. Use this, not MicroTaskUpdate, in any
+// code that has no signed-in user acting on a task.
+export type MicroTaskSchedulePatch = Pick<
+  MicroTaskUpdate,
+  'week_of' | 'due_date' | 'carried_from_week' | 'pulled_from_week'
+>;
 export type ConnectedAppInsert = TablesInsert<'connected_apps'>;
 export type ConnectedAppUpdate = TablesUpdate<'connected_apps'>;

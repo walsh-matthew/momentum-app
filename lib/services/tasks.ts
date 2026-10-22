@@ -4,7 +4,9 @@
 // Completion is human-only (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6). Status changes here
 // always run as the signed-in user through the anon-key client, so RLS scopes the write to their
 // own rows, and there is no actor or "system" parameter. Automated code (rebalancing, ingestion)
-// must not call setTaskStatus; it has no session to act as.
+// must not call setTaskStatus; it has no session to act as. Migration 002 backs this up in the
+// database: a trigger rejects any change to status or completed_at that is not made by the
+// authenticated owner, so even the service role cannot complete a task.
 //
 // Rebalancing moves tasks between weeks and nothing else (§5 rule 1, §10): this module never
 // deletes a task, and applyRebalance never touches status or completed_at.
@@ -14,7 +16,7 @@ import { buildRebalanceProposal, shiftDateByWeeks, summarizeProposalTasks } from
 import {
   TASK_STATUSES,
   type MicroTask,
-  type MicroTaskUpdate,
+  type MicroTaskSchedulePatch,
   type TaskStatus,
 } from '@/types/database.types';
 import {
@@ -59,7 +61,9 @@ export async function getFocusTask(): Promise<ServiceResult<MicroTask | null>> {
 }
 
 // Sets a task to done or back to todo on behalf of the signed-in user. Validates its input
-// because it is reachable from any caller, including a direct Server Action POST.
+// because it is reachable from any caller, including a direct Server Action POST. The session is
+// re-verified with getUser() (which asks Supabase Auth, not just the cookie) before any write, and
+// the write is filtered to that user's id as well as scoped by RLS.
 export async function setTaskStatus(taskId: unknown, status: unknown): Promise<ServiceResult<MicroTask>> {
   if (typeof taskId !== 'string' || !UUID_PATTERN.test(taskId)) {
     return { ok: false, error: 'Invalid task.' };
@@ -143,7 +147,7 @@ export async function applyRebalance(rawProposal: unknown): Promise<ServiceResul
       if (row.week_of !== move.fromWeek) return skip('It moved since this was proposed.');
 
       // A carry-over and a pull-forward each set one marker and clear the other, as the table requires.
-      const patch: MicroTaskUpdate = {
+      const patch: MicroTaskSchedulePatch = {
         week_of: move.toWeek,
         carried_from_week: move.action === 'carry_over' ? move.fromWeek : null,
         pulled_from_week: move.action === 'pull_forward' ? move.fromWeek : null,
