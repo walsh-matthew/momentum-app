@@ -21,7 +21,7 @@ export async function createSupabaseServerClient() {
       getAll: () => cookieStore.getAll(),
       setAll: (toSet) => {
         // Cookies can only be written from a Server Action or Route Handler. A read-only render
-        // throws here, which is safe to ignore: the session refresh happens on the next write path.
+        // throws here, which is safe to ignore: proxy.ts refreshes the session on every request.
         try {
           toSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
         } catch {}
