@@ -12,8 +12,18 @@
 // deletes a task, and applyRebalance never touches status or completed_at. Each move also lands in
 // task_rebalance_history (migration 003), written by the same database call that moves the task.
 
+import { requestRebalanceFromModel, type ModelRebalanceFailure } from '@/lib/ai/rebalance';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { buildRebalanceProposal, shiftDateByWeeks, summarizeProposalTasks } from '@/lib/utils/rebalance';
+import {
+  MAX_MODEL_TASKS,
+  buildModelFacts,
+  buildRebalanceProposal,
+  checkProposalAgainstTasks,
+  shiftDateByWeeks,
+  summarizeProposalTasks,
+  type ModelRebalanceFacts,
+} from '@/lib/utils/rebalance';
+import { computeVelocity, currentPlanWeek, type VelocitySnapshot } from '@/lib/utils/velocity';
 import {
   TASK_STATUSES,
   type MicroTask,
@@ -26,6 +36,7 @@ import {
   type RebalanceProposalView,
   type RebalanceSkippedMove,
 } from '@/types/rebalance';
+import { listGoalChannels } from './goals';
 import type { ServiceResult } from './result';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,21 +122,123 @@ export async function setTaskStatus(taskId: unknown, status: unknown): Promise<S
   return { ok: true, data };
 }
 
+// Why the user got the rule-based suggestion when they asked for Claude's. Fixed wording from our own
+// code: nothing the model or the provider wrote is ever shown as a notice.
+const MODEL_FALLBACK_NOTICES: Record<ModelRebalanceFailure | 'invalid' | 'too_large', string> = {
+  not_configured: "Claude suggestions aren't set up on the server yet, so this is the rule-based suggestion.",
+  refused: 'Claude declined to write a suggestion, so this is the rule-based suggestion.',
+  rate_limited: 'Claude is busy right now, so this is the rule-based suggestion. Try again in a minute.',
+  unavailable: 'Claude could not be reached, so this is the rule-based suggestion.',
+  bad_output: "Claude's answer could not be read, so this is the rule-based suggestion.",
+  invalid: "Claude's suggestion did not pass our safety checks, so this is the rule-based suggestion.",
+  too_large: 'Your plan is too large to send to Claude, so this is the rule-based suggestion.',
+};
+
 // Builds the rebalance proposal the drawer shows. Takes the tasks the caller already fetched so the
 // page reads them once. Proposing reads and writes nothing: it never changes a task.
+//
+// By default the proposal is rule-based (free and instant, so the page can load it every time). Pass
+// `useModel` and Claude writes it instead; that is only ever done from an explicit user action
+// (requestModelRebalance), never on a page load, because it costs money and takes seconds.
+//
+// A model proposal is trusted no further than the rule-based one:
+// - its raw JSON goes through parseRebalanceProposal() unchanged, which allows only carry_over and
+//   pull_forward and rejects any delete, cut or status field;
+// - checkProposalAgainstTasks() then checks it against the real tasks (they exist, are unfinished, are
+//   in the week it says, and are not sent into the past);
+// - titles come from `tasks`, never from the model.
+// If anything fails, the user gets the rule-based proposal with a notice saying why, never an error.
 export async function proposeRebalance(
   tasks: readonly MicroTask[],
   currentWeek: number,
   asOf: string,
+  options: { useModel?: boolean; velocity?: ModelRebalanceFacts['velocity'] } = {},
 ): Promise<ServiceResult<RebalanceProposalView>> {
-  // TODO(MOM-Phase2): live LLM orchestration trigger. Replace buildRebalanceProposal with a Claude
-  // call (Vercel AI SDK, ANTHROPIC_API_KEY read here on the server only) that is given the task ids,
-  // weeks and velocity and returns a proposal. Pass its raw output through parseRebalanceProposal()
-  // unchanged, and keep titles coming from `tasks`, never from the model. Fire it from an explicit
-  // user action (the drawer or the Adjust Weekly Pace chip), not on every page load, and decide
-  // whether to store the proposal so Apply can approve it by id (BACKLOG.md).
-  const proposal = buildRebalanceProposal(tasks, currentWeek, asOf);
-  return { ok: true, data: { proposal, tasks: summarizeProposalTasks(tasks, proposal), currentWeek } };
+  const fromRules = (notice: string | null): ServiceResult<RebalanceProposalView> => {
+    let proposal: ReturnType<typeof buildRebalanceProposal>;
+    try {
+      proposal = buildRebalanceProposal(tasks, currentWeek, asOf);
+    } catch {
+      // The builder holds itself to the proposal schema, which allows at most MAX_REBALANCE_MOVES moves.
+      // A plan with more work behind than that has no valid rule-based proposal; say so, don't crash.
+      return { ok: false, error: 'There is too much unfinished work to rebalance in one go.' };
+    }
+    return {
+      ok: true,
+      data: {
+        proposal,
+        source: 'rules',
+        model: null,
+        notice,
+        tasks: summarizeProposalTasks(tasks, proposal),
+        currentWeek,
+      },
+    };
+  };
+  if (!options.useModel) return fromRules(null);
+
+  if (tasks.filter((t) => t.status === 'todo').length > MAX_MODEL_TASKS) return fromRules(MODEL_FALLBACK_NOTICES.too_large);
+
+  const answer = await requestRebalanceFromModel(buildModelFacts(tasks, currentWeek, asOf, options.velocity ?? null));
+  if (!answer.ok) return fromRules(MODEL_FALLBACK_NOTICES[answer.reason]);
+
+  const parsed = parseRebalanceProposal(answer.raw);
+  if (!parsed.ok || checkProposalAgainstTasks(parsed.data, tasks, currentWeek) !== null) {
+    return fromRules(MODEL_FALLBACK_NOTICES.invalid);
+  }
+  return {
+    ok: true,
+    data: {
+      proposal: parsed.data,
+      source: 'model',
+      model: answer.model,
+      notice: null,
+      tasks: summarizeProposalTasks(tasks, parsed.data),
+      currentWeek,
+    },
+  };
+}
+
+// A user asked Claude to write their rebalance proposal. Reachable from a Server Action, so it
+// authenticates, loads the user's own plan through RLS, and limits how often one user can call it:
+// each call is a paid model request. The limit is per server instance and best effort (BACKLOG.md).
+const MODEL_REQUEST_COOLDOWN_MS = 20_000;
+const lastModelRequestAt = new Map<string, number>();
+
+export async function requestModelRebalance(
+  deps: { now?: () => number } = {},
+): Promise<ServiceResult<RebalanceProposalView>> {
+  const supabase = await createSupabaseServerClient();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) return { ok: false, error: 'Sign in to ask for a suggestion.' };
+
+  const now = (deps.now ?? Date.now)();
+  const last = lastModelRequestAt.get(auth.user.id);
+  if (last !== undefined && now - last < MODEL_REQUEST_COOLDOWN_MS) {
+    return { ok: false, error: 'Please wait a few seconds before asking again.' };
+  }
+  // Set before the call, so a failing or slow request still counts.
+  lastModelRequestAt.set(auth.user.id, now);
+
+  const [goals, tasks, history] = await Promise.all([listGoalChannels(), listMicroTasks(), listRebalanceHistory()]);
+  if (!goals.ok || !tasks.ok) return { ok: false, error: 'Could not load your plan.' };
+  const goal = goals.data.find((g) => g.status === 'active');
+  if (!goal) return { ok: false, error: 'Create a goal first.' };
+  const today = new Date(now).toISOString().slice(0, 10);
+  const week = currentPlanWeek(goal.start_date, today);
+  if (week === null) return { ok: false, error: 'Could not work out your plan week.' };
+
+  // Velocity is context for the model; if the history is unavailable the plan still loads without it.
+  const snapshot: VelocitySnapshot = computeVelocity(tasks.data, week, today, history.ok ? history.data : []);
+  return proposeRebalance(tasks.data, week, today, {
+    useModel: true,
+    velocity: {
+      score: snapshot.score,
+      trend: snapshot.trend,
+      risk: snapshot.risk,
+      pressureStreak: snapshot.pressureStreak,
+    },
+  });
 }
 
 // Applies a proposal the user approved. For each move it updates week_of, the carry-over or

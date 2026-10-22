@@ -1,10 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { applyRebalance, setTaskStatus } from '@/lib/services/tasks';
+import { applyRebalance, requestModelRebalance, setTaskStatus } from '@/lib/services/tasks';
 import type { ServiceResult } from '@/lib/services/result';
 import type { MicroTask } from '@/types/database.types';
-import type { RebalanceApplyResult } from '@/types/rebalance';
+import type { RebalanceApplyResult, RebalanceProposalView } from '@/types/rebalance';
 
 // Server Actions are reachable by direct POST, so this takes `unknown` and the service validates
 // and authenticates (via the session cookie). Only a user's own toggle reaches this action;
@@ -22,4 +22,12 @@ export async function applyRebalanceProposal(rawProposal: unknown): Promise<Serv
   const result = await applyRebalance(rawProposal);
   if (result.ok && result.data.moved.length > 0) revalidatePath('/');
   return result;
+}
+
+// Runs only when the user clicks "Ask Claude" in the rebalance drawer; it is never called on a page load.
+// It takes no input at all, so there is nothing for a direct POST to tamper with: the service
+// authenticates, loads the signed-in user's own plan, rate-limits, and returns a proposal that has
+// passed TaskRebalanceSchema and been checked against their tasks. It changes nothing in the database.
+export async function askClaudeToRebalance(): Promise<ServiceResult<RebalanceProposalView>> {
+  return requestModelRebalance();
 }
