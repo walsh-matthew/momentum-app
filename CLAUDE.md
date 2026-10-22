@@ -70,6 +70,7 @@ Before writing or changing any domain logic, read these files. They override ass
 - [ ] Feature branch created off clean `main`.
 - [ ] Code implemented in Next.js / Supabase with clean service abstractions and central types.
 - [ ] Static type verification passes (`npx tsc --noEmit`).
+- [ ] Unit tests pass (`npm test`). Add or update tests in `tests/` for any change to domain logic, services or SQL migrations.
 - [ ] Verified locally via `npm run dev`.
 - [ ] Code committed using `feat(MOM-X)` message format.
 - [ ] Branch merged to `main` and Jira ticket moved to `Done`.
