@@ -112,8 +112,10 @@ begin
   -- Reading, and the append-only guarantee
   -- -------------------------------------------------------------------------
 
-  select count(*) into v from public.task_rebalance_history;
-  res := res || jsonb_build_object('c', 'A reads only their own history (3 rows)', 'p', v = 3, 'd', format('%s rows', v));
+  -- A's rows: 1 from the signup seed's carry-over (migration 004) plus the 3 moves made above.
+  select count(*), count(*) filter (where user_id = a) into v, w from public.task_rebalance_history;
+  res := res || jsonb_build_object('c', 'A reads only their own history (4 rows: 1 seed + 3 moves)', 'p', v = 4 and w = 4,
+    'd', format('%s rows visible, %s are A''s', v, w));
 
   begin
     insert into public.task_rebalance_history (user_id, task_id, source_week, target_week, shift_type)
@@ -145,8 +147,10 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated')::text, true);
 
-  select count(*) into v from public.task_rebalance_history;
-  res := res || jsonb_build_object('c', 'B cannot see A''s history', 'p', v = 0, 'd', format('%s rows', v));
+  -- B sees their own seed row (migration 004) and none of A's.
+  select count(*), count(*) filter (where user_id = a) into v, w from public.task_rebalance_history;
+  res := res || jsonb_build_object('c', 'B cannot see A''s history (sees only their own 1 seed row)', 'p', v = 1 and w = 0,
+    'd', format('%s rows visible, %s are A''s', v, w));
 
   select count(*) into v from public.micro_tasks where id = b_task and week_of = 2 and carried_from_week is null;
   res := res || jsonb_build_object('c', 'B''s task did not move', 'p', v = 1, 'd', format('%s rows unchanged', v));
