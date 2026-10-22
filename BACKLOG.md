@@ -18,7 +18,7 @@ Items below were triaged into Jira on 2026-10-21 under `MOM-16` (EPIC 5: Phase 2
 | Rebalance | MOM-47, MOM-48, MOM-49, MOM-50, MOM-51, MOM-52, MOM-53, MOM-73 |
 | Tests | MOM-54, MOM-55, MOM-56, MOM-57, MOM-58, MOM-59, MOM-61, MOM-67 |
 | Deployment | MOM-60 |
-| Tooling | MOM-63, MOM-68, MOM-74 |
+| Tooling | MOM-63, MOM-68, MOM-74, MOM-75 |
 
 ## Discovered In-Flight
 
@@ -110,3 +110,4 @@ Items found while working on tickets. Add new items at the bottom with the ticke
 - [ ] Rebalance (Claude): the model is told the plan as ids, weeks, types, minutes, due dates and velocity; it is not told the paces (§9) or the lane tags, and "interviews win" (§5 rule 3) still has no input. *Source: MOM-47.* *Jira: MOM-52.*
 - [x] Tooling: BACKLOG.md had no way to turn its tickets into build prompts. Resolved in MOM-63: `npm run plan` (`scripts/generate-execution-plan.ts`) prints a prompt per ticket, or an overview, from BACKLOG.md and the standards in CLAUDE.md. *Source: tooling request.* *Jira: MOM-63.*
 - [ ] Env: the global `HEVY_API_KEY` is vestigial. Hevy keys are stored per user in `integration_credentials`, but `getServerEnv()` still requires the variable and `.env.example`, `CLAUDE.md`, `ROADMAP.md` and `docs/INTEGRATIONS_SPEC.md` §3.A still name it. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are real server secrets that `CLAUDE.md` does not list. Delete the variable from Vercel Production after the change merges. *Source: MOM-37, next-phase audit.* *Jira: MOM-74.*
+- [ ] Tooling: each build day is run by pasting block prompts from `docs/plans/NEXT_BUILD_PLAN.md` by hand. Add `/day-start`, `/run-block <MOM-n>` and `/day-end` Claude Code commands, a plan format check in `npm test`, and a "Today's runbook" section from the plan generator. Spec: `docs/mom-75-plan-execution-spec.md`. Build after Sessions 1 and 2 have run by hand. *Source: day-two build review.* *Jira: MOM-75.*
