@@ -8,7 +8,14 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GOAL_CHANNEL_STATUSES, SHIFT_TYPES, TASK_STATUSES, TASK_TYPES } from '@/types/database.types';
+import {
+  CREDENTIAL_STATUSES,
+  GOAL_CHANNEL_STATUSES,
+  INTEGRATION_AUTH_TYPES,
+  SHIFT_TYPES,
+  TASK_STATUSES,
+  TASK_TYPES,
+} from '@/types/database.types';
 
 const DIR = join(process.cwd(), 'supabase', 'migrations');
 const files = readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort();
@@ -135,5 +142,40 @@ describe('functions only the database should call have no EXECUTE grant', () => 
   });
   it('seed_career_pivot is not callable by API roles', () => {
     expect(sqlOf('001')).toMatch(/revoke execute on function public\.seed_career_pivot\(uuid\) from public, anon, authenticated/i);
+  });
+});
+
+describe('provider tokens are out of reach of the browser (migration 005)', () => {
+  const sql = sqlOf('005');
+
+  it('removes the browser-readable connected_apps.credentials column', () => {
+    expect(sql).toMatch(/alter table public\.connected_apps drop column credentials/i);
+    expect(sql).toMatch(/alter table public\.connected_apps drop constraint connected_apps_credentials_is_object/i);
+  });
+  it('turns row level security on and takes every grant from the API roles', () => {
+    expect(sql).toMatch(/alter table public\.integration_credentials enable row level security/i);
+    expect(sql).toMatch(/revoke all on table public\.integration_credentials from anon, authenticated/i);
+  });
+  it('defines no policy and grants nothing to a browser role', () => {
+    expect(all).not.toMatch(/create policy[^;]*on public\.integration_credentials/i);
+    expect(all).not.toMatch(/grant [^;]*on (table )?public\.integration_credentials[^;]* to [^;]*\b(anon|authenticated|public)\b/i);
+  });
+  it('ties each credential to a connected app of the same user, and removes it with the app', () => {
+    expect(sql).toMatch(
+      /foreign key \(user_id, provider\) references public\.connected_apps \(user_id, provider\) on delete cascade/i,
+    );
+    expect(sql).toMatch(/integration_credentials_user_provider_unique unique \(user_id, provider\)/i);
+  });
+  it('keeps the auth type and status lists in step with the TypeScript types', () => {
+    expect(inList(sql, 'integration_credentials_auth_type_check')).toEqual([...INTEGRATION_AUTH_TYPES]);
+    expect(inList(sql, 'integration_credentials_status_check')).toEqual([...CREDENTIAL_STATUSES]);
+  });
+  it.each(['integration_credentials_secret_matches_type', 'integration_credentials_secrets_not_blank'])(
+    'has the %s constraint the fake enforces',
+    (name) => expect(sql).toMatch(new RegExp(`constraint ${name}\\b`, 'i')),
+  );
+  it('an OAuth credential has an access token and no key; a key credential has a key and no tokens', () => {
+    expect(sql).toMatch(/auth_type = 'oauth2'\s+and access_token is not null and api_key is null/i);
+    expect(sql).toMatch(/auth_type = 'api_key' and api_key is not null and access_token is null and refresh_token is null/i);
   });
 });

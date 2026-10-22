@@ -108,7 +108,7 @@ All provider adapters must output data adhering to this standardized interface i
   * Implement mock provider adapters (`getMockHevyActivity()`, `getMockCalendarActivity()`).
   * Build UI toggle cards in the Integration Panel that store active states in Supabase `connected_apps` without making live third-party network requests.
 * **Phase 2 (Post-MVP):**
-  * Implement real HTTP clients (`@/lib/adapters/hevy.ts`, `@/lib/adapters/google.ts`) utilizing stored API keys/OAuth tokens from `connected_apps`.
+  * Implement real HTTP clients (`@/lib/adapters/hevy.ts`, `@/lib/adapters/google.ts`) utilizing stored API keys/OAuth tokens from `integration_credentials` (via `getAccessToken()` in `@/lib/services/integrations.ts`).
   * Add background webhook route handlers at `app/api/webhooks/[provider]/route.ts`.
 
 ---
@@ -116,5 +116,7 @@ All provider adapters must output data adhering to this standardized interface i
 ## 5. Security & Secret Safeguards
 
 1. **Zero Secret Leakage:** Provider API keys and OAuth client secrets MUST NEVER be rendered on client components or stored in frontend state.
-2. **Database Storage:** Credentials inside `connected_apps.credentials` (`jsonb`) are protected by Supabase Row Level Security (RLS) policies enforcing `auth.uid() = user_id`.
-3. **Environment Placeholders:** Local testing keys are stored in `.env.local` and mirrored with placeholder variables in `.env.example`.
+2. **Database Storage:** Provider API keys and OAuth tokens live in `integration_credentials` (migration 005), not on `connected_apps`. RLS alone is not enough for secrets: a policy of `auth.uid() = user_id` would still let the owner's browser session (and anything that runs in it, such as an XSS bug) read their own tokens. So that table has RLS on with no policies and no grants for `anon` or `authenticated`: no browser role can read or write it. Only server code using the service-role client (`@/lib/supabase/admin`) does.
+3. **User Isolation:** The service-role client bypasses RLS, so `@/lib/services/integrations.ts` enforces isolation itself. Session-bound functions take no user id and read it from the verified session (`getUser()`); `getAccessToken(userId, provider)` is for code with no session (a signed webhook, a sync job) and must be given an id the caller resolved itself, never one a client supplied. `integration_credentials` has a same-owner foreign key to `connected_apps`, which keeps the user's own RLS-protected row as the anchor.
+4. **No Secret in Errors or Logs:** Tokens are never logged or returned in an error. Database errors are replaced with fixed wording (a failed CHECK reports the offending row), and the status shown to a client (`IntegrationAccount`, `types/integrations.ts`) has no secret field.
+5. **Environment Placeholders:** Local testing keys are stored in `.env.local` and mirrored with placeholder variables in `.env.example`.
