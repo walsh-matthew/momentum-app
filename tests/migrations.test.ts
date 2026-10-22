@@ -1,0 +1,139 @@
+// Static checks over supabase/migrations/*.sql. They do not run SQL (that is what supabase/verify/ is
+// for); they stop the TypeScript side drifting from the schema:
+// - every CHECK constraint the in-memory fake enforces really exists in the migrations,
+// - the enum values in types/database.types.ts match the CHECK lists,
+// - the invariants "never cut work", "the user owns completion" and "history is append-only" are
+//   still written into the SQL that implements them.
+
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { GOAL_CHANNEL_STATUSES, SHIFT_TYPES, TASK_STATUSES, TASK_TYPES } from '@/types/database.types';
+
+const DIR = join(process.cwd(), 'supabase', 'migrations');
+const files = readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort();
+const sqlOf = (prefix: string) => {
+  const file = files.find((f) => f.startsWith(prefix));
+  if (!file) throw new Error(`no migration ${prefix}`);
+  // Comments say "never delete" and similar; only the statements count.
+  return readFileSync(join(DIR, file), 'utf8').replace(/--.*$/gm, '');
+};
+const all = files.map((f) => sqlOf(f.slice(0, 3))).join('\n');
+
+// The text of a constraint's check list, e.g. `status in ('todo', 'done')`, as a set of values.
+function inList(sql: string, constraint: string): string[] {
+  const match = new RegExp(`constraint ${constraint}\\s+check\\s*\\(\\s*(?:[a-z_]+)\\s+in\\s*\\(([^)]*)\\)`, 'i').exec(sql);
+  if (!match) throw new Error(`no IN-list check named ${constraint}`);
+  return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+}
+
+describe('migration files', () => {
+  it('are numbered 001, 002, ... with no gaps', () => {
+    expect(files.map((f) => f.slice(0, 3))).toEqual(files.map((_, i) => String(i + 1).padStart(3, '0')));
+  });
+});
+
+describe('CHECK constraints the fake enforces exist in the SQL', () => {
+  it.each([
+    'micro_tasks_week_of_positive',
+    'micro_tasks_carried_from_earlier_week',
+    'micro_tasks_pulled_from_later_week',
+    'micro_tasks_single_move_marker',
+    'micro_tasks_completed_at_matches_status',
+    'task_rebalance_history_weeks_positive',
+    'task_rebalance_history_direction',
+    'task_rebalance_history_shift_type_check',
+  ])('%s', (name) => expect(all).toMatch(new RegExp(`constraint ${name}\\b`, 'i')));
+
+  it('micro_tasks: done exactly when completed_at is set', () => {
+    expect(sqlOf('001')).toMatch(/micro_tasks_completed_at_matches_status\s+check\s*\(\s*\(status = 'done'\) = \(completed_at is not null\)\s*\)/i);
+  });
+  it('micro_tasks: a carry-over comes from an earlier week, a pull-forward from a later one', () => {
+    const sql = sqlOf('001');
+    expect(sql).toMatch(/carried_from_week >= 1 and carried_from_week < week_of/);
+    expect(sql).toMatch(/pulled_from_week > week_of/);
+  });
+  it('task_rebalance_history: direction is tied to the shift type', () => {
+    const sql = sqlOf('003');
+    expect(sql).toMatch(/shift_type = 'carry_over' and target_week > source_week/);
+    expect(sql).toMatch(/shift_type = 'pull_forward' and target_week < source_week/);
+  });
+});
+
+describe('enum values match types/database.types.ts', () => {
+  it('task statuses', () => expect(inList(sqlOf('001'), 'micro_tasks_status_check')).toEqual([...TASK_STATUSES]));
+  it('task types', () => expect(inList(sqlOf('001'), 'micro_tasks_task_type_check').sort()).toEqual([...TASK_TYPES].sort()));
+  it('goal channel statuses', () => {
+    expect(inList(sqlOf('001'), 'goal_channels_status_check')).toEqual([...GOAL_CHANNEL_STATUSES]);
+  });
+  it('shift types', () => {
+    expect(inList(sqlOf('003'), 'task_rebalance_history_shift_type_check')).toEqual([...SHIFT_TYPES]);
+  });
+});
+
+describe('the user owns completion (migration 002)', () => {
+  const sql = sqlOf('002');
+  it('guards inserts and updates on micro_tasks with a trigger', () => {
+    expect(sql).toMatch(/create trigger micro_tasks_guard_completion\s+before insert or update on public\.micro_tasks/i);
+  });
+  it('allows a change only for the authenticated owner', () => {
+    expect(sql).toMatch(/current_user <> 'authenticated'/);
+    expect(sql).toMatch(/auth\.uid\(\) is distinct from new\.user_id/);
+  });
+  it('covers both status and completed_at, and fails with a permission error', () => {
+    expect(sql).toMatch(/new\.status is distinct from old\.status/);
+    expect(sql).toMatch(/new\.completed_at is distinct from old\.completed_at/);
+    expect(sql).toMatch(/errcode = '42501'/);
+  });
+});
+
+describe('rebalancing moves work and nothing else (migration 003)', () => {
+  const sql = sqlOf('003');
+  const fn = /create or replace function public\.apply_task_move[\s\S]*?\n\$\$;/i.exec(sql)?.[0] ?? '';
+  const setClause = /\bset\b([\s\S]*?)\bwhere\b/i.exec(fn.slice(fn.indexOf('update public.micro_tasks')))?.[1] ?? '';
+
+  it('finds the function and its SET clause', () => {
+    expect(fn).not.toBe('');
+    expect(setClause).toMatch(/week_of/);
+  });
+  it('never sets status or completed_at, and never deletes', () => {
+    expect(setClause).not.toMatch(/status|completed_at/i);
+    expect(fn).not.toMatch(/\bdelete\b/i);
+  });
+  it('only moves an unfinished task owned by the signed-in user', () => {
+    expect(fn).toMatch(/user_id = v_uid/);
+    expect(fn).toMatch(/status = 'todo'/);
+    expect(fn).toMatch(/auth\.uid\(\)/);
+  });
+  it('is callable only by signed-in users', () => {
+    expect(sql).toMatch(/revoke execute on function public\.apply_task_move\([^)]*\)\s+from public, anon, authenticated, service_role/i);
+    expect(sql).toMatch(/grant execute on function public\.apply_task_move\([^)]*\) to authenticated/i);
+  });
+});
+
+describe('task_rebalance_history is append-only for API roles', () => {
+  const sql = sqlOf('003');
+  it('revokes everything, then grants SELECT only', () => {
+    expect(sql).toMatch(/revoke all on table public\.task_rebalance_history from anon, authenticated, service_role/i);
+    expect(sql).toMatch(/grant select on table public\.task_rebalance_history to authenticated/i);
+  });
+  it('has no insert, update or delete policy anywhere', () => {
+    expect(all).not.toMatch(/create policy[^;]*on public\.task_rebalance_history\s+for (insert|update|delete|all)/i);
+  });
+  it('is removed with its task and with the account', () => {
+    expect(sql).toMatch(/foreign key \(task_id, user_id\) references public\.micro_tasks \(id, user_id\) on delete cascade/i);
+    expect(sql).toMatch(/user_id\s+uuid not null references public\.users \(id\) on delete cascade/i);
+  });
+});
+
+describe('functions only the database should call have no EXECUTE grant', () => {
+  it.each([
+    ['002', 'micro_tasks_guard_completion'],
+    ['004', 'micro_tasks_record_initial_move'],
+  ])('migration %s: %s', (prefix, fn) => {
+    expect(sqlOf(prefix)).toMatch(new RegExp(`revoke execute on function public\\.${fn}\\(\\) from public, anon, authenticated, service_role`, 'i'));
+  });
+  it('seed_career_pivot is not callable by API roles', () => {
+    expect(sqlOf('001')).toMatch(/revoke execute on function public\.seed_career_pivot\(uuid\) from public, anon, authenticated/i);
+  });
+});
