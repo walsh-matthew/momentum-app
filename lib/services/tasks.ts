@@ -9,14 +9,15 @@
 // authenticated owner, so even the service role cannot complete a task.
 //
 // Rebalancing moves tasks between weeks and nothing else (§5 rule 1, §10): this module never
-// deletes a task, and applyRebalance never touches status or completed_at.
+// deletes a task, and applyRebalance never touches status or completed_at. Each move also lands in
+// task_rebalance_history (migration 003), written by the same database call that moves the task.
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { buildRebalanceProposal, shiftDateByWeeks, summarizeProposalTasks } from '@/lib/utils/rebalance';
 import {
   TASK_STATUSES,
   type MicroTask,
-  type MicroTaskSchedulePatch,
+  type TaskRebalanceHistory,
   type TaskStatus,
 } from '@/types/database.types';
 import {
@@ -56,6 +57,23 @@ export async function getFocusTask(): Promise<ServiceResult<MicroTask | null>> {
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+// The signed-in user's rebalance history, oldest move first, optionally for one task. A task's whole
+// chain reads in order (for example 2 to 3, then 3 to 5), unlike carried_from_week, which keeps only
+// the last hop. RLS limits this to their own rows; the table is append-only.
+export async function listRebalanceHistory(
+  options: { taskId?: string } = {},
+): Promise<ServiceResult<TaskRebalanceHistory[]>> {
+  if (options.taskId !== undefined && !UUID_PATTERN.test(options.taskId)) {
+    return { ok: false, error: 'Invalid task.' };
+  }
+  const supabase = await createSupabaseServerClient();
+  let query = supabase.from('task_rebalance_history').select('*');
+  if (options.taskId !== undefined) query = query.eq('task_id', options.taskId);
+  const { data, error } = await query.order('created_at', { ascending: true });
   if (error) return { ok: false, error: error.message };
   return { ok: true, data };
 }
@@ -146,30 +164,23 @@ export async function applyRebalance(rawProposal: unknown): Promise<ServiceResul
       if (row.status !== 'todo') return skip('Already done, so it stays where it is.');
       if (row.week_of !== move.fromWeek) return skip('It moved since this was proposed.');
 
-      // A carry-over and a pull-forward each set one marker and clear the other, as the table requires.
-      const patch: MicroTaskSchedulePatch = {
-        week_of: move.toWeek,
-        carried_from_week: move.action === 'carry_over' ? move.fromWeek : null,
-        pulled_from_week: move.action === 'pull_forward' ? move.fromWeek : null,
+      // One database call moves the task and records it in task_rebalance_history, in the same
+      // transaction (migration 003). It sets week_of, one move marker (clearing the other) and the due
+      // date, and nothing else: no status, no completed_at, no delete. It re-checks that the task is
+      // the signed-in user's, still unfinished and still in fromWeek, so a stale proposal comes back false.
+      const { data: applied, error } = await supabase.rpc('apply_task_move', {
+        p_task_id: move.taskId,
+        p_from_week: move.fromWeek,
+        p_to_week: move.toWeek,
+        p_action: move.action,
         // Dates are flexible (§5 rule 2): the due date keeps its weekday and moves with the task.
-        due_date:
+        p_due_date:
           row.due_date === null
             ? null
             : (shiftDateByWeeks(row.due_date, move.toWeek - move.fromWeek) ?? row.due_date),
-      };
-      const { data, error } = await supabase
-        .from('micro_tasks')
-        .update(patch)
-        .eq('id', move.taskId)
-        .eq('user_id', userId)
-        // Guards against a stale proposal: only move a task that is still unfinished and still in
-        // the week the proposal saw it in.
-        .eq('status', 'todo')
-        .eq('week_of', move.fromWeek)
-        .select('id')
-        .maybeSingle();
+      });
       if (error) return skip(error.message);
-      if (!data) return skip('It changed since this was proposed.');
+      if (!applied) return skip('It changed since this was proposed.');
       return null;
     }),
   );
