@@ -27,7 +27,7 @@ Items found while working on tickets. Add new items at the bottom with the ticke
 - [ ] Weekly review notes need a record (week plus the eight feedback-loop note fields). *Source: `docs/NINETY_DAY_PLAN_CONTEXT.md` §6, §7.* *Jira: MOM-21.*
 - [ ] Carry-over history: `carried_from_week` records one hop only. Decide whether to keep a chain. *Source: `docs/NINETY_DAY_PLAN_CONTEXT.md` §7.* *Jira: MOM-22.*
 - [ ] Failure log entries (dated: asked, model got wrong, why) and lane tracking have no table. *Source: `docs/NINETY_DAY_PLAN_CONTEXT.md` §6, §7.* *Jira: MOM-23, MOM-24.*
-- [ ] Add `SUPABASE_SERVICE_ROLE_KEY` handling check: confirm no `NEXT_PUBLIC_` prefix is ever used for it. *Source: MOM-8 `.env.example`.* *Jira: MOM-27.*
+- [x] Add `SUPABASE_SERVICE_ROLE_KEY` handling check: confirm no `NEXT_PUBLIC_` prefix is ever used for it. *Source: MOM-8 `.env.example`.* *Jira: MOM-27.* Resolved in MOM-28: validated server-only in `lib/config/env.ts`; build audit found no leak.
 - [ ] Remove the Career Pivot seed from signup. `handle_new_user()` calls `seed_career_pivot()` for every new account; once the MOM-11 wizard ships, new users should start empty. *Source: MOM-9 migration §9.* *Jira: MOM-19.*
 - [ ] Lock down `connected_apps.credentials` before Phase 2 stores real tokens. RLS lets the owner's browser session read the column; move credentials to a server-only table, Supabase Vault, or column-level grants. *Source: MOM-9 migration §5, `docs/INTEGRATIONS_SPEC.md` §5.* *Jira: MOM-28.*
 - [ ] Lane tags (`lane_1`, `lane_2`) are not in the schema. §2 maps lane to "a tag on a channel or task". *Source: MOM-9, `docs/NINETY_DAY_PLAN_CONTEXT.md` §2, §4.* *Jira: MOM-24.*
