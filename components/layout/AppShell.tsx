@@ -8,7 +8,7 @@ import { MobileTabBar } from './MobileTabBar';
 import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
 import type { VelocitySnapshot } from '@/lib/utils/velocity';
 import type { ConnectedAppPublic, MicroTask } from '@/types/database.types';
-import type { RebalanceProposalView } from '@/types/rebalance';
+import type { RebalanceProposalView, TaskMoveChains } from '@/types/rebalance';
 import type { WorkspaceView } from './panels';
 
 interface AppShellProps {
@@ -16,11 +16,13 @@ interface AppShellProps {
   velocity: VelocitySnapshot | null;
   connectedApps: ConnectedAppPublic[];
   rebalance: RebalanceProposalView | null;
+  // Each task's moves, from one history query on the page. Read by the focus card and the drawer.
+  moveChains: TaskMoveChains;
 }
 
 // Owns the mobile view selection and whether the rebalance drawer is open. The initial state is a
 // constant, so the server render and first client render match (no hydration mismatch).
-export function AppShell({ focusTask, velocity, connectedApps, rebalance }: AppShellProps) {
+export function AppShell({ focusTask, velocity, connectedApps, rebalance, moveChains }: AppShellProps) {
   const [view, setView] = useState<WorkspaceView>('feed');
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
 
@@ -34,7 +36,7 @@ export function AppShell({ focusTask, velocity, connectedApps, rebalance }: AppS
         onNavigate={() => setView('feed')}
         onAdjustPace={() => setRebalanceOpen(true)}
       />
-      <MainFeed focusTask={focusTask} velocity={velocity} className={panelClass('feed')} />
+      <MainFeed focusTask={focusTask} velocity={velocity} moveChains={moveChains} className={panelClass('feed')} />
       <ConnectedStackPanel
         connectedApps={connectedApps}
         rebalance={rebalance}
@@ -43,7 +45,12 @@ export function AppShell({ focusTask, velocity, connectedApps, rebalance }: AppS
       />
       <MobileTabBar active={view} onChange={setView} />
       {/* Rendered here, not inside a panel: below lg the inactive panels are display:none, which would hide a modal opened from one. */}
-      <RebalanceDrawer open={rebalanceOpen} onClose={() => setRebalanceOpen(false)} view={rebalance} />
+      <RebalanceDrawer
+        open={rebalanceOpen}
+        onClose={() => setRebalanceOpen(false)}
+        view={rebalance}
+        moveChains={moveChains}
+      />
     </div>
   );
 }

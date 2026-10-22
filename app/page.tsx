@@ -1,9 +1,10 @@
 import { AppShell } from '@/components/layout/AppShell';
 import { listGoalChannels } from '@/lib/services/goals';
 import { listConnectedApps } from '@/lib/services/integrations';
-import { getFocusTask, listMicroTasks, proposeRebalance } from '@/lib/services/tasks';
+import { getFocusTask, listMicroTasks, listRebalanceHistory, proposeRebalance } from '@/lib/services/tasks';
+import { groupMovesByTask } from '@/lib/utils/rebalance';
 import { computeVelocity, currentPlanWeek } from '@/lib/utils/velocity';
-import type { ConnectedAppPublic, MicroTask } from '@/types/database.types';
+import type { ConnectedAppPublic, MicroTask, TaskRebalanceHistory } from '@/types/database.types';
 import type { RebalanceProposalView } from '@/types/rebalance';
 
 // Reads the signed-in user's session, so this page renders per request.
@@ -30,22 +31,29 @@ async function loadConnectedApps(): Promise<ConnectedAppPublic[]> {
 
 interface PlanState {
   tasks: MicroTask[];
+  // Every move the user's tasks have made, read once here for velocity, the focus card and the drawer.
+  history: TaskRebalanceHistory[];
   week: number;
   today: string;
 }
 
-// The user's tasks and the plan week of the first active goal (the default goal sorts first), read
-// once and shared by velocity and rebalancing. null hides both when there is no goal or the data
-// cannot be read.
+// The user's tasks, their move history and the plan week of the first active goal (the default goal
+// sorts first), read once and shared by velocity, the focus card and rebalancing. null hides them
+// when there is no goal or the data cannot be read. History is one query for all tasks, never one
+// per task, and losing it only drops the chain detail: the plan still loads.
 async function loadPlan(): Promise<PlanState | null> {
   try {
-    const [goals, tasks] = await Promise.all([listGoalChannels(), listMicroTasks()]);
+    const [goals, tasks, history] = await Promise.all([
+      listGoalChannels(),
+      listMicroTasks(),
+      listRebalanceHistory(),
+    ]);
     if (!goals.ok || !tasks.ok) return null;
     const goal = goals.data.find((g) => g.status === 'active');
     if (!goal) return null;
     const today = new Date().toISOString().slice(0, 10);
     const week = currentPlanWeek(goal.start_date, today);
-    return week === null ? null : { tasks: tasks.data, week, today };
+    return week === null ? null : { tasks: tasks.data, history: history.ok ? history.data : [], week, today };
   } catch {
     return null;
   }
@@ -67,9 +75,16 @@ export default async function HomePage() {
     loadPlan(),
     loadConnectedApps(),
   ]);
-  const velocity = plan ? computeVelocity(plan.tasks, plan.week, plan.today) : null;
+  const velocity = plan ? computeVelocity(plan.tasks, plan.week, plan.today, plan.history) : null;
+  const moveChains = groupMovesByTask(plan?.history ?? []);
   const rebalance = await loadRebalance(plan);
   return (
-    <AppShell focusTask={focusTask} velocity={velocity} connectedApps={connectedApps} rebalance={rebalance} />
+    <AppShell
+      focusTask={focusTask}
+      velocity={velocity}
+      connectedApps={connectedApps}
+      rebalance={rebalance}
+      moveChains={moveChains}
+    />
   );
 }

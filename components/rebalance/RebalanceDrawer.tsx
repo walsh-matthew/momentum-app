@@ -3,12 +3,20 @@
 import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import { applyRebalanceProposal } from '@/app/actions/tasks';
 import { REBALANCE_ACTION_LABELS, TASK_TYPE_LABELS, TIMELINE_WARNING_LABELS } from '@/lib/tasks/labels';
-import type { RebalanceApplyResult, RebalanceProposalView, TimelineWarning } from '@/types/rebalance';
+import { describeMoveChain } from '@/lib/utils/rebalance';
+import type {
+  RebalanceApplyResult,
+  RebalanceProposalView,
+  TaskMoveChains,
+  TimelineWarning,
+} from '@/types/rebalance';
 
 interface RebalanceDrawerProps {
   open: boolean;
   onClose: () => void;
   view: RebalanceProposalView | null;
+  // Each task's earlier moves, from the page's single history query (no per-task fetch here).
+  moveChains: TaskMoveChains;
 }
 
 interface WarningCardProps {
@@ -48,13 +56,14 @@ function WarningCard({ warning, view }: WarningCardProps) {
 
 interface DrawerBodyProps {
   view: RebalanceProposalView;
+  moveChains: TaskMoveChains;
   titleId: string;
   onClose: () => void;
   onPendingChange: (pending: boolean) => void;
 }
 
 // Mounted only while the drawer is open, so every open starts from a clean state.
-function DrawerBody({ view, titleId, onClose, onPendingChange }: DrawerBodyProps) {
+function DrawerBody({ view, moveChains, titleId, onClose, onPendingChange }: DrawerBodyProps) {
   const { proposal } = view;
   const [selected, setSelected] = useState<Set<string>>(() => new Set(proposal.moves.map((m) => m.taskId)));
   const [error, setError] = useState<string | null>(null);
@@ -177,6 +186,7 @@ function DrawerBody({ view, titleId, onClose, onPendingChange }: DrawerBodyProps
               {proposal.moves.map((move) => {
                 const task = view.tasks[move.taskId];
                 const isOn = selected.has(move.taskId);
+                const earlier = moveChains[move.taskId] ?? [];
                 return (
                   <li key={move.taskId}>
                     <label
@@ -209,6 +219,11 @@ function DrawerBody({ view, titleId, onClose, onPendingChange }: DrawerBodyProps
                             Week {move.fromWeek} → Week {move.toWeek}
                           </span>
                         </span>
+                        {earlier.length > 0 && (
+                          <span className="mt-1 block text-xs text-muted">
+                            Already moved: {describeMoveChain(earlier)}
+                          </span>
+                        )}
                         <span className="mt-1 block text-xs text-muted">{move.reason}</span>
                       </span>
                     </label>
@@ -262,7 +277,7 @@ function DrawerBody({ view, titleId, onClose, onPendingChange }: DrawerBodyProps
 
 // A right-hand slide-out on a native <dialog>, like the goal wizard: focus trapping, Escape and the
 // backdrop come for free. Closing it, by any route, changes nothing.
-export function RebalanceDrawer({ open, onClose, view }: RebalanceDrawerProps) {
+export function RebalanceDrawer({ open, onClose, view, moveChains }: RebalanceDrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const titleId = useId();
@@ -289,7 +304,13 @@ export function RebalanceDrawer({ open, onClose, view }: RebalanceDrawerProps) {
     >
       {open &&
         (view ? (
-          <DrawerBody view={view} titleId={titleId} onClose={onClose} onPendingChange={setBusy} />
+          <DrawerBody
+            view={view}
+            moveChains={moveChains}
+            titleId={titleId}
+            onClose={onClose}
+            onPendingChange={setBusy}
+          />
         ) : (
           <div className="flex h-full flex-col">
             <div className="flex-1 p-4 lg:px-6">

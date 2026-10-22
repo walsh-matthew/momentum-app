@@ -18,12 +18,13 @@
 //   yet (see BACKLOG.md), so the rule-based builder only proposes carry-overs. The schema and the
 //   service already support pull-forward.
 
-import { PLAN_WEEKS, type MicroTask } from '@/types/database.types';
+import { PLAN_WEEKS, type MicroTask, type TaskRebalanceHistory } from '@/types/database.types';
 import {
   parseRebalanceProposal,
   type RebalanceMove,
   type RebalanceProposal,
   type RebalanceTaskSummary,
+  type TaskMoveChains,
   type TimelineWarning,
 } from '@/types/rebalance';
 
@@ -31,6 +32,29 @@ export type RebalanceTask = Pick<
   MicroTask,
   'id' | 'title' | 'task_type' | 'minutes' | 'status' | 'week_of' | 'due_date'
 >;
+
+// Groups one history query's rows into a chain per task. Rows are expected oldest first, as
+// listRebalanceHistory returns them; the order within each chain is kept as given.
+export function groupMovesByTask(
+  history: readonly Pick<TaskRebalanceHistory, 'task_id' | 'source_week' | 'target_week' | 'shift_type'>[],
+): TaskMoveChains {
+  const chains: TaskMoveChains = {};
+  for (const row of history) {
+    (chains[row.task_id] ??= []).push({
+      sourceWeek: row.source_week,
+      targetWeek: row.target_week,
+      shiftType: row.shift_type,
+    });
+  }
+  return chains;
+}
+
+// "Week 2 → 3 → 5" for a task that moved twice. Empty for a task that never moved. Each move adds
+// its target week, starting from the first move's source week.
+export function describeMoveChain(chain: readonly { sourceWeek: number; targetWeek: number }[]): string {
+  if (chain.length === 0) return '';
+  return `Week ${[chain[0].sourceWeek, ...chain.map((move) => move.targetWeek)].join(' → ')}`;
+}
 
 const MS_PER_DAY = 86_400_000;
 const WEEK_DAYS = 7;
