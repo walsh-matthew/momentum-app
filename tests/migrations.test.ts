@@ -179,3 +179,15 @@ describe('provider tokens are out of reach of the browser (migration 005)', () =
     expect(sql).toMatch(/auth_type = 'api_key' and api_key is not null and access_token is null and refresh_token is null/i);
   });
 });
+
+describe('the service role is granted the credential table explicitly (migration 006)', () => {
+  // This project's default privileges give the API roles no read/write on new tables, and 005 assumed
+  // otherwise, so the service role could not use the table until 006 granted it.
+  it('grants select, insert, update and delete to service_role and to nobody else', () => {
+    const sql = sqlOf('006');
+    expect(sql).toMatch(
+      /grant select, insert, update, delete on table public\.integration_credentials to service_role\s*;/i,
+    );
+    expect(sql).not.toMatch(/\bto\b[^;]*\b(anon|authenticated|public)\b/i);
+  });
+});
