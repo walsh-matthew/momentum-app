@@ -275,7 +275,7 @@ export function renderPrompt(plan: Omit<TicketPlan, 'prompt'>, standards: Standa
     `Create the feature branch \`${plan.branch}\` off a clean \`main\`, commit with "${plan.commitMessage}", and merge it into \`main\` with \`--no-ff\`.`,
   );
   steps.push(
-    `Move ${plan.ticket} to Done in Jira only if its acceptance criteria are met. If any are not, say which and leave it open.`,
+    `Move ${plan.ticket} to Done in Jira only if its acceptance criteria are met. If any are not, say which and leave it open. If the ticket turns out to be obsolete or redundant, move it to Closed instead, with a comment saying why.`,
   );
 
   const lines: string[] = [];
