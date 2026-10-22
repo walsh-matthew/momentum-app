@@ -24,6 +24,11 @@ export type RebalanceAction = (typeof REBALANCE_ACTIONS)[number];
 export const TIMELINE_WARNING_KINDS = ['compression', 'cannot_hold'] as const;
 export type TimelineWarningKind = (typeof TIMELINE_WARNING_KINDS)[number];
 
+// Who wrote a proposal. 'rules' is the deterministic builder (lib/utils/rebalance.ts); 'model' is Claude
+// (lib/ai/rebalance.ts). Both must pass TaskRebalanceSchema before anyone sees them.
+export const REBALANCE_SOURCES = ['rules', 'model'] as const;
+export type RebalanceSource = (typeof REBALANCE_SOURCES)[number];
+
 export const MAX_REBALANCE_MOVES = 100;
 const MAX_WARNINGS = 20;
 
@@ -147,6 +152,12 @@ export interface RebalanceTaskSummary {
 
 export interface RebalanceProposalView {
   proposal: RebalanceProposal;
+  source: RebalanceSource;
+  // The model that wrote it when source is 'model', for attribution in the drawer. Otherwise null.
+  model: string | null;
+  // Set when the user asked for a model suggestion and got the rule-based one instead, with the reason
+  // in plain words. Fixed wording from our own code, never model or provider text.
+  notice: string | null;
   // Every task the proposal names, keyed by task id.
   tasks: Record<string, RebalanceTaskSummary>;
   currentWeek: number;

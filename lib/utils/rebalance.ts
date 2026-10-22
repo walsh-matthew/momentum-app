@@ -212,6 +212,80 @@ export function buildRebalanceProposal(
   return parsed.data;
 }
 
+// ---------------------------------------------------------------------------
+// Model-written proposals (MOM-47)
+// ---------------------------------------------------------------------------
+
+// The most unfinished tasks sent to the model in one request. A plan holds a few dozen; this keeps a
+// runaway account from producing a huge prompt.
+export const MAX_MODEL_TASKS = 200;
+
+// What the model is told about the plan. Ids, weeks, types, minutes and dates only: no titles, since
+// the model does not need them to decide what moves, and the titles on screen come from the rows
+// anyway (summarizeProposalTasks). Only unfinished tasks are listed, since only they can move.
+export interface ModelRebalanceFacts {
+  currentWeek: number;
+  planWeeks: number;
+  today: string;
+  velocity: { score: number | null; trend: string | null; risk: string | null; pressureStreak: number } | null;
+  // Every week that has tasks: how many are unfinished and how many the user finished.
+  weeks: Array<{ week: number; unfinished: number; finished: number }>;
+  tasks: Array<{ id: string; week: number; type: string; minutes: number; dueDate: string | null }>;
+}
+
+export function buildModelFacts(
+  tasks: readonly RebalanceTask[],
+  currentWeek: number,
+  asOf: string,
+  velocity: ModelRebalanceFacts['velocity'] = null,
+): ModelRebalanceFacts {
+  const perWeek = new Map<number, { unfinished: number; finished: number }>();
+  for (const t of tasks) {
+    const counts = perWeek.get(t.week_of) ?? { unfinished: 0, finished: 0 };
+    if (t.status === 'done') counts.finished++;
+    else counts.unfinished++;
+    perWeek.set(t.week_of, counts);
+  }
+  return {
+    currentWeek,
+    planWeeks: PLAN_WEEKS,
+    today: asOf,
+    velocity,
+    weeks: [...perWeek.entries()].sort((a, b) => a[0] - b[0]).map(([week, c]) => ({ week, ...c })),
+    tasks: tasks
+      .filter((t) => t.status === 'todo')
+      .map((t) => ({ id: t.id, week: t.week_of, type: t.task_type, minutes: t.minutes, dueDate: t.due_date })),
+  };
+}
+
+// Checks a proposal that already passed TaskRebalanceSchema against the user's actual tasks, which the
+// schema cannot see. A model can write a well-formed proposal that names a task that does not exist,
+// one the user already finished, one in a different week than it says, or a week in the past. Returns
+// null when it is safe to show, otherwise a short reason (never the proposal's own text). Apply
+// re-checks every task again, so this is about not showing the user a proposal that cannot work.
+export function checkProposalAgainstTasks(
+  proposal: RebalanceProposal,
+  tasks: readonly RebalanceTask[],
+  currentWeek: number,
+): string | null {
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  for (const move of proposal.moves) {
+    const task = byId.get(move.taskId);
+    if (!task) return 'It named a task that does not exist.';
+    if (task.status !== 'todo') return 'It tried to move a task that is already done.';
+    if (task.week_of !== move.fromWeek) return 'It got the current week of a task wrong.';
+    if (move.toWeek < currentWeek) return 'It placed work in a week that has already passed.';
+  }
+  for (const warning of proposal.warnings) {
+    for (const id of warning.taskIds) {
+      const task = byId.get(id);
+      if (!task) return 'It named a task that does not exist.';
+      if (task.status !== 'todo') return 'It named a finished task as unplaceable.';
+    }
+  }
+  return null;
+}
+
 // Display details for every task a proposal names, keyed by id. Taken from the rows, never from the
 // proposal, so the titles on screen are always the user's own.
 export function summarizeProposalTasks(

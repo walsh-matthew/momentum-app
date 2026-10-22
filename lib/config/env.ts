@@ -23,6 +23,7 @@ const serverSchema = z.object({
 // Narrower than serverSchema on purpose: code that needs one secret should not fail because an
 // unrelated one is missing in this environment.
 const serviceRoleSchema = serverSchema.pick({ SUPABASE_SERVICE_ROLE_KEY: true });
+const anthropicSchema = serverSchema.pick({ ANTHROPIC_API_KEY: true });
 
 // OAuth client credentials for Google Calendar (MOM-37). Server only, like the keys above.
 const googleOAuthSchema = z.object({
@@ -45,6 +46,7 @@ function parseEnv<T extends z.ZodType>(schema: T, source: unknown, label: string
 let publicEnv: PublicEnv | undefined;
 let serverEnv: ServerEnv | undefined;
 let serviceRoleKey: string | undefined;
+let anthropicApiKey: string | undefined;
 let googleOAuthEnv: GoogleOAuthEnv | undefined;
 
 export function getPublicEnv(): PublicEnv {
@@ -93,4 +95,15 @@ export function getGoogleOAuthEnv(): GoogleOAuthEnv {
     'Google OAuth',
   );
   return googleOAuthEnv;
+}
+
+// Just the Anthropic key, for the rebalance model call (lib/ai/rebalance.ts, MOM-47). Read only on the
+// server, and only when a user asks for a model suggestion.
+export function getAnthropicApiKey(): string {
+  anthropicApiKey ??= parseEnv(
+    anthropicSchema,
+    { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY },
+    'server',
+  ).ANTHROPIC_API_KEY;
+  return anthropicApiKey;
 }

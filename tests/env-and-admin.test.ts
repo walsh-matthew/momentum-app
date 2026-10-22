@@ -81,6 +81,17 @@ describe('getSupabaseServiceRoleKey', () => {
   });
 });
 
+describe('getAnthropicApiKey', () => {
+  it('needs only the Anthropic key, not the unrelated secrets', async () => {
+    const env = await loadEnv({ ANTHROPIC_API_KEY: 'sk-ant-test' });
+    expect(env.getAnthropicApiKey()).toBe('sk-ant-test');
+  });
+  it('throws naming the variable, and never puts a value in the error', async () => {
+    const env = await loadEnv({});
+    expect(() => env.getAnthropicApiKey()).toThrow(/ANTHROPIC_API_KEY/);
+  });
+});
+
 describe('getGoogleOAuthEnv', () => {
   it('returns the client id and secret', async () => {
     const env = await loadEnv({ GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' });

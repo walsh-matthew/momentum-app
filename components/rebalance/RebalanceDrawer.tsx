@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, useTransition } from 'react';
-import { applyRebalanceProposal } from '@/app/actions/tasks';
+import { applyRebalanceProposal, askClaudeToRebalance } from '@/app/actions/tasks';
 import { REBALANCE_ACTION_LABELS, TASK_TYPE_LABELS, TIMELINE_WARNING_LABELS } from '@/lib/tasks/labels';
 import { describeMoveChain } from '@/lib/utils/rebalance';
 import type {
@@ -56,6 +56,8 @@ function WarningCard({ warning, view }: WarningCardProps) {
 
 interface DrawerBodyProps {
   view: RebalanceProposalView;
+  // Called with the proposal Claude wrote (or the rule-based one, with a notice, if Claude's failed).
+  onModelView: (view: RebalanceProposalView) => void;
   moveChains: TaskMoveChains;
   titleId: string;
   onClose: () => void;
@@ -63,14 +65,27 @@ interface DrawerBodyProps {
 }
 
 // Mounted only while the drawer is open, so every open starts from a clean state.
-function DrawerBody({ view, moveChains, titleId, onClose, onPendingChange }: DrawerBodyProps) {
+function DrawerBody({ view, onModelView, moveChains, titleId, onClose, onPendingChange }: DrawerBodyProps) {
   const { proposal } = view;
   const [selected, setSelected] = useState<Set<string>>(() => new Set(proposal.moves.map((m) => m.taskId)));
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RebalanceApplyResult | null>(null);
   const [pending, startTransition] = useTransition();
+  const [asking, startAsking] = useTransition();
+  const [askError, setAskError] = useState<string | null>(null);
 
-  useEffect(() => onPendingChange(pending), [pending, onPendingChange]);
+  useEffect(() => onPendingChange(pending || asking), [pending, asking, onPendingChange]);
+
+  // The only way a model is ever called: this click. It changes nothing in the plan; it only swaps
+  // the suggestion on screen, and every change still needs the user to select it and press Apply.
+  function askClaude() {
+    setAskError(null);
+    startAsking(async () => {
+      const answer = await askClaudeToRebalance();
+      if (answer.ok) onModelView(answer.data);
+      else setAskError(answer.error);
+    });
+  }
 
   const titleOf = (taskId: string) => view.tasks[taskId]?.title ?? 'A task';
   const chosen = proposal.moves.filter((m) => selected.has(m.taskId));
@@ -152,8 +167,12 @@ function DrawerBody({ view, moveChains, titleId, onClose, onPendingChange }: Dra
           <h2 id={titleId} className="text-lg font-semibold">
             Rebalance your plan
           </h2>
-          {/* TODO(MOM-Phase2): show model attribution once proposals come from Claude (see proposeRebalance). */}
-          <p className="mt-1 text-xs text-muted">Rule-based suggestion · week {view.currentWeek} of the plan</p>
+          <p className="mt-1 text-xs text-muted">
+            {view.source === 'model'
+              ? `Suggested by Claude (${view.model ?? 'model'}) · checked against your plan`
+              : 'Rule-based suggestion'}
+            {' · '}week {view.currentWeek} of the plan
+          </p>
         </div>
         <button
           type="button"
@@ -168,6 +187,31 @@ function DrawerBody({ view, moveChains, titleId, onClose, onPendingChange }: Dra
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:px-6">
         <p className="text-sm">{proposal.summary}</p>
+
+        {view.notice && (
+          <p role="status" className="mt-3 rounded-md border border-border bg-foreground/5 p-3 text-xs">
+            {view.notice}
+          </p>
+        )}
+
+        <div className="mt-3">
+          <button
+            type="button"
+            disabled={pending || asking}
+            onClick={askClaude}
+            className="min-h-11 rounded-md border border-border px-3 text-sm font-medium hover:bg-foreground/5 disabled:opacity-60"
+          >
+            {asking ? 'Asking Claude…' : view.source === 'model' ? 'Ask Claude again' : 'Ask Claude to review'}
+          </button>
+          <p className="mt-1 text-xs text-muted">
+            Claude sees task ids, weeks and types, never your task titles. You approve every change.
+          </p>
+          {askError && (
+            <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+              {askError}
+            </p>
+          )}
+        </div>
 
         {proposal.warnings.length > 0 && (
           <ul aria-label="Timeline warnings" className="mt-4 flex flex-col gap-2">
@@ -280,7 +324,15 @@ function DrawerBody({ view, moveChains, titleId, onClose, onPendingChange }: Dra
 export function RebalanceDrawer({ open, onClose, view, moveChains }: RebalanceDrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
+  // What the user asked Claude for in this open drawer. Starts empty each time it opens, so a new open
+  // always shows the page's own (rule-based) suggestion first.
+  const [modelView, setModelView] = useState<RebalanceProposalView | null>(null);
+  const [askCount, setAskCount] = useState(0);
   const titleId = useId();
+
+  useEffect(() => {
+    if (!open) setModelView(null);
+  }, [open]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -305,7 +357,13 @@ export function RebalanceDrawer({ open, onClose, view, moveChains }: RebalanceDr
       {open &&
         (view ? (
           <DrawerBody
-            view={view}
+            // A new proposal starts with every move selected again.
+            key={modelView ? `model-${askCount}` : 'page'}
+            view={modelView ?? view}
+            onModelView={(next) => {
+              setModelView(next);
+              setAskCount((n) => n + 1);
+            }}
             moveChains={moveChains}
             titleId={titleId}
             onClose={onClose}
