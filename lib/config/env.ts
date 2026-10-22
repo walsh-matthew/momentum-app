@@ -20,8 +20,19 @@ const serverSchema = z.object({
   HEVY_API_KEY: z.string().min(1),
 });
 
+// Narrower than serverSchema on purpose: code that needs one secret should not fail because an
+// unrelated one is missing in this environment.
+const serviceRoleSchema = serverSchema.pick({ SUPABASE_SERVICE_ROLE_KEY: true });
+
+// OAuth client credentials for Google Calendar (MOM-37). Server only, like the keys above.
+const googleOAuthSchema = z.object({
+  GOOGLE_CLIENT_ID: z.string().min(1),
+  GOOGLE_CLIENT_SECRET: z.string().min(1),
+});
+
 export type PublicEnv = z.infer<typeof publicSchema>;
 export type ServerEnv = z.infer<typeof serverSchema>;
+export type GoogleOAuthEnv = z.infer<typeof googleOAuthSchema>;
 
 // Reports variable names and rules only, never values, so secrets cannot leak into logs.
 function parseEnv<T extends z.ZodType>(schema: T, source: unknown, label: string): z.infer<T> {
@@ -33,6 +44,8 @@ function parseEnv<T extends z.ZodType>(schema: T, source: unknown, label: string
 
 let publicEnv: PublicEnv | undefined;
 let serverEnv: ServerEnv | undefined;
+let serviceRoleKey: string | undefined;
+let googleOAuthEnv: GoogleOAuthEnv | undefined;
 
 export function getPublicEnv(): PublicEnv {
   // Each NEXT_PUBLIC_ name is written out in full; Next.js only inlines static references.
@@ -58,4 +71,26 @@ export function getServerEnv(): ServerEnv {
     'server',
   );
   return serverEnv;
+}
+
+// Just the service role key, for the admin client (lib/supabase/admin.ts).
+export function getSupabaseServiceRoleKey(): string {
+  serviceRoleKey ??= parseEnv(
+    serviceRoleSchema,
+    { SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY },
+    'server',
+  ).SUPABASE_SERVICE_ROLE_KEY;
+  return serviceRoleKey;
+}
+
+export function getGoogleOAuthEnv(): GoogleOAuthEnv {
+  googleOAuthEnv ??= parseEnv(
+    googleOAuthSchema,
+    {
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    },
+    'Google OAuth',
+  );
+  return googleOAuthEnv;
 }

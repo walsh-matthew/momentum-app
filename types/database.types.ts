@@ -26,6 +26,16 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const SHIFT_TYPES = ['carry_over', 'pull_forward'] as const;
 export type ShiftType = (typeof SHIFT_TYPES)[number];
 
+// How a provider is authorised: an OAuth2 token pair (Google) or a single API key (Hevy). Matches
+// integration_credentials.auth_type (migration 005).
+export const INTEGRATION_AUTH_TYPES = ['oauth2', 'api_key'] as const;
+export type IntegrationAuthType = (typeof INTEGRATION_AUTH_TYPES)[number];
+
+// State of a stored credential. 'needs_reauth': the provider refused the refresh token and the user
+// must connect again. 'error': the last attempt failed for another reason; retrying may work.
+export const CREDENTIAL_STATUSES = ['connected', 'needs_reauth', 'error'] as const;
+export type CredentialStatus = (typeof CREDENTIAL_STATUSES)[number];
+
 export const TASK_TYPES = [
   'job_search',
   'interview_fill_in',
@@ -213,7 +223,6 @@ export type Database = {
           provider: ExternalProviderId;
           is_active: boolean;
           goal_channel_id: string | null;
-          credentials: Json;
           last_synced_at: string | null;
           created_at: string;
           updated_at: string;
@@ -224,7 +233,6 @@ export type Database = {
           provider: ExternalProviderId;
           is_active?: boolean;
           goal_channel_id?: string | null;
-          credentials?: Json;
           last_synced_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -235,7 +243,6 @@ export type Database = {
           provider?: ExternalProviderId;
           is_active?: boolean;
           goal_channel_id?: string | null;
-          credentials?: Json;
           last_synced_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -288,6 +295,68 @@ export type Database = {
           },
         ];
       };
+      // Provider tokens (migration 005). Server only: no browser role can read it, so it is reached
+      // only through the service-role client in lib/supabase/admin.ts. Never import its Row type into
+      // a client component; clients get IntegrationAccount (types/integrations.ts) instead.
+      integration_credentials: {
+        Row: {
+          id: string;
+          user_id: string;
+          provider: ExternalProviderId;
+          auth_type: IntegrationAuthType;
+          access_token: string | null;
+          refresh_token: string | null;
+          api_key: string | null;
+          expires_at: string | null;
+          scope: string | null;
+          status: CredentialStatus;
+          last_error: string | null;
+          last_refreshed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          provider: ExternalProviderId;
+          auth_type: IntegrationAuthType;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          api_key?: string | null;
+          expires_at?: string | null;
+          scope?: string | null;
+          status?: CredentialStatus;
+          last_error?: string | null;
+          last_refreshed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          provider?: ExternalProviderId;
+          auth_type?: IntegrationAuthType;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          api_key?: string | null;
+          expires_at?: string | null;
+          scope?: string | null;
+          status?: CredentialStatus;
+          last_error?: string | null;
+          last_refreshed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'integration_credentials_app_fk';
+            columns: ['user_id', 'provider'];
+            isOneToOne: true;
+            referencedRelation: 'connected_apps';
+            referencedColumns: ['user_id', 'provider'];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     // seed_career_pivot, handle_new_user and the trigger functions are not executable by API roles, so
@@ -325,9 +394,12 @@ export type User = Tables<'users'>;
 export type GoalChannel = Tables<'goal_channels'>;
 export type MicroTask = Tables<'micro_tasks'>;
 export type TaskRebalanceHistory = Tables<'task_rebalance_history'>;
-// `credentials` is server-only (INTEGRATIONS_SPEC.md §5). Client components should use ConnectedAppPublic.
+// Provider tokens live in integration_credentials (server only), not on this row, so a ConnectedApp is
+// safe to send to the client.
 export type ConnectedApp = Tables<'connected_apps'>;
-export type ConnectedAppPublic = Omit<ConnectedApp, 'credentials'>;
+export type ConnectedAppPublic = ConnectedApp;
+// Server only. Holds secrets: never pass it to a client component or return it from an action.
+export type IntegrationCredential = Tables<'integration_credentials'>;
 
 export type GoalChannelInsert = TablesInsert<'goal_channels'>;
 export type GoalChannelUpdate = TablesUpdate<'goal_channels'>;
