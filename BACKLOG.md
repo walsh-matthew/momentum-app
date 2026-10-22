@@ -18,7 +18,7 @@ Items below were triaged into Jira on 2026-10-21 under `MOM-16` (EPIC 5: Phase 2
 | Rebalance | MOM-47, MOM-48, MOM-49, MOM-50, MOM-51, MOM-52, MOM-53, MOM-73 |
 | Tests | MOM-54, MOM-55, MOM-56, MOM-57, MOM-58, MOM-59, MOM-61, MOM-67 |
 | Deployment | MOM-60 |
-| Tooling | MOM-63, MOM-68 |
+| Tooling | MOM-63, MOM-68, MOM-74 |
 
 ## Discovered In-Flight
 
@@ -109,3 +109,4 @@ Items found while working on tickets. Add new items at the bottom with the ticke
 - [ ] Rebalance (Claude): the drawer's render states are tested by rendering to HTML; clicking "Ask Claude" and seeing the new proposal appear was checked by hand once in production but has no automated test (needs jsdom and Testing Library, or Playwright). The proposal is not stored, so Apply sends it back from the client and re-validates it, as before. *Source: MOM-47.* *Jira: MOM-61.*
 - [ ] Rebalance (Claude): the model is told the plan as ids, weeks, types, minutes, due dates and velocity; it is not told the paces (§9) or the lane tags, and "interviews win" (§5 rule 3) still has no input. *Source: MOM-47.* *Jira: MOM-52.*
 - [x] Tooling: BACKLOG.md had no way to turn its tickets into build prompts. Resolved in MOM-63: `npm run plan` (`scripts/generate-execution-plan.ts`) prints a prompt per ticket, or an overview, from BACKLOG.md and the standards in CLAUDE.md. *Source: tooling request.* *Jira: MOM-63.*
+- [ ] Env: the global `HEVY_API_KEY` is vestigial. Hevy keys are stored per user in `integration_credentials`, but `getServerEnv()` still requires the variable and `.env.example`, `CLAUDE.md`, `ROADMAP.md` and `docs/INTEGRATIONS_SPEC.md` §3.A still name it. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are real server secrets that `CLAUDE.md` does not list. Delete the variable from Vercel Production after the change merges. *Source: MOM-37, next-phase audit.* *Jira: MOM-74.*
