@@ -104,3 +104,48 @@ export interface AccessToken {
   // null for API keys.
   expiresAt: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Ingestion results (lib/services/ingestion.ts, MOM-40)
+// ---------------------------------------------------------------------------
+// What happened to each activity in a batch. Safe for client components: they name the item and the
+// outcome, and never echo a payload back.
+
+// Why a well-formed activity was set aside. Each is a fixed, deterministic rule, so the same activity
+// always gets the same answer.
+export const INGESTION_SKIP_REASONS = [
+  'unsupported_provider',
+  'activity_not_completed',
+  'no_matching_channel',
+  'channel_not_active',
+  'before_plan_start',
+  'after_plan_end',
+] as const;
+export type IngestionSkipReason = (typeof INGESTION_SKIP_REASONS)[number];
+
+// created: a new unfinished task now carries this activity. duplicate: that provider and id already
+// made a task, so nothing changed. skipped: valid but not ingestible (see the reason). invalid: failed
+// the payload contract. failed: a valid activity that could not be saved; try the batch again.
+export const INGESTION_OUTCOMES = ['created', 'duplicate', 'skipped', 'invalid', 'failed'] as const;
+export type IngestionOutcome = (typeof INGESTION_OUTCOMES)[number];
+
+export interface IngestionItemResult {
+  // Position in the submitted batch.
+  index: number;
+  provider: string | null;
+  externalId: string | null;
+  outcome: IngestionOutcome;
+  // Set for skipped (an IngestionSkipReason) and invalid (what was wrong with the payload).
+  reason: string | null;
+  taskId: string | null;
+  weekOf: number | null;
+}
+
+export interface IngestionSummary {
+  created: number;
+  duplicate: number;
+  skipped: number;
+  invalid: number;
+  failed: number;
+  results: IngestionItemResult[];
+}

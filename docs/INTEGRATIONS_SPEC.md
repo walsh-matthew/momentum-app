@@ -4,12 +4,12 @@ As of 2026-10-21. Blueprint for third-party service ingestion and normalization 
 
 ## 1. Executive Purpose & Architectural Strategy
 
-Momentum ingests activity data from heterogeneous external services (REST APIs, OAuth webhooks, client SDKs) to passively verify task completion and update user velocity scores without manual entry fatigue.
+Momentum ingests activity data from heterogeneous external services (REST APIs, OAuth webhooks, client SDKs) to bring what the user has already done into their plan as evidence, without manual entry fatigue. Evidence never completes a task: the user ticks their own tasks and the system never marks one done on their behalf (`NINETY_DAY_PLAN_CONTEXT.md` §3, §5 rule 6).
 
 To ensure the product can scale from 2 initial integrations to 20+ without breaking existing services or requiring database schema refactoring, all integrations follow the **Adapter Pattern**:
 1. **Raw Payload Ingestion:** Providers receive raw external JSON via API polling or Webhook routes.
 2. **Adapter Normalization:** Individual provider modules transform external payloads into a unified `InboundActivityPayload` schema.
-3. **Core Ingestion Engine:** `integrations.ts` passes the normalized payload to `tasks.ts` and `velocity.ts` to score completions and update goal channel metrics.
+3. **Core Ingestion Engine:** `@/lib/services/ingestion.ts` validates the normalized payload, places it in one of the user's goal channels and plan weeks, and creates an unfinished task that carries the activity as evidence (see §6).
 
 ---
 
@@ -120,3 +120,17 @@ All provider adapters must output data adhering to this standardized interface i
 3. **User Isolation:** The service-role client bypasses RLS, so `@/lib/services/integrations.ts` enforces isolation itself. Session-bound functions take no user id and read it from the verified session (`getUser()`); `getAccessToken(userId, provider)` is for code with no session (a signed webhook, a sync job) and must be given an id the caller resolved itself, never one a client supplied. `integration_credentials` has a same-owner foreign key to `connected_apps`, which keeps the user's own RLS-protected row as the anchor.
 4. **No Secret in Errors or Logs:** Tokens are never logged or returned in an error. Database errors are replaced with fixed wording (a failed CHECK reports the offending row), and the status shown to a client (`IntegrationAccount`, `types/integrations.ts`) has no secret field.
 5. **Environment Placeholders:** Local testing keys are stored in `.env.local` and mirrored with placeholder variables in `.env.example`.
+
+---
+
+## 6. Ingestion Engine (`@/lib/services/ingestion.ts`)
+
+`ingestActivities(batch)` turns normalized activity into tasks for the signed-in user.
+
+1. **Contract:** each item is checked against `InboundActivityPayloadSchema` (strict: UTC ISO timestamp, lower-case keys, no extra fields). An invalid item is reported as `invalid` and does not stop the batch.
+2. **Handler per provider:** Hevy activity is always real; a Google Calendar item with `metrics.eventCompleted === false` (not yet elapsed, or cancelled) is set aside as `activity_not_completed`.
+3. **Placement:** `targetGoalChannel` must be one of the user's *active* goal channels. `week_of` is the plan week of the activity's UTC date relative to the channel's `start_date`, and `due_date` is that date. Activity before the channel began, or after plan week 13, is set aside (`before_plan_start`, `after_plan_end`), never squeezed into week 1 or 13.
+4. **The task:** `task_type` is `event` (a timed, dated item), `minutes` is the rounded duration (at least 1), `status` is `'todo'` and `completed_at` is unset. The normalized activity is kept in `micro_tasks.source_evidence`, with `source_provider` and `source_external_id` (migration 007).
+5. **Idempotent:** a provider and external id make at most one task per user, so webhook retries and overlapping polls create nothing new. Re-ingesting never touches a task the user has since edited or ticked.
+6. **Set aside, not lost:** every skipped, invalid or failed item appears in the returned summary and is logged (provider, id and reason only).
+7. **Scope:** it runs as the signed-in user through RLS and only inserts. Code with no session (a signed webhook) needs its own entry point; see `BACKLOG.md`.
