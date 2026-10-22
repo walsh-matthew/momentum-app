@@ -14,7 +14,7 @@
 //   never dropped and never pushed past the plan.
 
 import { z } from 'zod';
-import { PLAN_WEEKS, type TaskType } from './database.types';
+import { PLAN_WEEKS, type ShiftType, type TaskType } from './database.types';
 
 export const REBALANCE_ACTIONS = ['carry_over', 'pull_forward'] as const;
 export type RebalanceAction = (typeof REBALANCE_ACTIONS)[number];
@@ -126,6 +126,18 @@ export function parseRebalanceProposal(raw: unknown): RebalanceParseResult {
 
 // Display details for a task a proposal names. Read from the database, never from model output, so
 // a model cannot relabel a task.
+// One move a task has made, as the UI needs it. Read from task_rebalance_history (migration 003),
+// never from model output.
+export interface TaskMove {
+  sourceWeek: number;
+  targetWeek: number;
+  shiftType: ShiftType;
+}
+
+// Every move of every task, keyed by task id, oldest move first. Built once per page load from a
+// single history query, so no card or drawer row needs its own query.
+export type TaskMoveChains = Record<string, TaskMove[]>;
+
 export interface RebalanceTaskSummary {
   id: string;
   title: string;

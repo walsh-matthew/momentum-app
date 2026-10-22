@@ -5,9 +5,13 @@
 // logged hours (§5 rule 4), so `minutes` is deliberately not an input. Nothing here marks a task
 // done or proposes cutting one (§3, §5 rules 1 and 6).
 
-import type { MicroTask } from '@/types/database.types';
+import type { MicroTask, TaskRebalanceHistory } from '@/types/database.types';
 
-export type VelocityTask = Pick<MicroTask, 'week_of' | 'status' | 'due_date' | 'carried_from_week'>;
+export type VelocityTask = Pick<MicroTask, 'id' | 'week_of' | 'status' | 'due_date' | 'carried_from_week'>;
+
+// A row of task_rebalance_history (migration 003). The whole chain is what lets a task that was
+// carried twice count against every week it left, not only the last one.
+export type VelocityMove = Pick<TaskRebalanceHistory, 'task_id' | 'source_week' | 'target_week' | 'shift_type'>;
 
 export type BurnoutRisk = 'low' | 'rising' | 'high';
 export type VelocityTrend = 'up' | 'down' | 'flat';
@@ -71,14 +75,42 @@ export function currentPlanWeek(startDate: string, asOf: string): number | null 
   return Math.max(1, Math.floor(days / WEEK_DAYS) + 1);
 }
 
+// For each week, the ids of tasks carried out of it that now sit in a later week. The history gives
+// every hop (2 to 3, then 3 to 5 is out of both week 2 and week 3). The one-hop carried_from_week
+// marker is added as well, so a task whose history row is missing still counts for its last hop;
+// the sets de-duplicate by task id.
+function carriedOutByWeek(
+  tasks: readonly VelocityTask[],
+  history: readonly VelocityMove[],
+): Map<number, Set<string>> {
+  const out = new Map<number, Set<string>>();
+  const add = (week: number, taskId: string) => {
+    const ids = out.get(week) ?? new Set<string>();
+    ids.add(taskId);
+    out.set(week, ids);
+  };
+  const currentWeekOf = new Map(tasks.map((t) => [t.id, t.week_of]));
+  for (const move of history) {
+    const now = currentWeekOf.get(move.task_id);
+    if (move.shift_type === 'carry_over' && now !== undefined && now > move.source_week) {
+      add(move.source_week, move.task_id);
+    }
+  }
+  for (const t of tasks) {
+    if (t.carried_from_week !== null && t.week_of > t.carried_from_week) add(t.carried_from_week, t.id);
+  }
+  return out;
+}
+
 function scoreWeek(
   week: number,
   tasks: readonly VelocityTask[],
+  carriedOutIds: ReadonlySet<string>,
   currentWeek: number,
   asOf: string,
 ): WeekVelocity | null {
   const inWeek = tasks.filter((t) => t.week_of === week);
-  const carriedOut = tasks.filter((t) => t.carried_from_week === week && t.week_of > week);
+  const carriedOut = tasks.filter((t) => carriedOutIds.has(t.id));
   if (inWeek.length === 0 && carriedOut.length === 0) return null;
 
   // Part-way through the current week, only what is due so far (or already ticked) counts. Without
@@ -121,15 +153,20 @@ function riskForStreak(streak: number): BurnoutRisk {
 }
 
 // Builds the snapshot for plan week `currentWeek` as of `asOf` (YYYY-MM-DD). Weeks after
-// `currentWeek` are ignored: work pulled forward or planned ahead is not a miss.
+// `currentWeek` are ignored: work pulled forward or planned ahead is not a miss. `history` is the
+// user's task_rebalance_history, read once by the caller; it defaults to empty, in which case only
+// the last hop of each carried task is known.
 export function computeVelocity(
   tasks: readonly VelocityTask[],
   currentWeek: number,
   asOf: string,
+  history: readonly VelocityMove[] = [],
 ): VelocitySnapshot {
+  const carriedOut = carriedOutByWeek(tasks, history);
+  const none: ReadonlySet<string> = new Set();
   const weeks: WeekVelocity[] = [];
   for (let week = currentWeek; week >= 1; week--) {
-    const scored = scoreWeek(week, tasks, currentWeek, asOf);
+    const scored = scoreWeek(week, tasks, carriedOut.get(week) ?? none, currentWeek, asOf);
     if (scored) weeks.push(scored);
   }
 

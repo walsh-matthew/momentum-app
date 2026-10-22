@@ -3,15 +3,20 @@
 import { useState, useTransition } from 'react';
 import { toggleTaskStatus } from '@/app/actions/tasks';
 import { TASK_TYPE_LABELS } from '@/lib/tasks/labels';
+import { describeMoveChain } from '@/lib/utils/rebalance';
 import type { MicroTask } from '@/types/database.types';
+import type { TaskMove } from '@/types/rebalance';
 
 interface FocusTaskCardProps {
   task: MicroTask;
+  // Every move this task has made, oldest first (task_rebalance_history), passed in from the page's
+  // single history query. The chips below show only the last hop; this shows the whole path.
+  moves: TaskMove[];
 }
 
 // The user ticks their own task; the card never completes anything by itself
 // (docs/NINETY_DAY_PLAN_CONTEXT.md §3).
-export function FocusTaskCard({ task }: FocusTaskCardProps) {
+export function FocusTaskCard({ task, moves }: FocusTaskCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const done = task.status === 'done';
@@ -45,6 +50,12 @@ export function FocusTaskCard({ task }: FocusTaskCardProps) {
           </span>
         )}
       </div>
+
+      {moves.length > 1 && (
+        <p className="mt-2 text-xs text-muted">
+          Moved {moves.length} times: {describeMoveChain(moves)}
+        </p>
+      )}
 
       <h2
         id={`focus-task-${task.id}`}
