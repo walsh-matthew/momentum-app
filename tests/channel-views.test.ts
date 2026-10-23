@@ -479,7 +479,7 @@ describe('source-level: building the views never writes', () => {
     // No selection state left in the shell: the address is the one source of truth.
     expect(shell).not.toMatch(/setSelected|useState<string>/);
     // `window` is touched only inside the click handler, never while rendering (it does not exist on the server).
-    const handler = shell.slice(shell.indexOf('function selectChannel'), shell.indexOf('// Below lg only the active panel'));
+    const handler = shell.slice(shell.indexOf('function selectChannel'), shell.indexOf('  return (\n    <>'));
     expect([...shell.matchAll(/window\./g)].length).toBe([...handler.matchAll(/window\./g)].length);
     expect(handler).toContain('window.history.pushState');
 

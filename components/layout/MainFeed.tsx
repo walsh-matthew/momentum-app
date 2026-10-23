@@ -38,26 +38,28 @@ export function MainFeed({
 }: MainFeedProps) {
   const { focus, upNext, recentlyDone } = feed;
   return (
-    <main className={`min-h-0 flex-1 flex-col overflow-y-auto p-4 lg:p-6 ${className}`}>
+    <main className={`min-w-0 pt-5 ${className}`}>
+      <p className="eyebrow">{channelTitle ?? 'All channels'}</p>
+      <h1 className="mt-1.5 text-[25px] font-semibold leading-tight tracking-[-0.055em] min-[1200px]:text-[34px]">
+        Make today count.
+      </h1>
       {velocity ? (
-        <div className="mb-6">
+        <div className="mt-5">
           <VelocityHero velocity={velocity} />
         </div>
       ) : (
         velocityHint === 'choose_channel' && (
-          <section aria-label="Velocity" className="score-card mb-6">
+          <section aria-label="Velocity" className="score-card mt-5">
             <div className="relative z-10 min-w-0">
               <p className="eyebrow">Velocity</p>
               <p className="mt-2 text-sm text-muted">
-              Velocity is worked out for one goal at a time, because each goal&apos;s weeks count from its own start
-              date. Choose a channel in the sidebar to see it.
+                Velocity is worked out for one goal at a time, because each goal&apos;s weeks count from its own start
+                date. Choose a channel in the sidebar or from your goal cards to see it.
               </p>
             </div>
           </section>
         )
       )}
-      <h1 className="text-[25px] font-semibold leading-tight tracking-[-0.055em]">Today</h1>
-      {channelTitle && <p className="eyebrow mt-1.5">{channelTitle}</p>}
       {feedState === 'signed_out' && <SignedOutState />}
       {feedState === 'no_goals' && <NoGoalsState onNewGoal={onNewGoal} />}
       {feedState === 'no_tasks' && <NoTasksState channelTitle={channelTitle} onNewGoal={onNewGoal} />}

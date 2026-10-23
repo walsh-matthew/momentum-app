@@ -294,16 +294,19 @@ describe('the selection survives the page refreshing its data', () => {
   });
 });
 
+// MOM-77: below 1200px the page is one scrolling column with no tab bar. The goal cards in the feed pick the channel
+// through the same ?channel= address as the sidebar (more in tests/layout.test.tsx).
 describe('on a phone', () => {
-  it('picking a channel goes to the feed, where the result is', () => {
+  it('has no tab bar, and a goal card picks the channel in the same feed', () => {
     renderShell();
-    fireEvent.click(screen.getByRole('button', { name: 'Channels' }));
-    expect(screen.getByRole('main').className).toContain('hidden');
+    expect(screen.queryByRole('navigation', { name: 'Workspace sections' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Channels' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Feed' })).toBeNull();
 
-    fireEvent.click(channelButton('Career Pivot'));
+    fireEvent.click(within(screen.getByRole('region', { name: 'Your goals' })).getByRole('link', { name: /Career Pivot/ }));
 
-    expect(screen.getByRole('main').className).not.toMatch(/(^|\s)hidden(\s|$)/);
-    expect(within(screen.getByRole('navigation', { name: 'Workspace sections' })).getByRole('button', { name: 'Feed' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
+    expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
   });
 });
 
@@ -535,11 +538,9 @@ describe('the selected channel is kept in the address bar', () => {
       for (const fn of Object.values(actions)) expect(fn).not.toHaveBeenCalled();
     });
 
-    it('still takes a phone to the feed', () => {
+    it('a goal card on a phone updates the address the same way', () => {
       renderAt('');
-      fireEvent.click(screen.getByRole('button', { name: 'Channels' }));
-      fireEvent.click(channelButton('Side Project'));
-      expect(screen.getByRole('main').className).not.toMatch(/(^|\s)hidden(\s|$)/);
+      fireEvent.click(within(screen.getByRole('region', { name: 'Your goals' })).getByRole('link', { name: /Side Project/ }));
       expect(here()).toBe(`/?channel=${sideId}`);
     });
   });

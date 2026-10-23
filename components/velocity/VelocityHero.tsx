@@ -1,5 +1,4 @@
 import { Sparkles } from 'lucide-react';
-import { BurnoutRiskBadge } from './BurnoutRiskBadge';
 import type { BurnoutRisk, VelocitySnapshot, VelocityTrend } from '@/lib/utils/velocity';
 
 interface VelocityHeroProps {
@@ -80,9 +79,6 @@ export function VelocityHero({ velocity }: VelocityHeroProps) {
             Velocity · Week {latest.week}
             {latest.week !== currentWeek && ` (week ${currentWeek} not planned yet)`}
           </p>
-        </div>
-        <div>
-          <BurnoutRiskBadge risk={risk} />
         </div>
         {trend && <p className="text-sm font-medium">{TREND_LABELS[trend]}</p>}
         <p className="text-sm text-muted">
