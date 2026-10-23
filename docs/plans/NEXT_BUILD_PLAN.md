@@ -1,12 +1,14 @@
 # 🚀 MOMENTUM BUILD: NEXT-PHASE MASTER EXECUTION PLAN
 
 > **Date:** 2026-10-22 | **Active Epic:** MOM-16 | **Base Commit:** 27cad6d
+>
+> **Revised 2026-10-23:** Session 2 (wireframe look and feel: MOM-76, MOM-31, MOM-77) inserted after the wireframe gap review; the former Sessions 2 to 4 are now 3 to 5.
 
 ---
 
 ## Executive Overview & Architectural Invariants
 
-This build cycle completes the onboarding demo loop (a new user creates a goal and gets real week-1 tasks), adds browser tests for sign-up, sign-in, route guards and sign-out against a **local** Supabase stack, connects the external provider UIs and real adapters, and protects production with CI and LLM spend governance. Every block preserves the three non-negotiable invariants:
+This build cycle completes the onboarding demo loop (a new user creates a goal and gets real week-1 tasks), brings the app's look and layout in line with the original v0 wireframes, adds browser tests for sign-up, sign-in, route guards and sign-out against a **local** Supabase stack, connects the external provider UIs and real adapters, and protects production with CI and LLM spend governance. Every block preserves the three non-negotiable invariants:
 
 1. **Human-Only Completion:** Only the signed-in owner ever changes a task's `status` or `completed_at`. No background job, webhook, ingestion run or LLM may write them, and nothing creates a task as `done`. Enforced by the `micro_tasks_guard_completion` trigger (migration 002) and by source-level tests.
 2. **No-Delete / Carry-Forward:** Unfinished work is never cut or hard-deleted. The only moves are `carry_over` and `pull_forward`; work that cannot fit is named in a `cannot_hold` warning. `task_rebalance_history` is append-only.
@@ -35,15 +37,17 @@ npm run plan -- MOM-<n>                                          # optional: the
 ```text
 SESSION 1: CORE DEMO LOOP & CLEAN SIGNUP (MOM-34, MOM-35, MOM-18, MOM-19)
   - Persist wizard answers, persist the Claude-written week-1 plan, real empty states, then drop the signup seed
-SESSION 2: E2E AUTH & HYDRATION TESTS (MOM-61)
+SESSION 2: WIREFRAME LOOK AND FEEL (MOM-76, MOM-31, MOM-77)
+  - Dark design system from the v0 wireframes, real goal channels, then the wireframe layout with single-scroll mobile
+SESSION 3: E2E AUTH & HYDRATION TESTS (MOM-61)
   - Playwright against a local Supabase stack: sign-up, confirmation, sign-in, route guards, sign-out, hydration at 390px and 1280px
-SESSION 3: EXTERNAL INTEGRATIONS & UI (MOM-62, MOM-38)
+SESSION 4: EXTERNAL INTEGRATIONS & UI (MOM-62, MOM-38)
   - Google consent flow and Hevy key forms, then real adapters and signed webhooks (MOM-38 needs Hevy samples from you)
-SESSION 4: CI PROTECTION & COST GOVERNANCE (MOM-67, MOM-73)
+SESSION 5: CI PROTECTION & COST GOVERNANCE (MOM-67, MOM-73)
   - GitHub Actions CI with a disposable database, then durable LLM rate limits, usage logging and spend caps
 ```
 
-*Order matters. In Session 1, MOM-19 comes last: the seed must not be removed until a new user can build a plan (MOM-34, MOM-35) and sees a sensible empty state (MOM-18). MOM-62 comes before MOM-38 because the adapters need the connect flows. Safe stopping points: after Block 1.2 (the core loop works), after each session. If the day runs short, stop after Session 2; Block 3.2 is the first to drop (it also waits on Hevy samples from you).*
+*Order matters. In Session 1, MOM-19 comes last: the seed must not be removed until a new user can build a plan (MOM-34, MOM-35) and sees a sensible empty state (MOM-18). Session 2 (added 2026-10-23 after the wireframe gap review) comes before the Playwright session so its component and hydration tests are written against the final UI, and before MOM-62 so the connect forms land on the new Connected Apps page. In Session 2, MOM-76 (styling) comes first, then MOM-31 (real channels), then MOM-77 (layout, which needs both). MOM-62 comes before MOM-38 because the adapters need the connect flows. Safe stopping points: after Block 1.2 (the core loop works), after each session. If the day runs short, stop after Session 3; Sessions 4 and 5 move to the next day, and Block 4.2 is the first to drop (it also waits on Hevy samples from you).*
 
 ---
 
@@ -182,9 +186,116 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 
 ---
 
-# SESSION 2: E2E AUTH & HYDRATION TESTS
+# SESSION 2: WIREFRAME LOOK AND FEEL (MOM-76, MOM-31, MOM-77)
 
-## Block 2.1: Playwright E2E, Hydration Checks and Component Tests (MOM-61)
+**Your prerequisites before this session:** (1) the v0 wireframe export unzipped **outside** the repo, for example `C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\` (the zip Matt downloaded on 2026-10-23); the prompts read it as reference and never copy its `package.json`, lockfile or `public/` placeholders; (2) the live wireframe open for comparison: https://momentum-teal-phi.vercel.app. Decisions already made (2026-10-23): **dark only** for now (light mode is MOM-30), and **single scroll on mobile** (the tab bar goes; MOM-32 is Closed).
+
+## Block 2.1: Adopt the Wireframe Design System, Dark (MOM-76)
+
+* **Objective & Scope:** Port the wireframe's tokens, CSS classes, icons and Button onto the existing components so the app looks like the wireframe. Layout, navigation and data stay as they are (Blocks 2.2 and 2.3). Same stack as the wireframe (Next 16, React 19, Tailwind v4), so the CSS ports directly.
+* **Core Invariants to Protect:** *Human-Only Completion*: the restyled task check is still the owner's own click and nothing else. *Service RLS*: styling only; no new data access. Behavior is unchanged, so existing test assertions must not change.
+* **CLI Session Config:** Model: Sonnet | Effort: Medium
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-76: adopt the wireframe design system (dark).
+
+Task Instructions:
+1. Read ticket MOM-76 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, app/globals.css, app/layout.tsx and every component under components/. Then read the wireframe reference at C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\ (app/globals.css, app/layout.tsx, components/momentum-dashboard.tsx, components/ui/button.tsx, components.json). If that folder is missing, stop and ask me for the path. It is reference only: never copy its package.json, lockfile, analytics or public/ placeholders into this repo.
+3. Create the feature branch `feature/MOM-76-wireframe-design-system` off a clean `main`.
+4. Tokens: port the wireframe's dark tokens into app/globals.css (color-scheme dark, oklch palette, lime #c6f36d, radius 0.85rem, surface and channel colors). Map this repo's existing token names (background, foreground, panel, border, muted, accent) onto the new palette or update every use; nothing may be left pointing at the old indigo values. Set viewport themeColor #111513 in app/layout.tsx. Do not add a light palette or a theme toggle (that is MOM-30).
+5. Classes: port only the wireframe classes this repo uses now (score card and ring, focus card and task check, connected-app row and toggle, eyebrow, badges, buttons, channel card and track). Leave the .desktop-* layout rules and .adaptive-sheet for MOM-77.
+6. Add lucide-react and the shadcn/ui Button (npx shadcn add button, or port components/ui/button.tsx with its class-variance-authority dependency). Show me the package.json diff before installing anything else.
+7. Restyle without changing behavior: VelocityHero (ring gauge with the score; keep the text alternative), FocusTaskCard, BurnoutRiskBadge, IntegrationCardList, RebalanceSideCard, RebalanceDrawer, GoalBuilderWizard and the sign-in page. Keep every role, aria attribute and label the tests rely on; color must never carry meaning alone; text stays WCAG AA on the dark background.
+8. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. If a test fails, fix the style change, not the assertion; selector-only updates are allowed and must be listed.
+9. Run `npm run dev`, and show me the main view at 390px and 1280px next to the wireframe. Wait for my OK on the look before committing.
+10. Update BACKLOG.md: tick the MOM-76 item, add anything deferred with its Jira key.
+11. Commit with "feat(MOM-76): adopt the wireframe design system (dark)" and merge into main with --no-ff. Do not push.
+12. Update MOM-76 in Jira: Done only if all acceptance criteria are met.
+
+Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
+```
+
+* **User Verification Gate:**
+  - [ ] Locally at 390px and 1280px, the velocity ring, focus card, integration cards and rebalance card look like the wireframe, dark, with the lime accent.
+  - [ ] Ticking and unticking the focus task still works, and the drawer still opens and applies only on your click.
+
+---
+
+## Block 2.2: Wire the Sidebar and Feed to Real Goal Channels (MOM-31)
+
+* **Objective & Scope:** Replace the placeholder channels in `NavSidebar` with the signed-in user's goal channels from `listGoalChannels()`, and feed `MainFeed` from the task service for the selected channel. Block 2.3 builds the goal cards and progress on top of this.
+* **Core Invariants to Protect:** *Service RLS*: data is fetched in the server component (`app/page.tsx`) through `lib/services/`, never in a client component. *Human-Only Completion*: selecting a channel only filters what is shown.
+* **CLI Session Config:** Model: Sonnet | Effort: Medium
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-31: wire NavSidebar and MainFeed to the goals and tasks services.
+
+Task Instructions:
+1. Read ticket MOM-31 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, app/page.tsx, components/layout/ (AppShell, NavSidebar, MainFeed), lib/services/goals.ts (listGoalChannels), lib/services/tasks.ts (getFocusTask, listMicroTasks) and components/goals/GoalBuilderWizard.tsx. MOM-76 must already be merged; if not, stop and tell me.
+3. Create the feature branch `feature/MOM-31-real-goal-channels` off a clean `main`.
+4. Fetch the user's goal channels in app/page.tsx (it already calls listGoalChannels) and pass them down to NavSidebar as typed props. Remove the NAV_ITEMS placeholder list.
+5. Selecting a channel filters the feed to that channel's tasks. Keep the selection in the URL (for example ?channel=<channel_key>) so the server component can read it; an unknown key falls back to all channels. The focus task respects the selection.
+6. After the wizard creates a goal, the sidebar shows it without a manual reload (router.refresh() or revalidatePath on the server action).
+7. No Supabase call in any component; new service helpers go in lib/services/ and are unit tested (another user's channels never appear).
+8. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
+9. Update BACKLOG.md: tick both MOM-31 items (Layout and Wizard).
+10. Commit with "feat(MOM-31): wire the sidebar and feed to real goal channels" and merge into main with --no-ff. Do not push.
+11. Update MOM-31 in Jira: Done only if all acceptance criteria are met.
+
+Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
+```
+
+* **User Verification Gate:**
+  - [ ] Locally: the sidebar lists your real goals (no "Health" or "Finances" placeholders); creating a goal in the wizard adds it without reloading; clicking a goal changes the feed.
+
+---
+
+## Block 2.3: Adopt the Wireframe Layout and Navigation, Single-Scroll Mobile (MOM-77)
+
+* **Objective & Scope:** Match the wireframe's structure: a three-column desktop from 1200px (232px / fluid / 326px) with a sidebar workspace nav, goal cards with progress, the connected stack and an inline Momentum AI rebalance nudge; on mobile, one scrolling column with a header and the nudge as a dismissible bottom sheet. Remove `MobileTabBar`. Add a Connected Apps page (reachable on mobile and desktop) and a Settings stub with sign-out. No streak badge yet (MOM-78).
+* **Core Invariants to Protect:** *No-Delete / Carry-Forward* and *Human-Only Completion*: the nudge only summarises and opens the existing drawer; applying stays a user click in the drawer, and nothing auto-applies. *Service RLS*: progress counts come from `lib/services/`, scoped to the signed-in user.
+* **CLI Session Config:** Model: Sonnet | Effort: High
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-77: adopt the wireframe layout and navigation with a single-scroll mobile view.
+
+Task Instructions:
+1. Read ticket MOM-77 in Jira first; its acceptance criteria are the definition of done. Also read MOM-32 (Closed: superseded by this ticket), MOM-62 (its connect forms will land on the new Connected Apps page) and MOM-78 (streak, not in scope). If MOM-77 disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, docs/NINETY_DAY_PLAN_CONTEXT.md section 5, app/page.tsx, app/layout.tsx, lib/supabase/proxy.ts (PUBLIC_PATHS), components/layout/, components/rebalance/, components/integrations/ and components/auth/SignOutButton.tsx. Then read the wireframe reference at C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\ (components/momentum-dashboard.tsx and the .desktop-*, .mobile-header, .goal-builder-* and .adaptive-sheet rules in app/globals.css). MOM-76 and MOM-31 must already be merged; if not, stop and tell me.
+3. Create the feature branch `feature/MOM-77-wireframe-layout` off a clean `main`.
+4. Desktop (from 1200px): three columns as in the wireframe. Left: logo mark, burnout badge, workspace nav (Daily Dashboard, Goal Channels, Connected Apps, Settings), active goals with progress, "Your pace" footer. Centre: the goal-builder banner (New Goal Wizard and Adjust Weekly Pace open what they open today; omit Review Milestones unless it has a real target, and tell me), date, headline, velocity ring, focus card, goal cards. Right: connected stack summary and the Momentum AI nudge.
+5. Mobile (below 1200px): one scrolling column with a header (logo, burnout badge, avatar with the signed-in user's initials). Delete MobileTabBar and the per-panel view state in AppShell and components/layout/panels.ts. The rebalance nudge is a bottom sheet the user can dismiss; dismissal is per session and changes no data. Keep RebalanceDrawer rendered outside any hidden panel.
+6. Pages: a Connected Apps page (for example app/connections/page.tsx) that renders IntegrationCardList, linked from the nav on desktop and from the mobile header or menu; a Settings stub page with sign-out. Both are authenticated routes: do NOT add them to PUBLIC_PATHS, and check the proxy redirects them to /login when signed out.
+7. Goal progress: add a service function in lib/services/ that returns done and planned counts per goal channel for the current plan week for the signed-in user. Unit test it (another user's tasks never count; carried-over tasks count once).
+8. The nudge shows the proposal summary from the existing rebalance view and a "Review" action that opens the drawer. No new "Accept" path that applies without the drawer; if you want one, stop and ask me.
+9. No streak badge (MOM-78). No Supabase call in any component; every new component exports an interface ...Props.
+10. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. Update or remove tests that covered MobileTabBar and list them.
+11. Run `npm run dev`; show me 390px and 1280px next to the wireframe, and confirm there are no hydration warnings in the console at either width. Wait for my OK.
+12. Update BACKLOG.md: tick the MOM-77 item, retire the MOM-32 item, and add any follow-ups with Jira keys.
+13. Commit with "feat(MOM-77): adopt the wireframe layout and single-scroll mobile view" and merge into main with --no-ff. Do not push.
+14. Update MOM-77 in Jira: Done only if all acceptance criteria are met.
+
+Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
+```
+
+* **User Verification Gate:**
+  - [ ] Locally at 1280px: three columns with the nav, goal cards with real progress, the connected stack and the nudge, matching the wireframe.
+  - [ ] Locally at 390px: one scroll, no tab bar; the nudge slides up and can be dismissed; Connected Apps opens from the menu.
+  - [ ] "Review" opens the drawer and nothing moves until you apply there. After the day-end push, repeat on the live site.
+
+---
+
+# SESSION 3: E2E AUTH & HYDRATION TESTS
+
+## Block 3.1: Playwright E2E, Hydration Checks and Component Tests (MOM-61)
 
 * **Objective & Scope:** Jira's three criteria: Playwright with `npm run test:e2e`; a console check that fails on any hydration error at 390px and 1280px; Testing Library with jsdom for component tests. This plan adds auth specs on top: sign-up, email confirmation, sign-in, protected-route guards and sign-out, run **only against a local Supabase stack** (`supabase start`, which needs Docker; confirmation emails are read from the local mail inbox). It never signs up real users on production.
 * **Core Invariants to Protect:** *Service RLS*: tests never use production URLs, keys or the real service-role key; the config refuses to run unless the Supabase URL is local. Protected routes must reject unauthenticated sessions. *Human-Only Completion*: component tests prove the UI offers no control that completes a task other than the owner's own toggle.
@@ -220,13 +331,13 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 
 ---
 
-# SESSION 3: EXTERNAL INTEGRATIONS & UI
+# SESSION 4: EXTERNAL INTEGRATIONS & UI
 
-**Your prerequisites before this session:** (1) a Google Cloud OAuth client (Web application, Calendar read-only scope) with redirect URIs `https://momentum-app-eight-chi.vercel.app/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/google`, yourself added as a test user; (2) `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set in Vercel Production and in `.env.local`; (3) for Block 3.2, a **redacted real Hevy API response** or the Hevy API documentation saved in the repo, and a Hevy Pro API key.
+**Your prerequisites before this session:** (1) a Google Cloud OAuth client (Web application, Calendar read-only scope) with redirect URIs `https://momentum-app-eight-chi.vercel.app/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/google`, yourself added as a test user; (2) `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set in Vercel Production and in `.env.local`; (3) for Block 4.2, a **redacted real Hevy API response** or the Hevy API documentation saved in the repo, and a Hevy Pro API key.
 
-## Block 3.1: Google OAuth Consent Flow and Hevy API-Key Forms (MOM-62)
+## Block 4.1: Google OAuth Consent Flow and Hevy API-Key Forms (MOM-62)
 
-* **Objective & Scope:** The Google consent redirect and callback route `/api/auth/callback/google`, a Hevy key form, and connect/disconnect buttons wired to `lib/services/integrations.ts`, shown on the existing integration cards in `components/integrations/`. Token storage, retrieval and refresh already exist (MOM-37). The provider catalog has two providers, Hevy and Google Calendar; there is no Jira provider and no settings page, so no new settings page or drawer is added.
+* **Objective & Scope:** The Google consent redirect and callback route `/api/auth/callback/google`, a Hevy key form, and connect/disconnect buttons wired to `lib/services/integrations.ts`, shown on the existing integration cards in `components/integrations/`, which MOM-77 (Block 2.3) renders on the Connected Apps page. Token storage, retrieval and refresh already exist (MOM-37). The provider catalog has two providers, Hevy and Google Calendar; there is no Jira provider. MOM-77 adds a Settings stub, but integration controls stay on the Connected Apps page, and no drawer is added.
 * **Core Invariants to Protect:** *Service RLS / secrets*: no token, key or client secret reaches the browser (only `IntegrationAccount` does); the callback requires a verified session and takes the user id from it, never the request; `state` is checked. *Human-Only Completion*: connecting an app creates and completes no tasks.
 * **CLI Session Config:** Model: Sonnet | Effort: High
 
@@ -241,7 +352,7 @@ Task Instructions:
 3. Create the feature branch `feature/MOM-62-connect-flows` off a clean `main`.
 4. Google: a route that starts the consent redirect (state and PKCE in an httpOnly short-lived cookie, minimal scope calendar.readonly, access_type=offline) and the callback at app/api/auth/callback/google/route.ts that requires a signed-in session, verifies state, exchanges the code server-side, validates the response and calls saveOAuthTokens(). The callback is an authenticated route: do NOT add it to PUBLIC_PATHS. Handle denial, bad state and exchange failure with a friendly message and no token or provider text in URLs or logs.
 5. Hevy: a Server Action form that calls saveApiKey(); the key is never echoed back or stored client-side.
-6. UI: connect and disconnect buttons on each existing card from listIntegrationAccounts() (IntegrationAccount only), including a "needs reconnect" state for status needs_reauth. Only Google Calendar and Hevy exist as providers; do not add Jira, a settings page or a drawer. If you think one is needed, stop and ask.
+6. UI: connect and disconnect buttons on each existing card from listIntegrationAccounts() (IntegrationAccount only), including a "needs reconnect" state for status needs_reauth. The cards live on the Connected Apps page from MOM-77. Only Google Calendar and Hevy exist as providers; do not add Jira, integration controls on the Settings page, or a drawer. If you think one is needed, stop and ask.
 7. Remove the TODO(MOM-Phase2) comment about the connect flow.
 8. Tests: state mismatch, missing session, exchange failure, denial, no token or secret in any returned value, and a boundary test that no component imports the Google exchange code. Mock the network.
 9. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. Confirm the client output contains no secret names or values.
@@ -259,7 +370,7 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 
 ---
 
-## Block 3.2: Hevy and Google HTTP Adapters and Signed Webhook Routes (MOM-38)
+## Block 4.2: Hevy and Google HTTP Adapters and Signed Webhook Routes (MOM-38)
 
 * **Objective & Scope:** Real clients in `lib/adapters/hevy.ts` and `lib/adapters/google.ts` whose output matches `InboundActivityPayload` (`docs/INTEGRATIONS_SPEC.md`), plus `app/api/webhooks/[provider]/route.ts` with signature verification. Adapters only normalize; they hand results to the existing ingestion engine (`lib/services/ingestion.ts`), and only services touch Supabase. **This block cannot be built honestly for Hevy without Hevy's real API documentation or a redacted sample response; the prompt stops if none is provided.**
 * **Core Invariants to Protect:** *Human-Only Completion*: ingestion writes evidence and never `status` or `completed_at`, and never completes or creates a completed task. *Service RLS*: the Hevy key is **per user**, read server-side from `integration_credentials` via the integrations service; the global `HEVY_API_KEY` env var is vestigial (MOM-74) and must not be used. The webhook rejects unsigned or invalid requests before touching the database.
@@ -295,9 +406,9 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 
 ---
 
-# SESSION 4: CI PROTECTION & COST GOVERNANCE
+# SESSION 5: CI PROTECTION & COST GOVERNANCE
 
-## Block 4.1: GitHub Actions CI with a Disposable Database (MOM-67)
+## Block 5.1: GitHub Actions CI with a Disposable Database (MOM-67)
 
 * **Objective & Scope:** `.github/workflows/ci.yml` with two jobs. Job 1 runs `npx tsc --noEmit`, `npm test` and `npm run build` on every push and PR. Job 2 starts a **local** Supabase stack, applies every migration, and runs every file in `supabase/verify/`, failing on any `passed = false` or error. If MOM-61 is merged, Job 1 also runs `npm run test:e2e`.
 * **Core Invariants to Protect:** All three; this ticket exists to guard them. CI must **never** hold production credentials or the production project ref.
@@ -332,7 +443,7 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 
 ---
 
-## Block 4.2: LLM Rate Limiting, Usage Logging and Spend Caps (MOM-73)
+## Block 5.2: LLM Rate Limiting, Usage Logging and Spend Caps (MOM-73)
 
 * **Objective & Scope:** Jira's scope: a durable per-user rate limit and a daily cap per user and overall; per-call token and latency records with no prompt or answer content, and a way to read them; a written decision on the SDK choice and on server-side fallbacks. Applies to both Claude call sites: `requestModelRebalance` and the MOM-35 plan generator.
 * **Core Invariants to Protect:** *Service RLS*: the new `llm_usage_logs` table needs RLS and **explicit grants** (a signed-in user may read only their own rows; only server-only code scoped to a verified user id may write), plus a verify script. *Human-Only Completion*: governance code never touches tasks. A tripped limit must not silently substitute output: rebalance may fall back to the existing rule-based proposal, clearly labelled; the plan generator shows the limit message and offers the rule-based stub only as the user's explicit choice.
@@ -468,11 +579,13 @@ git push origin main
 
 | Item | Why it matters |
 | --- | --- |
-| **Hevy API samples** | Block 3.2 cannot build the Hevy adapter honestly without Hevy's API docs or a redacted `/v1/workouts` response. The prompt stops without them. |
-| **Docker** | Blocks 2.1 and 4.1 need Docker for a local Supabase stack, and the repo has no `supabase/config.toml` yet (Block 2.1 creates it with `supabase init`). Without Docker, the auth specs and the CI database job cannot be tested locally. |
+| **Hevy API samples** | Block 4.2 cannot build the Hevy adapter honestly without Hevy's API docs or a redacted `/v1/workouts` response. The prompt stops without them. |
+| **Docker** | Blocks 3.1 and 5.1 need Docker for a local Supabase stack, and the repo has no `supabase/config.toml` yet (Block 3.1 creates it with `supabase init`). Without Docker, the auth specs and the CI database job cannot be tested locally. |
 | **MOM-35 migration** | Saving the goal and its week-1 tasks all-or-nothing needs a Postgres function, so Block 1.2 will stop for your approval of a migration. |
 | **Google verification** | Calendar read-only is a sensitive scope. Testing mode (test users) is fine for you; wider use needs Google's app verification and a verified domain. |
 | **MOM-19 touches every verify script** | The 91 checks currently rely on the signup seed. The prompt makes the CLI rewrite them first; review that diff. |
 | **Not scheduled today, still recommended** | MOM-65 (revoke EXECUTE on `handle_new_user` and `rls_auto_enable`; low risk, since `handle_new_user` returns `trigger` and cannot be called directly. Block 1.4 comments on its outdated seed criterion), MOM-66 (table grants check), MOM-68 (`.env*` gitignore), MOM-74 (retire `HEVY_API_KEY`; delete it from Vercel Production afterwards). |
+| **Wireframe reference** | Session 2 reads the v0 export from `C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\`. Unzip it there before Block 2.1; it must never be copied into the repo. |
+| **Dark only until MOM-30** | MOM-76 makes the app dark regardless of the device setting. Light mode with a follow-device default is MOM-30, not scheduled today. |
 | **Direct pushes to `main`** | Today every change is merged and pushed to `main` by hand. After MOM-67 and branch protection are on, step C becomes a pull request. |
 | **Model cost** | MOM-35's generator and MOM-47's rebalance call Claude Opus 5.5 per click; MOM-73 is what bounds that. Until it ships, do not invite real users. |
