@@ -54,7 +54,7 @@ SESSION 5: CI PROTECTION & COST GOVERNANCE (MOM-67, MOM-73)
 
 # SESSION 1: EMPTY STATES & CLEAN SIGNUP
 
-**Your prerequisites before this session:** none for Block 1.1. **One-time, during Block 1.2:** production has no users today, so the standing smoke-test account does not exist. Create it **after** Block 1.2 has pushed migration 010 (the CLI tells you when): Supabase dashboard → Authentication → Add user → email `smoke-test@momentum-app.test`, password from your password manager, **Auto Confirm User on**. Created before migration 010 it would receive the old Career Pivot seed (delete and recreate it if that happens). This is the first block that needs a live sign-in.
+**Your prerequisites before this session:** none for Block 1.1. **One-time, during Block 1.2:** the standing smoke-test account already exists (recreated 2026-10-23 at about 15:50 UTC, **before** migration 010), so it holds the old Career Pivot seed. **After** Block 1.2 has pushed migration 010 (the CLI tells you when), delete it and create it again: Supabase dashboard → Authentication → Users → delete `smoke-test@momentum-app.test`, then Add user → same email, password from your password manager, **Auto Confirm User on**. Recreated after 010 it starts empty, which is the live proof of MOM-19. This is the first block that needs a live sign-in.
 
 ## Block 1.1: Distinguish Signed-Out, No-Goals, No-Tasks and All-Done Empty States (MOM-18)
 
@@ -110,7 +110,7 @@ Task Instructions:
 6. Rewrite the dependent verify scripts so each builds its own fixtures as postgres instead of relying on signup: right after creating a throwaway user, call `perform public.seed_career_pivot(<user id>)` (postgres can; API roles cannot) wherever the script needs the seeded channel, tasks or history. A check that only tested "signing up seeds the goal" must change to the new truth, and you must list each one. All 171 existing checks must still be present and pass. Add checks that a fresh signup has zero goal channels, zero tasks and zero history rows but does have its users row, that handle_new_user is still not executable by API roles, and that a goal created through create_goal_with_week_one_plan with the key career_pivot succeeds on a fresh account with exactly that key (no _2 suffix).
 7. Add a unit test that a wizard goal titled "Career pivot" gets the key career_pivot against an empty account (extend the fake if needed), and check toChannelKey/channelKeyFor need no change.
 8. Verify locally first: `npx supabase db reset`, then run every file in supabase/verify/ with `npx supabase db query --local -f <file> -o table`; all must pass. The local test user `test@example.com` is wiped by the reset; that is expected.
-9. STOP before production. Show me the migration, the diff of every verify script (grouped by script, with the changed checks listed) and `npx supabase db push --dry-run`. Wait for my go-ahead, then push and run ALL scripts in supabase/verify/ against production; all must pass. Then tell me to create the standing smoke-test account (see the plan's Session 1 prerequisites) and wait for my confirmation.
+9. STOP before production. Show me the migration, the diff of every verify script (grouped by script, with the changed checks listed) and `npx supabase db push --dry-run`. Wait for my go-ahead, then push and run ALL scripts in supabase/verify/ against production; all must pass. Then tell me to delete and recreate the standing smoke-test account in the dashboard (it was created before migration 010 and holds the old seed; see the plan's Session 1 prerequisites) and wait for my confirmation.
 10. With my confirmation, run a COUNT-ONLY query on production for smoke-test@momentum-app.test: users row 1, goal channels 0, tasks 0, history rows 0. Print counts only, nothing else about the account.
 11. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
 12. Update BACKLOG.md for MOM-19 and any seed-related items (the two Wizard/Layout items that mention the seed).
@@ -123,7 +123,7 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 * **User Verification Gate:**
   - [ ] You reviewed the verify-script diff: the same checks, now with explicit fixtures, and the signup-seed checks rewritten to the new truth.
   - [ ] After the push, the verify total is all passing (171 plus the new checks).
-  - [ ] You created the standing smoke-test account in the dashboard **after** migration 010 was live; the CLI's count-only query shows zero goals, tasks and history for it.
+  - [ ] You deleted and recreated the standing smoke-test account in the dashboard **after** migration 010 was live; the CLI's count-only query shows zero goals, tasks and history for it.
   - [ ] After the day-end push, sign in as the standing smoke-test account: you see the **no-goals** state with the wizard call to action (Block 1.1), create a goal in the wizard, tick every task for that channel and see the **all-done** state with the undo still available. If its data gets cluttered, delete and recreate it in the dashboard.
 
 ---
@@ -495,7 +495,7 @@ git push origin main
 
 | Item | Why it matters |
 | --- | --- |
-| **Standing smoke-test account** | Production has no users today. Create `smoke-test@momentum-app.test` in the Supabase dashboard **after** Block 1.2 has pushed migration 010 (Auto Confirm on), or it receives the old Career Pivot seed. Every live gate in this plan signs in as it; its password stays in your password manager. If its data gets cluttered, delete and recreate it. |
+| **Standing smoke-test account** | `smoke-test@momentum-app.test` already exists on production but was created before migration 010, so it holds the old Career Pivot seed. **After** Block 1.2 has pushed migration 010, delete it and recreate it in the Supabase dashboard (Auto Confirm on) so it starts empty; Block 1.2's count-only check expects zero goals and tasks. Every live gate in this plan signs in as it; its password stays in your password manager. If its data gets cluttered, delete and recreate it. |
 | **MOM-18: the signed-out state is normally unreachable** | `lib/supabase/proxy.ts` redirects signed-out visitors to `/login`, so criterion 1 ("signed-out shows a sign-in call to action") can only be met at the component level. Block 1.1 builds it as a safe default and comments on the ticket; decide whether to amend the ticket's wording. |
 | **MOM-19 touches six verify scripts** | Scripts 001, 002, 003, 004, 007 and 008 rely on the signup seed for their fixtures. The prompt keeps all 171 checks by calling `seed_career_pivot()` explicitly as postgres and rewrites the few checks that tested signup seeding itself; review that diff before the push. |
 | **Migration 010 and MOM-73's migration** | Block 1.2 takes 010 and shows you the migration and a dry run before anything is pushed; Block 5.2 then takes 011. Each stops for your approval. |
