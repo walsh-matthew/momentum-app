@@ -42,6 +42,7 @@ Seeded 2026-10-23 (MOM-92) from the project's build sessions. The owner reviews 
 | I-01 | The model failure paths (wait message, Try again, starter plan) have never run in production. | Measure | Build agent | — (current) | Browser tests cover them against a local stack. | open | MOM-61 |
 | I-02 | The plan week can be off by one around midnight for users outside UTC. | Measure | Build agent | — (current) | Store the user's time zone or week boundary explicitly. | open | MOM-45 |
 | I-03 | Database rule checks run by hand against production, not in CI. | Manage | Build agent | — (current) | Run them in CI against a disposable database. | open | MOM-67 |
+| I-04 | **A failed data load is shown as an empty account.** When the plan cannot be read, the home screen tells a user who has goals that they have none and invites them to start one. | Manage | Build agent | — (current) | Add a distinct "could not load" screen with a retry and no goal prompt. | unreviewed | MOM-93 |
 
 ## Dependencies
 

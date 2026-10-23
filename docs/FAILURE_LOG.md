@@ -70,6 +70,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner's preflight pull failed. It was fixed with an ordinary git checkout, after confirming the diff was line endings only.
 - **Predicted it?** No.
 
+### F-009 · 2026-10-23 · build tool · `unreviewed`
+- **Asked:** Add a database check that a wizard goal titled "Career pivot" gets exactly the key `career_pivot` on a fresh account (MOM-19).
+- **What went wrong:** The new check passed, but the detail text it printed was an error message from a different, earlier test case, so a passing check looked like it had failed with a duplicate-key error.
+- **Why:** The detail text came from a variable that an earlier loop in the same script had already filled in. The model reused the variable without clearing it first. The pass/fail result was right; only the explanation shown was wrong.
+- **Caught by:** Reading the printed output of the new checks line by line rather than only the pass count. Fixed before commit.
+- **Predicted it?** _owner to answer_
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
