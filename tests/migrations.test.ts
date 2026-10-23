@@ -55,6 +55,9 @@ describe('CHECK constraints the fake enforces exist in the SQL', () => {
     'task_rebalance_history_shift_type_check',
     'goal_channels_goal_type_check',
     'goal_channels_preferences_shape',
+    // The week 1 plan path (migration 009) inserts tasks, so the fake enforces these two as well.
+    'micro_tasks_title_not_blank',
+    'micro_tasks_task_type_check',
   ])('%s', (name) => expect(all).toMatch(new RegExp(`constraint ${name}\\b`, 'i')));
 
   it('micro_tasks: done exactly when completed_at is set', () => {

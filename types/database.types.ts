@@ -107,12 +107,38 @@ export interface GoalCriterion {
   done: boolean;
 }
 
+// One task passed to create_goal_with_week_one_plan. Only these three keys are accepted by the function.
+export interface WeekOneTaskArg {
+  title: string;
+  task_type: TaskType;
+  minutes: number;
+}
+
 // goal_channels.preferences. Only the answers the user gave are present: an unset pace is omitted, and
 // a goal with no constraints has no `constraints` key. Shape is enforced by goal_channels_preferences_shape.
 export interface GoalPreferences {
   constraints?: Constraint[];
   pace?: Pace;
 }
+
+// A goal_channels row. Named so create_goal_with_week_one_plan can return it. A type alias, not an
+// interface: supabase-js needs rows to be assignable to Record<string, unknown>.
+export type GoalChannelRow = {
+  id: string;
+  user_id: string;
+  channel_key: string;
+  title: string;
+  status: GoalChannelStatus;
+  is_default: boolean;
+  start_date: string;
+  target_date: string | null;
+  criteria: GoalCriterion[];
+  // Null for goals created before migration 008 recorded it.
+  goal_type: GoalType | null;
+  preferences: GoalPreferences;
+  created_at: string;
+  updated_at: string;
+};
 
 // ---------------------------------------------------------------------------
 // Database (supabase-js generic)
@@ -144,22 +170,7 @@ export type Database = {
         Relationships: [];
       };
       goal_channels: {
-        Row: {
-          id: string;
-          user_id: string;
-          channel_key: string;
-          title: string;
-          status: GoalChannelStatus;
-          is_default: boolean;
-          start_date: string;
-          target_date: string | null;
-          criteria: GoalCriterion[];
-          // Null for goals created before migration 008 recorded it.
-          goal_type: GoalType | null;
-          preferences: GoalPreferences;
-          created_at: string;
-          updated_at: string;
-        };
+        Row: GoalChannelRow;
         Insert: {
           id?: string;
           user_id: string;
@@ -425,6 +436,22 @@ export type Database = {
     // seed_career_pivot, handle_new_user and the trigger functions are not executable by API roles, so
     // they are not exposed. apply_task_move is the only one a signed-in user can call.
     Functions: {
+      // Creates a wizard goal and its week 1 tasks in one transaction (migration 009). The owner is
+      // auth.uid(); there is no user id, status or completed_at argument, every task is 'todo' in week 1, and
+      // a failure on any task rolls the goal back. Returns the new goal.
+      create_goal_with_week_one_plan: {
+        Args: {
+          p_channel_key: string;
+          p_title: string;
+          p_goal_type: GoalType | null;
+          p_preferences: GoalPreferences;
+          p_criteria: GoalCriterion[];
+          p_start_date: string;
+          p_target_date: string | null;
+          p_tasks: WeekOneTaskArg[];
+        };
+        Returns: GoalChannelRow;
+      };
       // Moves one unfinished task to another week and records it, in one transaction. Returns false
       // when the task is not eligible (not theirs, already done, or not in p_from_week).
       apply_task_move: {

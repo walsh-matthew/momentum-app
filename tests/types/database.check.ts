@@ -56,3 +56,39 @@ export async function typeChecks() {
   const status: GoalChannel['status'] = 'paused';
   return { tasks, done, status, goalType, prefs };
 }
+
+// create_goal_with_week_one_plan (migration 009): a task carries only a title, a task type and minutes. There
+// is no user id, status or completed_at argument, so a done task cannot even be typed. The negative checks
+// use the declared Args type directly: supabase-js's generic rpc() infers its argument type from the call, so
+// it would let an extra key through and these lines would pass for the wrong reason.
+type PlanArgs = Database['public']['Functions']['create_goal_with_week_one_plan']['Args'];
+const planArgs = (args: PlanArgs) => args;
+
+export async function weekOnePlanTypeChecks() {
+  const args = planArgs({
+    p_channel_key: 'k',
+    p_title: 't',
+    p_goal_type: 'get_certified',
+    p_preferences: { pace: 'lighter' },
+    p_criteria: [{ key: 'a', label: 'A', done: false }],
+    p_start_date: '2026-10-23',
+    p_target_date: '2027-01-21',
+    p_tasks: [{ title: 'x', task_type: 'build', minutes: 30 }],
+  });
+  const { data } = await sb.rpc('create_goal_with_week_one_plan', args);
+  const goal: GoalChannel | null = data;
+
+  // @ts-expect-error a task cannot carry a status
+  planArgs({ ...args, p_tasks: [{ title: 'x', task_type: 'build', minutes: 30, status: 'done' }] });
+  // @ts-expect-error nor a completion time
+  planArgs({ ...args, p_tasks: [{ title: 'x', task_type: 'build', minutes: 30, completed_at: 'now' }] });
+  // @ts-expect-error nor a week
+  planArgs({ ...args, p_tasks: [{ title: 'x', task_type: 'build', minutes: 30, week_of: 3 }] });
+  // @ts-expect-error the task type must be a known lowercase key
+  planArgs({ ...args, p_tasks: [{ title: 'x', task_type: 'Build', minutes: 30 }] });
+  // @ts-expect-error the owner is never passed: the function reads it from the session
+  planArgs({ ...args, p_user_id: 'someone-else' });
+  // @ts-expect-error the goal type must be a known key
+  planArgs({ ...args, p_goal_type: 'Get certified' });
+  return goal;
+}

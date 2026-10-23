@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { createGoalFromWizard } from '@/app/actions/goals';
+import { createGoalWithPlanAction, generateWeekOnePlanAction } from '@/app/actions/goals';
 import {
   CONSTRAINTS,
   CONSTRAINT_LABELS,
@@ -25,6 +25,7 @@ import {
   buildStubTaskPlan,
   defaultTitleFor,
   parseWizardInput,
+  type TaskPlan,
 } from '@/lib/goals/taskPlan';
 import type { GoalChannel } from '@/types/database.types';
 
@@ -60,6 +61,20 @@ function Chip({ label, selected, onToggle }: ChipProps) {
 const toggleIn = <T,>(list: T[], item: T) =>
   list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 
+// A week 1 plan the user is looking at. `forKey` ties it to the answers it was made for: change an answer
+// and it no longer applies, so it is never saved against different answers.
+interface PlanDraft {
+  plan: TaskPlan;
+  source: 'claude' | 'starter';
+  model: string | null;
+  forKey: string;
+}
+
+interface CreatedState {
+  goal: GoalChannel;
+  tasksSaved: number;
+}
+
 interface WizardBodyProps {
   onClose: () => void;
   onCreated?: (goal: GoalChannel) => void;
@@ -76,10 +91,14 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
   const [pace, setPace] = useState<Pace | null>(null);
   const [reviewPrompts, setReviewPrompts] = useState<ReviewPrompt[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<GoalChannel | null>(null);
+  const [created, setCreated] = useState<CreatedState | null>(null);
+  const [draft, setDraft] = useState<PlanDraft | null>(null);
+  const [planError, setPlanError] = useState<{ message: string; forKey: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [generating, startGenerating] = useTransition();
 
-  useEffect(() => onPendingChange(pending), [pending, onPendingChange]);
+  const busy = pending || generating;
+  useEffect(() => onPendingChange(busy), [busy, onPendingChange]);
 
   const step: WizardStep = WIZARD_STEPS[stepIndex];
   const isLast = stepIndex === WIZARD_STEPS.length - 1;
@@ -88,7 +107,10 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
     () => parseWizardInput({ title, goalType, constraints, pace, reviewPrompts }),
     [title, goalType, constraints, pace, reviewPrompts],
   );
-  const plan = useMemo(() => (parsed.ok ? buildStubTaskPlan(parsed.data) : null), [parsed]);
+  const inputKey = parsed.ok ? JSON.stringify(parsed.data) : null;
+  // Only a plan made for the current answers counts.
+  const plan = draft && draft.forKey === inputKey ? draft : null;
+  const shownPlanError = planError && planError.forKey === inputKey ? planError.message : null;
 
   // Step 1 is the only gated step; every chip group after it is optional.
   const canAdvance = step !== 'goal_type' || (goalType !== null && title.trim().length > 0);
@@ -98,20 +120,48 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
     if (!titleEdited) setTitle(defaultTitleFor(type));
   }
 
+  // Runs only from the Generate button. Nothing calls it on load or from an effect: each call is a paid
+  // model request. The plan is shown for review and saved only when the user confirms.
+  function generate() {
+    if (!parsed.ok || inputKey === null) return;
+    const input = parsed.data;
+    const forKey = inputKey;
+    setPlanError(null);
+    startGenerating(async () => {
+      const result = await generateWeekOnePlanAction(input);
+      if (!result.ok) {
+        setPlanError({ message: result.error, forKey });
+        return;
+      }
+      setDraft({ plan: result.data.plan, source: 'claude', model: result.data.model, forKey });
+    });
+  }
+
+  // The rule-based plan, only when the user asks for it. It is never swapped in after a failure.
+  function useStarterPlan() {
+    if (!parsed.ok || inputKey === null) return;
+    setPlanError(null);
+    setDraft({ plan: buildStubTaskPlan(parsed.data), source: 'starter', model: null, forKey: inputKey });
+  }
+
   function submit() {
     if (!parsed.ok) {
       setError(parsed.error);
       return;
     }
+    if (!plan) {
+      setError('Generate a week 1 plan, or choose the starter plan, before creating the goal.');
+      return;
+    }
     setError(null);
     startTransition(async () => {
-      const result = await createGoalFromWizard(parsed.data);
+      const result = await createGoalWithPlanAction(parsed.data, plan.plan);
       if (!result.ok) {
         setError(result.error);
         return;
       }
       setCreated(result.data);
-      onCreated?.(result.data);
+      onCreated?.(result.data.goal);
     });
   }
 
@@ -120,8 +170,9 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
       <div className="flex flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold">Goal created</h2>
         <p className="text-sm text-muted">
-          <span className="font-medium text-foreground">{created.title}</span> is active
-          {created.target_date ? ` with a day-90 checkpoint on ${created.target_date}` : ''}.
+          <span className="font-medium text-foreground">{created.goal.title}</span> is active
+          {created.goal.target_date ? ` with a day-90 checkpoint on ${created.goal.target_date}` : ''}.{' '}
+          {created.tasksSaved} week 1 {created.tasksSaved === 1 ? 'task is' : 'tasks are'} saved, all unticked.
         </p>
         <button
           type="button"
@@ -138,7 +189,9 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (isLast) submit();
+        if (isLast) {
+          if (plan) submit();
+        }
         else if (canAdvance) setStepIndex(stepIndex + 1);
       }}
       className="flex max-h-[85dvh] flex-col"
@@ -267,22 +320,73 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
               </section>
             )}
 
-            {plan && (
-              <section aria-label="Week 1 starter plan preview">
-                <h3 className="text-sm font-medium">Week 1 starter plan (preview)</h3>
-                <ul className="mt-2 flex flex-col gap-1 text-sm">
-                  {plan.tasks.map((t) => (
-                    <li key={t.title} className="flex justify-between gap-3">
-                      <span>{t.title}</span>
-                      <span className="shrink-0 text-muted">{t.minutes} min</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-xs text-muted">
-                  Tasks are not saved yet. Creating the goal saves the channel; you tick off your own work.
+            <section aria-label="Week 1 plan">
+              <h3 className="text-sm font-medium">Week 1 plan</h3>
+              <p className="mt-1 text-xs text-muted">
+                Claude sees only what you entered in this wizard: your title, goal type, constraints, pace and
+                review choices. Nothing from your other goals or tasks is sent.
+              </p>
+
+              {plan && (
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-accent">
+                    {plan.source === 'claude'
+                      ? `Written by Claude${plan.model ? ` (${plan.model})` : ''}`
+                      : 'Starter plan (rule-based, not written by Claude)'}
+                  </p>
+                  <ul className="mt-2 flex flex-col gap-1 text-sm">
+                    {plan.plan.tasks.map((t, i) => (
+                      <li key={`${i}-${t.title}`} className="flex justify-between gap-3">
+                        <span>{t.title}</span>
+                        <span className="shrink-0 text-muted">{t.minutes} min</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-muted">
+                    Creating the goal saves these as week 1 tasks, all unticked. You tick off your own work.
+                  </p>
+                </div>
+              )}
+
+              {generating && (
+                <p role="status" className="mt-3 text-sm text-muted">
+                  Asking Claude to write your week 1 plan…
                 </p>
-              </section>
-            )}
+              )}
+
+              {shownPlanError && (
+                <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+                  {shownPlanError} Nothing was saved or substituted.
+                </p>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={generate}
+                  disabled={busy || !parsed.ok}
+                  className="min-h-11 rounded-md border border-border px-4 text-sm disabled:opacity-50"
+                >
+                  {generating
+                    ? 'Asking Claude…'
+                    : shownPlanError
+                      ? 'Try again'
+                      : plan
+                        ? 'Ask Claude again'
+                        : 'Generate week 1 plan with Claude'}
+                </button>
+                {plan?.source !== 'starter' && (
+                  <button
+                    type="button"
+                    onClick={useStarterPlan}
+                    disabled={busy || !parsed.ok}
+                    className="min-h-11 rounded-md border border-border px-4 text-sm disabled:opacity-50"
+                  >
+                    Use the starter plan instead
+                  </button>
+                )}
+              </div>
+            </section>
           </div>
         )}
 
@@ -296,7 +400,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
       <footer className="flex shrink-0 justify-between gap-2 border-t border-border p-4 lg:px-6">
         <button
           type="button"
-          disabled={pending}
+          disabled={busy}
           onClick={() => (stepIndex === 0 ? onClose() : setStepIndex(stepIndex - 1))}
           className="min-h-11 rounded-md border border-border px-4 text-sm disabled:opacity-50"
         >
@@ -304,7 +408,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
         </button>
         <button
           type="submit"
-          disabled={pending || !canAdvance || (isLast && !parsed.ok)}
+          disabled={busy || !canAdvance || (isLast && (!parsed.ok || !plan))}
           className="min-h-11 rounded-md bg-accent px-5 text-sm font-medium text-background disabled:opacity-50"
         >
           {isLast ? (pending ? 'Creating…' : 'Create goal') : 'Next'}

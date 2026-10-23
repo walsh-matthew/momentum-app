@@ -11,11 +11,13 @@
 //   user fails (switch off with db.rls = false to prove the service filters by user id itself),
 // - goal_channels inserts: the 001 CHECK constraints and unique key, the 008 goal_type and preferences
 //   checks, and the 008 trigger that rejects a new goal with a ticked criterion,
+// - create_goal_with_week_one_plan() from migration 009: the goal and its week 1 tasks are saved together or
+//   not at all, the owner is the signed-in user, and every task is 'todo' in week 1,
 // - apply_task_move() from migration 003: moves one unfinished task and records it together.
 // It has no working delete(): calling it throws and is counted, so tests can prove nothing is cut.
 // tests/migrations.test.ts keeps this file honest by checking each rule exists in the SQL.
 
-import { CONSTRAINTS, GOAL_TYPES, PACES } from '@/types/database.types';
+import { CONSTRAINTS, GOAL_TYPES, PACES, TASK_TYPES } from '@/types/database.types';
 
 export interface TaskRow {
   id: string;
@@ -78,6 +80,9 @@ export const db = {
   inserts: [] as Array<Record<string, unknown>>,
   // When set, the next insert fails with this message (a stand-in for a database error, which can quote the row).
   failNextInsert: null as string | null,
+  // When set, create_goal_with_week_one_plan fails on the task at this index, after the goal row exists,
+  // to prove the whole call rolls back.
+  failTaskAt: null as number | null,
   // Runs after each read, to simulate another request changing a row mid-flight.
   afterRead: undefined as (() => void) | undefined,
   clock: 0,
@@ -95,6 +100,7 @@ export function resetDb(tasks: TaskRow[] = [], user: { id: string } | null = nul
   db.deleteCalls = 0;
   db.inserts = [];
   db.failNextInsert = null;
+  db.failTaskAt = null;
   db.afterRead = undefined;
   db.clock = 0;
 }
@@ -112,6 +118,8 @@ function taskViolation(r: TaskRow): string | null {
   if (r.source_evidence !== null && r.source_provider === null) return 'micro_tasks_source_evidence_object';
   if (r.source_external_id !== null && r.source_external_id.trim() === '') return 'micro_tasks_source_external_id_not_blank';
   if (r.minutes <= 0) return 'micro_tasks_minutes_positive';
+  if (r.title.trim().length === 0) return 'micro_tasks_title_not_blank';
+  if (!(TASK_TYPES as readonly string[]).includes(r.task_type)) return 'micro_tasks_task_type_check';
   return null;
 }
 
@@ -308,48 +316,11 @@ class Query {
     return { data: [this.project(row as unknown as Row)], error: null };
   }
 
-  // An insert into goal_channels as a signed-in user: row level security, the table's defaults, its CHECK
-  // constraints, the 008 insert trigger, and the unique channel key and single default per user.
+  // An insert into goal_channels as a signed-in user (see insertChannel).
   private runChannelInsert(): { data: Row[]; error: { message: string; code?: string } | null } {
-    const input = this.payload;
-    if (db.failNextInsert) {
-      const message = db.failNextInsert;
-      db.failNextInsert = null;
-      return { data: [], error: { message, code: 'XX000' } };
-    }
-    if (db.rls && (db.user === null || input.user_id !== db.user.id)) {
-      return { data: [], error: { message: 'new row violates row-level security policy for table "goal_channels"', code: '42501' } };
-    }
-    const stamp = new Date(Date.UTC(2026, 0, 1, 0, 0, ++db.clock)).toISOString();
-    const row: ChannelRow = {
-      id: newId(),
-      user_id: input.user_id as string,
-      channel_key: '',
-      title: '',
-      status: 'active',
-      is_default: false,
-      start_date: '2026-10-14',
-      target_date: null,
-      criteria: [],
-      goal_type: null,
-      preferences: {},
-      created_at: stamp,
-      updated_at: stamp,
-      ...(input as unknown as Partial<ChannelRow>),
-    };
-    const violated = channelViolation(row);
-    if (violated) {
-      const trigger = violated === 'goal_channels_guard_new_criteria';
-      return { data: [], error: { message: trigger ? "A new goal's criteria must all start unticked." : `new row violates check constraint "${violated}"`, code: '23514' } };
-    }
-    if (db.channels.some((c) => c.user_id === row.user_id && c.channel_key === row.channel_key)) {
-      return { data: [], error: { message: 'duplicate key value violates unique constraint "goal_channels_user_channel_key_unique"', code: '23505' } };
-    }
-    if (row.is_default && db.channels.some((c) => c.user_id === row.user_id && c.is_default)) {
-      return { data: [], error: { message: 'duplicate key value violates unique constraint "goal_channels_one_default_per_user"', code: '23505' } };
-    }
-    db.channels.push(row);
-    return { data: [this.project(row as unknown as Row)], error: null };
+    const result = insertChannel(this.payload);
+    if (result.error) return { data: [], error: result.error };
+    return { data: [this.project(result.row as unknown as Row)], error: null };
   }
 
   single() {
@@ -364,6 +335,130 @@ class Query {
   then<T>(resolve: (v: { data: Row[]; error: { message: string; code?: string } | null }) => T, reject?: (e: unknown) => T) {
     return Promise.resolve(this.run()).then(resolve, reject);
   }
+}
+
+// An insert into goal_channels as a signed-in user: row level security (the new row must be theirs), the
+// table's defaults, its CHECK constraints, the 008 insert trigger, and the unique channel key and single
+// default per user.
+function insertChannel(input: Row): { row: ChannelRow; error: null } | { row: null; error: { message: string; code?: string } } {
+  if (db.failNextInsert) {
+    const message = db.failNextInsert;
+    db.failNextInsert = null;
+    return { row: null, error: { message, code: 'XX000' } };
+  }
+  if (db.rls && (db.user === null || input.user_id !== db.user.id)) {
+    return { row: null, error: { message: 'new row violates row-level security policy for table "goal_channels"', code: '42501' } };
+  }
+  const stamp = new Date(Date.UTC(2026, 0, 1, 0, 0, ++db.clock)).toISOString();
+  const row: ChannelRow = {
+    id: newId(),
+    user_id: input.user_id as string,
+    channel_key: '',
+    title: '',
+    status: 'active',
+    is_default: false,
+    start_date: '2026-10-14',
+    target_date: null,
+    criteria: [],
+    goal_type: null,
+    preferences: {},
+    created_at: stamp,
+    updated_at: stamp,
+    ...(input as unknown as Partial<ChannelRow>),
+  };
+  const violated = channelViolation(row);
+  if (violated) {
+    const trigger = violated === 'goal_channels_guard_new_criteria';
+    return {
+      row: null,
+      error: {
+        message: trigger ? "A new goal's criteria must all start unticked." : `new row violates check constraint "${violated}"`,
+        code: '23514',
+      },
+    };
+  }
+  if (db.channels.some((c) => c.user_id === row.user_id && c.channel_key === row.channel_key)) {
+    return { row: null, error: { message: 'duplicate key value violates unique constraint "goal_channels_user_channel_key_unique"', code: '23505' } };
+  }
+  if (row.is_default && db.channels.some((c) => c.user_id === row.user_id && c.is_default)) {
+    return { row: null, error: { message: 'duplicate key value violates unique constraint "goal_channels_one_default_per_user"', code: '23505' } };
+  }
+  db.channels.push(row);
+  return { row, error: null };
+}
+
+// Mirrors public.create_goal_with_week_one_plan (migration 009): acts for the signed-in user only, saves a
+// goal and its tasks in one transaction, takes no status or completed_at, and makes every task 'todo' in week 1.
+// Any failure restores the state from before the call, so no goal is left without its tasks.
+function createGoalWithWeekOnePlan(args: Record<string, unknown>): {
+  data: ChannelRow | null;
+  error: { message: string; code?: string } | null;
+} {
+  if (db.user === null) return { data: null, error: { message: 'Sign in to create a goal.', code: '42501' } };
+  const tasks = args.p_tasks;
+  if (!Array.isArray(tasks)) return { data: null, error: { message: 'p_tasks must be a JSON array of tasks.', code: '22023' } };
+  if (tasks.length < 1 || tasks.length > 100) {
+    return { data: null, error: { message: 'A week 1 plan needs between 1 and 100 tasks.', code: '22023' } };
+  }
+  const allowed = new Set(['title', 'task_type', 'minutes']);
+  if (tasks.some((t) => !isObject(t) || Object.keys(t).some((k) => !allowed.has(k)))) {
+    return { data: null, error: { message: 'Each task may only have title, task_type and minutes.', code: '22023' } };
+  }
+
+  const before = { channels: [...db.channels], tasks: [...db.tasks] };
+  const rollback = () => {
+    db.channels = before.channels;
+    db.tasks = before.tasks;
+  };
+
+  const goal = insertChannel({
+    user_id: db.user.id,
+    channel_key: args.p_channel_key,
+    title: args.p_title,
+    goal_type: args.p_goal_type,
+    preferences: args.p_preferences,
+    criteria: args.p_criteria,
+    start_date: args.p_start_date,
+    target_date: args.p_target_date,
+  });
+  if (goal.error) {
+    rollback();
+    return { data: null, error: goal.error };
+  }
+
+  for (const [i, t] of (tasks as Array<Record<string, unknown>>).entries()) {
+    const row: TaskRow = {
+      id: newId(),
+      user_id: db.user.id,
+      goal_channel_id: goal.row.id,
+      title: t.title as string,
+      task_type: t.task_type as string,
+      minutes: t.minutes as number,
+      status: 'todo',
+      fit: null,
+      week_of: 1,
+      due_date: null,
+      carried_from_week: null,
+      pulled_from_week: null,
+      completed_at: null,
+      source_provider: null,
+      source_external_id: null,
+      source_evidence: null,
+      created_at: new Date(Date.UTC(2026, 9, 14, 0, 0, 0, i + 1)).toISOString(),
+    };
+    const violated =
+      db.failTaskAt === i
+        ? 'simulated_task_failure'
+        : typeof row.title !== 'string' || typeof row.minutes !== 'number'
+          ? 'micro_tasks_not_null'
+          : taskViolation(row);
+    if (violated) {
+      rollback();
+      return { data: null, error: { message: `new row violates check constraint "${violated}"`, code: '23514' } };
+    }
+    db.tasks.push(row);
+  }
+  return { data: goal.row, error: null };
 }
 
 // Mirrors public.apply_task_move (migration 003): acts for the signed-in user only, only on their own
@@ -429,6 +524,7 @@ export async function createSupabaseServerClient() {
     },
     rpc: async (fn: string, args: Record<string, unknown>) => {
       db.rpcCalls.push({ fn, args });
+      if (fn === 'create_goal_with_week_one_plan') return createGoalWithWeekOnePlan(args);
       if (fn !== 'apply_task_move') throw new Error(`unexpected function ${fn}`);
       return applyTaskMove(args as Parameters<typeof applyTaskMove>[0]);
     },
