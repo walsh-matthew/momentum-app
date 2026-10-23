@@ -20,7 +20,6 @@ import { requestRebalanceFromModel, type ModelRebalanceFailure } from '@/lib/ai/
 import { requestWeekOnePlanFromModel, type ModelTaskPlanFailure } from '@/lib/ai/taskPlan';
 import { parseWeekOnePlan, parseWizardInput, type TaskPlan } from '@/lib/goals/taskPlan';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { buildFocusFeed } from '@/lib/utils/focusFeed';
 import { summarizeAllGoalProgress } from '@/lib/utils/progress';
 import {
   MAX_MODEL_TASKS,
@@ -45,7 +44,6 @@ import {
   type RebalanceProposalView,
   type RebalanceSkippedMove,
 } from '@/types/rebalance';
-import type { FocusFeed } from '@/types/focusFeed';
 import type { GoalProgress } from '@/types/progress';
 import { MAX_KEY_ATTEMPTS, UNIQUE_VIOLATION, buildNewGoalFields, channelKeyFor, listGoalChannels } from './goals';
 import type { ServiceResult } from './result';
@@ -67,14 +65,26 @@ export async function listMicroTasks(options: { weekOf?: number } = {}): Promise
   return { ok: true, data };
 }
 
-// What the focus card area shows (MOM-36): the task to do next (the earliest unfinished one), the
-// unfinished tasks queued behind it, and the tasks finished most recently, which the user can reopen.
-// One read of the signed-in user's own tasks (RLS), ordered by buildFocusFeed. It only reads: completing
-// or reopening a task is the user's click, through setTaskStatus.
-export async function getFocusFeed(): Promise<ServiceResult<FocusFeed>> {
-  const tasks = await listMicroTasks();
+// Everything the home page works from, read once (MOM-44, MOM-84): the signed-in user's goals, tasks and
+// rebalance history, and today's date. The channel feeds, each channel's velocity and the rebalance
+// proposal are all built from this one snapshot, so the page makes one read of each table. All three reads
+// go through the user's own session (RLS scopes them to their rows) and nothing here writes: completing or
+// reopening a task is the user's click, through setTaskStatus. Losing the history only drops the move-chain
+// detail, so the snapshot still loads without it.
+export interface PlanSnapshot {
+  goals: GoalChannel[];
+  tasks: MicroTask[];
+  history: TaskRebalanceHistory[];
+  // YYYY-MM-DD, the day the snapshot was taken.
+  today: string;
+}
+
+export async function getPlanSnapshot(deps: { now?: () => number } = {}): Promise<ServiceResult<PlanSnapshot>> {
+  const [goals, tasks, history] = await Promise.all([listGoalChannels(), listMicroTasks(), listRebalanceHistory()]);
+  if (!goals.ok) return goals;
   if (!tasks.ok) return tasks;
-  return { ok: true, data: buildFocusFeed(tasks.data) };
+  const today = new Date((deps.now ?? Date.now)()).toISOString().slice(0, 10);
+  return { ok: true, data: { goals: goals.data, tasks: tasks.data, history: history.ok ? history.data : [], today } };
 }
 
 // How far along each of the signed-in user's goals is (MOM-86): tasks done of total, the percentage, and the

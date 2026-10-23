@@ -10,12 +10,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyRebalance,
-  getFocusFeed,
+  getPlanSnapshot,
   listMicroTasks,
   listRebalanceHistory,
   proposeRebalance,
   setTaskStatus,
 } from '@/lib/services/tasks';
+import { buildFocusFeed } from '@/lib/utils/focusFeed';
 import { OTHER_USER, USER, db, newId, resetDb, taskById, taskRow, type TaskRow } from './helpers/fakeSupabase';
 
 vi.mock('@/lib/supabase/server', async () => {
@@ -281,12 +282,12 @@ describe('reads', () => {
     const done = taskRow(1, { status: 'done', completed_at: '2026-10-20T00:00:00Z' });
     const next = taskRow(2);
     resetDb([taskRow(3), next, done], signedIn);
-    const focus = await getFocusFeed();
-    expect(focus.ok && focus.data.focus?.id).toBe(next.id);
+    const focus = await getPlanSnapshot();
+    expect(focus.ok && buildFocusFeed(focus.data.tasks).focus?.id).toBe(next.id);
 
     resetDb([done], signedIn);
-    const none = await getFocusFeed();
-    expect(none.ok && none.data.focus).toBeNull();
+    const none = await getPlanSnapshot();
+    expect(none.ok && buildFocusFeed(none.data.tasks).focus).toBeNull();
   });
 });
 

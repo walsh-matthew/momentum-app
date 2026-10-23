@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFocusFeed } from '@/lib/utils/focusFeed';
-import { getFocusFeed, setTaskStatus } from '@/lib/services/tasks';
+import { getPlanSnapshot, setTaskStatus } from '@/lib/services/tasks';
 import type { MicroTask } from '@/types/database.types';
 import { RECENTLY_DONE_LIMIT, UP_NEXT_LIMIT } from '@/types/focusFeed';
 import { OTHER_USER, USER, db, newId, resetDb, taskRow, type TaskRow } from './helpers/fakeSupabase';
@@ -23,6 +23,12 @@ const todo = (week: number, over: Partial<TaskRow> = {}) => mt(taskRow(week, ove
 const done = (week: number, completedAt: string, over: Partial<TaskRow> = {}) =>
   mt(taskRow(week, { status: 'done', completed_at: completedAt, ...over }));
 const ids = (tasks: MicroTask[]) => tasks.map((t) => t.id);
+
+// The feed the home page shows for all channels' tasks: read the snapshot, then build the feed from its tasks.
+async function getFocusFeed() {
+  const r = await getPlanSnapshot();
+  return r.ok ? { ok: true as const, data: buildFocusFeed(r.data.tasks) } : r;
+}
 
 describe('buildFocusFeed: the order work is done in', () => {
   it('focus is the earliest unfinished task and up next follows in the same order', () => {
@@ -124,14 +130,14 @@ describe('buildFocusFeed: edges', () => {
   });
 });
 
-describe('getFocusFeed (the service)', () => {
+describe('the feed built from the plan snapshot (the service)', () => {
   beforeEach(() => resetDb([], signedIn));
 
-  it('reads once and writes nothing', async () => {
+  it('reads goals, tasks and history once each and writes nothing', async () => {
     resetDb([todo(1) as unknown as TaskRow, todo(2) as unknown as TaskRow], signedIn);
     const r = await getFocusFeed();
     expect(r.ok && r.data.focus?.week_of).toBe(1);
-    expect(db.reads).toBe(1);
+    expect(db.reads).toBe(3);
     expect(db.updates).toHaveLength(0);
     expect(db.inserts).toHaveLength(0);
     expect(db.rpcCalls).toHaveLength(0);
@@ -204,9 +210,9 @@ describe('source-level: nothing completes or reopens a task on the user\'s behal
     }
   });
 
-  it('getFocusFeed only reads', () => {
+  it('getPlanSnapshot only reads', () => {
     const tasks = read('lib', 'services', 'tasks.ts');
-    const start = tasks.indexOf('export async function getFocusFeed');
+    const start = tasks.indexOf('export async function getPlanSnapshot');
     const body = strip(tasks.slice(start, tasks.indexOf('\n}\n', start) + 3));
     expect(body).toContain('listMicroTasks()');
     expect(body).not.toMatch(/\.insert\(|\.update\(|\.rpc\(|\.delete\(|setTaskStatus/);
