@@ -51,6 +51,31 @@ export const IntegrationAccountSchema = z.strictObject({
 });
 
 // ---------------------------------------------------------------------------
+// Connect flow results (client-safe)
+// ---------------------------------------------------------------------------
+
+// Every way the Google consent flow can end, and the only words that ever travel in an address or a log
+// (lib/services/googleOAuth.ts, MOM-62). The Connected Apps page turns each into a sentence
+// (lib/integrations/connectNotices.ts). No token, no code and no provider wording is ever one of these.
+export const CONNECT_OUTCOMES = [
+  'connected',
+  'denied',
+  'expired',
+  'bad_state',
+  'scope',
+  'failed',
+  'not_configured',
+  'signed_out',
+] as const;
+export type ConnectOutcome = (typeof CONNECT_OUTCOMES)[number];
+
+// What a connect form (the Hevy key) shows after it runs. Never holds the key: a rejected key is not echoed back.
+export interface ConnectFormState {
+  error: string | null;
+  notice: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Token contracts (server only)
 // ---------------------------------------------------------------------------
 
