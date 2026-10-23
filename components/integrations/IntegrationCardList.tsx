@@ -1,5 +1,6 @@
 'use client';
 
+import { CalendarDays, Dumbbell, type LucideIcon } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toggleConnectedApp } from '@/app/actions/integrations';
 import { INTEGRATION_CATALOG, type IntegrationCatalogEntry } from '@/lib/integrations/catalog';
@@ -14,10 +15,16 @@ interface IntegrationCardProps {
   active: boolean;
 }
 
+const PROVIDER_ICONS: Record<IntegrationCatalogEntry['provider'], LucideIcon> = {
+  hevy: Dumbbell,
+  google_calendar: CalendarDays,
+};
+
 function IntegrationCard({ entry, active }: IntegrationCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const labelId = `integration-${entry.provider}`;
+  const Icon = PROVIDER_ICONS[entry.provider];
 
   const onToggle = () => {
     setError(null);
@@ -28,40 +35,36 @@ function IntegrationCard({ entry, active }: IntegrationCardProps) {
   };
 
   return (
-    <li className="rounded-lg border border-border bg-background p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 id={labelId} className="font-medium text-foreground">
-            {entry.name}
-          </h3>
-          <p className="mt-1 text-sm text-muted">{entry.description}</p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={active}
-          aria-labelledby={labelId}
-          disabled={pending}
-          onClick={onToggle}
-          className={`relative h-11 w-14 shrink-0 rounded-full disabled:opacity-60`}
-        >
-          <span
-            aria-hidden
-            className={`absolute left-0 top-1/2 h-7 w-14 -translate-y-1/2 rounded-full border ${
-              active ? 'border-accent bg-accent' : 'border-border bg-foreground/10'
-            }`}
-          />
-          <span
-            aria-hidden
-            className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-background shadow transition-[left] ${
-              active ? 'left-8' : 'left-1'
-            }`}
-          />
-        </button>
+    <li className="connected-app-row flex-wrap">
+      <span className="connected-app-icon" aria-hidden="true">
+        <Icon />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 id={labelId} className="text-sm font-semibold text-foreground">
+          {entry.name}
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted">{entry.description}</p>
+        {/* The words say the state; the dot and the switch position only repeat it. */}
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted">
+          <span className={`sync-dot${active ? ' synced' : ''}`} aria-hidden="true" />
+          {pending ? 'Saving…' : active ? 'Connected' : 'Not connected'}
+        </p>
       </div>
-      <p className="mt-2 text-xs text-muted">{pending ? 'Saving…' : active ? 'Connected' : 'Not connected'}</p>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={active}
+        aria-labelledby={labelId}
+        disabled={pending}
+        onClick={onToggle}
+        className="connection-toggle"
+      >
+        <span className="pill" aria-hidden="true">
+          <span />
+        </span>
+      </button>
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="basis-full text-sm text-danger">
           {error}
         </p>
       )}

@@ -19,8 +19,8 @@ export function MobileTabBar({ active, onChange }: MobileTabBarProps) {
           type="button"
           aria-current={active === view ? 'page' : undefined}
           onClick={() => onChange(view)}
-          className={`min-h-12 text-sm font-medium ${
-            active === view ? 'text-accent' : 'text-muted'
+          className={`min-h-12 border-t-2 text-sm font-medium ${
+            active === view ? 'border-accent text-accent' : 'border-transparent text-muted'
           }`}
         >
           {WORKSPACE_VIEW_LABELS[view]}

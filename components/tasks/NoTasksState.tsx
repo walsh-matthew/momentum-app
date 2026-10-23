@@ -1,3 +1,5 @@
+import { Button } from '@/components/ui/button';
+
 export interface NoTasksStateProps {
   // The channel with no tasks; null for all channels (goals exist, none has a task).
   channelTitle?: string | null;
@@ -9,21 +11,17 @@ export interface NoTasksStateProps {
 // nothing was ever planned here, so there is nothing to reopen.
 export function NoTasksState({ channelTitle = null, onNewGoal }: NoTasksStateProps) {
   return (
-    <section aria-labelledby="no-tasks-heading" className="mt-6 rounded-lg border border-dashed border-border p-6">
-      <h2 id="no-tasks-heading" className="text-sm font-semibold">
+    <section aria-labelledby="no-tasks-heading" className="channel-card mt-6 border-dashed p-6">
+      <h2 id="no-tasks-heading" className="section-title">
         No tasks yet
       </h2>
       <p className="mt-2 text-sm text-muted">
         {channelTitle ? `${channelTitle} has no tasks yet.` : 'None of your goals has a task yet.'} You can start
         another goal while you decide what goes in here.
       </p>
-      <button
-        type="button"
-        onClick={onNewGoal}
-        className="mt-4 min-h-11 rounded-md border border-border px-5 text-sm font-medium hover:bg-foreground/5"
-      >
+      <Button variant="outline" onClick={onNewGoal} className="mt-4">
         Start another goal
-      </button>
+      </Button>
     </section>
   );
 }

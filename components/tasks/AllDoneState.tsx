@@ -1,3 +1,5 @@
+import { CircleCheck } from 'lucide-react';
+
 export interface AllDoneStateProps {
   // The channel that is finished; null for all channels.
   channelTitle?: string | null;
@@ -8,13 +10,18 @@ export interface AllDoneStateProps {
 // beneath this, so the last task can still be reopened.
 export function AllDoneState({ channelTitle = null }: AllDoneStateProps) {
   return (
-    <section aria-labelledby="all-done-heading" className="mt-6 rounded-lg border border-border bg-panel p-6">
-      <h2 id="all-done-heading" className="text-sm font-semibold">
-        All done
-      </h2>
-      <p className="mt-2 text-sm text-muted">
-        Everything {channelTitle ? `in ${channelTitle}` : 'on your list'} is done. Reopen a task below if you need to.
-      </p>
+    <section aria-labelledby="all-done-heading" className="focus-card is-complete mt-6 items-center p-6">
+      <span className="task-check" aria-hidden="true" data-done>
+        <CircleCheck className="size-5" />
+      </span>
+      <div className="min-w-0">
+        <h2 id="all-done-heading" className="section-title">
+          All done
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Everything {channelTitle ? `in ${channelTitle}` : 'on your list'} is done. Reopen a task below if you need to.
+        </p>
+      </div>
     </section>
   );
 }

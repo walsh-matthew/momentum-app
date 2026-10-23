@@ -1,23 +1,43 @@
 @import 'tailwindcss';
 
-:root {
-  --background: #fafafa;
-  --foreground: #0a0a0a;
-  --panel: #ffffff;
-  --border: #e4e4e7;
-  --muted: #52525b;
-  --accent: #4f46e5;
-}
+/* The wireframe design system, dark only (MOM-76). Source: the v0 wireframe's app/globals.css.
+   There is no light palette and no theme toggle; a matching light palette that follows the device is MOM-30.
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #fafafa;
-    --panel: #111113;
-    --border: #27272a;
-    --muted: #a1a1aa;
-    --accent: #818cf8;
-  }
+   Token names. This repo's names are kept, mapped onto the wireframe palette, so existing classes keep working:
+     background / foreground  page and text
+     panel                    card and panel surfaces (the wireframe's --card)
+     border                   hairlines
+     muted                    secondary TEXT (the wireframe's --muted-foreground; its --muted is a surface)
+     accent                   the lime accent (the wireframe's --primary)
+   The wireframe's own names (card, primary, destructive, ...) are defined too, for the shadcn Button. */
+
+:root {
+  color-scheme: dark;
+  --background: oklch(0.13 0.009 155);
+  --foreground: oklch(0.96 0.012 110);
+  --panel: oklch(0.18 0.011 155);
+  --border: oklch(1 0 0 / 8%);
+  --muted: oklch(0.7 0.018 145);
+  --accent: #c6f36d;
+
+  --card: var(--panel);
+  --card-foreground: var(--foreground);
+  --primary: var(--accent);
+  --primary-foreground: oklch(0.18 0.035 130);
+  --secondary: oklch(0.22 0.012 155);
+  --secondary-foreground: oklch(0.92 0.01 110);
+  --destructive: oklch(0.65 0.2 25);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.89 0.18 125 / 60%);
+  --radius: 0.85rem;
+
+  --surface-raised: #1b201f;
+  --surface-soft: #171c1b;
+  --lime: #c6f36d;
+  --channel: #a8baff;
+  --streak: #f4c27e;
+  /* Error text. The wireframe has no error state; this is a light red that holds 4.5:1 on every surface above. */
+  --danger: oklch(0.78 0.13 25);
 }
 
 @theme inline {
@@ -27,6 +47,29 @@
   --color-border: var(--border);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-soft: var(--surface-soft);
+  --color-lime: var(--lime);
+  --color-channel: var(--channel);
+  --color-streak: var(--streak);
+  --color-danger: var(--danger);
+  --color-warn: var(--streak);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
 }
 
 /* Slide-in for side drawers built on <dialog> (components/rebalance). */
@@ -39,8 +82,401 @@
   }
 }
 
+* {
+  box-sizing: border-box;
+}
+html {
+  min-height: 100%;
+  background: var(--background);
+}
 body {
+  min-height: 100vh;
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+/* Component classes sit in the components layer so a Tailwind utility on the same element still wins. */
+@layer components {
+/* ---- Brand ---------------------------------------------------------------------------------------------- */
+
+.momentum-mark {
+  margin-top: -4px;
+  font-family: Georgia, serif;
+  font-size: 25px;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: -0.13em;
+}
+
+/* ---- Text ----------------------------------------------------------------------------------------------- */
+
+/* The wireframe sets these at 9 to 10px; raised to 11px so the muted text stays legible. */
+.eyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.section-title {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+}
+/* ---- Badges --------------------------------------------------------------------------------------------- */
+
+/* The label always says the level; the dot colour and the border only reinforce it. */
+.burnout-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgb(198 243 109 / 18%);
+  border-radius: 999px;
+  background: rgb(198 243 109 / 6%);
+  padding: 0 10px;
+  color: #d3e3bb;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.burnout-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 7px rgb(198 243 109 / 35%);
+}
+.burnout-badge[data-risk='rising'] {
+  border-color: rgb(244 194 126 / 35%);
+  background: rgb(244 194 126 / 8%);
+  color: var(--streak);
+}
+.burnout-badge[data-risk='rising'] .burnout-dot {
+  border-radius: 1px;
+  background: var(--streak);
+  box-shadow: 0 0 7px rgb(244 194 126 / 35%);
+}
+.burnout-badge[data-risk='high'] {
+  border-color: rgb(244 128 120 / 40%);
+  background: rgb(244 128 120 / 9%);
+  color: var(--danger);
+}
+.burnout-badge[data-risk='high'] .burnout-dot {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  background: var(--danger);
+  box-shadow: none;
+}
+.effort-tag {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 6%);
+  padding: 0 8px;
+  color: #d3d8cf;
+  font-size: 12px;
+  font-weight: 550;
+}
+.chip {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chip-accent {
+  border-color: rgb(198 243 109 / 30%);
+  background: rgb(198 243 109 / 9%);
+  color: var(--lime);
+  font-weight: 600;
+}
+.chip-warn {
+  border-color: rgb(244 194 126 / 35%);
+  background: rgb(244 194 126 / 8%);
+  color: var(--streak);
+  font-weight: 600;
+}
+.chip-danger {
+  border-color: rgb(244 128 120 / 40%);
+  background: rgb(244 128 120 / 9%);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ---- Score card and ring -------------------------------------------------------------------------------- */
+
+.score-card {
+  position: relative;
+  display: flex;
+  min-height: 148px;
+  align-items: center;
+  overflow: hidden;
+  gap: 10px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse at 85% 60%, rgb(192 235 117 / 10%), transparent 48%),
+    linear-gradient(130deg, #1d2421, #171c1b 70%);
+  padding: 15px 15px 15px 18px;
+  box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+}
+.score-ring {
+  position: relative;
+  z-index: 1;
+  width: 116px;
+  height: 116px;
+  flex: 0 0 116px;
+}
+.score-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.score-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+.score-ring-track {
+  stroke: rgb(255 255 255 / 8%);
+}
+.score-ring-progress {
+  stroke: var(--lime);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgb(198 243 109 / 24%));
+  transition: stroke-dashoffset 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---- Focus card and task check -------------------------------------------------------------------------- */
+
+.focus-card {
+  display: flex;
+  min-height: 98px;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 17px;
+  background: var(--surface-raised);
+  padding: 13px 14px;
+  transition:
+    border-color 160ms ease,
+    opacity 160ms ease;
+}
+.focus-card.is-complete {
+  border-color: rgb(198 243 109 / 28%);
+}
+.focus-card.is-complete h2 {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: rgb(198 243 109 / 65%);
+}
+.task-check {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid rgb(198 243 109 / 42%);
+  border-radius: 10px;
+  background: rgb(198 243 109 / 8%);
+  color: var(--lime);
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+.task-check:hover:not(:disabled) {
+  transform: scale(1.04);
+  background: rgb(198 243 109 / 15%);
+}
+.task-check:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.task-check[aria-checked='true'] {
+  background: var(--lime);
+  color: #1c2514;
+}
+.task-check:disabled {
+  opacity: 0.7;
+}
+
+/* ---- Channel card and track ----------------------------------------------------------------------------- */
+
+.channel-card {
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 16px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+.channel-icon {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 9px;
+}
+.channel-icon.career {
+  background: rgb(158 182 255 / 10%);
+  color: var(--channel);
+}
+.channel-icon.fitness {
+  background: rgb(198 243 109 / 10%);
+  color: var(--lime);
+}
+.channel-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+}
+.channel-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+.channel-track span.career {
+  background: var(--channel);
+}
+.channel-track span.fitness {
+  background: var(--lime);
+}
+
+/* ---- Connected app row and toggle ----------------------------------------------------------------------- */
+
+.connected-app-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid rgb(255 255 255 / 6%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 2%);
+  padding: 12px 11px;
+}
+.connected-app-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 11px;
+  background: rgb(111 163 255 / 11%);
+  color: #9bbcff;
+}
+.connected-app-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.sync-dot {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: #69736c;
+}
+.sync-dot.synced {
+  background: var(--lime);
+  box-shadow: 0 0 7px rgb(198 243 109 / 38%);
+}
+/* The switch is the whole 44px tap target; the pill inside is what is drawn. */
+.connection-toggle {
+  position: relative;
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.connection-toggle > .pill {
+  position: relative;
+  display: block;
+  width: 33px;
+  height: 19px;
+  border: 1px solid rgb(255 255 255 / 45%);
+  border-radius: 999px;
+  background: #2a312d;
+  padding: 2px;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease;
+}
+.connection-toggle > .pill > span {
+  display: block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #a3ada5;
+  transition:
+    transform 180ms ease,
+    background 180ms ease;
+}
+.connection-toggle[aria-checked='true'] > .pill {
+  border-color: rgb(198 243 109 / 40%);
+  background: rgb(198 243 109 / 17%);
+}
+.connection-toggle[aria-checked='true'] > .pill > span {
+  transform: translateX(14px);
+  background: var(--lime);
+}
+.connection-toggle:disabled {
+  opacity: 0.6;
+}
+
+/* ---- Dialogs (goal wizard, rebalance drawer) ------------------------------------------------------------ */
+
+.sheet-surface {
+  border: 1px solid rgb(255 255 255 / 9%);
+  background: linear-gradient(160deg, #202724 0%, #191e1d 62%);
+  box-shadow:
+    0 -16px 50px rgb(0 0 0 / 28%),
+    inset 0 1px rgb(255 255 255 / 4%);
+}
+.ai-icon {
+  display: grid;
+  width: 35px;
+  height: 35px;
+  flex: 0 0 35px;
+  place-items: center;
+  border: 1px solid rgb(198 243 109 / 18%);
+  border-radius: 12px;
+  background: rgb(198 243 109 / 9%);
+  color: var(--lime);
+}
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

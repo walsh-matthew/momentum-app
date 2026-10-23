@@ -1,7 +1,9 @@
 'use client';
 
+import { Check, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { createGoalWithPlanAction, generateWeekOnePlanAction } from '@/app/actions/goals';
+import { Button } from '@/components/ui/button';
 import {
   CONSTRAINTS,
   CONSTRAINT_LABELS,
@@ -47,12 +49,14 @@ function Chip({ label, selected, onToggle }: ChipProps) {
       type="button"
       aria-pressed={selected}
       onClick={onToggle}
-      className={`min-h-11 rounded-full border px-4 text-sm ${
+      className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-sm ${
         selected
-          ? 'border-accent bg-accent/10 font-medium text-accent'
-          : 'border-border hover:bg-foreground/5'
+          ? 'border-accent/50 bg-accent/10 font-medium text-accent'
+          : 'border-input hover:bg-foreground/[0.06]'
       }`}
     >
+      {/* The check repeats what aria-pressed says, so a selected chip is not told apart by color alone. */}
+      {selected && <Check className="size-3.5 shrink-0" aria-hidden="true" />}
       {label}
     </button>
   );
@@ -168,19 +172,20 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
   if (created) {
     return (
       <div className="flex flex-col gap-4 p-6">
-        <h2 className="text-lg font-semibold">Goal created</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-[-0.03em]">
+          <span className="ai-icon" aria-hidden="true">
+            <Check className="size-[17px]" />
+          </span>
+          Goal created
+        </h2>
         <p className="text-sm text-muted">
           <span className="font-medium text-foreground">{created.goal.title}</span> is active
           {created.goal.target_date ? ` with a day-90 checkpoint on ${created.goal.target_date}` : ''}.{' '}
           {created.tasksSaved} week 1 {created.tasksSaved === 1 ? 'task is' : 'tasks are'} saved, all unticked.
         </p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="min-h-11 self-end rounded-md bg-accent px-5 text-sm font-medium text-background"
-        >
+        <Button onClick={onClose} className="self-end">
           Done
-        </button>
+        </Button>
       </div>
     );
   }
@@ -197,13 +202,16 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
       className="flex max-h-[85dvh] flex-col"
     >
       <header className="shrink-0 border-b border-border p-4 lg:px-6">
-        <h2 className="text-lg font-semibold">New goal</h2>
-        <ol className="mt-2 flex gap-2 text-xs" aria-label="Wizard steps">
+        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-[-0.03em]">
+          <Sparkles className="size-4 text-accent" aria-hidden="true" />
+          New goal
+        </h2>
+        <ol className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs" aria-label="Wizard steps">
           {WIZARD_STEPS.map((s, i) => (
             <li
               key={s}
               aria-current={i === stepIndex ? 'step' : undefined}
-              className={i === stepIndex ? 'font-semibold text-accent' : 'text-muted'}
+              className={i === stepIndex ? 'font-semibold text-accent underline underline-offset-4' : 'text-muted'}
             >
               {i + 1}. {WIZARD_STEP_LABELS[s]}
             </li>
@@ -237,7 +245,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
                   setTitle(e.target.value);
                   setTitleEdited(true);
                 }}
-                className="min-h-11 rounded-md border border-border bg-background px-3 text-base font-normal"
+                className="min-h-11 rounded-lg border border-foreground/45 bg-background px-3 text-base font-normal"
               />
             </label>
           </div>
@@ -295,7 +303,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
               </div>
             </fieldset>
 
-            <section aria-label="Summary" className="rounded-lg border border-border p-4 text-sm">
+            <section aria-label="Summary" className="channel-card p-4 text-sm">
               <h3 className="font-medium">{title.trim() || 'Untitled goal'}</h3>
               <p className="mt-1 text-muted">
                 {goalType ? GOAL_TYPE_LABELS[goalType] : 'No goal type'} · 90-day checkpoint
@@ -355,18 +363,13 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
               )}
 
               {shownPlanError && (
-                <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+                <p role="alert" className="mt-3 text-sm text-danger">
                   {shownPlanError} Nothing was saved or substituted.
                 </p>
               )}
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={generate}
-                  disabled={busy || !parsed.ok}
-                  className="min-h-11 rounded-md border border-border px-4 text-sm disabled:opacity-50"
-                >
+                <Button variant="outline" onClick={generate} disabled={busy || !parsed.ok}>
                   {generating
                     ? 'Asking Claude…'
                     : shownPlanError
@@ -374,16 +377,11 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
                       : plan
                         ? 'Ask Claude again'
                         : 'Generate week 1 plan with Claude'}
-                </button>
+                </Button>
                 {plan?.source !== 'starter' && (
-                  <button
-                    type="button"
-                    onClick={useStarterPlan}
-                    disabled={busy || !parsed.ok}
-                    className="min-h-11 rounded-md border border-border px-4 text-sm disabled:opacity-50"
-                  >
+                  <Button variant="outline" onClick={useStarterPlan} disabled={busy || !parsed.ok}>
                     Use the starter plan instead
-                  </button>
+                  </Button>
                 )}
               </div>
             </section>
@@ -391,28 +389,23 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
         )}
 
         {error && (
-          <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="mt-4 text-sm text-danger">
             {error}
           </p>
         )}
       </div>
 
       <footer className="flex shrink-0 justify-between gap-2 border-t border-border p-4 lg:px-6">
-        <button
-          type="button"
+        <Button
+          variant="outline"
           disabled={busy}
           onClick={() => (stepIndex === 0 ? onClose() : setStepIndex(stepIndex - 1))}
-          className="min-h-11 rounded-md border border-border px-4 text-sm disabled:opacity-50"
         >
           {stepIndex === 0 ? 'Cancel' : 'Back'}
-        </button>
-        <button
-          type="submit"
-          disabled={busy || !canAdvance || (isLast && (!parsed.ok || !plan))}
-          className="min-h-11 rounded-md bg-accent px-5 text-sm font-medium text-background disabled:opacity-50"
-        >
+        </Button>
+        <Button type="submit" disabled={busy || !canAdvance || (isLast && (!parsed.ok || !plan))}>
           {isLast ? (pending ? 'Creating…' : 'Create goal') : 'Next'}
-        </button>
+        </Button>
       </footer>
     </form>
   );
@@ -441,7 +434,7 @@ export function GoalBuilderWizard({ open, onClose, onCreated }: GoalBuilderWizar
       onClick={(e) => {
         if (e.target === dialogRef.current && !busy) onClose();
       }}
-      className="m-auto w-[min(36rem,calc(100vw-2rem))] rounded-xl border border-border bg-panel p-0 text-foreground backdrop:bg-black/50"
+      className="sheet-surface m-auto w-[min(36rem,calc(100vw-2rem))] rounded-2xl p-0 text-foreground backdrop:bg-black/60"
     >
       {open && <WizardBody onClose={onClose} onCreated={onCreated} onPendingChange={setBusy} />}
     </dialog>
