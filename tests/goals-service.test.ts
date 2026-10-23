@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { criteriaFor } from '@/lib/goals/criteria';
 import { GOAL_TYPES } from '@/lib/goals/vocabulary';
-import { createGoalChannel, listGoalChannels } from '@/lib/services/goals';
+import { channelKeyFor, createGoalChannel, listGoalChannels, toChannelKey } from '@/lib/services/goals';
 import { OTHER_USER, USER, channelRow, createSupabaseServerClient, db, resetDb } from './helpers/fakeSupabase';
 
 vi.mock('@/lib/supabase/server', async () => {
@@ -143,6 +143,38 @@ describe('createGoalChannel: keys', () => {
     const b = await createGoalChannel(input());
     expect(a.ok && a.data.channel_key).toBe('get_my_first_certification');
     expect(b.ok && b.data.channel_key).toBe('get_my_first_certification_2');
+  });
+});
+
+// MOM-19: signup no longer seeds a Career Pivot channel, so the first wizard goal with that title is not
+// pushed to career_pivot_2. The key code needed no change; the seed was what held the plain key.
+describe('createGoalChannel: a Career pivot goal on an empty account (MOM-19)', () => {
+  const careerPivot = () => input({ title: 'Career pivot', goalType: 'career_pivot' });
+
+  it('gets exactly the key career_pivot, with no numeric suffix', async () => {
+    expect(db.channels).toHaveLength(0);
+    const r = await createGoalChannel(careerPivot());
+    expect(r.ok && r.data.channel_key).toBe('career_pivot');
+    expect(db.channels.map((c) => c.channel_key)).toEqual(['career_pivot']);
+  });
+
+  it('only a second goal with that title is numbered', async () => {
+    const first = await createGoalChannel(careerPivot());
+    const second = await createGoalChannel(careerPivot());
+    expect(first.ok && first.data.channel_key).toBe('career_pivot');
+    expect(second.ok && second.data.channel_key).toBe('career_pivot_2');
+  });
+
+  it('is numbered when something else already holds career_pivot, which is what the old signup seed did', async () => {
+    db.channels = [channelRow({ channel_key: 'career_pivot', is_default: true, goal_type: 'career_pivot' })];
+    const r = await createGoalChannel(careerPivot());
+    expect(r.ok && r.data.channel_key).toBe('career_pivot_2');
+  });
+
+  it('the key functions give the plain key first and a suffix only on a retry', () => {
+    expect(toChannelKey('Career pivot')).toBe('career_pivot');
+    expect(channelKeyFor('Career pivot', 1)).toBe('career_pivot');
+    expect(channelKeyFor('Career pivot', 2)).toBe('career_pivot_2');
   });
 });
 

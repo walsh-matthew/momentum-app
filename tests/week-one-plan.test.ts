@@ -188,6 +188,16 @@ describe('createGoalWithWeekOnePlan: saved together', () => {
     expect(db.tasks).toHaveLength(3);
   });
 
+  it('a Career pivot goal on an empty account gets exactly the key career_pivot (MOM-19)', async () => {
+    expect(db.channels).toHaveLength(0);
+    const r = await createGoalWithWeekOnePlan(input({ title: 'Career pivot', goalType: 'career_pivot' }), goodPlan());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.goal.channel_key).toBe('career_pivot');
+    expect(db.channels.map((c) => c.channel_key)).toEqual(['career_pivot']);
+    expect(db.rpcCalls).toHaveLength(1);
+  });
+
   it('every task is todo, in week 1, owned by the signed-in user and attached to the new goal', async () => {
     const r = await createGoalWithWeekOnePlan(input(), goodPlan());
     expect(r.ok).toBe(true);

@@ -1,6 +1,7 @@
 -- Verification for supabase/migrations/009_wizard_week_one_plan.sql (MOM-35).
 -- Run in the Supabase SQL Editor or with `supabase db query --linked -f`. Safe to re-run.
 -- Creates two throwaway auth users, calls create_goal_with_week_one_plan as each, then deletes them.
+-- Needs no seed: signup starts accounts empty (migration 010) and this script never calls the seed function.
 -- Leaves no data behind: an unexpected error rolls back the whole block.
 
 drop table if exists pg_temp.mom35_results;
@@ -21,6 +22,7 @@ declare
   pass boolean;
   detail text;
   titles text;
+  t text;
   res jsonb := '[]';
   -- One statement shape for every call, so each case differs only in its arguments.
   call_sql constant text :=
@@ -231,6 +233,23 @@ begin
   select count(*) into v from public.goal_channels where id = a_goal;
   select count(*) into w from public.micro_tasks where goal_channel_id = a_goal;
   res := res || jsonb_build_object('c', 'B cannot see A''s new goal or its tasks', 'p', v = 0 and w = 0, 'd', format('%s goals, %s tasks visible', v, w));
+
+  -- New in MOM-19: B signed up empty, so a wizard goal titled "Career pivot" gets the plain key career_pivot.
+  -- Before 010 the signup seed already held that key, and the wizard's retry gave career_pivot_2.
+  select count(*) into v from public.goal_channels where user_id = b;
+  res := res || jsonb_build_object('c', 'A fresh account has no goals before its first wizard goal', 'p', v = 0, 'd', format('%s goals', v));
+
+  detail := null; -- the rejection loop above left its last message here
+  begin
+    execute format(call_sql, 'career_pivot', 'Career pivot', 'career_pivot', '{}', good_criteria, good_tasks) into gid;
+  exception when others then
+    gid := null;
+    detail := sqlstate || ' ' || sqlerrm;
+  end;
+  select count(*), min(channel_key) into v, t from public.goal_channels where user_id = b;
+  select count(*) into w from public.micro_tasks where goal_channel_id = gid and user_id = b and status = 'todo' and week_of = 1;
+  res := res || jsonb_build_object('c', 'A wizard Career pivot goal on a fresh account gets exactly the key career_pivot', 'p',
+    gid is not null and v = 1 and t = 'career_pivot' and w = 3, 'd', coalesce(detail, format('%s goal, key %s, %s tasks', v, t, w)));
 
   -- The same key as A's goal is fine: keys are per user.
   execute format(call_sql, 'get_certified', 'Get certified', 'get_certified', '{}', good_criteria, good_tasks) into b_goal;

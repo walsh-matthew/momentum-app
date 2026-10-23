@@ -1,6 +1,7 @@
 -- Verification for supabase/migrations/007_task_source_evidence.sql (MOM-40).
 -- Run in the Supabase SQL Editor or with `supabase db query --linked -f`. Safe to re-run.
 -- Creates two throwaway auth users, creates ingested-style tasks as them, then deletes the users.
+-- Signup no longer seeds (migration 010), so postgres seeds Career Pivot by hand where this script needs it.
 -- Leaves no data behind: an unexpected error rolls back the whole block.
 
 drop table if exists pg_temp.mom40_results;
@@ -19,10 +20,12 @@ declare
 begin
   insert into auth.users (id, email)
   values (a, 'mom40-verify-a@example.invalid'), (b, 'mom40-verify-b@example.invalid');
+  perform public.seed_career_pivot(a);
+  perform public.seed_career_pivot(b);
   select id into a_channel from public.goal_channels where user_id = a and channel_key = 'career_pivot';
   select id into b_channel from public.goal_channels where user_id = b and channel_key = 'career_pivot';
 
-  -- The signup seed creates ordinary tasks: none of them has a source.
+  -- The seed creates ordinary tasks: none of them has a source.
   select count(*) into v from public.micro_tasks where user_id = a and (source_provider is not null or source_external_id is not null or source_evidence is not null);
   res := res || jsonb_build_object('c', 'Ordinary and seeded tasks have no source', 'p', v = 0, 'd', format('%s tasks with a source', v));
 

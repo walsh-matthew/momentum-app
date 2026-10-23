@@ -1,6 +1,7 @@
 -- Verification for supabase/migrations/004_history_backfill_and_seed.sql (MOM-22).
 -- Run in the Supabase SQL Editor or with `supabase db query --linked -f`. Safe to re-run.
 -- Creates one throwaway auth user, checks the seed's history and the backfill, then deletes the user.
+-- Signup no longer seeds (migration 010), so postgres seeds Career Pivot by hand where this script needs it.
 -- Leaves no data behind: an unexpected error rolls back the whole block.
 
 drop table if exists pg_temp.mom22b_results;
@@ -17,11 +18,12 @@ declare
   res jsonb := '[]';
 begin
   insert into auth.users (id, email) values (a, 'mom22-verify-004@example.invalid');
+  perform public.seed_career_pivot(a);
   select id into a_channel from public.goal_channels where user_id = a and channel_key = 'career_pivot';
   select id into a_task from public.micro_tasks where user_id = a and task_type = 'build' and week_of = 2;
 
   -- -------------------------------------------------------------------------
-  -- Signup seed
+  -- Seed function (called by hand; signup no longer seeds)
   -- -------------------------------------------------------------------------
 
   select count(*) into v from public.task_rebalance_history where user_id = a;

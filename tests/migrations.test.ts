@@ -120,6 +120,29 @@ describe('goal_channels wizard answers (migration 008)', () => {
   });
 });
 
+describe('new accounts start empty (migration 010, MOM-19)', () => {
+  const sql = sqlOf('010');
+
+  it('replaces the signup trigger function without the seed call', () => {
+    expect(sql).toMatch(/create or replace function public\.handle_new_user\(\)/i);
+    expect(sql).toMatch(/insert into public\.users \(id\) values \(new\.id\) on conflict \(id\) do nothing/i);
+    expect(sql).not.toMatch(/seed_career_pivot/i);
+  });
+  it('is still security definer with an empty search_path', () => {
+    expect(sql).toMatch(/security definer/i);
+    expect(sql).toMatch(/set search_path = ''/i);
+  });
+  it('changes no privileges and touches no existing row or function', () => {
+    expect(sql).not.toMatch(/\b(grant|revoke)\b/i);
+    expect(sql).not.toMatch(/\b(update|delete|drop|alter|truncate)\b/i);
+    expect(sql).not.toMatch(/create trigger/i);
+  });
+  it('leaves the seed function defined, for dev seeding', () => {
+    expect(sqlOf('008')).toMatch(/create or replace function public\.seed_career_pivot\(p_user_id uuid\)/i);
+    expect(sql).not.toMatch(/function public\.seed_career_pivot/i);
+  });
+});
+
 describe('the user owns completion (migration 002)', () => {
   const sql = sqlOf('002');
   it('guards inserts and updates on micro_tasks with a trigger', () => {
