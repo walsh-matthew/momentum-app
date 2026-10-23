@@ -81,3 +81,13 @@ Before writing or changing any domain logic, read these files. They override ass
 - **Security:** Maintain strict RLS policies in Supabase. Never expose service role keys on the client.
 - **Environment Files:** Ensure `.env.local` remains explicitly ignored in `.gitignore`.
 - **UI Design System:** Clean 3-column desktop layout collapsing to single-column mobile execution cards. Focus on high contrast, low clutter, and rapid feedback loops.
+---
+
+## RAID and Failure Logs (MOM-92)
+
+Two logs run alongside the build: `docs/RAID_LOG.md` (risks, assumptions, issues, dependencies) and `docs/FAILURE_LOG.md` (each place an AI tool got it wrong, and why). The owner reviews; the build agent does the writing.
+
+- **Capture as you go.** When the owner corrects you, a check fails, or something you said or wrote turns out false (a status, a "done", a command, a file or function name), append a failure-log entry marked `unreviewed`: asked, what went wrong, why, how it was caught, source (`build tool` or `in-product`). When work turns up a new risk, assumption, issue or dependency, append a RAID row marked `unreviewed` with a suggested owner, trigger, response and NIST function. The owner can also say "log that" at any time.
+- **The repo is public.** RAID rows name a category of risk, never its location: no table, column, function, endpoint, environment-variable or key names, no exploit steps, no personal data, and owners as roles, not names. Failure entries follow the same rule for secrets and personal data. Specifics belong in Jira.
+- **Review at day-end, in plain language.** The day-end backlog step lists the unreviewed entries, asks "predicted it? yes / no / partly" for each failure, and commits only what the owner approves. Never ask the owner to edit these files or run commands for them.
+- **Work goes through the backlog.** A RAID response that needs build work gets a `BACKLOG.md` item (and a Jira key at day-end); the RAID row points to that key.
