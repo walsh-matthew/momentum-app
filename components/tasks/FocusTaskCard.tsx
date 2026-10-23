@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { toggleTaskStatus } from '@/app/actions/tasks';
 import { TASK_TYPE_LABELS } from '@/lib/tasks/labels';
 import { describeMoveChain } from '@/lib/utils/rebalance';
 import type { MicroTask } from '@/types/database.types';
 import type { TaskMove } from '@/types/rebalance';
+import { useTaskToggle } from './useTaskToggle';
 
 interface FocusTaskCardProps {
   task: MicroTask;
@@ -17,17 +16,10 @@ interface FocusTaskCardProps {
 // The user ticks their own task; the card never completes anything by itself
 // (docs/NINETY_DAY_PLAN_CONTEXT.md §3).
 export function FocusTaskCard({ task, moves }: FocusTaskCardProps) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { pending, error, toggle } = useTaskToggle(task.id);
   const done = task.status === 'done';
 
-  const onToggle = () => {
-    setError(null);
-    startTransition(async () => {
-      const result = await toggleTaskStatus(task.id, done ? 'todo' : 'done');
-      if (!result.ok) setError(result.error);
-    });
-  };
+  const onToggle = () => toggle(done ? 'todo' : 'done');
 
   return (
     <article

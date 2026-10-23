@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyRebalance,
-  getFocusTask,
+  getFocusFeed,
   listMicroTasks,
   listRebalanceHistory,
   proposeRebalance,
@@ -281,12 +281,12 @@ describe('reads', () => {
     const done = taskRow(1, { status: 'done', completed_at: '2026-10-20T00:00:00Z' });
     const next = taskRow(2);
     resetDb([taskRow(3), next, done], signedIn);
-    const focus = await getFocusTask();
-    expect(focus.ok && focus.data?.id).toBe(next.id);
+    const focus = await getFocusFeed();
+    expect(focus.ok && focus.data.focus?.id).toBe(next.id);
 
     resetDb([done], signedIn);
-    const none = await getFocusTask();
-    expect(none.ok && none.data).toBeNull();
+    const none = await getFocusFeed();
+    expect(none.ok && none.data.focus).toBeNull();
   });
 });
 

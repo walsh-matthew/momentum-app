@@ -1,22 +1,23 @@
 import { AppShell } from '@/components/layout/AppShell';
 import { listGoalChannels } from '@/lib/services/goals';
 import { listConnectedApps } from '@/lib/services/integrations';
-import { getFocusTask, listMicroTasks, listRebalanceHistory, proposeRebalance } from '@/lib/services/tasks';
+import { getFocusFeed, listMicroTasks, listRebalanceHistory, proposeRebalance } from '@/lib/services/tasks';
 import { groupMovesByTask } from '@/lib/utils/rebalance';
 import { computeVelocity, currentPlanWeek } from '@/lib/utils/velocity';
 import type { ConnectedAppPublic, MicroTask, TaskRebalanceHistory } from '@/types/database.types';
+import { EMPTY_FOCUS_FEED, type FocusFeed } from '@/types/focusFeed';
 import type { RebalanceProposalView } from '@/types/rebalance';
 
 // Reads the signed-in user's session, so this page renders per request.
 export const dynamic = 'force-dynamic';
 
-async function loadFocusTask(): Promise<MicroTask | null> {
+async function loadFocusFeed(): Promise<FocusFeed> {
   try {
-    const result = await getFocusTask();
-    return result.ok ? result.data : null;
+    const result = await getFocusFeed();
+    return result.ok ? result.data : EMPTY_FOCUS_FEED;
   } catch {
     // Supabase env vars are not configured; show the empty state instead of failing the page.
-    return null;
+    return EMPTY_FOCUS_FEED;
   }
 }
 
@@ -70,8 +71,8 @@ async function loadRebalance(plan: PlanState | null): Promise<RebalanceProposalV
 }
 
 export default async function HomePage() {
-  const [focusTask, plan, connectedApps] = await Promise.all([
-    loadFocusTask(),
+  const [feed, plan, connectedApps] = await Promise.all([
+    loadFocusFeed(),
     loadPlan(),
     loadConnectedApps(),
   ]);
@@ -80,7 +81,7 @@ export default async function HomePage() {
   const rebalance = await loadRebalance(plan);
   return (
     <AppShell
-      focusTask={focusTask}
+      feed={feed}
       velocity={velocity}
       connectedApps={connectedApps}
       rebalance={rebalance}
