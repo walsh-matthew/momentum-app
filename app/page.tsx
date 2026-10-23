@@ -1,13 +1,26 @@
 import { AppShell } from '@/components/layout/AppShell';
+import { getCurrentUser } from '@/lib/services/auth';
 import { listConnectedApps } from '@/lib/services/integrations';
 import { getPlanSnapshot, type PlanSnapshot } from '@/lib/services/tasks';
 import { buildChannelViews } from '@/lib/utils/channelViews';
 import { groupMovesByTask } from '@/lib/utils/rebalance';
-import { EMPTY_CHANNEL_VIEWS } from '@/types/channelViews';
+import { EMPTY_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 
 // Reads the signed-in user's session, so this page renders per request.
 export const dynamic = 'force-dynamic';
+
+// Whether a session exists right now. proxy.ts redirects a signed-out visitor to /login before this page
+// renders, so false means the session ended in between. A session that cannot be checked counts as none: the
+// page then reads nothing.
+async function hasSession(): Promise<boolean> {
+  try {
+    const result = await getCurrentUser();
+    return result.ok && result.data !== null;
+  } catch {
+    return false;
+  }
+}
 
 async function loadConnectedApps(): Promise<ConnectedAppPublic[]> {
   try {
@@ -31,6 +44,10 @@ async function loadSnapshot(): Promise<PlanSnapshot | null> {
 }
 
 export default async function HomePage() {
+  // Asked first, so a signed-out render reads nothing.
+  if (!(await hasSession())) {
+    return <AppShell views={SIGNED_OUT_CHANNEL_VIEWS} connectedApps={[]} moveChains={{}} />;
+  }
   const [snapshot, connectedApps] = await Promise.all([loadSnapshot(), loadConnectedApps()]);
   // One view per active goal plus "all channels": its feed, velocity and rule-based rebalance proposal, each
   // from that goal's own tasks and start date. The sidebar switches between them in the browser, so no

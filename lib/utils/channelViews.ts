@@ -10,7 +10,7 @@
 // mean different things.
 
 import type { GoalChannel, MicroTask } from '@/types/database.types';
-import { ALL_CHANNELS, type ChannelView, type ChannelViews } from '@/types/channelViews';
+import { ALL_CHANNELS, type ChannelView, type ChannelViews, type FeedState } from '@/types/channelViews';
 import { buildFocusFeed } from './focusFeed';
 import { buildRulesView, type RebalanceTask } from './rebalance';
 import { computeVelocity, currentPlanWeek, type VelocityMove } from './velocity';
@@ -26,6 +26,13 @@ function rulesViewOrNull(tasks: readonly RebalanceTask[], week: number, today: s
   } catch {
     return null;
   }
+}
+
+// The screen for a set of tasks, read from the tasks themselves (not from the feed, which is capped): none at
+// all, every one finished, or something left to do. The no-goals case is decided by the caller.
+function feedStateFor(tasks: readonly MicroTask[]): FeedState {
+  if (tasks.length === 0) return 'no_tasks';
+  return tasks.some((t) => t.status === 'todo') ? 'tasks' : 'all_done';
 }
 
 export function buildChannelViews(
@@ -45,6 +52,7 @@ export function buildChannelViews(
     const own = tasksByGoal.get(goal.id) ?? [];
     const week = currentPlanWeek(goal.start_date, today);
     byChannel[goal.id] = {
+      feedState: feedStateFor(own),
       feed: buildFocusFeed(own),
       velocity: week === null ? null : computeVelocity(own, week, today, history),
       velocityHint: null,
@@ -56,6 +64,7 @@ export function buildChannelViews(
 
   const everyActiveTask = active.flatMap((g) => tasksByGoal.get(g.id) ?? []);
   byChannel[ALL_CHANNELS] = {
+    feedState: active.length === 0 ? 'no_goals' : feedStateFor(everyActiveTask),
     feed: buildFocusFeed(everyActiveTask),
     velocity: active.length === 1 ? byChannel[active[0].id].velocity : null,
     velocityHint: active.length > 1 ? 'choose_channel' : null,

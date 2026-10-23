@@ -142,10 +142,10 @@ describe('the sidebar lists the user\'s real channels', () => {
     expect(current().map((b) => b.textContent)).toEqual(['All channels']);
   });
 
-  it('a user with no goals sees only All channels and the empty state', () => {
+  it('a user with no goals sees only All channels and the no-goals state', () => {
     renderShell(EMPTY_CHANNEL_VIEWS);
     expect(current().map((b) => b.textContent)).toEqual(['All channels']);
-    expect(screen.getByText('No tasks yet.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'No goals yet' })).toBeTruthy();
     expect(velocity()).toBeNull();
   });
 });
@@ -228,7 +228,7 @@ describe('switching channels', () => {
     const emptyGoals = [...goals, { id: 'new', title: 'Brand New', status: 'active' as const, start_date: TODAY }];
     renderShell(buildChannelViews(emptyGoals, tasks, [], TODAY));
     fireEvent.click(channelButton('Brand New'));
-    expect(screen.getByText('No tasks yet.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'No tasks yet' })).toBeTruthy();
     expect(velocity()!.textContent).toContain('appears once this week has tasks due');
   });
 

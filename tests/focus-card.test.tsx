@@ -15,6 +15,7 @@ import { FocusTaskCard } from '@/components/tasks/FocusTaskCard';
 import { RecentlyDoneList } from '@/components/tasks/RecentlyDoneList';
 import { UpNextList } from '@/components/tasks/UpNextList';
 import { TOGGLE_NETWORK_ERROR } from '@/components/tasks/useTaskToggle';
+import type { FeedState } from '@/types/channelViews';
 import type { MicroTask } from '@/types/database.types';
 import type { FocusFeed } from '@/types/focusFeed';
 
@@ -256,7 +257,9 @@ describe('the whole feed', () => {
     recentlyDone: [finished({ title: 'Already finished' })],
     ...over,
   });
-  const renderFeed = (f: FocusFeed) => render(<MainFeed feed={f} velocity={null} moveChains={{}} />);
+  // The state is passed in, as buildChannelViews would decide it; MainFeed never works it out from the feed.
+  const renderFeed = (f: FocusFeed, feedState: FeedState = 'tasks') =>
+    render(<MainFeed feedState={feedState} feed={f} velocity={null} moveChains={{}} onNewGoal={() => {}} />);
 
   it('shows the focus task, then Up next, then Recently done, and calls nothing on load', () => {
     renderFeed(feed());
@@ -278,18 +281,18 @@ describe('the whole feed', () => {
   it('when everything is done the undo is still there, so the last task can be reopened', async () => {
     const last = finished({ title: 'The very last task' });
     actions.toggle.mockResolvedValue({ ok: true, data: { ...last, status: 'todo' } });
-    renderFeed({ focus: null, upNext: [], recentlyDone: [last] });
+    renderFeed({ focus: null, upNext: [], recentlyDone: [last] }, 'all_done');
 
     expect(screen.getByText(/Everything on your list is done/)).toBeTruthy();
-    expect(screen.queryByText('No tasks yet.')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'No tasks yet' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reopen The very last task' }));
     await waitFor(() => expect(actions.toggle).toHaveBeenCalledWith(last.id, 'todo'));
   });
 
-  it('with no tasks at all it shows the empty state and no controls', () => {
-    renderFeed({ focus: null, upNext: [], recentlyDone: [] });
-    expect(screen.getByText('No tasks yet.')).toBeTruthy();
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
+  it('with no tasks at all it shows the no-tasks state, whose only control is the new-goal button', () => {
+    renderFeed({ focus: null, upNext: [], recentlyDone: [] }, 'no_tasks');
+    expect(screen.getByRole('heading', { name: 'No tasks yet' })).toBeTruthy();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Start another goal']);
   });
 });
