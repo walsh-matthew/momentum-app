@@ -99,6 +99,10 @@ All provider adapters must output data adhering to this standardized interface i
 * `durationMinutes` <- Difference between `event.end` and `event.start`
 * `metrics.eventCompleted` <- `true` if event time has elapsed and wasn't canceled
 
+**Connect flow (MOM-62).** The Connected Apps page posts to `/api/integrations/google/start`, which sends the signed-in user to Google's consent screen with the single scope `https://www.googleapis.com/auth/calendar.readonly`, `access_type=offline`, `prompt=consent`, a random `state` and a PKCE S256 challenge. The `state`, the code verifier, the user id and the redirect URI sit in a ten-minute httpOnly, SameSite=Lax cookie scoped to the callback path. Google returns to `/api/auth/callback/google`, an authenticated route (not in `PUBLIC_PATHS`), which refuses a missing session, a missing or expired cookie, a state that does not match, a different user or a different address; reads a denial as `denied`; exchanges the code on the server with the client secret and the verifier; refuses a response that lacks the calendar scope; and passes the validated response to `saveOAuthTokens()`. It always redirects to `/connections?google=<outcome>` with one of a fixed set of outcome codes and clears the cookie: no token, code or provider text goes in an address or a log. The redirect URI to register in the Google Cloud console is `<origin>/api/auth/callback/google` for each origin the app is served from (for example `http://localhost:3000` and the production domain); preview deployments need their own entries. All of this is in `lib/services/googleOAuth.ts`; no component imports it.
+
+**Hevy key form (MOM-62).** A Server Action (`saveHevyApiKey`) passes the pasted key to `saveApiKey()`. The key is checked for shape only; it goes into a password field, is not echoed or kept in client state, and the form returns only a message. Calling Hevy to confirm the key works belongs to the Phase 2 adapter.
+
 ---
 
 ## 4. Phase 1 vs. Phase 2 Scope Boundary

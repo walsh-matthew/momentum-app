@@ -5,6 +5,9 @@
 // MOM-40: turning normalized activity into tasks lives in @/lib/services/ingestion.ts.
 // MOM-37: provider tokens and API keys (storage, retrieval, refresh) in integration_credentials. The
 // only network request to a third party is the OAuth token refresh in refreshAccessToken().
+// MOM-62: the Google consent flow (redirect, callback and code exchange) is in @/lib/services/googleOAuth.ts; the
+// Hevy key form and the disconnect button call saveApiKey() and disconnectIntegration() from
+// app/actions/integrations.ts.
 
 import { getGoogleOAuthEnv } from '@/lib/config/env';
 import { INTEGRATION_CATALOG, SUPPORTED_PROVIDER_IDS, authTypeOf } from '@/lib/integrations/catalog';
@@ -159,7 +162,7 @@ export async function setConnectedAppActive(
 // Nothing here logs a token or returns one in an error. Database errors are replaced with fixed
 // wording because a failed CHECK reports the offending row, secrets included.
 
-const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 // Refresh a little early so a token does not expire between being handed out and being used.
 const EXPIRY_SKEW_MS = 60_000;
 const REFRESH_TIMEOUT_MS = 10_000;
@@ -537,11 +540,6 @@ async function refreshAccessToken(
   }
   return { ok: false, error: 'Could not refresh that connection. Try again shortly.' };
 }
-
-// TODO(MOM-Phase2): the OAuth connect flow itself: the Google consent redirect (with state and PKCE) and
-// the callback route that exchanges the authorisation code and hands the response to
-// saveOAuthTokens(). Token storage, retrieval and refresh are above (MOM-37). Also a Server Action
-// that calls saveApiKey() for the Hevy key form.
 
 // TODO(MOM-Phase2): real HTTP clients in @/lib/adapters/hevy.ts and @/lib/adapters/google.ts.
 // TODO(MOM-Phase2): webhook handlers at app/api/webhooks/[provider]/route.ts.
