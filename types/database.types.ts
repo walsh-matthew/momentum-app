@@ -1,5 +1,5 @@
 // Central data models for Momentum. Single source of truth (CLAUDE.md, Architectural Directive 2).
-// Derived from supabase/migrations/001_initial_schema.sql. Mirrors the shape of `supabase gen types`
+// Derived from supabase/migrations/ (001 onward). Mirrors the shape of `supabase gen types`
 // so the generated output can replace the `Database` block later; keep the aliases below it.
 // All enum values are lowercase machine keys. Presentation strings belong in the UI.
 
@@ -17,6 +17,28 @@ export type Json =
 
 export const GOAL_CHANNEL_STATUSES = ['active', 'paused', 'done'] as const;
 export type GoalChannelStatus = (typeof GOAL_CHANNEL_STATUSES)[number];
+
+// Wizard answers stored on goal_channels (migration 008). Lowercase machine keys; labels live in
+// lib/goals/vocabulary.ts, which re-exports these so the CHECK lists and the wizard share one source.
+export const GOAL_TYPES = [
+  'career_pivot',
+  'get_certified',
+  'portfolio_piece',
+  'interview_prep',
+  'grow_network',
+] as const;
+export type GoalType = (typeof GOAL_TYPES)[number];
+
+export const CONSTRAINTS = [
+  'flexible_hours',
+  'contract_work_first',
+  'dont_track_hours',
+  'flexible_dates',
+] as const;
+export type Constraint = (typeof CONSTRAINTS)[number];
+
+export const PACES = ['lighter', 'heavier', 'ahead', 'behind', 'carry_over'] as const;
+export type Pace = (typeof PACES)[number];
 
 export const TASK_STATUSES = ['todo', 'done'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -85,6 +107,13 @@ export interface GoalCriterion {
   done: boolean;
 }
 
+// goal_channels.preferences. Only the answers the user gave are present: an unset pace is omitted, and
+// a goal with no constraints has no `constraints` key. Shape is enforced by goal_channels_preferences_shape.
+export interface GoalPreferences {
+  constraints?: Constraint[];
+  pace?: Pace;
+}
+
 // ---------------------------------------------------------------------------
 // Database (supabase-js generic)
 // ---------------------------------------------------------------------------
@@ -125,6 +154,9 @@ export type Database = {
           start_date: string;
           target_date: string | null;
           criteria: GoalCriterion[];
+          // Null for goals created before migration 008 recorded it.
+          goal_type: GoalType | null;
+          preferences: GoalPreferences;
           created_at: string;
           updated_at: string;
         };
@@ -138,6 +170,8 @@ export type Database = {
           start_date?: string;
           target_date?: string | null;
           criteria?: GoalCriterion[];
+          goal_type?: GoalType | null;
+          preferences?: GoalPreferences;
           created_at?: string;
           updated_at?: string;
         };
@@ -151,6 +185,8 @@ export type Database = {
           start_date?: string;
           target_date?: string | null;
           criteria?: GoalCriterion[];
+          goal_type?: GoalType | null;
+          preferences?: GoalPreferences;
           created_at?: string;
           updated_at?: string;
         };

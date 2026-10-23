@@ -34,6 +34,25 @@ export async function typeChecks() {
   // @ts-expect-error 'delete' is not a rebalance action
   await sb.rpc('apply_task_move', { p_task_id: 't', p_from_week: 2, p_to_week: 3, p_action: 'delete', p_due_date: null });
 
+  // The wizard's answers (migration 008). goal_type is a known key or null; preferences hold only constraints and pace.
+  await sb.from('goal_channels').insert({
+    user_id: 'u',
+    channel_key: 'k',
+    title: 't',
+    goal_type: 'get_certified',
+    preferences: { constraints: ['flexible_hours'], pace: 'lighter' },
+  });
+  // @ts-expect-error goal_type must be one of the lowercase goal type keys
+  await sb.from('goal_channels').insert({ user_id: 'u', channel_key: 'k', title: 't', goal_type: 'Career pivot' });
+  // @ts-expect-error pace must be one of the pace keys
+  await sb.from('goal_channels').insert({ user_id: 'u', channel_key: 'k', title: 't', preferences: { pace: 'turbo' } });
+  // @ts-expect-error constraints must be known keys
+  await sb.from('goal_channels').insert({ user_id: 'u', channel_key: 'k', title: 't', preferences: { constraints: ['work_weekends'] } });
+  // @ts-expect-error preferences take no other keys
+  await sb.from('goal_channels').insert({ user_id: 'u', channel_key: 'k', title: 't', preferences: { theme: 'dark' } });
+  const goalType: GoalChannel['goal_type'] = null;
+  const prefs: GoalChannel['preferences'] = {};
+
   const status: GoalChannel['status'] = 'paused';
-  return { tasks, done, status };
+  return { tasks, done, status, goalType, prefs };
 }
