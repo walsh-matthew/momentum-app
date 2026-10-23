@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { IntegrationCardList } from '@/components/integrations/IntegrationCardList';
 import { RebalanceSideCard } from '@/components/rebalance/RebalanceSideCard';
+import type { ChannelHint } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { RebalanceProposalView } from '@/types/rebalance';
 
 interface ConnectedStackPanelProps {
   connectedApps: ConnectedAppPublic[];
   rebalance: RebalanceProposalView | null;
+  rebalanceHint?: ChannelHint | null;
   onOpenRebalance: () => void;
   className?: string;
 }
@@ -23,6 +25,7 @@ const PANEL_TABS: Record<PanelTab, string> = {
 export function ConnectedStackPanel({
   connectedApps,
   rebalance,
+  rebalanceHint = null,
   onOpenRebalance,
   className = '',
 }: ConnectedStackPanelProps) {
@@ -52,7 +55,7 @@ export function ConnectedStackPanel({
           <IntegrationCardList connectedApps={connectedApps} />
         ) : (
           <div className="flex flex-col gap-4">
-            <RebalanceSideCard view={rebalance} onOpen={onOpenRebalance} />
+            <RebalanceSideCard view={rebalance} hint={rebalanceHint} onOpen={onOpenRebalance} />
             <p>Assistant chat coming soon.</p>
           </div>
         )}

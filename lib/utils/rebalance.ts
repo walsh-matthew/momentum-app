@@ -23,6 +23,7 @@ import {
   parseRebalanceProposal,
   type RebalanceMove,
   type RebalanceProposal,
+  type RebalanceProposalView,
   type RebalanceTaskSummary,
   type TaskMoveChains,
   type TimelineWarning,
@@ -210,6 +211,27 @@ export function buildRebalanceProposal(
   const parsed = parseRebalanceProposal({ summary, moves, warnings });
   if (!parsed.ok) throw new Error(`Rebalance proposal failed validation: ${parsed.error}`);
   return parsed.data;
+}
+
+// The rule-based proposal as the side card and drawer show it: the proposal plus the display details of the
+// tasks it names, taken from the rows. Pure, like the builder, and it throws when the builder does (more
+// unfinished work than a proposal may carry). Callers pass ONE goal channel's tasks and that channel's own
+// plan week (MOM-87); mixing channels would put one goal's work in another goal's weeks.
+export function buildRulesView(
+  tasks: readonly RebalanceTask[],
+  currentWeek: number,
+  asOf: string,
+  notice: string | null = null,
+): RebalanceProposalView {
+  const proposal = buildRebalanceProposal(tasks, currentWeek, asOf);
+  return {
+    proposal,
+    source: 'rules',
+    model: null,
+    notice,
+    tasks: summarizeProposalTasks(tasks, proposal),
+    currentWeek,
+  };
 }
 
 // ---------------------------------------------------------------------------

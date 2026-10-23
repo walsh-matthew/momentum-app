@@ -1,14 +1,18 @@
 import { TIMELINE_WARNING_LABELS } from '@/lib/tasks/labels';
+import type { ChannelHint } from '@/types/channelViews';
 import type { RebalanceProposalView } from '@/types/rebalance';
 
 interface RebalanceSideCardProps {
+  // The proposal for the selected goal channel (MOM-87).
   view: RebalanceProposalView | null;
+  // Set when there is no proposal on purpose: several goals are active and none is selected.
+  hint?: ChannelHint | null;
   onOpen: () => void;
 }
 
 // The at-a-glance version of the proposal. It only opens the drawer; applying happens there, on the
 // user's say-so (docs/NINETY_DAY_PLAN_CONTEXT.md §5 rule 1).
-export function RebalanceSideCard({ view, onOpen }: RebalanceSideCardProps) {
+export function RebalanceSideCard({ view, hint = null, onOpen }: RebalanceSideCardProps) {
   const moves = view?.proposal.moves.length ?? 0;
   const warnings = view?.proposal.warnings ?? [];
   const needsAttention = moves > 0 || warnings.length > 0;
@@ -23,7 +27,11 @@ export function RebalanceSideCard({ view, onOpen }: RebalanceSideCardProps) {
       </h3>
 
       {view === null ? (
-        <p className="mt-2 text-sm text-muted">Rebalancing appears once you have a plan with tasks.</p>
+        <p className="mt-2 text-sm text-muted">
+          {hint === 'choose_channel'
+            ? "Rebalancing is worked out for one goal at a time. Choose a channel in the sidebar to see what could move."
+            : 'Rebalancing appears once you have a plan with tasks.'}
+        </p>
       ) : (
         <>
           <p className="mt-2 text-sm">{view.proposal.summary}</p>

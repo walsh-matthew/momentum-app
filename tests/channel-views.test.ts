@@ -6,11 +6,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPlanSnapshot } from '@/lib/services/tasks';
+import { getPlanSnapshot, proposeRebalance } from '@/lib/services/tasks';
 import { buildChannelViews, resolveChannel } from '@/lib/utils/channelViews';
+import { buildRulesView } from '@/lib/utils/rebalance';
 import { computeVelocity } from '@/lib/utils/velocity';
 import { ALL_CHANNELS, EMPTY_CHANNEL_VIEWS } from '@/types/channelViews';
 import type { MicroTask } from '@/types/database.types';
+import { MAX_REBALANCE_MOVES } from '@/types/rebalance';
 import { OTHER_USER, USER, channelRow, db, resetDb, taskRow, type TaskRow } from './helpers/fakeSupabase';
 
 vi.mock('@/lib/supabase/server', async () => {
@@ -218,6 +220,142 @@ describe('resolveChannel: the selection that is actually shown', () => {
   });
 });
 
+describe('each channel is rebalanced on its own tasks and its own plan week (MOM-87)', () => {
+  // A started 30 days ago (plan week 5): its week 2 and 3 tasks are behind. B started today (week 1): its week 1
+  // tasks are not behind yet, although scored against A's week they would be.
+  const goals = [goal('A', { start_date: '2026-09-23' }), goal('B', { start_date: '2026-10-23' })];
+  const a2 = task('A', 2, { title: 'A behind two' });
+  const a3 = task('A', 3, { title: 'A behind three' });
+  const b1 = task('B', 1, { title: 'B week one' });
+  const b1b = task('B', 1, { title: 'B week one again' });
+  const aTasks = [a2, a3];
+  const bTasks = [b1, b1b];
+  const views = buildChannelViews(goals, [...aTasks, ...bTasks], [], TODAY);
+
+  it('a channel\'s proposal uses only that channel\'s tasks and its own plan week', () => {
+    const a = views.byChannel.A.rebalance!;
+    expect(a.currentWeek).toBe(5);
+    expect(a.proposal.moves.map((m) => m.taskId).sort()).toEqual([a2.id, a3.id].sort());
+    expect(a.proposal.moves.every((m) => m.toWeek >= 5)).toBe(true);
+    expect(Object.keys(a.tasks).sort()).toEqual([a2.id, a3.id].sort());
+  });
+
+  it('a new goal is not scored against an older goal\'s week: nothing of its is behind', () => {
+    const b = views.byChannel.B.rebalance!;
+    expect(b.currentWeek).toBe(1);
+    expect(b.proposal.moves).toEqual([]);
+    expect(b.proposal.summary).toMatch(/on track/);
+    // The old mistake, shown: the same tasks against the other goal's week would all be proposed to move.
+    expect(buildRulesView(bTasks, 5, TODAY).proposal.moves.length).toBe(2);
+  });
+
+  it('each proposal is exactly what that channel\'s tasks and week produce on their own', () => {
+    expect(views.byChannel.A.rebalance).toEqual(buildRulesView(aTasks, 5, TODAY));
+    expect(views.byChannel.B.rebalance).toEqual(buildRulesView(bTasks, 1, TODAY));
+  });
+
+  it('no proposal names a task from another channel', () => {
+    const named = (id: string) => JSON.stringify(views.byChannel[id].rebalance);
+    for (const other of bTasks) expect(named('A')).not.toContain(other.id);
+    for (const other of aTasks) expect(named('B')).not.toContain(other.id);
+  });
+
+  it('ticking tasks in one channel does not change the other\'s proposal', () => {
+    const ticked = bTasks.map((t) => ({ ...t, status: 'done' as const, completed_at: '2026-10-23T08:00:00Z' }));
+    const after = buildChannelViews(goals, [...aTasks, ...ticked], [], TODAY);
+    expect(after.byChannel.A.rebalance).toEqual(views.byChannel.A.rebalance);
+  });
+
+  it('each channel remembers which goal its proposal is for, so "Ask Claude" can send it', () => {
+    expect(views.byChannel.A.rebalanceChannelId).toBe('A');
+    expect(views.byChannel.B.rebalanceChannelId).toBe('B');
+    expect(views.byChannel.A.rebalanceHint).toBeNull();
+  });
+
+  it('matches the proposal the service builds for the same tasks (one builder, not two)', async () => {
+    const viaService = await proposeRebalance(aTasks, 5, TODAY);
+    expect(viaService.ok && viaService.data).toEqual(views.byChannel.A.rebalance);
+  });
+});
+
+describe('the rebalance proposal for all channels', () => {
+  it('with one active goal it is that goal\'s proposal, for that goal', () => {
+    const v = buildChannelViews([goal('A')], [task('A', 2), task('A', 3)], [], TODAY);
+    expect(v.byChannel[ALL_CHANNELS].rebalance).toEqual(v.byChannel.A.rebalance);
+    expect(v.byChannel[ALL_CHANNELS].rebalance).not.toBeNull();
+    expect(v.byChannel[ALL_CHANNELS].rebalanceChannelId).toBe('A');
+    expect(v.byChannel[ALL_CHANNELS].rebalanceHint).toBeNull();
+  });
+
+  it('with several active goals there is no single plan week, so it asks the user to choose a channel', () => {
+    const v = buildChannelViews([goal('A'), goal('B')], [task('A', 2), task('B', 2)], [], TODAY);
+    expect(v.byChannel[ALL_CHANNELS]).toMatchObject({ rebalance: null, rebalanceChannelId: null, rebalanceHint: 'choose_channel' });
+  });
+
+  it('with no active goal there is nothing to rebalance and nothing to say', () => {
+    const v = buildChannelViews([goal('P', { status: 'paused' })], [task('P', 2)], [], TODAY);
+    expect(v.byChannel[ALL_CHANNELS]).toMatchObject({ rebalance: null, rebalanceChannelId: null, rebalanceHint: null });
+  });
+
+  it('a paused goal is not a channel to rebalance, and does not count toward the several', () => {
+    const pausedTask = task('P', 2);
+    const v = buildChannelViews([goal('A'), goal('P', { status: 'paused' })], [task('A', 2), pausedTask], [], TODAY);
+    expect(v.byChannel.P).toBeUndefined();
+    expect(v.byChannel[ALL_CHANNELS].rebalanceHint).toBeNull();
+    expect(v.byChannel[ALL_CHANNELS].rebalanceChannelId).toBe('A');
+    expect(JSON.stringify(v)).not.toContain(pausedTask.id);
+  });
+});
+
+describe('rebalance edge cases per channel', () => {
+  it('a goal with no tasks gets an empty, on-track proposal, not nothing', () => {
+    const v = buildChannelViews([goal('empty')], [], [], TODAY);
+    expect(v.byChannel.empty.rebalance).toMatchObject({ source: 'rules', currentWeek: 5 });
+    expect(v.byChannel.empty.rebalance!.proposal.moves).toEqual([]);
+    expect(v.byChannel.empty.rebalance!.proposal.warnings).toEqual([]);
+  });
+
+  it('a goal past week 13 moves nothing: the work is named as unable to fit, and left where it is', () => {
+    const old = goal('old', { start_date: '2026-01-01' }); // 295 days before TODAY: plan week 43
+    const stuck = task('old', 12, { title: 'Still open' });
+    const done12 = done('old', 12);
+    const v = buildChannelViews([old], [stuck, done12], [], TODAY);
+    const r = v.byChannel.old.rebalance!;
+    expect(r.currentWeek).toBe(43);
+    expect(r.proposal.moves).toEqual([]);
+    expect(r.proposal.warnings.map((w) => w.kind)).toEqual(['cannot_hold']);
+    expect(r.proposal.warnings[0].taskIds).toEqual([stuck.id]);
+    expect(r.proposal.warnings[0].message).toMatch(/Nothing is cut/);
+  });
+
+  it('a goal that has not started yet is in week 1 and has nothing behind', () => {
+    const v = buildChannelViews([goal('later', { start_date: '2026-12-01' })], [task('later', 1), task('later', 2)], [], TODAY);
+    expect(v.byChannel.later.rebalance).toMatchObject({ currentWeek: 1 });
+    expect(v.byChannel.later.rebalance!.proposal.moves).toEqual([]);
+  });
+
+  it('a start date that cannot be read gives no proposal, but the channel and its feed still work', () => {
+    const v = buildChannelViews([goal('A', { start_date: 'not a date' })], [task('A', 2)], [], TODAY);
+    expect(v.byChannel.A.rebalance).toBeNull();
+    expect(v.byChannel.A.rebalanceChannelId).toBe('A');
+    expect(v.byChannel.A.feed.focus).not.toBeNull();
+  });
+
+  it('more unfinished work than one proposal can carry gives no proposal instead of an error', () => {
+    const tasks = Array.from({ length: MAX_REBALANCE_MOVES + 1 }, () => task('A', 1));
+    const v = buildChannelViews([goal('A'), goal('B')], [...tasks, task('B', 5)], [], TODAY);
+    expect(v.byChannel.A.rebalance).toBeNull();
+    expect(v.byChannel.A.feed.focus).not.toBeNull();
+    // One channel being too big does not take another's proposal away.
+    expect(v.byChannel.B.rebalance).not.toBeNull();
+  });
+
+  it('can be sent to the browser as plain data', () => {
+    const v = buildChannelViews([goal('A'), goal('B')], [task('A', 2), task('B', 5)], [], TODAY);
+    expect(JSON.parse(JSON.stringify(v))).toEqual(v);
+  });
+});
+
 describe('the home page pipeline: the snapshot, then the views (one user\'s session)', () => {
   const signedIn = { id: USER };
   const NOW = Date.parse('2026-10-23T12:00:00Z');
@@ -309,6 +447,25 @@ describe('source-level: building the views never writes', () => {
     for (const read of ['listGoalChannels()', 'listMicroTasks()', 'listRebalanceHistory()']) expect(body).toContain(read);
     expect(body).not.toMatch(/\.insert\(|\.update\(|\.rpc\(|\.delete\(|\.upsert\(|setTaskStatus|from\(/);
     expect(body).not.toMatch(/supabase\/admin|SERVICE_ROLE/);
+  });
+
+  it('the page no longer builds a rebalance proposal of its own from all tasks and the first goal\'s week', () => {
+    const page = strip(read('app', 'page.tsx'));
+    expect(page).not.toMatch(/proposeRebalance|rebalancePlanFrom|currentPlanWeek/);
+  });
+
+  it('the Ask Claude action and the drawer pass the channel through, and the service checks it', () => {
+    const action = strip(read('app', 'actions', 'tasks.ts'));
+    expect(action).toContain('askClaudeToRebalance(channelId: unknown)');
+    expect(action).toContain('requestModelRebalance(channelId)');
+    expect(strip(read('components', 'rebalance', 'RebalanceDrawer.tsx'))).toContain('askClaudeToRebalance(channelId)');
+    const tasks = read('lib', 'services', 'tasks.ts');
+    const start = tasks.indexOf('export async function requestModelRebalance');
+    const body = strip(tasks.slice(start, tasks.indexOf('\n}\n', start) + 3));
+    expect(body).toContain('UUID_PATTERN.test(channelId)');
+    expect(body).toContain('active.find((g) => g.id === channelId)');
+    expect(body).toContain('t.goal_channel_id === goal.id');
+    expect(body).not.toMatch(/\.insert\(|\.update\(|\.rpc\(|\.delete\(|supabase\/admin|SERVICE_ROLE/);
   });
 
   it('the page builds the views from the one snapshot, and never from a selection it was sent', () => {

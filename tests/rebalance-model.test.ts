@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { proposeRebalance, requestModelRebalance } from '@/lib/services/tasks';
 import { buildRebalanceProposal, buildModelFacts, checkProposalAgainstTasks, MAX_MODEL_TASKS } from '@/lib/utils/rebalance';
+import { computeVelocity } from '@/lib/utils/velocity';
 import { parseRebalanceProposal } from '@/types/rebalance';
 import { OTHER_USER, USER, channelRow, db, newId, resetDb, taskRow, type TaskRow } from './helpers/fakeSupabase';
 
@@ -234,48 +235,260 @@ describe('checkProposalAgainstTasks', () => {
   });
 });
 
-describe('requestModelRebalance (the "Ask Claude" click)', () => {
-  // Distinct clock values keep the per-user cooldown from leaking between tests.
+describe('requestModelRebalance (the "Ask Claude" click, for one goal channel)', () => {
+  // Distinct clock values keep the per-user cooldown from leaking between tests. The date is 2026-11-04 plus
+  // a few minutes: a goal that started 2026-10-14 is in plan week 4, one that started today is in week 1.
   let tick = 0;
   const nextNow = () => Date.parse('2026-11-04T12:00:00Z') + ++tick * 60_000;
+  const ask = (channelId: unknown) => requestModelRebalance(channelId, { now: nextNow });
+  const NOT_A_CHANNEL = { ok: false, error: 'Choose one of your goal channels.' };
 
-  function setup(tasks: TaskRow[], channels = [channelRow({ channel_key: 'career_pivot', start_date: '2026-10-14' })]) {
+  // A goal for the signed-in user (or another), and a task that belongs to it.
+  const goal = (over: Record<string, unknown> = {}) =>
+    channelRow({ channel_key: `goal_${++tick}`, start_date: '2026-10-14', ...over } as never);
+  const inGoal = (g: { id: string }, over: Partial<TaskRow> = {}) => behind({ goal_channel_id: g.id, ...over });
+  function setup(tasks: TaskRow[], channels: ReturnType<typeof goal>[]) {
     resetDb(tasks, { id: USER });
     db.channels = channels;
   }
+  const sentFacts = (call = 0) => model.request.mock.calls[call][0] as ReturnType<typeof buildModelFacts>;
 
   it('refuses when signed out and never calls the model', async () => {
     resetDb([], null);
-    expect(await requestModelRebalance({ now: nextNow })).toEqual({ ok: false, error: 'Sign in to ask for a suggestion.' });
+    expect(await ask(newId())).toEqual({ ok: false, error: 'Sign in to ask for a suggestion.' });
     expect(model.request).not.toHaveBeenCalled();
   });
 
   it('needs an active goal', async () => {
-    setup([behind()], [channelRow({ status: 'paused' })]);
-    expect(await requestModelRebalance({ now: nextNow })).toEqual({ ok: false, error: 'Create a goal first.' });
+    const paused = goal({ status: 'paused' });
+    setup([inGoal(paused)], [paused]);
+    expect(await ask(paused.id)).toEqual({ ok: false, error: 'Create a goal first.' });
     expect(model.request).not.toHaveBeenCalled();
   });
 
-  it('loads the signed-in user’s own plan, asks Claude once, and returns the checked proposal', async () => {
-    const mine = behind();
-    const theirs = behind({ user_id: OTHER_USER });
-    setup([mine, theirs]);
-    answer(proposalFor([goodMove(mine)]));
+  describe('the channel id is not trusted', () => {
+    it.each([
+      ['missing', undefined],
+      ['null', null],
+      ['a number', 7],
+      ['an object', { id: 'x' }],
+      ['empty', ''],
+      ['not a uuid', 'career_pivot'],
+      ['a uuid with extra text', '11111111-1111-4111-8111-111111111111; drop table'],
+    ])('%s is refused before anything is read or sent', async (_name, bad) => {
+      const mine = goal();
+      setup([inGoal(mine)], [mine]);
+      expect(await ask(bad)).toEqual(NOT_A_CHANNEL);
+      expect(model.request).not.toHaveBeenCalled();
+    });
 
-    const r = await requestModelRebalance({ now: nextNow });
-    expect(r.ok && r.data).toMatchObject({ source: 'model', currentWeek: 4 });
-    expect(model.request).toHaveBeenCalledTimes(1);
-    const sent = model.request.mock.calls[0][0] as ReturnType<typeof buildModelFacts>;
-    expect(sent.tasks.map((t) => t.id)).toEqual([mine.id]);
-    expect(sent.currentWeek).toBe(4);
-    expect(sent.velocity).not.toBeNull();
+    it('an id that is not one of the user\'s goals is refused', async () => {
+      const mine = goal();
+      setup([inGoal(mine)], [mine]);
+      expect(await ask(newId())).toEqual(NOT_A_CHANNEL);
+      expect(model.request).not.toHaveBeenCalled();
+    });
+
+    it('another user\'s goal is refused like a missing one, and none of their tasks are sent', async () => {
+      const mine = goal();
+      const theirs = goal({ user_id: OTHER_USER });
+      const theirTask = inGoal(theirs, { user_id: OTHER_USER });
+      setup([inGoal(mine), theirTask], [mine, theirs]);
+
+      const r = await ask(theirs.id);
+      expect(r).toEqual(NOT_A_CHANNEL);
+      expect(JSON.stringify(r)).not.toContain(theirTask.id);
+      expect(model.request).not.toHaveBeenCalled();
+    });
+
+    it('another user\'s goal is refused even with row level security off in the fake', async () => {
+      const mine = goal();
+      const theirs = goal({ user_id: OTHER_USER });
+      setup([inGoal(mine), inGoal(theirs, { user_id: OTHER_USER })], [mine, theirs]);
+      db.rls = false;
+      // With RLS off the service can see their rows; it must still not send a task that is not the user's goal's.
+      answer(proposalFor([]));
+      await ask(mine.id);
+      const ids = sentFacts().tasks.map((t) => t.id);
+      expect(ids).toHaveLength(1);
+      expect(ids[0]).toBe(db.tasks.find((t) => t.goal_channel_id === mine.id)!.id);
+    });
+
+    it('a paused goal is refused when another goal is active', async () => {
+      const live = goal();
+      const paused = goal({ status: 'paused' });
+      setup([inGoal(live), inGoal(paused)], [live, paused]);
+      expect(await ask(paused.id)).toEqual(NOT_A_CHANNEL);
+      expect(model.request).not.toHaveBeenCalled();
+    });
+
+    it('a bad id does not use up the cooldown', async () => {
+      const mine = goal();
+      setup([inGoal(mine)], [mine]);
+      const t = nextNow();
+      expect(await requestModelRebalance('nope', { now: () => t })).toEqual(NOT_A_CHANNEL);
+      answer(proposalFor([]));
+      expect((await requestModelRebalance(mine.id, { now: () => t + 1 })).ok).toBe(true);
+    });
+  });
+
+  describe('a channel is rebalanced on its own tasks and its own plan week', () => {
+    it('loads the signed-in user\'s own plan, asks Claude once, and returns the checked proposal', async () => {
+      const mine = goal();
+      const task = inGoal(mine);
+      setup([task, inGoal(goal({ user_id: OTHER_USER }), { user_id: OTHER_USER })], [mine]);
+      answer(proposalFor([goodMove(task)]));
+
+      const r = await ask(mine.id);
+      expect(r.ok && r.data).toMatchObject({ source: 'model', currentWeek: 4 });
+      expect(model.request).toHaveBeenCalledTimes(1);
+      expect(sentFacts().tasks.map((t) => t.id)).toEqual([task.id]);
+      expect(sentFacts().currentWeek).toBe(4);
+      expect(sentFacts().velocity).not.toBeNull();
+    });
+
+    it('two goals with different start dates: each request sends only that goal\'s tasks and that goal\'s week', async () => {
+      const older = goal({ start_date: '2026-10-14' }); // week 4 on 2026-11-04
+      const newer = goal({ start_date: '2026-11-04' }); // week 1
+      const olderTask = inGoal(older, { week_of: 2 });
+      const newerTask = inGoal(newer, { week_of: 1 });
+      setup([olderTask, newerTask], [older, newer]);
+      answer(proposalFor([]));
+      answer(proposalFor([]));
+
+      await ask(older.id);
+      await ask(newer.id);
+
+      expect(sentFacts(0).tasks.map((t) => t.id)).toEqual([olderTask.id]);
+      expect(sentFacts(0).currentWeek).toBe(4);
+      expect(sentFacts(1).tasks.map((t) => t.id)).toEqual([newerTask.id]);
+      expect(sentFacts(1).currentWeek).toBe(1);
+    });
+
+    it('the first goal\'s week is not used for the others (the old mistake)', async () => {
+      const first = goal({ start_date: '2026-09-01' }); // far along
+      const second = goal({ start_date: '2026-11-04' }); // brand new
+      // A week 1 task in the new goal is NOT behind; scored against the first goal's week it would be.
+      const fresh = inGoal(second, { week_of: 1 });
+      setup([inGoal(first, { week_of: 2 }), fresh], [first, second]);
+      model.request.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
+
+      const r = await ask(second.id);
+      expect(r.ok && r.data).toMatchObject({ source: 'rules', currentWeek: 1 });
+      expect(r.ok && r.data.proposal.moves).toEqual([]);
+      expect(r.ok && r.data.proposal.summary).toMatch(/on track/);
+    });
+
+    it('the velocity the model is told is the channel\'s own', async () => {
+      const g = goal();
+      const own = [inGoal(g, { week_of: 4, status: 'done', completed_at: '2026-11-03T00:00:00Z' }), inGoal(g, { week_of: 4 })];
+      const other = goal();
+      setup([...own, inGoal(other, { week_of: 4, status: 'done', completed_at: '2026-11-03T00:00:00Z' })], [g, other]);
+      answer(proposalFor([]));
+      await ask(g.id);
+      const expected = computeVelocity(own, 4, '2026-11-04', []);
+      expect(sentFacts().velocity).toEqual({
+        score: expected.score,
+        trend: expected.trend,
+        risk: expected.risk,
+        pressureStreak: expected.pressureStreak,
+      });
+    });
+
+    it('a move that names a task from another goal is rejected, and the user gets the rule-based proposal', async () => {
+      const a = goal();
+      const b = goal();
+      const aTask = inGoal(a);
+      const bTask = inGoal(b);
+      setup([aTask, bTask], [a, b]);
+      answer(proposalFor([goodMove(bTask)]));
+
+      const r = await ask(a.id);
+      expect(r.ok && r.data).toMatchObject({ source: 'rules' });
+      expect(r.ok && r.data.notice).toMatch(/safety checks/);
+      expect(JSON.stringify(r)).not.toContain(bTask.id);
+    });
+
+    it('titles on screen come from this channel\'s rows only', async () => {
+      const a = goal();
+      const b = goal();
+      const aTask = inGoal(a, { title: 'Alpha title' });
+      const bTask = inGoal(b, { title: 'Beta title' });
+      setup([aTask, bTask], [a, b]);
+      answer(proposalFor([goodMove(aTask)]));
+      const r = await ask(a.id);
+      expect(r.ok && Object.values(r.data.tasks).map((t) => t.title)).toEqual(['Alpha title']);
+      expect(JSON.stringify(sentFacts())).not.toContain('Alpha title');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('a goal with no tasks is rebalanced to an empty, on-track proposal', async () => {
+      const empty = goal();
+      setup([inGoal(goal())], [empty]);
+      answer(proposalFor([]));
+      const r = await ask(empty.id);
+      expect(r.ok && r.data.proposal.moves).toEqual([]);
+      expect(sentFacts().tasks).toEqual([]);
+    });
+
+    it('a goal past week 13 is asked about with its real week, and nothing can be placed', async () => {
+      const old = goal({ start_date: '2026-01-01' }); // plan week 44 on 2026-11-04
+      const task = inGoal(old, { week_of: 12 });
+      setup([task], [old]);
+      model.request.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
+
+      const r = await ask(old.id);
+      expect(r.ok && r.data.currentWeek).toBe(44);
+      expect(r.ok && r.data.proposal.moves).toEqual([]);
+      expect(r.ok && r.data.proposal.warnings.map((w) => w.kind)).toEqual(['cannot_hold']);
+      // Nothing is cut: the task is named as stuck, where it is.
+      expect(r.ok && r.data.proposal.warnings[0].taskIds).toEqual([task.id]);
+    });
+
+    it('a goal that has not started yet is week 1, and a week 1 task is not behind', async () => {
+      const future = goal({ start_date: '2026-12-01' });
+      setup([inGoal(future, { week_of: 1 })], [future]);
+      model.request.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
+      const r = await ask(future.id);
+      expect(r.ok && r.data).toMatchObject({ currentWeek: 1 });
+      expect(r.ok && r.data.proposal.moves).toEqual([]);
+    });
+
+    it('a start date that cannot be read is refused with a plain message', async () => {
+      const broken = goal({ start_date: 'not a date' });
+      setup([inGoal(broken)], [broken]);
+      expect(await ask(broken.id)).toEqual({ ok: false, error: 'Could not work out your plan week.' });
+      expect(model.request).not.toHaveBeenCalled();
+    });
+
+    it('a goal with more unfinished work than the model may be sent falls back to the rule-based proposal', async () => {
+      const big = goal();
+      const tasks = Array.from({ length: MAX_MODEL_TASKS + 1 }, () => inGoal(big, { week_of: 4 }));
+      setup(tasks, [big]);
+      const r = await ask(big.id);
+      expect(model.request).not.toHaveBeenCalled();
+      expect(r.ok && r.data).toMatchObject({ source: 'rules' });
+      expect(r.ok && r.data.notice).toMatch(/too large/);
+    });
+
+    it('another goal\'s work does not count toward the size limit', async () => {
+      const big = goal();
+      const small = goal();
+      setup([...Array.from({ length: MAX_MODEL_TASKS + 5 }, () => inGoal(big, { week_of: 4 })), inGoal(small)], [big, small]);
+      answer(proposalFor([]));
+      const r = await ask(small.id);
+      expect(model.request).toHaveBeenCalledTimes(1);
+      expect(r.ok && r.data).toMatchObject({ source: 'model' });
+    });
   });
 
   it('changes nothing: no insert, update, delete or function call', async () => {
-    const mine = behind();
-    setup([mine]);
-    answer(proposalFor([goodMove(mine)]));
-    await requestModelRebalance({ now: nextNow });
+    const mine = goal();
+    const task = inGoal(mine);
+    setup([task], [mine]);
+    answer(proposalFor([goodMove(task)]));
+    await ask(mine.id);
     expect(db.inserts).toHaveLength(0);
     expect(db.updates).toHaveLength(0);
     expect(db.rpcCalls).toHaveLength(0);
@@ -283,25 +496,29 @@ describe('requestModelRebalance (the "Ask Claude" click)', () => {
     expect(db.tasks[0]).toMatchObject({ week_of: 2, status: 'todo', completed_at: null });
   });
 
-  it('limits one user to a request every 20 seconds, and the limit counts a failed request', async () => {
-    setup([behind()]);
+  it('limits one user to a request every 20 seconds across all their channels, and counts a failed request', async () => {
+    const a = goal();
+    const b = goal();
+    setup([inGoal(a), inGoal(b)], [a, b]);
     const start = nextNow();
     model.request.mockResolvedValue({ ok: false, reason: 'unavailable' });
 
-    expect((await requestModelRebalance({ now: () => start })).ok).toBe(true);
-    expect(await requestModelRebalance({ now: () => start + 19_000 })).toEqual({
+    expect((await requestModelRebalance(a.id, { now: () => start })).ok).toBe(true);
+    // Asking about the other channel straight away does not get round the limit.
+    expect(await requestModelRebalance(b.id, { now: () => start + 19_000 })).toEqual({
       ok: false,
       error: 'Please wait a few seconds before asking again.',
     });
     expect(model.request).toHaveBeenCalledTimes(1);
-    expect((await requestModelRebalance({ now: () => start + 21_000 })).ok).toBe(true);
+    expect((await requestModelRebalance(b.id, { now: () => start + 21_000 })).ok).toBe(true);
     expect(model.request).toHaveBeenCalledTimes(2);
   });
 
   it('falls back to the rule-based proposal with a notice when Claude fails', async () => {
-    setup([behind()]);
+    const mine = goal();
+    setup([inGoal(mine)], [mine]);
     model.request.mockResolvedValueOnce({ ok: false, reason: 'rate_limited' });
-    const r = await requestModelRebalance({ now: nextNow });
+    const r = await ask(mine.id);
     expect(r.ok && r.data).toMatchObject({ source: 'rules' });
     expect(r.ok && r.data.notice).toMatch(/busy/);
   });

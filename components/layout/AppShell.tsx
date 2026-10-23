@@ -9,15 +9,14 @@ import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
 import { resolveChannel } from '@/lib/utils/channelViews';
 import { ALL_CHANNELS, type ChannelViews } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
-import type { RebalanceProposalView, TaskMoveChains } from '@/types/rebalance';
+import type { TaskMoveChains } from '@/types/rebalance';
 import type { WorkspaceView } from './panels';
 
 interface AppShellProps {
-  // One view (feed and velocity) per active goal channel plus all channels, built on the server from the
-  // user's own data (see lib/utils/channelViews.ts). The sidebar only chooses between them.
+  // One view (feed, velocity and rebalance proposal) per active goal channel plus all channels, built on the
+  // server from the user's own data (see lib/utils/channelViews.ts). The sidebar only chooses between them.
   views: ChannelViews;
   connectedApps: ConnectedAppPublic[];
-  rebalance: RebalanceProposalView | null;
   // Each task's moves, from one history query on the page. Read by the focus card and the drawer.
   moveChains: TaskMoveChains;
 }
@@ -25,7 +24,7 @@ interface AppShellProps {
 // Owns the mobile view selection, the selected goal channel and whether the rebalance drawer is open. The
 // initial state is constant (feed panel, all channels), so the server render and first client render match
 // (no hydration mismatch).
-export function AppShell({ views, connectedApps, rebalance, moveChains }: AppShellProps) {
+export function AppShell({ views, connectedApps, moveChains }: AppShellProps) {
   const [view, setView] = useState<WorkspaceView>('feed');
   const [selected, setSelected] = useState<string>(ALL_CHANNELS);
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
@@ -60,7 +59,8 @@ export function AppShell({ views, connectedApps, rebalance, moveChains }: AppShe
       />
       <ConnectedStackPanel
         connectedApps={connectedApps}
-        rebalance={rebalance}
+        rebalance={channel.rebalance}
+        rebalanceHint={channel.rebalanceHint}
         onOpenRebalance={() => setRebalanceOpen(true)}
         className={panelClass('stack')}
       />
@@ -69,7 +69,9 @@ export function AppShell({ views, connectedApps, rebalance, moveChains }: AppShe
       <RebalanceDrawer
         open={rebalanceOpen}
         onClose={() => setRebalanceOpen(false)}
-        view={rebalance}
+        view={channel.rebalance}
+        channelId={channel.rebalanceChannelId}
+        hint={channel.rebalanceHint}
         moveChains={moveChains}
       />
     </div>
