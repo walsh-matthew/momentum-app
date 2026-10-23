@@ -78,6 +78,15 @@ export const parseWizardInput = (raw: unknown) => parseWith(WizardInputSchema, r
 // Entry point for any task generator's output, stub or model.
 export const parseTaskPlan = (raw: unknown) => parseWith(TaskPlanSchema, raw);
 
+// A wizard plan is the first week only; later weeks belong to rebalancing (§5 rule 1). parseTaskPlan
+// accepts any week from 1 to PLAN_WEEKS, so a plan that places work later is rejected here, never moved.
+export function parseWeekOnePlan(raw: unknown): ParseResult<TaskPlan> {
+  const parsed = parseTaskPlan(raw);
+  if (!parsed.ok) return parsed;
+  if (parsed.data.tasks.some((t) => t.weekOf !== 1)) return { ok: false, error: 'A new goal starts with week 1 tasks only.' };
+  return parsed;
+}
+
 // ---------------------------------------------------------------------------
 // Stub generator
 // ---------------------------------------------------------------------------

@@ -8,11 +8,17 @@
 // database: a trigger rejects any change to status or completed_at that is not made by the
 // authenticated owner, so even the service role cannot complete a task.
 //
+// The wizard's week 1 plan is also written here (MOM-35): generateWeekOnePlan asks Claude and saves
+// nothing; createGoalWithWeekOnePlan saves the goal and its tasks in one database call. Neither sets
+// status or completed_at: every new task is 'todo' and only the user ticks it.
+//
 // Rebalancing moves tasks between weeks and nothing else (§5 rule 1, §10): this module never
 // deletes a task, and applyRebalance never touches status or completed_at. Each move also lands in
 // task_rebalance_history (migration 003), written by the same database call that moves the task.
 
 import { requestRebalanceFromModel, type ModelRebalanceFailure } from '@/lib/ai/rebalance';
+import { requestWeekOnePlanFromModel, type ModelTaskPlanFailure } from '@/lib/ai/taskPlan';
+import { parseWeekOnePlan, parseWizardInput, type TaskPlan } from '@/lib/goals/taskPlan';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import {
   MAX_MODEL_TASKS,
@@ -26,6 +32,7 @@ import {
 import { computeVelocity, currentPlanWeek, type VelocitySnapshot } from '@/lib/utils/velocity';
 import {
   TASK_STATUSES,
+  type GoalChannel,
   type MicroTask,
   type TaskRebalanceHistory,
   type TaskStatus,
@@ -36,7 +43,7 @@ import {
   type RebalanceProposalView,
   type RebalanceSkippedMove,
 } from '@/types/rebalance';
-import { listGoalChannels } from './goals';
+import { MAX_KEY_ATTEMPTS, UNIQUE_VIOLATION, buildNewGoalFields, channelKeyFor, listGoalChannels } from './goals';
 import type { ServiceResult } from './result';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -302,4 +309,115 @@ export async function applyRebalance(rawProposal: unknown): Promise<ServiceResul
   const skippedIds = new Set(skipped.map((s) => s.taskId));
   const moved = moves.map((move) => move.taskId).filter((id) => !skippedIds.has(id));
   return { ok: true, data: { moved, skipped } };
+}
+
+// ---------------------------------------------------------------------------
+// The wizard's week 1 plan (MOM-35)
+// ---------------------------------------------------------------------------
+
+// Why Claude's plan was not used. Fixed wording from our own code: nothing the model or the provider
+// wrote is ever shown. The wizard offers a retry next to every one of these, and a starter plan the
+// user can choose themselves; nothing is substituted for them.
+const PLAN_FAILURE_MESSAGES: Record<ModelTaskPlanFailure | 'invalid', string> = {
+  not_configured: "Claude plans aren't set up on the server yet.",
+  refused: 'Claude declined to write a plan.',
+  rate_limited: 'Claude is busy right now.',
+  unavailable: 'Claude could not be reached.',
+  bad_output: "Claude's answer could not be read.",
+  invalid: "Claude's plan did not pass our checks, so none of it was used.",
+};
+
+// One model request per user per 20 seconds; each call is a paid request. Like requestModelRebalance
+// this is per server instance and best effort (BACKLOG.md), and it counts failed requests too.
+const PLAN_REQUEST_COOLDOWN_MS = 20_000;
+const lastPlanRequestAt = new Map<string, number>();
+
+export interface GeneratedWeekOnePlan {
+  plan: TaskPlan;
+  model: string;
+}
+
+// A user clicked "Generate" in the goal wizard. Reachable from a Server Action, so it validates the
+// answers, authenticates and rate-limits. It reads and writes nothing in the database: the plan is only
+// shown to the user, and saved later by createGoalWithWeekOnePlan if they confirm it.
+//
+// The model sees only the wizard's answers. Its raw JSON goes through parseTaskPlan() unchanged (via
+// parseWeekOnePlan, which also insists on week 1), so a status, an unknown task type, a week 14 or an
+// empty plan is rejected rather than repaired.
+export async function generateWeekOnePlan(
+  rawInput: unknown,
+  deps: { now?: () => number } = {},
+): Promise<ServiceResult<GeneratedWeekOnePlan>> {
+  const parsedInput = parseWizardInput(rawInput);
+  if (!parsedInput.ok) return { ok: false, error: parsedInput.error };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) return { ok: false, error: 'Sign in to generate a plan.' };
+
+  const now = (deps.now ?? Date.now)();
+  const last = lastPlanRequestAt.get(auth.user.id);
+  if (last !== undefined && now - last < PLAN_REQUEST_COOLDOWN_MS) {
+    return { ok: false, error: 'Please wait a few seconds before asking again.' };
+  }
+  // Set before the call, so a failing or slow request still counts.
+  lastPlanRequestAt.set(auth.user.id, now);
+
+  const answer = await requestWeekOnePlanFromModel(parsedInput.data);
+  if (!answer.ok) return { ok: false, error: PLAN_FAILURE_MESSAGES[answer.reason] };
+
+  const plan = parseWeekOnePlan(answer.raw);
+  if (!plan.ok) return { ok: false, error: PLAN_FAILURE_MESSAGES.invalid };
+  return { ok: true, data: { plan: plan.data, model: answer.model } };
+}
+
+export interface CreatedGoalWithPlan {
+  goal: GoalChannel;
+  tasksSaved: number;
+}
+
+// A user confirmed the wizard. Saves the goal and its week 1 tasks together or not at all: one
+// create_goal_with_week_one_plan call, which is one database transaction (migration 009). It runs as the
+// signed-in user through the anon-key client, so RLS applies, and never as the service role.
+//
+// Reachable from a Server Action, so both arguments are validated again here, whatever the wizard did.
+// The plan may have come from Claude or from the starter plan the user chose; it is held to the same
+// rules. Nothing passes a user id, a status or a completion time: the function takes the owner from the
+// session and makes every task 'todo' in week 1.
+export async function createGoalWithWeekOnePlan(
+  rawInput: unknown,
+  rawPlan: unknown,
+): Promise<ServiceResult<CreatedGoalWithPlan>> {
+  const parsedInput = parseWizardInput(rawInput);
+  if (!parsedInput.ok) return { ok: false, error: parsedInput.error };
+  const parsedPlan = parseWeekOnePlan(rawPlan);
+  if (!parsedPlan.ok) return { ok: false, error: parsedPlan.error };
+  const input = parsedInput.data;
+
+  const fields = buildNewGoalFields(input);
+  if (!fields.ok) return fields;
+
+  const supabase = await createSupabaseServerClient();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) return { ok: false, error: 'Sign in to create a goal.' };
+
+  const tasks = parsedPlan.data.tasks.map((t) => ({ title: t.title, task_type: t.taskType, minutes: t.minutes }));
+  for (let attempt = 1; attempt <= MAX_KEY_ATTEMPTS; attempt++) {
+    const { data, error } = await supabase.rpc('create_goal_with_week_one_plan', {
+      p_channel_key: channelKeyFor(input.title, attempt),
+      p_title: fields.data.title,
+      p_goal_type: fields.data.goal_type,
+      p_preferences: fields.data.preferences,
+      p_criteria: fields.data.criteria,
+      p_start_date: fields.data.start_date,
+      p_target_date: fields.data.target_date,
+      p_tasks: tasks,
+    });
+    if (!error && data) return { ok: true, data: { goal: data, tasksSaved: tasks.length } };
+    // A failed call rolled back as a whole, so retrying with another key cannot leave anything behind.
+    if (error?.code === UNIQUE_VIOLATION) continue;
+    console.error('[wizard-plan] could not save the goal and plan', { code: error?.code ?? 'no_row' });
+    return { ok: false, error: 'Could not save your goal and plan. Nothing was saved.' };
+  }
+  return { ok: false, error: 'You already have goals with similar names. Try a different title.' };
 }
