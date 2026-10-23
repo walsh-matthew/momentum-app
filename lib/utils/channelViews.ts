@@ -67,8 +67,10 @@ export function buildChannelViews(
   return { channels: active.map((g) => ({ id: g.id, title: g.title })), byChannel };
 }
 
-// The view to show for a selection. A selection that is no longer a channel (the goal was paused, or the page
-// was refreshed after it changed) falls back to all channels instead of showing nothing.
+// The view to show for a selection. The selection comes from the address bar (lib/utils/channelParam.ts), so it
+// is only ever used to choose among the views built above from the signed-in user's own data. A selection that
+// is no longer a channel (the goal was paused, the id is mistyped or belongs to someone else, or the page was
+// refreshed after it changed) falls back to all channels instead of showing nothing.
 export function resolveChannel(views: ChannelViews, selected: string): string {
   return Object.hasOwn(views.byChannel, selected) ? selected : ALL_CHANNELS;
 }

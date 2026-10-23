@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The sidebar's channel selection in a DOM (MOM-44): the feed and the velocity hero follow the channel the
+// The sidebar's channel selection in a DOM (MOM-44, MOM-88): the feed and the velocity hero follow the channel the
 // user picks, "All channels" is the default, and picking a channel never touches a task. These render the real
 // AppShell, sidebar, feed and hero with views built by the real buildChannelViews; only the server actions
 // behind the buttons are replaced. The views themselves are covered in tests/channel-views.test.ts.
@@ -8,9 +8,11 @@
 // Completion is human-only (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6): every test that switches channel
 // also checks nothing was ticked, reopened or moved.
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '@/components/layout/AppShell';
+import { withChannelParam } from '@/lib/utils/channelParam';
 import { buildChannelViews } from '@/lib/utils/channelViews';
 import { EMPTY_CHANNEL_VIEWS } from '@/types/channelViews';
 import type { MicroTask } from '@/types/database.types';
@@ -35,6 +37,31 @@ vi.mock('@/app/actions/goals', () => ({
 }));
 vi.mock('@/app/actions/auth', () => ({ signOutAction: actions.signOutAction, authenticate: vi.fn() }));
 vi.mock('@/app/actions/integrations', () => ({ toggleConnectedApp: actions.toggleConnectedApp }));
+
+// The selected channel is the ?channel= in the address bar (MOM-88). Next.js keeps useSearchParams in sync with the
+// browser's own history API (pushState, replaceState and the back button; see the Next docs, "Shallow routing on
+// the client"). jsdom has no Next router, so this stand-in does the same job: it reads the live URL and re-renders
+// when it changes. That integration itself is Next's, not ours, and is not exercised here.
+vi.mock('next/navigation', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const subscribe = (notify: () => void) => {
+    window.addEventListener('popstate', notify);
+    window.addEventListener('test:url-changed', notify);
+    return () => {
+      window.removeEventListener('popstate', notify);
+      window.removeEventListener('test:url-changed', notify);
+    };
+  };
+  const read = () => window.location.search;
+  return { useSearchParams: () => new URLSearchParams(useSyncExternalStore(subscribe, read, read)) };
+});
+
+// pushState does not notify anyone by itself; Next's router does, so tell the stand-in above. Patched once.
+const realPushState = window.history.pushState.bind(window.history);
+window.history.pushState = (...args: Parameters<History['pushState']>) => {
+  realPushState(...args);
+  window.dispatchEvent(new Event('test:url-changed'));
+};
 
 const TODAY = '2026-10-23';
 let n = 0;
@@ -94,7 +121,10 @@ const channelButton = (name: string) => sidebar().getByRole('button', { name });
 const current = () => sidebar().getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page');
 const bodyText = () => document.body.textContent ?? '';
 
-beforeEach(() => Object.values(actions).forEach((fn) => fn.mockReset()));
+beforeEach(() => {
+  Object.values(actions).forEach((fn) => fn.mockReset());
+  window.history.replaceState(null, '', '/');
+});
 afterEach(cleanup);
 
 describe('the sidebar lists the user\'s real channels', () => {
@@ -395,5 +425,218 @@ describe('rebalancing follows the selected channel', () => {
       expect(actions.askClaudeToRebalance).not.toHaveBeenCalled();
       expect(actions.toggleTaskStatus).not.toHaveBeenCalled();
     });
+  });
+});
+
+// MOM-88: the selected channel survives a reload because it is in the address bar.
+describe('the selected channel is kept in the address bar', () => {
+  const careerId = 'career';
+  const sideId = 'side';
+  const views = () => buildChannelViews(goals, tasks, [], TODAY);
+  const here = () => `${window.location.pathname}${window.location.search}`;
+  const renderAt = (search: string, v = views()) => {
+    window.history.replaceState(null, '', `/${search}`);
+    return renderShell(v);
+  };
+
+  describe('opening the page with a stored selection', () => {
+    it('lands on that channel straight away, as a reload or a shared link would', () => {
+      renderAt(`?channel=${careerId}`);
+      expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
+      expect(screen.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
+      expect(bodyText()).not.toContain('Side focus task');
+      expect(velocity()!.textContent).toContain('Week 5');
+    });
+
+    it('lands on the other channel just as well', () => {
+      renderAt(`?channel=${sideId}`);
+      expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
+      expect(screen.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
+      expect(velocity()!.textContent).toContain('Week 1');
+    });
+
+    it('starts on All channels when there is nothing stored', () => {
+      renderAt('');
+      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+    });
+
+    it('is decided while rendering, so the server HTML and the first browser render agree (no flash, no hydration warning)', () => {
+      window.history.replaceState(null, '', `/?channel=${careerId}`);
+      const ui = <AppShell views={views()} connectedApps={[]} moveChains={{}} />;
+
+      const html = renderToString(ui);
+      expect(html).toContain('Career open task');
+      expect(html).not.toContain('Side focus task');
+
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = html;
+      render(ui, { container, hydrate: true });
+      expect(errors.mock.calls.map((c) => String(c[0]))).toEqual([]);
+      errors.mockRestore();
+      expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
+    });
+
+    it('does not call a server action just by opening on a channel', () => {
+      renderAt(`?channel=${careerId}`);
+      for (const fn of Object.values(actions)) expect(fn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('choosing a channel updates the address', () => {
+    it('puts the channel in the address, and clears it again for All channels', () => {
+      renderAt('');
+      fireEvent.click(channelButton('Career Pivot'));
+      expect(here()).toBe(`/?channel=${careerId}`);
+      fireEvent.click(channelButton('Side Project'));
+      expect(here()).toBe(`/?channel=${sideId}`);
+      fireEvent.click(channelButton('All channels'));
+      expect(here()).toBe('/');
+      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+    });
+
+    it('keeps any other parameters in the address', () => {
+      renderAt('?utm_source=mail&channel=side');
+      fireEvent.click(channelButton('Career Pivot'));
+      expect(new URLSearchParams(window.location.search).get('utm_source')).toBe('mail');
+      expect(new URLSearchParams(window.location.search).get('channel')).toBe(careerId);
+      fireEvent.click(channelButton('All channels'));
+      expect(here()).toBe('/?utm_source=mail');
+    });
+
+    it('does not add a history entry when the address would not change', () => {
+      renderAt(`?channel=${careerId}`);
+      const before = window.history.length;
+      fireEvent.click(channelButton('Career Pivot'));
+      fireEvent.click(channelButton('Career Pivot'));
+      expect(window.history.length).toBe(before);
+      fireEvent.click(channelButton('Side Project'));
+      expect(window.history.length).toBe(before + 1);
+    });
+
+    it('the back button steps back through the choices', async () => {
+      renderAt('');
+      fireEvent.click(channelButton('Career Pivot'));
+      fireEvent.click(channelButton('Side Project'));
+      expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
+
+      window.history.back();
+      await waitFor(() => expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']));
+      expect(screen.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
+
+      window.history.back();
+      await waitFor(() => expect(current().map((b) => b.textContent)).toEqual(['All channels']));
+    });
+
+    it('fetches nothing and runs no server action', () => {
+      renderAt('');
+      fireEvent.click(channelButton('Career Pivot'));
+      fireEvent.click(channelButton('All channels'));
+      for (const fn of Object.values(actions)) expect(fn).not.toHaveBeenCalled();
+    });
+
+    it('still takes a phone to the feed', () => {
+      renderAt('');
+      fireEvent.click(screen.getByRole('button', { name: 'Channels' }));
+      fireEvent.click(channelButton('Side Project'));
+      expect(screen.getByRole('main').className).not.toMatch(/(^|\s)hidden(\s|$)/);
+      expect(here()).toBe(`/?channel=${sideId}`);
+    });
+  });
+
+  describe('a stored selection that is not one of the user\'s channels falls back to All channels', () => {
+    it.each([
+      ['an id that does not exist', '?channel=00000000-0000-4000-8000-00000000dead'],
+      ['an id with the wrong case', '?channel=CAREER'],
+      ['an empty value', '?channel='],
+      ['a name, not an id', '?channel=Career%20Pivot'],
+      ['an object property name', '?channel=toString'],
+      ['the prototype key', '?channel=__proto__'],
+      ['a constructor name', '?channel=constructor'],
+      ['markup', '?channel=%3Cscript%3Ealert(1)%3C%2Fscript%3E'],
+      ['a very long value', `?channel=${'x'.repeat(5000)}`],
+    ])('%s', (_name, search) => {
+      renderAt(search);
+      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+      expect(screen.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
+      expect(velocity()!.textContent).toContain('Choose a channel in the sidebar');
+    });
+
+    it('a repeated parameter uses the first value, and an invalid first value means All channels', () => {
+      renderAt(`?channel=${careerId}&channel=${sideId}`);
+      expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
+      cleanup();
+      renderAt(`?channel=nope&channel=${careerId}`);
+      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+    });
+
+    it('another user\'s goal id is not a channel here, and none of their data is shown', () => {
+      // The page only builds views from the signed-in user's own goals, so a foreign id is simply not in them.
+      const foreign = '99999999-9999-4999-8999-999999999999';
+      renderAt(`?channel=${foreign}`);
+      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+      expect(bodyText()).not.toContain(foreign);
+    });
+
+    it('a goal that has been paused is not a channel, and the page does not show its tasks', () => {
+      const paused = [goals[0], { ...goals[1], status: 'paused' as const }];
+      renderAt(`?channel=${sideId}`, buildChannelViews(paused, tasks, [], TODAY));
+      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+      expect(sidebar().queryByRole('button', { name: 'Side Project' })).toBeNull();
+      expect(bodyText()).not.toContain('Side focus task');
+    });
+
+    it('the stored selection comes back by itself if the goal becomes active again', () => {
+      const paused = [goals[0], { ...goals[1], status: 'paused' as const }];
+      const view = renderAt(`?channel=${sideId}`, buildChannelViews(paused, tasks, [], TODAY));
+      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+      view.rerenderWith(views());
+      expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
+    });
+
+    it('choosing All channels clears an invalid parameter from the address', () => {
+      renderAt('?channel=nope&keep=1');
+      fireEvent.click(channelButton('All channels'));
+      expect(here()).toBe('/?keep=1');
+    });
+
+    it('choosing a real channel replaces an invalid one', () => {
+      renderAt('?channel=nope');
+      fireEvent.click(channelButton('Side Project'));
+      expect(here()).toBe(`/?channel=${sideId}`);
+      expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
+    });
+  });
+
+  describe('the selection survives the page refreshing its data', () => {
+    it('keeps the channel from the address when new data arrives', () => {
+      const view = renderAt(`?channel=${careerId}`);
+      const ticked = tasks.map((t) => (t.title === 'Career open task' ? { ...t, status: 'done' as const, completed_at: '2026-10-23T08:00:00Z' } : t));
+      view.rerenderWith(buildChannelViews(goals, ticked, [], TODAY));
+      expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
+      expect(velocity()!.textContent).toContain('3 of 3 tasks ticked');
+    });
+  });
+});
+
+describe('withChannelParam builds the new address', () => {
+  it.each([
+    ['', 'career', '?channel=career'],
+    ['?channel=side', 'career', '?channel=career'],
+    ['?channel=side', 'all', ''],
+    ['', 'all', ''],
+    ['?a=1', 'career', '?a=1&channel=career'],
+    ['?a=1&channel=side&b=2', 'career', '?a=1&channel=career&b=2'],
+    ['?a=1&channel=side', 'all', '?a=1'],
+    ['?channel=a&channel=b', 'career', '?channel=career'],
+    ['?channel=a&channel=b', 'all', ''],
+    ['channel=side', 'career', '?channel=career'],
+    ['?q=a%20b', 'career', '?q=a+b&channel=career'],
+  ])('%j with %s gives %j', (search, id, expected) => {
+    expect(withChannelParam(search, id)).toBe(expected);
+  });
+
+  it('encodes an id instead of trusting it', () => {
+    expect(withChannelParam('', 'a&b=c')).toBe('?channel=a%26b%3Dc');
   });
 });
