@@ -156,6 +156,7 @@ button:disabled {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 .burnout-dot {
   width: 6px;
@@ -468,6 +469,535 @@ button:disabled {
   background: rgb(198 243 109 / 9%);
   color: var(--lime);
 }
+}
+
+/* ---- Layout and navigation (MOM-77) ---------------------------------------------------------------------
+   Ported from the wireframe's .desktop-*, .mobile-header, .goal-builder-* and .adaptive-sheet rules.
+   Below 1200px the page is one scrolling column (the document scrolls; nothing inside it does) with a sticky
+   header. From 1200px it is three columns, 232px / fluid / 326px, with sticky sidebars. */
+@layer components {
+  .desktop-shell {
+    display: block;
+    min-height: 100dvh;
+  }
+  .desktop-sidebar {
+    display: none;
+  }
+  /* The right column wrapper carries no semantics. Below 1200px it disappears so the nudge sheet is positioned
+     against the viewport and the connected stack (which has its own page on small screens) stays hidden. */
+  .desktop-right {
+    display: contents;
+  }
+  .desktop-workspace {
+    display: contents;
+  }
+  .workspace-content {
+    width: 100%;
+    max-width: 640px;
+    min-height: 100dvh;
+    margin: 0 auto;
+    padding: 0 16px 280px;
+  }
+
+  /* Mobile header: sticky, so the logo, risk badge and account links stay reachable while the feed scrolls. */
+  .mobile-header {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 -16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgb(255 255 255 / 6%);
+    background: rgb(17 21 19 / 92%);
+    backdrop-filter: blur(10px);
+  }
+  .mobile-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 44px;
+    color: var(--foreground);
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.04em;
+  }
+  .brand-mark {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 11px;
+    background: var(--lime);
+    color: #1a2412;
+  }
+  .avatar-button {
+    position: relative;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    place-items: center;
+    border-radius: 50%;
+    color: #e5e9e1;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .avatar-button > span {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 50%;
+    background: linear-gradient(145deg, #414944, #252c29);
+  }
+  .icon-link {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border-radius: 12px;
+    color: var(--muted);
+  }
+  .icon-link:hover,
+  .icon-link[aria-current='page'] {
+    background: rgb(255 255 255 / 6%);
+    color: var(--foreground);
+  }
+  .icon-link[aria-current='page'] {
+    box-shadow: inset 0 -2px var(--lime);
+  }
+
+  /* Goal-builder banner: the copy is desktop only; the two actions stay on small screens, where there is no sidebar. */
+  .goal-builder-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin: 16px 0 0;
+  }
+  .goal-builder-copy {
+    display: none;
+    align-items: flex-start;
+    gap: 13px;
+    min-width: 0;
+  }
+  .goal-builder-icon {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    place-items: center;
+    border: 1px solid rgb(198 243 109 / 15%);
+    border-radius: 11px;
+    background: rgb(198 243 109 / 9%);
+    color: var(--lime);
+  }
+  .goal-builder-eyebrow {
+    margin: 0;
+    color: #c1d79c;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .goal-builder-copy h2 {
+    margin: 5px 0 0;
+    color: #f0f3eb;
+    font-size: 15px;
+    font-weight: 620;
+    letter-spacing: -0.035em;
+  }
+  .goal-builder-description {
+    margin: 5px 0 0;
+    color: #a9b3ab;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .goal-builder-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .builder-chip {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid rgb(255 255 255 / 14%);
+    border-radius: 11px;
+    background: rgb(12 16 14 / 55%);
+    padding: 0 12px;
+    color: #d3dad4;
+    font-size: 12px;
+    font-weight: 550;
+    white-space: nowrap;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      color 160ms ease;
+  }
+  .builder-chip svg {
+    width: 14px;
+    height: 14px;
+    color: #a9c77c;
+  }
+  .builder-chip:hover {
+    border-color: rgb(198 243 109 / 35%);
+    background: rgb(198 243 109 / 9%);
+    color: #eef4e3;
+  }
+
+  /* Goal cards (the in-feed goal picker on small screens). */
+  .goal-card {
+    position: relative;
+    display: block;
+    min-width: 0;
+    border: 1px solid rgb(255 255 255 / 7%);
+    border-radius: 16px;
+    background: var(--surface-soft);
+    padding: 12px;
+    color: var(--foreground);
+  }
+  .goal-card[aria-current='page'] {
+    border-color: rgb(198 243 109 / 45%);
+    background: rgb(198 243 109 / 6%);
+  }
+  .goal-count {
+    color: var(--foreground);
+    font-size: 12px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .goal-count span {
+    color: var(--muted);
+    font-weight: 450;
+  }
+
+  /* Connected stack card (right column). */
+  .connected-stack {
+    border: 1px solid rgb(255 255 255 / 8%);
+    border-radius: 20px;
+    background: linear-gradient(155deg, #1d2421, #171c1b 76%);
+    box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+  }
+  .right-panel-eyebrow {
+    margin: 0;
+    color: #a9b3ab;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+
+  /* Rebalance nudge: a bottom sheet below 1200px, a card in the right column from 1200px. */
+  .adaptive-sheet {
+    position: fixed;
+    z-index: 20;
+    bottom: 0;
+    left: 50%;
+    width: min(100%, 520px);
+    transform: translateX(-50%);
+    border: 1px solid rgb(255 255 255 / 9%);
+    border-bottom: 0;
+    border-radius: 23px 23px 0 0;
+    background: linear-gradient(160deg, #202724 0%, #191e1d 62%);
+    padding: 10px 20px calc(17px + env(safe-area-inset-bottom));
+    box-shadow:
+      0 -16px 50px rgb(0 0 0 / 28%),
+      inset 0 1px rgb(255 255 255 / 4%);
+    animation: sheet-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .sheet-handle {
+    width: 34px;
+    height: 4px;
+    margin: 0 auto 17px;
+    border-radius: 99px;
+    background: rgb(255 255 255 / 22%);
+  }
+  .ai-label {
+    color: var(--lime);
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.13em;
+  }
+  .ai-new {
+    border-radius: 4px;
+    background: rgb(255 255 255 / 9%);
+    padding: 2px 6px;
+    color: #c0c8c1;
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+  }
+
+  /* Sidebar pieces (desktop). */
+  .sidebar-label {
+    color: #98a39b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .desktop-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    width: fit-content;
+    color: var(--foreground);
+    font-size: 18px;
+    font-weight: 650;
+    letter-spacing: -0.055em;
+  }
+  .desktop-brand .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+  .desktop-nav-link {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 11px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    padding: 0 11px;
+    color: #b0b9b2;
+    font-size: 13px;
+    font-weight: 550;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease;
+  }
+  .desktop-nav-link svg {
+    width: 16px;
+    height: 16px;
+    color: #909b93;
+  }
+  .desktop-nav-link:hover {
+    background: rgb(255 255 255 / 4%);
+    color: var(--foreground);
+  }
+  .desktop-nav-link[aria-current='page'] {
+    border-color: rgb(198 243 109 / 22%);
+    background: rgb(198 243 109 / 8%);
+    color: #eef4e3;
+    font-weight: 650;
+  }
+  .desktop-nav-link[aria-current='page'] svg {
+    color: var(--lime);
+  }
+  .sidebar-goal {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid rgb(255 255 255 / 8%);
+    border-radius: 13px;
+    background: rgb(255 255 255 / 2%);
+    padding: 11px 11px 10px;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease;
+  }
+  .sidebar-goal:hover {
+    border-color: rgb(255 255 255 / 14%);
+    background: rgb(255 255 255 / 4%);
+  }
+  .sidebar-goal:focus-within {
+    outline: 2px solid var(--lime);
+    outline-offset: 2px;
+  }
+  .sidebar-goal[data-active='true'] {
+    border-color: rgb(198 243 109 / 45%);
+    background: rgb(198 243 109 / 6%);
+  }
+  .sidebar-goal-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sidebar-goal-top .channel-icon {
+    width: 25px;
+    height: 25px;
+  }
+  .sidebar-goal-count {
+    color: #dce4d9;
+    font-size: 12px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The button is the title only (its accessible name is the goal's name); its ::after stretches the click and
+     touch target over the whole card. */
+  .sidebar-goal-name {
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #e0e6df;
+    font-size: 13px;
+    font-weight: 550;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sidebar-goal-name::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  .sidebar-goal-name:focus-visible {
+    outline: none;
+  }
+  .sidebar-goal[data-active='true'] .sidebar-goal-name {
+    color: var(--foreground);
+    font-weight: 700;
+  }
+  .sidebar-footer {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 15px 9px 3px;
+    color: #a2ada5;
+    font-size: 12px;
+  }
+  .sidebar-footer-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--lime);
+    box-shadow: 0 0 8px rgb(198 243 109 / 35%);
+  }
+
+  @media (min-width: 1200px) {
+    body {
+      background: #0a0d0c;
+    }
+    .desktop-shell {
+      display: grid;
+      grid-template-columns: 232px minmax(0, 1fr) 326px;
+      align-items: start;
+      gap: 30px;
+      width: 100%;
+      max-width: 1680px;
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding: 30px 32px;
+      background: radial-gradient(ellipse at 47% -12%, rgb(169 206 114 / 5%), transparent 44%);
+    }
+    .desktop-shell[data-columns='2'] {
+      grid-template-columns: 232px minmax(0, 1fr);
+    }
+    .desktop-sidebar {
+      position: sticky;
+      top: 30px;
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100dvh - 60px);
+      max-height: calc(100dvh - 60px);
+      overflow-y: auto;
+      padding: 4px 20px 0 0;
+      border-right: 1px solid rgb(255 255 255 / 7%);
+    }
+    .desktop-status-stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 22px;
+    }
+    .desktop-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-top: 30px;
+    }
+    .desktop-nav .sidebar-label {
+      margin: 0 0 8px 10px;
+    }
+    .desktop-channel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-top: 28px;
+    }
+    .sidebar-section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 1px 4px 10px;
+    }
+    .desktop-workspace {
+      display: block;
+      min-width: 0;
+    }
+    .workspace-content {
+      max-width: none;
+      min-height: auto;
+      margin: 0;
+      padding: 27px 0 56px;
+    }
+    .mobile-header,
+    .mobile-goal-channels {
+      display: none;
+    }
+    .goal-builder-banner {
+      margin-bottom: 30px;
+      border: 1px solid rgb(198 243 109 / 14%);
+      border-radius: 18px;
+      background: linear-gradient(110deg, rgb(198 243 109 / 8%), rgb(255 255 255 / 2%) 64%);
+      padding: 19px 21px;
+    }
+    .goal-builder-copy {
+      display: flex;
+    }
+    .goal-builder-actions {
+      justify-content: flex-end;
+    }
+    .builder-chip {
+      min-height: 36px;
+    }
+    .desktop-right {
+      position: sticky;
+      top: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-top: 27px;
+    }
+    .adaptive-sheet {
+      position: relative;
+      bottom: auto;
+      left: auto;
+      width: 100%;
+      transform: none;
+      border: 1px solid rgb(255 255 255 / 8%);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+      animation: none;
+    }
+    .sheet-handle {
+      display: none;
+    }
+  }
+}
+
+@keyframes sheet-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -84,3 +84,19 @@ export function summarizeAllGoalProgress(
     return summarize(goal, entry?.done ?? 0, entry?.total ?? 0, asOf);
   });
 }
+
+// Progress for the goals that are channels on the home page (MOM-77): the active ones only, in the order given,
+// from the same snapshot the feeds are built from. A paused or finished goal is not listed and its tasks are not
+// counted, matching buildChannelViews. A task is one row however many times it was carried over (a move changes
+// its week, it never copies it), so it counts once.
+export function summarizeActiveGoalProgress(
+  goals: readonly ProgressGoal[],
+  tasks: readonly ProgressTask[],
+  asOf: string,
+): GoalProgress[] {
+  return summarizeAllGoalProgress(
+    goals.filter((g) => g.status === 'active'),
+    tasks,
+    asOf,
+  );
+}

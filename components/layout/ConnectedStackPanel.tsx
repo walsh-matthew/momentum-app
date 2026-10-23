@@ -22,6 +22,8 @@ const PANEL_TABS: Record<PanelTab, string> = {
   assistant: 'AI Assistant',
 };
 
+// The right-hand card from 1200px (below that the Connected Apps page and the nudge sheet replace it). Two tabs:
+// the connected apps' switches, and the assistant, which holds the rebalance side card.
 export function ConnectedStackPanel({
   connectedApps,
   rebalance,
@@ -30,13 +32,20 @@ export function ConnectedStackPanel({
   className = '',
 }: ConnectedStackPanelProps) {
   const [tab, setTab] = useState<PanelTab>('stack');
+  const activeCount = connectedApps.filter((a) => a.is_active).length;
 
   return (
-    <aside
-      aria-label="Connected stack and AI assistant"
-      className={`min-h-0 flex-1 flex-col border-border bg-panel lg:flex-none lg:border-l ${className}`}
-    >
-      <div role="tablist" className="grid shrink-0 grid-cols-2 border-b border-border">
+    <aside aria-label="Connected stack and AI assistant" className={`connected-stack hidden min-[1200px]:block ${className}`}>
+      <div className="flex items-center justify-between p-5 pb-3">
+        <div>
+          <p className="right-panel-eyebrow">Your everyday tools</p>
+          <p className="mt-1.5 text-lg font-semibold tracking-[-0.04em]">Connected stack</p>
+        </div>
+        <span className="effort-tag" aria-label={`${activeCount} connected`}>
+          {String(activeCount).padStart(2, '0')}
+        </span>
+      </div>
+      <div role="tablist" className="grid grid-cols-2 border-b border-border">
         {(Object.keys(PANEL_TABS) as PanelTab[]).map((t) => (
           <button
             key={t}
@@ -50,7 +59,7 @@ export function ConnectedStackPanel({
           </button>
         ))}
       </div>
-      <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-muted">
+      <div role="tabpanel" className="p-4 text-sm text-muted">
         {tab === 'stack' ? (
           <IntegrationCardList connectedApps={connectedApps} />
         ) : (

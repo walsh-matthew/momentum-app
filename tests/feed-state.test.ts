@@ -157,10 +157,10 @@ describe('the home page and the empty states (source)', () => {
 
   it('the page asks getCurrentUser first and, with no session, passes the signed-out views without reading anything', () => {
     const page = strip(read('app', 'page.tsx'));
-    expect(page).toContain("import { getCurrentUser } from '@/lib/services/auth'");
+    expect(page).toContain("import { getCurrentUser, type SessionUser } from '@/lib/services/auth'");
     expect(page).toContain('getCurrentUser()');
     expect(page).toContain('SIGNED_OUT_CHANNEL_VIEWS');
-    const check = page.indexOf('await hasSession()');
+    const check = page.indexOf('await sessionUser()');
     expect(check).toBeGreaterThan(-1);
     expect(check).toBeLessThan(page.indexOf('Promise.all'));
     expect(check).toBeLessThan(page.indexOf('buildChannelViews('));
