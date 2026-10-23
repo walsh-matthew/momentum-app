@@ -21,6 +21,7 @@ import { requestWeekOnePlanFromModel, type ModelTaskPlanFailure } from '@/lib/ai
 import { parseWeekOnePlan, parseWizardInput, type TaskPlan } from '@/lib/goals/taskPlan';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { buildFocusFeed } from '@/lib/utils/focusFeed';
+import { summarizeAllGoalProgress } from '@/lib/utils/progress';
 import {
   MAX_MODEL_TASKS,
   buildModelFacts,
@@ -45,6 +46,7 @@ import {
   type RebalanceSkippedMove,
 } from '@/types/rebalance';
 import type { FocusFeed } from '@/types/focusFeed';
+import type { GoalProgress } from '@/types/progress';
 import { MAX_KEY_ATTEMPTS, UNIQUE_VIOLATION, buildNewGoalFields, channelKeyFor, listGoalChannels } from './goals';
 import type { ServiceResult } from './result';
 
@@ -73,6 +75,19 @@ export async function getFocusFeed(): Promise<ServiceResult<FocusFeed>> {
   const tasks = await listMicroTasks();
   if (!tasks.ok) return tasks;
   return { ok: true, data: buildFocusFeed(tasks.data) };
+}
+
+// How far along each of the signed-in user's goals is (MOM-86): tasks done of total, the percentage, and the
+// plan week today falls in. Two reads through the user's own session (RLS scopes both to their rows), then
+// pure counting in summarizeAllGoalProgress. It never writes, so it cannot complete, reopen or move a task;
+// that stays the user's own tick (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6). Goals come in the order
+// listGoalChannels gives them (the default goal first). A goal with no tasks is listed as 0 of 0.
+export async function listGoalProgress(deps: { now?: () => number } = {}): Promise<ServiceResult<GoalProgress[]>> {
+  const [goals, tasks] = await Promise.all([listGoalChannels(), listMicroTasks()]);
+  if (!goals.ok) return goals;
+  if (!tasks.ok) return tasks;
+  const today = new Date((deps.now ?? Date.now)()).toISOString().slice(0, 10);
+  return { ok: true, data: summarizeAllGoalProgress(goals.data, tasks.data, today) };
 }
 
 // The signed-in user's rebalance history, oldest move first, optionally for one task. A task's whole
