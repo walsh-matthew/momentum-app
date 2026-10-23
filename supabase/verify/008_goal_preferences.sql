@@ -1,6 +1,7 @@
 -- Verification for supabase/migrations/008_goal_preferences.sql (MOM-34).
 -- Run in the Supabase SQL Editor or with `supabase db query --linked -f`. Safe to re-run.
 -- Creates two throwaway auth users, checks the seed, the new CHECKs, the insert trigger and RLS as each,
+-- Signup no longer seeds (migration 010), so postgres seeds Career Pivot by hand where this script needs it.
 -- then deletes them. Leaves no data behind: an unexpected error rolls back the whole block.
 
 drop table if exists pg_temp.mom34_results;
@@ -19,10 +20,12 @@ declare
 begin
   insert into auth.users (id, email)
   values (a, 'mom34-verify-a@example.invalid'), (b, 'mom34-verify-b@example.invalid');
+  perform public.seed_career_pivot(a);
+  perform public.seed_career_pivot(b);
   select id into a_seed from public.goal_channels where user_id = a and channel_key = 'career_pivot';
 
   -- -------------------------------------------------------------------------
-  -- Existing rows and the signup seed (as postgres)
+  -- Existing rows and the seed function (as postgres)
   -- -------------------------------------------------------------------------
 
   select count(*) into v from public.goal_channels where user_id = a and goal_type = 'career_pivot' and preferences = '{}'::jsonb and is_default;

@@ -1,6 +1,7 @@
 -- Verification for supabase/migrations/001_initial_schema.sql (MOM-9).
 -- Run in the Supabase SQL Editor. Safe to re-run.
--- Creates two throwaway auth users, checks the signup seed and RLS as each, then deletes them.
+-- Creates two throwaway auth users, checks that signup starts them empty (MOM-19), seeds Career Pivot for each
+-- explicitly as postgres to test the seed function and RLS as each, then deletes them.
 -- Leaves no data behind: the users are deleted at the end, and an unexpected error rolls back the whole block.
 
 drop table if exists pg_temp.mom9_results;
@@ -16,24 +17,53 @@ declare
   a_task_2 uuid;
   v int;
   w int;
+  x int;
   t text;
   res jsonb := '[]';
 begin
   -- -------------------------------------------------------------------------
-  -- Seed and signup trigger (as postgres)
+  -- Signup trigger (as postgres), then the seed function called by hand
   -- -------------------------------------------------------------------------
 
+  -- Was "every existing account has a users row and Career Pivot". Signup no longer seeds (migration 010), so an
+  -- account created after it has no channel; the users row is what every account has.
   select count(*) into v from auth.users;
   select count(*) into w from auth.users u
-  where exists (select 1 from public.users p where p.id = u.id)
-    and exists (select 1 from public.goal_channels g where g.user_id = u.id and g.channel_key = 'career_pivot');
-  res := res || jsonb_build_object('c', 'Backfill: every existing account has a users row and Career Pivot', 'p', v = w, 'd', format('%s of %s', w, v));
+  where exists (select 1 from public.users p where p.id = u.id);
+  res := res || jsonb_build_object('c', 'Backfill: every existing account has a users row', 'p', v = w, 'd', format('%s of %s', w, v));
 
   insert into auth.users (id, email)
   values (a, 'mom9-verify-a@example.invalid'), (b, 'mom9-verify-b@example.invalid');
 
   select count(*) into v from public.users where id in (a, b);
   res := res || jsonb_build_object('c', 'Signup trigger creates users rows', 'p', v = 2, 'd', format('%s of 2', v));
+
+  -- New in MOM-19: a fresh signup starts empty.
+  select count(*) into v from public.goal_channels where user_id in (a, b);
+  select count(*) into w from public.micro_tasks where user_id in (a, b);
+  select count(*) into x from public.task_rebalance_history where user_id in (a, b);
+  res := res || jsonb_build_object('c', 'A fresh signup has no goal channels, tasks or history rows', 'p', v = 0 and w = 0 and x = 0,
+    'd', format('%s channels, %s tasks, %s history rows', v, w, x));
+
+  -- New in MOM-19: the signup trigger function creates the users row and nothing else.
+  select count(*) into v from pg_proc p
+  where p.oid = 'public.handle_new_user()'::regprocedure
+    and p.prosecdef
+    and exists (select 1 from unnest(p.proconfig) cfg where replace(cfg, ' ', '') in ('search_path=""', 'search_path='))
+    and p.prosrc not ilike '%seed%'
+    and p.prosrc ilike '%insert into public.users%';
+  res := res || jsonb_build_object('c', 'handle_new_user inserts the users row only: security definer, empty search_path, no seed call', 'p', v = 1, 'd', format('%s matching definitions', v));
+
+  -- New in MOM-19: the seed function stays for dev seeding, and the API still cannot run it.
+  res := res || jsonb_build_object('c', 'seed_career_pivot still exists but anon and signed-in users cannot execute it', 'p',
+    exists (select 1 from pg_proc where oid = 'public.seed_career_pivot(uuid)'::regprocedure)
+    and not has_function_privilege('anon', 'public.seed_career_pivot(uuid)', 'execute')
+    and not has_function_privilege('authenticated', 'public.seed_career_pivot(uuid)', 'execute'),
+    'd', 'execute privilege checked for anon and authenticated');
+
+  -- The seed is now an explicit step, as in a dev environment: postgres seeds each throwaway account.
+  perform public.seed_career_pivot(a);
+  perform public.seed_career_pivot(b);
 
   select count(*) into v from public.goal_channels
   where user_id in (a, b) and channel_key = 'career_pivot' and title = 'Career Pivot' and status = 'active' and is_default;
@@ -151,6 +181,15 @@ begin
     res := res || jsonb_build_object('c', 'Signed-in users cannot call seed_career_pivot', 'p', false, 'd', 'call succeeded');
   exception when others then
     res := res || jsonb_build_object('c', 'Signed-in users cannot call seed_career_pivot', 'p', sqlstate = '42501', 'd', sqlstate || ' ' || sqlerrm);
+  end;
+
+  -- New in MOM-19: the signup trigger function is a trigger function, so calling it by hand does nothing
+  -- (its EXECUTE grants are a separate question, MOM-65).
+  begin
+    perform public.handle_new_user();
+    res := res || jsonb_build_object('c', 'handle_new_user cannot be run by hand by a signed-in user', 'p', false, 'd', 'call succeeded');
+  exception when others then
+    res := res || jsonb_build_object('c', 'handle_new_user cannot be run by hand by a signed-in user', 'p', sqlstate in ('0A000', '42501'), 'd', sqlstate || ' ' || sqlerrm);
   end;
 
   update public.micro_tasks set status = 'done', completed_at = now() where id = a_task;

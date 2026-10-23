@@ -15,7 +15,7 @@ function compareTimestamps(a: string, b: string): number {
 
 // The order the plan is worked in, matching listMicroTasks: earliest week first, then the earliest due
 // date (undated tasks last), then the oldest. The id is only a final tie-break so the order is stable
-// when the database gives several tasks the same created_at (the signup seed inserts them together).
+// when the database gives several tasks the same created_at (seed_career_pivot and the wizard's week 1 plan insert them together).
 export function compareUnfinished(a: MicroTask, b: MicroTask): number {
   if (a.week_of !== b.week_of) return a.week_of - b.week_of;
   if (a.due_date !== b.due_date) {

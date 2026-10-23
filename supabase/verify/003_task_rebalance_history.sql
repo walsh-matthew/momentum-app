@@ -1,6 +1,7 @@
 -- Verification for supabase/migrations/003_task_rebalance_history.sql (MOM-22).
 -- Run in the Supabase SQL Editor or with `supabase db query --linked -f`. Safe to re-run.
 -- Creates two throwaway auth users, moves tasks as user A, checks the history, then deletes them.
+-- Signup no longer seeds (migration 010), so postgres seeds Career Pivot by hand where this script needs it.
 -- Leaves no data behind: an unexpected error rolls back the whole block.
 
 drop table if exists pg_temp.mom22_results;
@@ -23,6 +24,8 @@ declare
 begin
   insert into auth.users (id, email)
   values (a, 'mom22-verify-a@example.invalid'), (b, 'mom22-verify-b@example.invalid');
+  perform public.seed_career_pivot(a);
+  perform public.seed_career_pivot(b);
 
   -- Seeded Career Pivot tasks: week 2 has 7 unfinished tasks, due dates null or set by the seed.
   select id into a_task from public.micro_tasks where user_id = a and task_type = 'build' and week_of = 2;
@@ -112,7 +115,7 @@ begin
   -- Reading, and the append-only guarantee
   -- -------------------------------------------------------------------------
 
-  -- A's rows: 1 from the signup seed's carry-over (migration 004) plus the 3 moves made above.
+  -- A's rows: 1 from the seed's carry-over (migration 004) plus the 3 moves made above.
   select count(*), count(*) filter (where user_id = a) into v, w from public.task_rebalance_history;
   res := res || jsonb_build_object('c', 'A reads only their own history (4 rows: 1 seed + 3 moves)', 'p', v = 4 and w = 4,
     'd', format('%s rows visible, %s are A''s', v, w));

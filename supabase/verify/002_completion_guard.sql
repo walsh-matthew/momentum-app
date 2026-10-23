@@ -1,6 +1,7 @@
 -- Verification for supabase/migrations/002_completion_guard.sql (MOM-29).
 -- Run in the Supabase SQL Editor or with `supabase db query --linked -f`. Safe to re-run.
 -- Creates one throwaway auth user, checks who can change a task's completion, then deletes the user.
+-- Signup no longer seeds (migration 010), so postgres seeds Career Pivot by hand where this script needs it.
 -- Leaves no data behind: an unexpected error rolls back the whole block.
 
 drop table if exists pg_temp.mom29_results;
@@ -15,6 +16,7 @@ declare
   res jsonb := '[]';
 begin
   insert into auth.users (id, email) values (a, 'mom29-verify-a@example.invalid');
+  perform public.seed_career_pivot(a);
   select id into a_channel from public.goal_channels where user_id = a and channel_key = 'career_pivot';
   select id into a_task from public.micro_tasks where user_id = a and task_type = 'build' and week_of = 2;
 
