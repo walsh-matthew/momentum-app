@@ -9,7 +9,7 @@
 // - A plan is only additive: there is no delete or cut action in the schema.
 
 import { z } from 'zod';
-import { PLAN_WEEKS, TASK_TYPES, type TaskType } from '@/types/database.types';
+import { PLAN_WEEKS, TASK_TYPES, type GoalPreferences, type TaskType } from '@/types/database.types';
 import {
   CONSTRAINTS,
   GOAL_TYPES,
@@ -25,14 +25,29 @@ import {
 export const TITLE_MAX_LENGTH = 80;
 export const DEFAULT_HORIZON_DAYS = 90;
 
-export const WizardInputSchema = z.object({
-  title: z.string().trim().min(1, 'Give the goal a title.').max(TITLE_MAX_LENGTH, 'Keep the title under 80 characters.'),
-  goalType: z.enum(GOAL_TYPES),
-  constraints: z.array(z.enum(CONSTRAINTS)).max(CONSTRAINTS.length),
-  pace: z.enum(PACES).nullable(),
-  reviewPrompts: z.array(z.enum(REVIEW_PROMPTS)).max(REVIEW_PROMPTS.length),
-});
+// goalType, constraints and pace are stored on the goal (migration 008). Criteria are not an input:
+// they come from the goal type (lib/goals/criteria.ts) and always start unticked, so `.strict()` turns
+// away a caller who tries to pass their own, ticked or not.
+export const WizardInputSchema = z
+  .object({
+    title: z.string().trim().min(1, 'Give the goal a title.').max(TITLE_MAX_LENGTH, 'Keep the title under 80 characters.'),
+    goalType: z.enum(GOAL_TYPES),
+    constraints: z.array(z.enum(CONSTRAINTS)).max(CONSTRAINTS.length),
+    pace: z.enum(PACES).nullable(),
+    reviewPrompts: z.array(z.enum(REVIEW_PROMPTS)).max(REVIEW_PROMPTS.length),
+  })
+  .strict();
 export type WizardInput = z.infer<typeof WizardInputSchema>;
+
+// What goal_channels.preferences stores: only the answers given, constraints de-duplicated in the
+// order picked. Review prompts shape the Friday review task, not the goal, so they are not stored.
+export function preferencesFrom(input: Pick<WizardInput, 'constraints' | 'pace'>): GoalPreferences {
+  const preferences: GoalPreferences = {};
+  const constraints = [...new Set(input.constraints)];
+  if (constraints.length > 0) preferences.constraints = constraints;
+  if (input.pace !== null) preferences.pace = input.pace;
+  return preferences;
+}
 
 // Mirrors the micro_tasks columns the generator is allowed to set. `.strict()` rejects extras such as
 // `status`, so a model cannot hand back a task that is already done.

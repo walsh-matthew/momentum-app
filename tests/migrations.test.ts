@@ -9,8 +9,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  CONSTRAINTS,
   CREDENTIAL_STATUSES,
   GOAL_CHANNEL_STATUSES,
+  GOAL_TYPES,
+  PACES,
   INTEGRATION_AUTH_TYPES,
   SHIFT_TYPES,
   TASK_STATUSES,
@@ -50,6 +53,8 @@ describe('CHECK constraints the fake enforces exist in the SQL', () => {
     'task_rebalance_history_weeks_positive',
     'task_rebalance_history_direction',
     'task_rebalance_history_shift_type_check',
+    'goal_channels_goal_type_check',
+    'goal_channels_preferences_shape',
   ])('%s', (name) => expect(all).toMatch(new RegExp(`constraint ${name}\\b`, 'i')));
 
   it('micro_tasks: done exactly when completed_at is set', () => {
@@ -75,6 +80,40 @@ describe('enum values match types/database.types.ts', () => {
   });
   it('shift types', () => {
     expect(inList(sqlOf('003'), 'task_rebalance_history_shift_type_check')).toEqual([...SHIFT_TYPES]);
+  });
+});
+
+// MOM-34: the wizard's answers are stored on goal_channels, and the SQL lists must be the TypeScript ones.
+describe('goal_channels wizard answers (migration 008)', () => {
+  const sql = sqlOf('008');
+
+  it('goal types', () => expect(inList(sql, 'goal_channels_goal_type_check')).toEqual([...GOAL_TYPES]));
+  it('constraints in the preferences check', () => {
+    const list = /<@\s*'\[([^\]]*)\]'::jsonb/.exec(sql)?.[1] ?? '';
+    expect([...list.matchAll(/"([^"]+)"/g)].map((m) => m[1])).toEqual([...CONSTRAINTS]);
+  });
+  it('paces in the preferences check', () => {
+    const list = /\(preferences ->> 'pace'\)\s+in\s*\(([^)]*)\)/.exec(sql)?.[1] ?? '';
+    expect([...list.matchAll(/'([^']+)'/g)].map((m) => m[1])).toEqual([...PACES]);
+  });
+  it('preferences allow only the two answers', () => {
+    expect(sql).toMatch(/\(preferences - 'constraints' - 'pace'\) = '\{\}'::jsonb/);
+  });
+  it('goal_type is nullable and preferences defaults to an empty object', () => {
+    expect(sql).toMatch(/add column goal_type\s+text,/);
+    expect(sql).toMatch(/add column preferences jsonb not null default '\{\}'::jsonb/);
+  });
+  it('a new goal cannot start with a ticked criterion, but the owner can still tick one later', () => {
+    expect(sql).toMatch(/create trigger goal_channels_guard_new_criteria\s+before insert on public\.goal_channels/i);
+    expect(sql).not.toMatch(/before (insert or update|update)/i);
+    expect(sql).toMatch(/\(c -> 'done'\) is distinct from 'false'::jsonb/);
+  });
+  it('the guard function is not executable by API roles', () => {
+    expect(sql).toMatch(/revoke execute on function public\.goal_channels_guard_new_criteria\(\) from public, anon, authenticated, service_role/);
+  });
+  it('the signup seed records the type, and the backfill covers only the seeded default', () => {
+    expect(sql).toMatch(/criteria, goal_type\)/);
+    expect(sql).toMatch(/where is_default and channel_key = 'career_pivot' and goal_type is null/);
   });
 });
 

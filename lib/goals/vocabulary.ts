@@ -1,6 +1,21 @@
 // Wizard vocabulary: prompt chips drawn from the plan's real language
 // (docs/NINETY_DAY_PLAN_CONTEXT.md §9). Keys are lowercase machine keys; labels are presentation.
 
+// The goal type, constraint and pace keys are stored on goal_channels, so they live in
+// types/database.types.ts next to the CHECK lists they mirror. Re-exported so wizard code imports
+// everything it needs from here.
+import {
+  CONSTRAINTS,
+  GOAL_TYPES,
+  PACES,
+  type Constraint,
+  type GoalType,
+  type Pace,
+} from '@/types/database.types';
+
+export { CONSTRAINTS, GOAL_TYPES, PACES };
+export type { Constraint, GoalType, Pace };
+
 export const WIZARD_STEPS = ['goal_type', 'constraints', 'pace', 'review'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
 
@@ -11,15 +26,6 @@ export const WIZARD_STEP_LABELS: Record<WizardStep, string> = {
   review: 'Review',
 };
 
-export const GOAL_TYPES = [
-  'career_pivot',
-  'get_certified',
-  'portfolio_piece',
-  'interview_prep',
-  'grow_network',
-] as const;
-export type GoalType = (typeof GOAL_TYPES)[number];
-
 export const GOAL_TYPE_LABELS: Record<GoalType, string> = {
   career_pivot: 'Career pivot',
   get_certified: 'Get certified',
@@ -28,23 +34,12 @@ export const GOAL_TYPE_LABELS: Record<GoalType, string> = {
   grow_network: 'Grow my network',
 };
 
-export const CONSTRAINTS = [
-  'flexible_hours',
-  'contract_work_first',
-  'dont_track_hours',
-  'flexible_dates',
-] as const;
-export type Constraint = (typeof CONSTRAINTS)[number];
-
 export const CONSTRAINT_LABELS: Record<Constraint, string> = {
   flexible_hours: 'Hours are flexible',
   contract_work_first: 'Contract work first',
   dont_track_hours: "Don't track hours",
   flexible_dates: 'Keep dates flexible',
 };
-
-export const PACES = ['lighter', 'heavier', 'ahead', 'behind', 'carry_over'] as const;
-export type Pace = (typeof PACES)[number];
 
 export const PACE_LABELS: Record<Pace, string> = {
   lighter: 'Lighter week',

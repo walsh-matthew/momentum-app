@@ -2,7 +2,8 @@
 // Directive 1). Server-side only: it reads the request's auth cookies.
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { DEFAULT_HORIZON_DAYS, parseWizardInput } from '@/lib/goals/taskPlan';
+import { InitialCriteriaSchema, criteriaFor } from '@/lib/goals/criteria';
+import { DEFAULT_HORIZON_DAYS, parseWizardInput, preferencesFrom } from '@/lib/goals/taskPlan';
 import type { GoalChannel, GoalChannelInsert } from '@/types/database.types';
 import type { ServiceResult } from './result';
 
@@ -34,12 +35,16 @@ export async function listGoalChannels(): Promise<ServiceResult<GoalChannel[]>> 
 }
 
 // Creates a goal channel from raw wizard input. Validates again here because this is reachable
-// from any caller, not just the wizard UI. Wizard selections beyond the title are not stored yet
-// (no columns for them; see BACKLOG.md).
+// from any caller, not just the wizard UI. The goal type, constraints and pace are stored on the row
+// (migration 008), so they reload with the goal; review prompts only shape the starter plan. The
+// criteria come from the goal type and start unticked: the user owns completion.
 export async function createGoalChannel(rawInput: unknown): Promise<ServiceResult<GoalChannel>> {
   const parsed = parseWizardInput(rawInput);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const input = parsed.data;
+
+  const criteria = InitialCriteriaSchema.safeParse(criteriaFor(input.goalType));
+  if (!criteria.success) return { ok: false, error: 'Could not build the starting criteria for this goal type.' };
 
   const supabase = await createSupabaseServerClient();
   const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -60,7 +65,9 @@ export async function createGoalChannel(rawInput: unknown): Promise<ServiceResul
       is_default: false,
       start_date: isoDate(start),
       target_date: isoDate(target),
-      criteria: [],
+      criteria: criteria.data,
+      goal_type: input.goalType,
+      preferences: preferencesFrom(input),
     };
     const { data, error } = await supabase.from('goal_channels').insert(row).select().single();
     if (!error) return { ok: true, data };

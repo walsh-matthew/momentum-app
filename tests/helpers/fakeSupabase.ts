@@ -9,9 +9,13 @@
 //   neither, and unique per user),
 // - row level security: a signed-in user only sees and changes their own rows, and an insert for another
 //   user fails (switch off with db.rls = false to prove the service filters by user id itself),
+// - goal_channels inserts: the 001 CHECK constraints and unique key, the 008 goal_type and preferences
+//   checks, and the 008 trigger that rejects a new goal with a ticked criterion,
 // - apply_task_move() from migration 003: moves one unfinished task and records it together.
 // It has no working delete(): calling it throws and is counted, so tests can prove nothing is cut.
 // tests/migrations.test.ts keeps this file honest by checking each rule exists in the SQL.
+
+import { CONSTRAINTS, GOAL_TYPES, PACES } from '@/types/database.types';
 
 export interface TaskRow {
   id: string;
@@ -37,8 +41,16 @@ export interface ChannelRow {
   id: string;
   user_id: string;
   channel_key: string;
+  title: string;
   status: 'active' | 'paused' | 'done';
+  is_default: boolean;
   start_date: string;
+  target_date: string | null;
+  criteria: unknown;
+  goal_type: string | null;
+  preferences: unknown;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface HistoryRow {
@@ -108,6 +120,33 @@ function historyViolation(h: HistoryRow): string | null {
   const forward = h.shift_type === 'carry_over' && h.target_week > h.source_week;
   const back = h.shift_type === 'pull_forward' && h.target_week < h.source_week;
   return forward || back ? null : 'task_rebalance_history_direction';
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+// goal_channels_preferences_shape (migration 008).
+function preferencesValid(p: unknown): boolean {
+  if (!isObject(p)) return false;
+  if (Object.keys(p).some((k) => k !== 'constraints' && k !== 'pace')) return false;
+  if ('constraints' in p) {
+    if (!Array.isArray(p.constraints)) return false;
+    if (!p.constraints.every((c) => (CONSTRAINTS as readonly unknown[]).includes(c))) return false;
+  }
+  if ('pace' in p && !(typeof p.pace === 'string' && (PACES as readonly string[]).includes(p.pace))) return false;
+  return true;
+}
+
+// The 001 and 008 rules on a goal_channels row; the trigger counts as a constraint here, named as in SQL.
+function channelViolation(r: ChannelRow): string | null {
+  if (!/^[a-z][a-z0-9_]*$/.test(r.channel_key)) return 'goal_channels_channel_key_format';
+  if (r.title.trim().length === 0) return 'goal_channels_title_not_blank';
+  if (!['active', 'paused', 'done'].includes(r.status)) return 'goal_channels_status_check';
+  if (!Array.isArray(r.criteria)) return 'goal_channels_criteria_is_array';
+  if (r.target_date !== null && !(r.target_date > r.start_date)) return 'goal_channels_target_after_start';
+  if (r.goal_type !== null && !(GOAL_TYPES as readonly string[]).includes(r.goal_type)) return 'goal_channels_goal_type_check';
+  if (!preferencesValid(r.preferences)) return 'goal_channels_preferences_shape';
+  if (r.criteria.some((c) => !isObject(c) || c.done !== false)) return 'goal_channels_guard_new_criteria';
+  return null;
 }
 
 type Table = 'micro_tasks' | 'task_rebalance_history' | 'goal_channels';
@@ -221,6 +260,7 @@ class Query {
   // An insert into micro_tasks as a signed-in user: row level security (the new row must be theirs),
   // the table's defaults, its CHECK constraints and the unique source per user (migration 007).
   private runInsert(): { data: Row[]; error: { message: string; code?: string } | null } {
+    if (this.table === 'goal_channels') return this.runChannelInsert();
     if (this.table !== 'micro_tasks') return { data: [], error: { message: 'permission denied for table', code: '42501' } };
     const input = this.payload;
     if (db.failNextInsert) {
@@ -265,6 +305,50 @@ class Query {
       return { data: [], error: { message: 'duplicate key value violates unique constraint "micro_tasks_source_unique"', code: '23505' } };
     }
     db.tasks.push(row);
+    return { data: [this.project(row as unknown as Row)], error: null };
+  }
+
+  // An insert into goal_channels as a signed-in user: row level security, the table's defaults, its CHECK
+  // constraints, the 008 insert trigger, and the unique channel key and single default per user.
+  private runChannelInsert(): { data: Row[]; error: { message: string; code?: string } | null } {
+    const input = this.payload;
+    if (db.failNextInsert) {
+      const message = db.failNextInsert;
+      db.failNextInsert = null;
+      return { data: [], error: { message, code: 'XX000' } };
+    }
+    if (db.rls && (db.user === null || input.user_id !== db.user.id)) {
+      return { data: [], error: { message: 'new row violates row-level security policy for table "goal_channels"', code: '42501' } };
+    }
+    const stamp = new Date(Date.UTC(2026, 0, 1, 0, 0, ++db.clock)).toISOString();
+    const row: ChannelRow = {
+      id: newId(),
+      user_id: input.user_id as string,
+      channel_key: '',
+      title: '',
+      status: 'active',
+      is_default: false,
+      start_date: '2026-10-14',
+      target_date: null,
+      criteria: [],
+      goal_type: null,
+      preferences: {},
+      created_at: stamp,
+      updated_at: stamp,
+      ...(input as unknown as Partial<ChannelRow>),
+    };
+    const violated = channelViolation(row);
+    if (violated) {
+      const trigger = violated === 'goal_channels_guard_new_criteria';
+      return { data: [], error: { message: trigger ? "A new goal's criteria must all start unticked." : `new row violates check constraint "${violated}"`, code: '23514' } };
+    }
+    if (db.channels.some((c) => c.user_id === row.user_id && c.channel_key === row.channel_key)) {
+      return { data: [], error: { message: 'duplicate key value violates unique constraint "goal_channels_user_channel_key_unique"', code: '23505' } };
+    }
+    if (row.is_default && db.channels.some((c) => c.user_id === row.user_id && c.is_default)) {
+      return { data: [], error: { message: 'duplicate key value violates unique constraint "goal_channels_one_default_per_user"', code: '23505' } };
+    }
+    db.channels.push(row);
     return { data: [this.project(row as unknown as Row)], error: null };
   }
 
@@ -385,7 +469,22 @@ export function taskRow(week_of: number, over: Partial<TaskRow> = {}): TaskRow {
 }
 
 export function channelRow(over: Partial<ChannelRow> = {}): ChannelRow {
-  return { id: newId(), user_id: USER, channel_key: 'career_pivot', status: 'active', start_date: '2026-10-14', ...over };
+  return {
+    id: newId(),
+    user_id: USER,
+    channel_key: 'career_pivot',
+    title: 'Career Pivot',
+    status: 'active',
+    is_default: false,
+    start_date: '2026-10-14',
+    target_date: null,
+    criteria: [],
+    goal_type: null,
+    preferences: {},
+    created_at: '2026-10-14T00:00:00Z',
+    updated_at: '2026-10-14T00:00:00Z',
+    ...over,
+  };
 }
 
 export const taskById = (id: string): TaskRow => {

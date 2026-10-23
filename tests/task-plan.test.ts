@@ -3,7 +3,7 @@
 // unknown task type (docs/NINETY_DAY_PLAN_CONTEXT.md §3, PRODUCT_STRATEGY.md §4).
 
 import { describe, expect, it } from 'vitest';
-import { TITLE_MAX_LENGTH, buildStubTaskPlan, parseTaskPlan, parseWizardInput } from '@/lib/goals/taskPlan';
+import { TITLE_MAX_LENGTH, buildStubTaskPlan, parseTaskPlan, parseWizardInput, preferencesFrom } from '@/lib/goals/taskPlan';
 
 const base = { title: ' Ship it ', goalType: 'career_pivot', constraints: [], pace: null, reviewPrompts: [] };
 
@@ -19,6 +19,31 @@ describe('parseWizardInput', () => {
     expect(parseWizardInput({ ...base, title: 'x'.repeat(TITLE_MAX_LENGTH) }).ok).toBe(true);
   });
   it('rejects an unknown pace', () => expect(parseWizardInput({ ...base, pace: 'turbo' }).ok).toBe(false));
+  it('rejects an unknown constraint', () => expect(parseWizardInput({ ...base, constraints: ['work_weekends'] }).ok).toBe(false));
+
+  // Criteria come from the goal type, never from the caller (lib/goals/criteria.ts).
+  it('rejects criteria passed in, ticked or not', () => {
+    const criteria = [{ key: 'a', label: 'A', done: true }];
+    expect(parseWizardInput({ ...base, criteria }).ok).toBe(false);
+    expect(parseWizardInput({ ...base, criteria: [{ ...criteria[0], done: false }] }).ok).toBe(false);
+  });
+});
+
+describe('preferencesFrom', () => {
+  it('keeps constraints and pace, and nothing else', () => {
+    expect(preferencesFrom({ constraints: ['flexible_hours'], pace: 'heavier' })).toEqual({
+      constraints: ['flexible_hours'],
+      pace: 'heavier',
+    });
+  });
+  it('omits an unset pace and an empty constraint list', () => {
+    expect(preferencesFrom({ constraints: [], pace: null })).toEqual({});
+  });
+  it('drops repeated constraints and keeps the first-picked order', () => {
+    expect(preferencesFrom({ constraints: ['flexible_dates', 'flexible_hours', 'flexible_dates'], pace: null })).toEqual({
+      constraints: ['flexible_dates', 'flexible_hours'],
+    });
+  });
 });
 
 describe('buildStubTaskPlan', () => {

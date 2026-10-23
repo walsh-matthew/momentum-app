@@ -19,6 +19,7 @@ import {
   type ReviewPrompt,
   type WizardStep,
 } from '@/lib/goals/vocabulary';
+import { criteriaFor } from '@/lib/goals/criteria';
 import {
   TITLE_MAX_LENGTH,
   buildStubTaskPlan,
@@ -251,6 +252,20 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
                 <p className="mt-1 text-muted">{constraints.map((c) => CONSTRAINT_LABELS[c]).join(', ')}</p>
               )}
             </section>
+
+            {goalType && (
+              <section aria-label="Completion criteria">
+                <h3 className="text-sm font-medium">Completion criteria</h3>
+                <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-sm">
+                  {criteriaFor(goalType).map((c) => (
+                    <li key={c.key}>{c.label}</li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-muted">
+                  The goal starts with these, all unticked. You tick them off when the work is real.
+                </p>
+              </section>
+            )}
 
             {plan && (
               <section aria-label="Week 1 starter plan preview">
