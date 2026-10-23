@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import { ALL_CHANNELS, type ChannelSummary } from '@/types/channelViews';
 
@@ -13,11 +11,11 @@ interface NavSidebarProps {
   selected: string;
   onSelect: (channelId: string) => void;
   onAdjustPace: () => void;
+  // Opens the goal wizard, which AppShell renders once.
+  onNewGoal: () => void;
 }
 
-export function NavSidebar({ className = '', channels, selected, onSelect, onAdjustPace }: NavSidebarProps) {
-  const [wizardOpen, setWizardOpen] = useState(false);
-
+export function NavSidebar({ className = '', channels, selected, onSelect, onAdjustPace, onNewGoal }: NavSidebarProps) {
   const items: ChannelSummary[] = [{ id: ALL_CHANNELS, title: 'All channels' }, ...channels];
 
   return (
@@ -43,7 +41,7 @@ export function NavSidebar({ className = '', channels, selected, onSelect, onAdj
       ))}
       <button
         type="button"
-        onClick={() => setWizardOpen(true)}
+        onClick={onNewGoal}
         className="mt-2 min-h-11 rounded-md border border-dashed border-border px-3 text-left text-sm text-muted hover:bg-foreground/5"
       >
         + New Goal Wizard
@@ -57,7 +55,6 @@ export function NavSidebar({ className = '', channels, selected, onSelect, onAdj
         Adjust Weekly Pace
       </button>
       <SignOutButton className="mt-auto pt-2" />
-      <GoalBuilderWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
     </aside>
   );
 }

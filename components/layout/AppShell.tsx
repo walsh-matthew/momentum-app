@@ -6,6 +6,7 @@ import { NavSidebar } from './NavSidebar';
 import { MainFeed } from './MainFeed';
 import { ConnectedStackPanel } from './ConnectedStackPanel';
 import { MobileTabBar } from './MobileTabBar';
+import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
 import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
 import { CHANNEL_PARAM, withChannelParam } from '@/lib/utils/channelParam';
 import { resolveChannel } from '@/lib/utils/channelViews';
@@ -23,7 +24,7 @@ interface AppShellProps {
   moveChains: TaskMoveChains;
 }
 
-// Owns the mobile view selection and whether the rebalance drawer is open. The selected goal channel is not
+// Owns the mobile view selection and whether the rebalance drawer and the goal wizard are open. The selected goal channel is not
 // state here: it is the ?channel=<goal id> in the address bar (MOM-88), read with useSearchParams. The page is
 // rendered per request, so that hook has the same value on the server and in the browser's first render: a
 // reload or a shared link lands on the right channel with no flash and no hydration mismatch. The server
@@ -31,6 +32,8 @@ interface AppShellProps {
 export function AppShell({ views, connectedApps, moveChains }: AppShellProps) {
   const [view, setView] = useState<WorkspaceView>('feed');
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
+  // The one goal wizard, opened from the sidebar button and from the empty states' call to action.
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const searchParams = useSearchParams();
   // A missing, mistyped, paused or foreign id is not one of this user's channels, so it falls back to all channels.
@@ -60,13 +63,16 @@ export function AppShell({ views, connectedApps, moveChains }: AppShellProps) {
           setView('feed');
         }}
         onAdjustPace={() => setRebalanceOpen(true)}
+        onNewGoal={() => setWizardOpen(true)}
       />
       <MainFeed
+        feedState={channel.feedState}
         feed={channel.feed}
         velocity={channel.velocity}
         velocityHint={channel.velocityHint}
         channelTitle={channelTitle}
         moveChains={moveChains}
+        onNewGoal={() => setWizardOpen(true)}
         className={panelClass('feed')}
       />
       <ConnectedStackPanel
@@ -86,6 +92,7 @@ export function AppShell({ views, connectedApps, moveChains }: AppShellProps) {
         hint={channel.rebalanceHint}
         moveChains={moveChains}
       />
+      <GoalBuilderWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
     </div>
   );
 }

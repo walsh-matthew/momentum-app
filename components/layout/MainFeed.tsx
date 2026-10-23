@@ -1,13 +1,19 @@
+import { AllDoneState } from '@/components/tasks/AllDoneState';
 import { FocusTaskCard } from '@/components/tasks/FocusTaskCard';
+import { NoGoalsState } from '@/components/tasks/NoGoalsState';
+import { NoTasksState } from '@/components/tasks/NoTasksState';
 import { RecentlyDoneList } from '@/components/tasks/RecentlyDoneList';
+import { SignedOutState } from '@/components/tasks/SignedOutState';
 import { UpNextList } from '@/components/tasks/UpNextList';
 import { VelocityHero } from '@/components/velocity/VelocityHero';
 import type { VelocitySnapshot } from '@/lib/utils/velocity';
-import type { VelocityHint } from '@/types/channelViews';
+import type { FeedState, VelocityHint } from '@/types/channelViews';
 import type { FocusFeed } from '@/types/focusFeed';
 import type { TaskMoveChains } from '@/types/rebalance';
 
 interface MainFeedProps {
+  // Which screen to show. Decided where the views are built (buildChannelViews), never worked out from the feed.
+  feedState: FeedState;
   feed: FocusFeed;
   velocity: VelocitySnapshot | null;
   // Why there is no velocity number, when that is on purpose (see types/channelViews.ts).
@@ -15,15 +21,19 @@ interface MainFeedProps {
   // The goal channel the feed is for; null for all channels.
   channelTitle?: string | null;
   moveChains: TaskMoveChains;
+  // Opens the goal wizard, for the empty states that offer a goal.
+  onNewGoal: () => void;
   className?: string;
 }
 
 export function MainFeed({
+  feedState,
   feed,
   velocity,
   velocityHint = null,
   channelTitle = null,
   moveChains,
+  onNewGoal,
   className = '',
 }: MainFeedProps) {
   const { focus, upNext, recentlyDone } = feed;
@@ -46,28 +56,24 @@ export function MainFeed({
       )}
       <h1 className="text-xl font-semibold">Today</h1>
       {channelTitle && <p className="mt-1 text-sm text-muted">{channelTitle}</p>}
-      {focus ? (
+      {feedState === 'signed_out' && <SignedOutState />}
+      {feedState === 'no_goals' && <NoGoalsState onNewGoal={onNewGoal} />}
+      {feedState === 'no_tasks' && <NoTasksState channelTitle={channelTitle} onNewGoal={onNewGoal} />}
+      {feedState === 'all_done' && (
+        // Nothing left to do, but the user may have just finished the last task by mistake: keep the undo.
+        <>
+          <AllDoneState channelTitle={channelTitle} />
+          <div className="mt-6">
+            <RecentlyDoneList tasks={recentlyDone} />
+          </div>
+        </>
+      )}
+      {feedState === 'tasks' && focus && (
         <div className="mt-6 flex flex-col gap-6">
           <FocusTaskCard key={focus.id} task={focus} moves={moveChains[focus.id] ?? []} />
           <UpNextList tasks={upNext} />
           <RecentlyDoneList tasks={recentlyDone} />
         </div>
-      ) : recentlyDone.length > 0 ? (
-        // Nothing left to do, but the user may have just finished the last task by mistake: keep the undo.
-        <>
-          <p className="mt-1 text-sm text-muted">Everything on your list is done. Reopen a task if you need to.</p>
-          <div className="mt-6">
-            <RecentlyDoneList tasks={recentlyDone} />
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="mt-1 text-sm text-muted">Your execution feed will appear here.</p>
-          {/* TODO(MOM-Phase2): placeholder empty state. Distinguish signed-out, no tasks, and all done once auth ships. */}
-          <div className="mt-6 rounded-lg border border-dashed border-border p-6 text-sm text-muted">
-            No tasks yet.
-          </div>
-        </>
       )}
     </main>
   );

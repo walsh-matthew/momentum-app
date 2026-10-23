@@ -20,7 +20,18 @@ export interface ChannelSummary {
 export type ChannelHint = 'choose_channel';
 export type VelocityHint = ChannelHint;
 
+// What the main feed shows (MOM-18). Decided once, where the views are built, so the UI never works it out
+// from an empty list:
+//   signed_out  there is no session (app/page.tsx; the proxy normally redirects first, see SIGNED_OUT_CHANNEL_VIEWS)
+//   no_goals    signed in with no active goal (all channels only)
+//   no_tasks    the channel's goals have no tasks at all
+//   all_done    the channel has tasks, every one of them finished
+//   tasks       at least one unfinished task: the focus card and its lists
+export type FeedState = 'signed_out' | 'no_goals' | 'no_tasks' | 'all_done' | 'tasks';
+
 export interface ChannelView {
+  // Which of the feed's screens to show; see FeedState.
+  feedState: FeedState;
   // The focus task, up next and recently done for this channel only (all active channels for "all").
   feed: FocusFeed;
   // Velocity from this channel's tasks and its own start date; null when there is nothing to score or,
@@ -44,13 +55,25 @@ export interface ChannelViews {
   byChannel: Record<string, ChannelView>;
 }
 
-const EMPTY_VIEW: ChannelView = {
-  feed: { focus: null, upNext: [], recentlyDone: [] },
-  velocity: null,
-  velocityHint: null,
-  rebalance: null,
-  rebalanceChannelId: null,
-  rebalanceHint: null,
-};
+const emptyViews = (feedState: FeedState): ChannelViews => ({
+  channels: [],
+  byChannel: {
+    [ALL_CHANNELS]: {
+      feedState,
+      feed: { focus: null, upNext: [], recentlyDone: [] },
+      velocity: null,
+      velocityHint: null,
+      rebalance: null,
+      rebalanceChannelId: null,
+      rebalanceHint: null,
+    },
+  },
+});
 
-export const EMPTY_CHANNEL_VIEWS: ChannelViews = { channels: [], byChannel: { [ALL_CHANNELS]: EMPTY_VIEW } };
+// A signed-in user with nothing to show. Also what the page falls back to when their data cannot be read.
+export const EMPTY_CHANNEL_VIEWS: ChannelViews = emptyViews('no_goals');
+
+// What the page passes when there is no session, instead of reading anything. proxy.ts redirects a signed-out
+// visitor to /login before the page renders, so this is only reached when the session ends between the proxy
+// and the render; it is the safe default for that gap.
+export const SIGNED_OUT_CHANNEL_VIEWS: ChannelViews = emptyViews('signed_out');
