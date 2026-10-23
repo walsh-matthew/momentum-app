@@ -164,7 +164,8 @@ describe('Recently done: one-click reopen', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe('Task not found.');
     const button = screen.getByRole('button', { name: 'Reopen Ship the demo' }) as HTMLButtonElement;
-    expect(button.disabled).toBe(false);
+    // The error shows a moment before the saving state clears, so wait for it rather than assume it.
+    await waitFor(() => expect(button.disabled).toBe(false));
     expect(screen.getByText('Ship the demo')).toBeTruthy();
 
     // A retry clears the old message, then succeeds.
@@ -185,7 +186,9 @@ describe('Recently done: one-click reopen', () => {
     expect(alert.textContent).toBe(TOGGLE_NETWORK_ERROR);
     // The raw error text is never shown.
     expect(alert.textContent).not.toContain('NetworkError');
-    expect((screen.getByRole('button', { name: 'Reopen Ship the demo' }) as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Reopen Ship the demo' }) as HTMLButtonElement).disabled).toBe(false),
+    );
   });
 
   it('a failure on one row does not show on another', async () => {
@@ -224,7 +227,8 @@ describe('the focus card: mark done and its error states', () => {
     fireEvent.click(screen.getByRole('checkbox'));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Sign in to update tasks.');
-    expect((screen.getByRole('checkbox') as HTMLButtonElement).disabled).toBe(false);
+    // The error shows a moment before the saving state clears, so wait for it rather than assume it.
+    await waitFor(() => expect((screen.getByRole('checkbox') as HTMLButtonElement).disabled).toBe(false));
   });
 
   it('shows a plain error when the request itself fails', async () => {
