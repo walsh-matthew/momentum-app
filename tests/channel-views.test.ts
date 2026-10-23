@@ -468,6 +468,26 @@ describe('source-level: building the views never writes', () => {
     expect(body).not.toMatch(/\.insert\(|\.update\(|\.rpc\(|\.delete\(|supabase\/admin|SERVICE_ROLE/);
   });
 
+  it('the selection lives in the address bar, not in browser storage, and the server never reads it', () => {
+    const param = strip(read('lib', 'utils', 'channelParam.ts'));
+    expect(param).not.toMatch(/window|document|localStorage|sessionStorage|cookie|fetch\(|supabase|router/i);
+
+    const shell = strip(read('components', 'layout', 'AppShell.tsx'));
+    expect(shell).toContain('useSearchParams()');
+    expect(shell).toContain('resolveChannel(views, searchParams.get(CHANNEL_PARAM)');
+    expect(shell).not.toMatch(/localStorage|sessionStorage|document\.cookie/);
+    // No selection state left in the shell: the address is the one source of truth.
+    expect(shell).not.toMatch(/setSelected|useState<string>/);
+    // `window` is touched only inside the click handler, never while rendering (it does not exist on the server).
+    const handler = shell.slice(shell.indexOf('function selectChannel'), shell.indexOf('// Below lg only the active panel'));
+    expect([...shell.matchAll(/window\./g)].length).toBe([...handler.matchAll(/window\./g)].length);
+    expect(handler).toContain('window.history.pushState');
+
+    for (const component of ['NavSidebar.tsx', 'MainFeed.tsx', 'ConnectedStackPanel.tsx']) {
+      expect(strip(read('components', 'layout', component))).not.toMatch(/localStorage|sessionStorage|window\./);
+    }
+  });
+
   it('the page builds the views from the one snapshot, and never from a selection it was sent', () => {
     const page = strip(read('app', 'page.tsx'));
     expect(page).toContain('getPlanSnapshot()');

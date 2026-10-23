@@ -1,11 +1,13 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { NavSidebar } from './NavSidebar';
 import { MainFeed } from './MainFeed';
 import { ConnectedStackPanel } from './ConnectedStackPanel';
 import { MobileTabBar } from './MobileTabBar';
 import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
+import { CHANNEL_PARAM, withChannelParam } from '@/lib/utils/channelParam';
 import { resolveChannel } from '@/lib/utils/channelViews';
 import { ALL_CHANNELS, type ChannelViews } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
@@ -21,18 +23,28 @@ interface AppShellProps {
   moveChains: TaskMoveChains;
 }
 
-// Owns the mobile view selection, the selected goal channel and whether the rebalance drawer is open. The
-// initial state is constant (feed panel, all channels), so the server render and first client render match
-// (no hydration mismatch).
+// Owns the mobile view selection and whether the rebalance drawer is open. The selected goal channel is not
+// state here: it is the ?channel=<goal id> in the address bar (MOM-88), read with useSearchParams. The page is
+// rendered per request, so that hook has the same value on the server and in the browser's first render: a
+// reload or a shared link lands on the right channel with no flash and no hydration mismatch. The server
+// never uses the parameter to load or filter anything; it only chooses among the user's own views below.
 export function AppShell({ views, connectedApps, moveChains }: AppShellProps) {
   const [view, setView] = useState<WorkspaceView>('feed');
-  const [selected, setSelected] = useState<string>(ALL_CHANNELS);
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
 
-  // A selection that is no longer a channel (the goal was paused, say) falls back to all channels.
-  const channelId = resolveChannel(views, selected);
+  const searchParams = useSearchParams();
+  // A missing, mistyped, paused or foreign id is not one of this user's channels, so it falls back to all channels.
+  const channelId = resolveChannel(views, searchParams.get(CHANNEL_PARAM) ?? ALL_CHANNELS);
   const channel = views.byChannel[channelId];
   const channelTitle = views.channels.find((c) => c.id === channelId)?.title ?? null;
+
+  // Puts the choice in the address bar with the browser's own history API, which Next.js syncs with
+  // useSearchParams, so nothing is fetched and the back button steps through the choices. Reads the live URL,
+  // not the render's, and does nothing when the address would not change (no duplicate history entries).
+  function selectChannel(id: string) {
+    const next = withChannelParam(window.location.search, id);
+    if (next !== window.location.search) window.history.pushState(null, '', `${window.location.pathname}${next}`);
+  }
 
   // Below lg only the active panel shows; from lg up all three show in a grid.
   const panelClass = (own: WorkspaceView) => (view === own ? 'flex' : 'hidden') + ' lg:flex';
@@ -44,7 +56,7 @@ export function AppShell({ views, connectedApps, moveChains }: AppShellProps) {
         channels={views.channels}
         selected={channelId}
         onSelect={(id) => {
-          setSelected(id);
+          selectChannel(id);
           setView('feed');
         }}
         onAdjustPace={() => setRebalanceOpen(true)}
