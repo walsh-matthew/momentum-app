@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import { applyRebalanceProposal, askClaudeToRebalance } from '@/app/actions/tasks';
 import { REBALANCE_ACTION_LABELS, TASK_TYPE_LABELS, TIMELINE_WARNING_LABELS } from '@/lib/tasks/labels';
 import { describeMoveChain } from '@/lib/utils/rebalance';
+import type { ChannelHint } from '@/types/channelViews';
 import type {
   RebalanceApplyResult,
   RebalanceProposalView,
@@ -14,7 +15,12 @@ import type {
 interface RebalanceDrawerProps {
   open: boolean;
   onClose: () => void;
+  // The proposal for the selected goal channel (MOM-87), or null when there is none to show.
   view: RebalanceProposalView | null;
+  // The goal the proposal is for. "Ask Claude" sends it, and the server checks it against the user's own goals.
+  channelId: string | null;
+  // Set when there is no proposal on purpose: several goals are active and none is selected.
+  hint?: ChannelHint | null;
   // Each task's earlier moves, from the page's single history query (no per-task fetch here).
   moveChains: TaskMoveChains;
 }
@@ -56,6 +62,7 @@ function WarningCard({ warning, view }: WarningCardProps) {
 
 interface DrawerBodyProps {
   view: RebalanceProposalView;
+  channelId: string | null;
   // Called with the proposal Claude wrote (or the rule-based one, with a notice, if Claude's failed).
   onModelView: (view: RebalanceProposalView) => void;
   moveChains: TaskMoveChains;
@@ -65,7 +72,7 @@ interface DrawerBodyProps {
 }
 
 // Mounted only while the drawer is open, so every open starts from a clean state.
-function DrawerBody({ view, onModelView, moveChains, titleId, onClose, onPendingChange }: DrawerBodyProps) {
+function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose, onPendingChange }: DrawerBodyProps) {
   const { proposal } = view;
   const [selected, setSelected] = useState<Set<string>>(() => new Set(proposal.moves.map((m) => m.taskId)));
   const [error, setError] = useState<string | null>(null);
@@ -79,9 +86,10 @@ function DrawerBody({ view, onModelView, moveChains, titleId, onClose, onPending
   // The only way a model is ever called: this click. It changes nothing in the plan; it only swaps
   // the suggestion on screen, and every change still needs the user to select it and press Apply.
   function askClaude() {
+    if (channelId === null) return;
     setAskError(null);
     startAsking(async () => {
-      const answer = await askClaudeToRebalance();
+      const answer = await askClaudeToRebalance(channelId);
       if (answer.ok) onModelView(answer.data);
       else setAskError(answer.error);
     });
@@ -197,7 +205,7 @@ function DrawerBody({ view, onModelView, moveChains, titleId, onClose, onPending
         <div className="mt-3">
           <button
             type="button"
-            disabled={pending || asking}
+            disabled={pending || asking || channelId === null}
             onClick={askClaude}
             className="min-h-11 rounded-md border border-border px-3 text-sm font-medium hover:bg-foreground/5 disabled:opacity-60"
           >
@@ -321,7 +329,7 @@ function DrawerBody({ view, onModelView, moveChains, titleId, onClose, onPending
 
 // A right-hand slide-out on a native <dialog>, like the goal wizard: focus trapping, Escape and the
 // backdrop come for free. Closing it, by any route, changes nothing.
-export function RebalanceDrawer({ open, onClose, view, moveChains }: RebalanceDrawerProps) {
+export function RebalanceDrawer({ open, onClose, view, channelId, hint = null, moveChains }: RebalanceDrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   // What the user asked Claude for in this open drawer. Starts empty each time it opens, so a new open
@@ -357,9 +365,10 @@ export function RebalanceDrawer({ open, onClose, view, moveChains }: RebalanceDr
       {open &&
         (view ? (
           <DrawerBody
-            // A new proposal starts with every move selected again.
-            key={modelView ? `model-${askCount}` : 'page'}
+            // A new proposal, or another channel's, starts with every move selected again.
+            key={`${channelId}-${modelView ? `model-${askCount}` : 'page'}`}
             view={modelView ?? view}
+            channelId={channelId}
             onModelView={(next) => {
               setModelView(next);
               setAskCount((n) => n + 1);
@@ -376,8 +385,9 @@ export function RebalanceDrawer({ open, onClose, view, moveChains }: RebalanceDr
                 Rebalance your plan
               </h2>
               <p className="mt-2 text-sm text-muted">
-                There is no plan to rebalance yet. Create a goal and this will show any unfinished work that
-                can be carried over.
+                {hint === 'choose_channel'
+                  ? "Rebalancing is worked out for one goal at a time, because each goal's weeks count from its own start date. Choose a channel in the sidebar, then open this again."
+                  : 'There is no plan to rebalance yet. Create a goal and this will show any unfinished work that can be carried over.'}
               </p>
             </div>
             <footer className="flex shrink-0 justify-end border-t border-border p-4 lg:px-6">

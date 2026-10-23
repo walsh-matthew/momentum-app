@@ -16,6 +16,7 @@ vi.mock('@/app/actions/tasks', () => ({
   askClaudeToRebalance: actions.ask,
 }));
 
+const CHANNEL = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 
@@ -42,7 +43,9 @@ function view(over: Partial<RebalanceProposalView> = {}): RebalanceProposalView 
 }
 
 const render = (v: RebalanceProposalView | null, open = true, moveChains = {}) =>
-  renderToStaticMarkup(<RebalanceDrawer open={open} onClose={() => {}} view={v} moveChains={moveChains} />);
+  renderToStaticMarkup(
+    <RebalanceDrawer open={open} onClose={() => {}} view={v} channelId={v ? CHANNEL : null} moveChains={moveChains} />,
+  );
 
 describe('a rule-based proposal', () => {
   const html = render(view());

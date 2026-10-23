@@ -25,9 +25,11 @@ export async function applyRebalanceProposal(rawProposal: unknown): Promise<Serv
 }
 
 // Runs only when the user clicks "Ask Claude" in the rebalance drawer; it is never called on a page load.
-// It takes no input at all, so there is nothing for a direct POST to tamper with: the service
-// authenticates, loads the signed-in user's own plan, rate-limits, and returns a proposal that has
-// passed TaskRebalanceSchema and been checked against their tasks. It changes nothing in the database.
-export async function askClaudeToRebalance(): Promise<ServiceResult<RebalanceProposalView>> {
-  return requestModelRebalance();
+// The one input is the goal channel the drawer is showing. It comes from the browser, so it is `unknown`
+// and the service does not trust it: it finds it among the signed-in user's own active goals (another
+// user's id is refused like a missing one), loads that goal's tasks only, rate-limits, and returns a
+// proposal that has passed TaskRebalanceSchema and been checked against those tasks. It changes nothing
+// in the database.
+export async function askClaudeToRebalance(channelId: unknown): Promise<ServiceResult<RebalanceProposalView>> {
+  return requestModelRebalance(channelId);
 }

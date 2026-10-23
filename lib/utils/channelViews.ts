@@ -3,17 +3,30 @@
 // (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6). It only slices the goals and tasks it is given, which the
 // caller read through the user's own session (RLS), so another user's data cannot appear here.
 //
-// Each channel's velocity uses that channel's own start date for its plan week, because the weeks of two goals
-// that started on different days are not comparable. "All channels" shows every active goal's tasks in one
-// feed; it has a velocity only when exactly one goal is active, and otherwise says to pick a channel, rather
-// than blend weeks that mean different things.
+// Each channel's velocity and rebalance proposal use that channel's own tasks and its own start date for the
+// plan week, because the weeks of two goals that started on different days are not comparable (MOM-44,
+// MOM-87). "All channels" shows every active goal's tasks in one feed; it has a velocity and a proposal
+// only when exactly one goal is active, and otherwise says to pick a channel, rather than blend weeks that
+// mean different things.
 
 import type { GoalChannel, MicroTask } from '@/types/database.types';
 import { ALL_CHANNELS, type ChannelView, type ChannelViews } from '@/types/channelViews';
 import { buildFocusFeed } from './focusFeed';
+import { buildRulesView, type RebalanceTask } from './rebalance';
 import { computeVelocity, currentPlanWeek, type VelocityMove } from './velocity';
 
 type ChannelGoal = Pick<GoalChannel, 'id' | 'title' | 'status' | 'start_date'>;
+
+// The rule-based proposal for one channel, or null when none can be built: the builder holds itself to the
+// proposal schema, which caps the moves, so a channel with more unfinished work than that has no valid
+// rule-based proposal (proposeRebalance reports the same case as an error).
+function rulesViewOrNull(tasks: readonly RebalanceTask[], week: number, today: string) {
+  try {
+    return buildRulesView(tasks, week, today);
+  } catch {
+    return null;
+  }
+}
 
 export function buildChannelViews(
   goals: readonly ChannelGoal[],
@@ -35,6 +48,9 @@ export function buildChannelViews(
       feed: buildFocusFeed(own),
       velocity: week === null ? null : computeVelocity(own, week, today, history),
       velocityHint: null,
+      rebalance: week === null ? null : rulesViewOrNull(own, week, today),
+      rebalanceChannelId: goal.id,
+      rebalanceHint: null,
     };
   }
 
@@ -43,6 +59,9 @@ export function buildChannelViews(
     feed: buildFocusFeed(everyActiveTask),
     velocity: active.length === 1 ? byChannel[active[0].id].velocity : null,
     velocityHint: active.length > 1 ? 'choose_channel' : null,
+    rebalance: active.length === 1 ? byChannel[active[0].id].rebalance : null,
+    rebalanceChannelId: active.length === 1 ? active[0].id : null,
+    rebalanceHint: active.length > 1 ? 'choose_channel' : null,
   };
 
   return { channels: active.map((g) => ({ id: g.id, title: g.title })), byChannel };

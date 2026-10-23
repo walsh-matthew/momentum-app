@@ -82,7 +82,7 @@ const tasks = [
 
 function renderShell(views = buildChannelViews(goals, tasks, [], TODAY)) {
   const ui = (v: typeof views) => (
-    <AppShell views={v} connectedApps={[]} rebalance={null} moveChains={{}} />
+    <AppShell views={v} connectedApps={[]} moveChains={{}} />
   );
   const result = render(ui(views));
   return { ...result, rerenderWith: (v: typeof views) => result.rerender(ui(v)) };
@@ -274,5 +274,126 @@ describe('on a phone', () => {
 
     expect(screen.getByRole('main').className).not.toMatch(/(^|\s)hidden(\s|$)/);
     expect(within(screen.getByRole('navigation', { name: 'Workspace sections' })).getByRole('button', { name: 'Feed' }).getAttribute('aria-current')).toBe('page');
+  });
+});
+
+// MOM-87: the rebalance side card and drawer follow the selected channel too.
+describe('rebalancing follows the selected channel', () => {
+  // jsdom has no <dialog>.showModal; this stand-in only opens and closes it, which is all the drawer needs.
+  beforeEach(() => {
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.removeAttribute('open');
+    };
+  });
+
+  // Career Pivot (plan week 5) has an open task left over in week 2, so it has something to carry over.
+  // Side Project (week 1) is on track.
+  const behindTask = task('career', 2, { title: 'Career behind task' });
+  const rebalanceTasks = [...tasks, behindTask];
+  const rebalanceViews = () => buildChannelViews(goals, rebalanceTasks, [], TODAY);
+
+  const openAssistantTab = () => fireEvent.click(screen.getByRole('tab', { name: 'AI Assistant' }));
+  const sideCard = () => within(screen.getByRole('region', { name: 'Rebalance' }));
+  const openDrawer = () => fireEvent.click(sidebar().getByRole('button', { name: 'Adjust Weekly Pace' }));
+  const drawer = () => within(screen.getByRole('dialog', { name: 'Rebalance your plan' }));
+  // The drawer has a header × ("Close without changing anything") and a footer button; either closes it.
+  const closeDrawer = () => fireEvent.click(screen.getAllByRole('button', { name: /^Close/ })[0]);
+
+  describe('the side card', () => {
+    it('asks for a channel under All channels when several goals are active', () => {
+      renderShell(rebalanceViews());
+      openAssistantTab();
+      expect(sideCard().getByText(/Choose a channel in the sidebar/)).toBeTruthy();
+      expect(sideCard().queryByRole('button', { name: 'Review proposal' })).toBeNull();
+    });
+
+    it('shows each channel\'s own proposal when it is selected', () => {
+      renderShell(rebalanceViews());
+      openAssistantTab();
+
+      fireEvent.click(channelButton('Career Pivot'));
+      expect(sideCard().getByText('1 to carry over')).toBeTruthy();
+      expect(sideCard().getByRole('button', { name: 'Review proposal' })).toBeTruthy();
+
+      fireEvent.click(channelButton('Side Project'));
+      expect(sideCard().getByText(/on track/)).toBeTruthy();
+      expect(sideCard().queryByText('1 to carry over')).toBeNull();
+      expect(sideCard().queryByRole('button', { name: 'Review proposal' })).toBeNull();
+    });
+
+    it('with a single goal the card shows that goal\'s proposal under All channels', () => {
+      renderShell(buildChannelViews([goals[0]], rebalanceTasks, [], TODAY));
+      openAssistantTab();
+      expect(sideCard().getByText('1 to carry over')).toBeTruthy();
+    });
+  });
+
+  describe('the drawer', () => {
+    it('under All channels with several goals it says to choose a channel, and offers no Claude button', () => {
+      renderShell(rebalanceViews());
+      openDrawer();
+      expect(drawer().getByText(/Choose a channel in the sidebar, then open this again/)).toBeTruthy();
+      expect(drawer().queryByRole('button', { name: /Ask Claude/ })).toBeNull();
+      expect(actions.askClaudeToRebalance).not.toHaveBeenCalled();
+    });
+
+    it('shows the selected channel\'s tasks and week, and only that channel\'s', () => {
+      renderShell(rebalanceViews());
+      fireEvent.click(channelButton('Career Pivot'));
+      openDrawer();
+      expect(drawer().getByText('Career behind task')).toBeTruthy();
+      expect(drawer().getByText(/week 5 of the plan/)).toBeTruthy();
+      expect(drawer().queryByText(/Side/)).toBeNull();
+      closeDrawer();
+
+      fireEvent.click(channelButton('Side Project'));
+      openDrawer();
+      expect(drawer().getByText('Nothing is behind, so there is nothing to rebalance.')).toBeTruthy();
+      expect(drawer().getByText(/week 1 of the plan/)).toBeTruthy();
+      expect(drawer().queryByText('Career behind task')).toBeNull();
+    });
+
+    it('"Ask Claude" sends the id of the channel the drawer is showing, and only when clicked', async () => {
+      actions.askClaudeToRebalance.mockResolvedValue({ ok: false, error: 'Please wait a few seconds before asking again.' });
+      renderShell(rebalanceViews());
+
+      fireEvent.click(channelButton('Career Pivot'));
+      openDrawer();
+      expect(actions.askClaudeToRebalance).not.toHaveBeenCalled();
+      fireEvent.click(drawer().getByRole('button', { name: 'Ask Claude to review' }));
+      await vi.waitFor(() => expect(actions.askClaudeToRebalance).toHaveBeenCalledTimes(1));
+      expect(actions.askClaudeToRebalance).toHaveBeenLastCalledWith('career');
+      await vi.waitFor(() => expect(drawer().getByRole('alert').textContent).toContain('Please wait'));
+      closeDrawer();
+
+      fireEvent.click(channelButton('Side Project'));
+      openDrawer();
+      fireEvent.click(drawer().getByRole('button', { name: 'Ask Claude to review' }));
+      await vi.waitFor(() => expect(actions.askClaudeToRebalance).toHaveBeenCalledTimes(2));
+      expect(actions.askClaudeToRebalance).toHaveBeenLastCalledWith('side');
+    });
+
+    it('with a single goal "Ask Claude" sends that goal\'s id even under All channels', async () => {
+      actions.askClaudeToRebalance.mockResolvedValue({ ok: false, error: 'x' });
+      renderShell(buildChannelViews([goals[1]], tasks, [], TODAY));
+      openDrawer();
+      fireEvent.click(drawer().getByRole('button', { name: 'Ask Claude to review' }));
+      await vi.waitFor(() => expect(actions.askClaudeToRebalance).toHaveBeenCalledWith('side'));
+    });
+
+    it('switching channels, opening the drawer and closing it change nothing in the plan', () => {
+      renderShell(rebalanceViews());
+      for (const name of ['Career Pivot', 'Side Project', 'All channels']) {
+        fireEvent.click(channelButton(name));
+        openDrawer();
+        closeDrawer();
+      }
+      expect(actions.applyRebalanceProposal).not.toHaveBeenCalled();
+      expect(actions.askClaudeToRebalance).not.toHaveBeenCalled();
+      expect(actions.toggleTaskStatus).not.toHaveBeenCalled();
+    });
   });
 });

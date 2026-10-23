@@ -24,7 +24,7 @@ import { summarizeAllGoalProgress } from '@/lib/utils/progress';
 import {
   MAX_MODEL_TASKS,
   buildModelFacts,
-  buildRebalanceProposal,
+  buildRulesView,
   checkProposalAgainstTasks,
   shiftDateByWeeks,
   summarizeProposalTasks,
@@ -183,25 +183,13 @@ export async function proposeRebalance(
   options: { useModel?: boolean; velocity?: ModelRebalanceFacts['velocity'] } = {},
 ): Promise<ServiceResult<RebalanceProposalView>> {
   const fromRules = (notice: string | null): ServiceResult<RebalanceProposalView> => {
-    let proposal: ReturnType<typeof buildRebalanceProposal>;
     try {
-      proposal = buildRebalanceProposal(tasks, currentWeek, asOf);
+      return { ok: true, data: buildRulesView(tasks, currentWeek, asOf, notice) };
     } catch {
       // The builder holds itself to the proposal schema, which allows at most MAX_REBALANCE_MOVES moves.
       // A plan with more work behind than that has no valid rule-based proposal; say so, don't crash.
       return { ok: false, error: 'There is too much unfinished work to rebalance in one go.' };
     }
-    return {
-      ok: true,
-      data: {
-        proposal,
-        source: 'rules',
-        model: null,
-        notice,
-        tasks: summarizeProposalTasks(tasks, proposal),
-        currentWeek,
-      },
-    };
   };
   if (!options.useModel) return fromRules(null);
 
@@ -227,18 +215,34 @@ export async function proposeRebalance(
   };
 }
 
-// A user asked Claude to write their rebalance proposal. Reachable from a Server Action, so it
-// authenticates, loads the user's own plan through RLS, and limits how often one user can call it:
-// each call is a paid model request. The limit is per server instance and best effort (BACKLOG.md).
+// A user asked Claude to write the rebalance proposal for one goal channel (MOM-87). Reachable from a Server
+// Action, so it authenticates, loads the user's own plan through RLS, and limits how often one user can
+// call it: each call is a paid model request. The limit is per server instance and best effort (BACKLOG.md).
+//
+// The channel id comes from the browser, so it is only trusted after it is found among the signed-in user's
+// own active goals: another user's goal, a paused goal and an id that does not exist are all refused the same
+// way, before anything is sent to the model. The proposal is then built from that goal's tasks and that
+// goal's own plan week, never from the user's other goals, so the model sees only this channel's work and
+// checkProposalAgainstTasks() rejects any move that names a task outside it.
 const MODEL_REQUEST_COOLDOWN_MS = 20_000;
 const lastModelRequestAt = new Map<string, number>();
+const NOT_A_CHANNEL = 'Choose one of your goal channels.';
 
 export async function requestModelRebalance(
+  channelId: unknown,
   deps: { now?: () => number } = {},
 ): Promise<ServiceResult<RebalanceProposalView>> {
   const supabase = await createSupabaseServerClient();
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth.user) return { ok: false, error: 'Sign in to ask for a suggestion.' };
+  if (typeof channelId !== 'string' || !UUID_PATTERN.test(channelId)) return { ok: false, error: NOT_A_CHANNEL };
+
+  const [goals, tasks, history] = await Promise.all([listGoalChannels(), listMicroTasks(), listRebalanceHistory()]);
+  if (!goals.ok || !tasks.ok) return { ok: false, error: 'Could not load your plan.' };
+  const active = goals.data.filter((g) => g.status === 'active');
+  if (active.length === 0) return { ok: false, error: 'Create a goal first.' };
+  const goal = active.find((g) => g.id === channelId);
+  if (!goal) return { ok: false, error: NOT_A_CHANNEL };
 
   const now = (deps.now ?? Date.now)();
   const last = lastModelRequestAt.get(auth.user.id);
@@ -248,17 +252,14 @@ export async function requestModelRebalance(
   // Set before the call, so a failing or slow request still counts.
   lastModelRequestAt.set(auth.user.id, now);
 
-  const [goals, tasks, history] = await Promise.all([listGoalChannels(), listMicroTasks(), listRebalanceHistory()]);
-  if (!goals.ok || !tasks.ok) return { ok: false, error: 'Could not load your plan.' };
-  const goal = goals.data.find((g) => g.status === 'active');
-  if (!goal) return { ok: false, error: 'Create a goal first.' };
   const today = new Date(now).toISOString().slice(0, 10);
   const week = currentPlanWeek(goal.start_date, today);
   if (week === null) return { ok: false, error: 'Could not work out your plan week.' };
 
+  const own = tasks.data.filter((t) => t.goal_channel_id === goal.id);
   // Velocity is context for the model; if the history is unavailable the plan still loads without it.
-  const snapshot: VelocitySnapshot = computeVelocity(tasks.data, week, today, history.ok ? history.data : []);
-  return proposeRebalance(tasks.data, week, today, {
+  const snapshot: VelocitySnapshot = computeVelocity(own, week, today, history.ok ? history.data : []);
+  return proposeRebalance(own, week, today, {
     useModel: true,
     velocity: {
       score: snapshot.score,
