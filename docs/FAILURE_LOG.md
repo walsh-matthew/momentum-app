@@ -63,6 +63,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** Code review. Tracked as MOM-45.
 - **Predicted it?** _owner to answer_
 
+### F-008 · 2026-10-23 · build tool (project thread) · ★
+- **Asked:** Discard a line-ending-only change on the owner's Windows checkout so the next pull would apply cleanly.
+- **What went wrong:** It reported the fix as done, but the next pull still aborted because the file counted as modified.
+- **Why:** It checked the file from a Linux view, where the content matched, and rewrote it with Unix line endings. It never checked how Windows git saw the file, and that git converts line endings, so the file still looked changed there. A check that runs somewhere other than where the result matters doesn't prove anything.
+- **Caught by:** The owner's preflight pull failed. It was fixed with an ordinary git checkout, after confirming the diff was line endings only.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
