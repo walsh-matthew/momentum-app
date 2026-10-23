@@ -1,17 +1,20 @@
 import { FocusTaskCard } from '@/components/tasks/FocusTaskCard';
+import { RecentlyDoneList } from '@/components/tasks/RecentlyDoneList';
+import { UpNextList } from '@/components/tasks/UpNextList';
 import { VelocityHero } from '@/components/velocity/VelocityHero';
 import type { VelocitySnapshot } from '@/lib/utils/velocity';
-import type { MicroTask } from '@/types/database.types';
+import type { FocusFeed } from '@/types/focusFeed';
 import type { TaskMoveChains } from '@/types/rebalance';
 
 interface MainFeedProps {
-  focusTask: MicroTask | null;
+  feed: FocusFeed;
   velocity: VelocitySnapshot | null;
   moveChains: TaskMoveChains;
   className?: string;
 }
 
-export function MainFeed({ focusTask, velocity, moveChains, className = '' }: MainFeedProps) {
+export function MainFeed({ feed, velocity, moveChains, className = '' }: MainFeedProps) {
+  const { focus, upNext, recentlyDone } = feed;
   return (
     <main className={`min-h-0 flex-1 flex-col overflow-y-auto p-4 lg:p-6 ${className}`}>
       {velocity && (
@@ -20,10 +23,20 @@ export function MainFeed({ focusTask, velocity, moveChains, className = '' }: Ma
         </div>
       )}
       <h1 className="text-xl font-semibold">Today</h1>
-      {focusTask ? (
-        <div className="mt-6">
-          <FocusTaskCard key={focusTask.id} task={focusTask} moves={moveChains[focusTask.id] ?? []} />
+      {focus ? (
+        <div className="mt-6 flex flex-col gap-6">
+          <FocusTaskCard key={focus.id} task={focus} moves={moveChains[focus.id] ?? []} />
+          <UpNextList tasks={upNext} />
+          <RecentlyDoneList tasks={recentlyDone} />
         </div>
+      ) : recentlyDone.length > 0 ? (
+        // Nothing left to do, but the user may have just finished the last task by mistake: keep the undo.
+        <>
+          <p className="mt-1 text-sm text-muted">Everything on your list is done. Reopen a task if you need to.</p>
+          <div className="mt-6">
+            <RecentlyDoneList tasks={recentlyDone} />
+          </div>
+        </>
       ) : (
         <>
           <p className="mt-1 text-sm text-muted">Your execution feed will appear here.</p>

@@ -7,12 +7,14 @@ import { ConnectedStackPanel } from './ConnectedStackPanel';
 import { MobileTabBar } from './MobileTabBar';
 import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
 import type { VelocitySnapshot } from '@/lib/utils/velocity';
-import type { ConnectedAppPublic, MicroTask } from '@/types/database.types';
+import type { ConnectedAppPublic } from '@/types/database.types';
+import type { FocusFeed } from '@/types/focusFeed';
 import type { RebalanceProposalView, TaskMoveChains } from '@/types/rebalance';
 import type { WorkspaceView } from './panels';
 
 interface AppShellProps {
-  focusTask: MicroTask | null;
+  // The focus task, the ones queued behind it and the ones just finished (see lib/utils/focusFeed.ts).
+  feed: FocusFeed;
   velocity: VelocitySnapshot | null;
   connectedApps: ConnectedAppPublic[];
   rebalance: RebalanceProposalView | null;
@@ -22,7 +24,7 @@ interface AppShellProps {
 
 // Owns the mobile view selection and whether the rebalance drawer is open. The initial state is a
 // constant, so the server render and first client render match (no hydration mismatch).
-export function AppShell({ focusTask, velocity, connectedApps, rebalance, moveChains }: AppShellProps) {
+export function AppShell({ feed, velocity, connectedApps, rebalance, moveChains }: AppShellProps) {
   const [view, setView] = useState<WorkspaceView>('feed');
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
 
@@ -36,7 +38,7 @@ export function AppShell({ focusTask, velocity, connectedApps, rebalance, moveCh
         onNavigate={() => setView('feed')}
         onAdjustPace={() => setRebalanceOpen(true)}
       />
-      <MainFeed focusTask={focusTask} velocity={velocity} moveChains={moveChains} className={panelClass('feed')} />
+      <MainFeed feed={feed} velocity={velocity} moveChains={moveChains} className={panelClass('feed')} />
       <ConnectedStackPanel
         connectedApps={connectedApps}
         rebalance={rebalance}

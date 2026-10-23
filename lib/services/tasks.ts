@@ -20,6 +20,7 @@ import { requestRebalanceFromModel, type ModelRebalanceFailure } from '@/lib/ai/
 import { requestWeekOnePlanFromModel, type ModelTaskPlanFailure } from '@/lib/ai/taskPlan';
 import { parseWeekOnePlan, parseWizardInput, type TaskPlan } from '@/lib/goals/taskPlan';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { buildFocusFeed } from '@/lib/utils/focusFeed';
 import {
   MAX_MODEL_TASKS,
   buildModelFacts,
@@ -43,6 +44,7 @@ import {
   type RebalanceProposalView,
   type RebalanceSkippedMove,
 } from '@/types/rebalance';
+import type { FocusFeed } from '@/types/focusFeed';
 import { MAX_KEY_ATTEMPTS, UNIQUE_VIOLATION, buildNewGoalFields, channelKeyFor, listGoalChannels } from './goals';
 import type { ServiceResult } from './result';
 
@@ -63,20 +65,14 @@ export async function listMicroTasks(options: { weekOf?: number } = {}): Promise
   return { ok: true, data };
 }
 
-// The task to do next: the earliest unfinished one, or null when nothing is left.
-export async function getFocusTask(): Promise<ServiceResult<MicroTask | null>> {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('micro_tasks')
-    .select('*')
-    .eq('status', 'todo')
-    .order('week_of', { ascending: true })
-    .order('due_date', { ascending: true, nullsFirst: false })
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, data };
+// What the focus card area shows (MOM-36): the task to do next (the earliest unfinished one), the
+// unfinished tasks queued behind it, and the tasks finished most recently, which the user can reopen.
+// One read of the signed-in user's own tasks (RLS), ordered by buildFocusFeed. It only reads: completing
+// or reopening a task is the user's click, through setTaskStatus.
+export async function getFocusFeed(): Promise<ServiceResult<FocusFeed>> {
+  const tasks = await listMicroTasks();
+  if (!tasks.ok) return tasks;
+  return { ok: true, data: buildFocusFeed(tasks.data) };
 }
 
 // The signed-in user's rebalance history, oldest move first, optionally for one task. A task's whole
