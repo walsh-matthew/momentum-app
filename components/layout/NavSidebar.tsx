@@ -3,19 +3,22 @@
 import { useState } from 'react';
 import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
 import { SignOutButton } from '@/components/auth/SignOutButton';
+import { ALL_CHANNELS, type ChannelSummary } from '@/types/channelViews';
 
 interface NavSidebarProps {
   className?: string;
-  onNavigate?: () => void;
+  // The user's active goal channels, in the order the goals service lists them.
+  channels: ChannelSummary[];
+  // ALL_CHANNELS or the id of one of `channels`.
+  selected: string;
+  onSelect: (channelId: string) => void;
   onAdjustPace: () => void;
 }
 
-// Placeholder items until goal channels are wired to @/lib/services/goals (MOM-11).
-const NAV_ITEMS = ['Today', 'Career Pivot', 'Health', 'Finances'] as const;
-
-export function NavSidebar({ className = '', onNavigate, onAdjustPace }: NavSidebarProps) {
-  const [selected, setSelected] = useState<string>(NAV_ITEMS[0]);
+export function NavSidebar({ className = '', channels, selected, onSelect, onAdjustPace }: NavSidebarProps) {
   const [wizardOpen, setWizardOpen] = useState(false);
+
+  const items: ChannelSummary[] = [{ id: ALL_CHANNELS, title: 'All channels' }, ...channels];
 
   return (
     <aside
@@ -25,20 +28,17 @@ export function NavSidebar({ className = '', onNavigate, onAdjustPace }: NavSide
       <h2 className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-muted">
         Goal Channels
       </h2>
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <button
-          key={item}
+          key={item.id}
           type="button"
-          aria-current={selected === item ? 'page' : undefined}
-          onClick={() => {
-            setSelected(item);
-            onNavigate?.();
-          }}
+          aria-current={selected === item.id ? 'page' : undefined}
+          onClick={() => onSelect(item.id)}
           className={`min-h-11 rounded-md px-3 text-left text-sm ${
-            selected === item ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-foreground/5'
+            selected === item.id ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-foreground/5'
           }`}
         >
-          {item}
+          {item.title}
         </button>
       ))}
       <button
