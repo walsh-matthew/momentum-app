@@ -1,5 +1,6 @@
 'use client';
 
+import { Check, Circle, Clock3, Loader2 } from 'lucide-react';
 import { TASK_TYPE_LABELS } from '@/lib/tasks/labels';
 import { describeMoveChain } from '@/lib/utils/rebalance';
 import type { MicroTask } from '@/types/database.types';
@@ -20,62 +21,62 @@ export function FocusTaskCard({ task, moves }: FocusTaskCardProps) {
   const done = task.status === 'done';
 
   const onToggle = () => toggle(done ? 'todo' : 'done');
+  const label = pending ? 'Saving…' : done ? 'Mark as not done' : 'Mark as done';
 
   return (
-    <article
-      aria-labelledby={`focus-task-${task.id}`}
-      className="rounded-lg border border-border bg-panel p-4 lg:p-6"
-    >
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded-full bg-accent/10 px-2.5 py-1 font-medium text-accent">
-          {TASK_TYPE_LABELS[task.task_type]}
-        </span>
-        <span className="text-muted">{task.minutes} min</span>
-        {task.carried_from_week !== null && (
-          <span className="rounded-full border border-border px-2.5 py-1 text-muted">
-            Carried over from week {task.carried_from_week}
-          </span>
-        )}
-        {task.pulled_from_week !== null && (
-          <span className="rounded-full border border-border px-2.5 py-1 text-muted">
-            Pulled forward from week {task.pulled_from_week}
-          </span>
-        )}
-      </div>
-
-      {moves.length > 1 && (
-        <p className="mt-2 text-xs text-muted">
-          Moved {moves.length} times: {describeMoveChain(moves)}
-        </p>
-      )}
-
-      <h2
-        id={`focus-task-${task.id}`}
-        className={`mt-3 text-lg font-semibold ${done ? 'text-muted line-through' : ''}`}
-      >
-        {task.title}
-      </h2>
-
+    <article aria-labelledby={`focus-task-${task.id}`} className={`focus-card${done ? ' is-complete' : ''}`}>
+      {/* The check is the whole control. Its text is for screen readers (and is what shows the saving state);
+          the icon changes shape between not done, saving and done, so the state never rests on color. */}
       <button
         type="button"
         role="checkbox"
         aria-checked={done}
         disabled={pending}
         onClick={onToggle}
-        className={`mt-4 min-h-11 w-full rounded-md border px-4 text-sm font-medium disabled:opacity-60 sm:w-auto ${
-          done
-            ? 'border-border hover:bg-foreground/5'
-            : 'border-accent bg-accent text-background hover:opacity-90'
-        }`}
+        title={label}
+        className="task-check mt-0.5"
       >
-        {pending ? 'Saving…' : done ? 'Mark as not done' : 'Mark as done'}
+        {pending ? (
+          <Loader2 className="size-[18px] animate-spin" aria-hidden="true" />
+        ) : done ? (
+          <Check className="size-[18px]" aria-hidden="true" />
+        ) : (
+          <Circle className="size-[20px]" aria-hidden="true" />
+        )}
+        <span className="sr-only">{label}</span>
       </button>
 
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="chip chip-accent">{TASK_TYPE_LABELS[task.task_type]}</span>
+          <span className="effort-tag">
+            <Clock3 className="size-3" aria-hidden="true" />
+            {task.minutes} min
+          </span>
+          {task.carried_from_week !== null && (
+            <span className="chip">Carried over from week {task.carried_from_week}</span>
+          )}
+          {task.pulled_from_week !== null && (
+            <span className="chip">Pulled forward from week {task.pulled_from_week}</span>
+          )}
+        </div>
+
+        {moves.length > 1 && (
+          <p className="mt-2 text-xs text-muted">
+            Moved {moves.length} times: {describeMoveChain(moves)}
+          </p>
+        )}
+
+        <h2 id={`focus-task-${task.id}`} className="mt-2.5 text-base font-semibold tracking-[-0.02em]">
+          {task.title}
+        </h2>
+
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
+      </div>
     </article>
   );
 }

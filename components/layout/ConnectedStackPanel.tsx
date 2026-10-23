@@ -44,7 +44,7 @@ export function ConnectedStackPanel({
             role="tab"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
-            className={`min-h-11 text-sm font-medium ${tab === t ? 'text-accent' : 'text-muted'}`}
+            className={`min-h-11 border-b-2 text-sm font-medium ${tab === t ? 'border-accent text-accent' : 'border-transparent text-muted'}`}
           >
             {PANEL_TABS[t]}
           </button>

@@ -1,3 +1,4 @@
+import { Clock3 } from 'lucide-react';
 import { TASK_TYPE_LABELS } from '@/lib/tasks/labels';
 import type { MicroTask } from '@/types/database.types';
 
@@ -11,19 +12,22 @@ interface UpNextListProps {
 export function UpNextList({ tasks }: UpNextListProps) {
   return (
     <section aria-labelledby="up-next-heading">
-      <h2 id="up-next-heading" className="text-sm font-semibold">
+      <h2 id="up-next-heading" className="section-title">
         Up next
       </h2>
       {tasks.length === 0 ? (
         <p className="mt-2 text-sm text-muted">Nothing is queued after this one.</p>
       ) : (
-        <ol className="mt-2 flex flex-col divide-y divide-border rounded-lg border border-border bg-panel">
+        <ol className="mt-3 flex flex-col gap-2">
           {tasks.map((task) => (
-            <li key={task.id} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-              <span className="text-sm">{task.title}</span>
+            <li key={task.id} className="channel-card flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <span className="text-sm font-medium">{task.title}</span>
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
                 <span>{TASK_TYPE_LABELS[task.task_type]}</span>
-                <span>{task.minutes} min</span>
+                <span className="inline-flex items-center gap-1">
+                  <Clock3 className="size-3" aria-hidden="true" />
+                  {task.minutes} min
+                </span>
                 <span>Week {task.week_of}</span>
                 {task.carried_from_week !== null && <span>Carried over from week {task.carried_from_week}</span>}
                 {task.pulled_from_week !== null && <span>Pulled forward from week {task.pulled_from_week}</span>}

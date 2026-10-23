@@ -1,3 +1,5 @@
+import { Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { TIMELINE_WARNING_LABELS } from '@/lib/tasks/labels';
 import type { ChannelHint } from '@/types/channelViews';
 import type { RebalanceProposalView } from '@/types/rebalance';
@@ -18,13 +20,13 @@ export function RebalanceSideCard({ view, hint = null, onOpen }: RebalanceSideCa
   const needsAttention = moves > 0 || warnings.length > 0;
 
   return (
-    <section
-      aria-labelledby="rebalance-card-title"
-      className="rounded-lg border border-border bg-background p-4 text-foreground"
-    >
-      <h3 id="rebalance-card-title" className="text-xs font-medium uppercase tracking-wide text-muted">
-        Rebalance
-      </h3>
+    <section aria-labelledby="rebalance-card-title" className="score-card flex-col items-stretch gap-0 p-4 text-foreground">
+      <div className="flex items-center gap-1.5">
+        <Sparkles className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
+        <h3 id="rebalance-card-title" className="eyebrow text-accent">
+          Rebalance
+        </h3>
+      </div>
 
       {view === null ? (
         <p className="mt-2 text-sm text-muted">
@@ -37,21 +39,10 @@ export function RebalanceSideCard({ view, hint = null, onOpen }: RebalanceSideCa
           <p className="mt-2 text-sm">{view.proposal.summary}</p>
 
           {needsAttention && (
-            <ul className="mt-3 flex flex-wrap gap-2 text-xs">
-              {moves > 0 && (
-                <li className="rounded-full bg-accent/10 px-2.5 py-1 font-medium text-accent">
-                  {moves} to carry over
-                </li>
-              )}
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {moves > 0 && <li className="chip chip-accent">{moves} to carry over</li>}
               {warnings.map((w, i) => (
-                <li
-                  key={`${w.kind}-${i}`}
-                  className={`rounded-full border px-2.5 py-1 font-medium ${
-                    w.kind === 'cannot_hold'
-                      ? 'border-red-600/40 text-red-700 dark:text-red-300'
-                      : 'border-amber-600/40 text-amber-800 dark:text-amber-300'
-                  }`}
-                >
+                <li key={`${w.kind}-${i}`} className={`chip ${w.kind === 'cannot_hold' ? 'chip-danger' : 'chip-warn'}`}>
                   {TIMELINE_WARNING_LABELS[w.kind]}
                 </li>
               ))}
@@ -59,13 +50,9 @@ export function RebalanceSideCard({ view, hint = null, onOpen }: RebalanceSideCa
           )}
 
           {needsAttention && (
-            <button
-              type="button"
-              onClick={onOpen}
-              className="mt-4 min-h-11 w-full rounded-md bg-accent px-4 text-sm font-medium text-background hover:opacity-90"
-            >
+            <Button onClick={onOpen} className="mt-4 w-full">
               Review proposal
-            </button>
+            </Button>
           )}
         </>
       )}

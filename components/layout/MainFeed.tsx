@@ -45,17 +45,19 @@ export function MainFeed({
         </div>
       ) : (
         velocityHint === 'choose_channel' && (
-          <section aria-label="Velocity" className="mb-6 rounded-lg border border-border bg-panel p-4 lg:p-6">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">Velocity</p>
-            <p className="mt-2 text-sm text-muted">
+          <section aria-label="Velocity" className="score-card mb-6">
+            <div className="relative z-10 min-w-0">
+              <p className="eyebrow">Velocity</p>
+              <p className="mt-2 text-sm text-muted">
               Velocity is worked out for one goal at a time, because each goal&apos;s weeks count from its own start
               date. Choose a channel in the sidebar to see it.
-            </p>
+              </p>
+            </div>
           </section>
         )
       )}
-      <h1 className="text-xl font-semibold">Today</h1>
-      {channelTitle && <p className="mt-1 text-sm text-muted">{channelTitle}</p>}
+      <h1 className="text-[25px] font-semibold leading-tight tracking-[-0.055em]">Today</h1>
+      {channelTitle && <p className="eyebrow mt-1.5">{channelTitle}</p>}
       {feedState === 'signed_out' && <SignedOutState />}
       {feedState === 'no_goals' && <NoGoalsState onNewGoal={onNewGoal} />}
       {feedState === 'no_tasks' && <NoTasksState channelTitle={channelTitle} onNewGoal={onNewGoal} />}

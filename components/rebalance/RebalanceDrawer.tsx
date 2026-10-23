@@ -1,7 +1,9 @@
 'use client';
 
+import { OctagonAlert, Sparkles, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import { applyRebalanceProposal, askClaudeToRebalance } from '@/app/actions/tasks';
+import { Button } from '@/components/ui/button';
 import { REBALANCE_ACTION_LABELS, TASK_TYPE_LABELS, TIMELINE_WARNING_LABELS } from '@/lib/tasks/labels';
 import { describeMoveChain } from '@/lib/utils/rebalance';
 import type { ChannelHint } from '@/types/channelViews';
@@ -37,15 +39,12 @@ function WarningCard({ warning, view }: WarningCardProps) {
   const stuck = blocking ? warning.taskIds.map((id) => view.tasks[id]?.title).filter(Boolean) : [];
   return (
     <li
-      className={`rounded-lg border p-3 text-sm ${
-        blocking ? 'border-red-600/40 bg-red-600/5' : 'border-amber-600/40 bg-amber-500/10'
+      className={`rounded-xl border p-3 text-sm ${
+        blocking ? 'border-danger/40 bg-destructive/10' : 'border-warn/40 bg-warn/10'
       }`}
     >
-      <p
-        className={`font-medium ${
-          blocking ? 'text-red-700 dark:text-red-300' : 'text-amber-800 dark:text-amber-300'
-        }`}
-      >
+      <p className={`flex items-center gap-1.5 font-medium ${blocking ? 'text-danger' : 'text-warn'}`}>
+        {blocking ? <OctagonAlert className="size-4 shrink-0" aria-hidden="true" /> : <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />}
         {TIMELINE_WARNING_LABELS[warning.kind]}
       </p>
       <p className="mt-1">{warning.message}</p>
@@ -144,7 +143,7 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
               <h3 className="text-sm font-medium">Left where they were</h3>
               <ul className="mt-2 flex flex-col gap-2 text-sm">
                 {result.skipped.map((s) => (
-                  <li key={s.taskId} className="rounded-lg border border-border p-3">
+                  <li key={s.taskId} className="channel-card">
                     <p className="font-medium">{titleOf(s.taskId)}</p>
                     <p className="text-muted">{s.reason}</p>
                   </li>
@@ -154,13 +153,7 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
           )}
         </div>
         <footer className="flex shrink-0 justify-end border-t border-border p-4 lg:px-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-11 rounded-md bg-accent px-5 text-sm font-medium text-background"
-          >
-            Done
-          </button>
+          <Button onClick={onClose}>Done</Button>
         </footer>
       </div>
     );
@@ -171,51 +164,52 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4 lg:px-6">
-        <div>
-          <h2 id={titleId} className="text-lg font-semibold">
-            Rebalance your plan
-          </h2>
-          <p className="mt-1 text-xs text-muted">
-            {view.source === 'model'
-              ? `Suggested by Claude (${view.model ?? 'model'}) · checked against your plan`
-              : 'Rule-based suggestion'}
-            {' · '}week {view.currentWeek} of the plan
-          </p>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="ai-icon" aria-hidden="true">
+            <Sparkles className="size-[17px]" />
+          </span>
+          <div className="min-w-0">
+            <h2 id={titleId} className="text-lg font-semibold tracking-[-0.03em]">
+              Rebalance your plan
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              {view.source === 'model'
+                ? `Suggested by Claude (${view.model ?? 'model'}) · checked against your plan`
+                : 'Rule-based suggestion'}
+              {' · '}week {view.currentWeek} of the plan
+            </p>
+          </div>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           disabled={pending}
           onClick={onClose}
           aria-label="Close without changing anything"
-          className="-mr-2 -mt-1 flex min-h-11 min-w-11 items-center justify-center rounded-md text-xl text-muted hover:bg-foreground/5 disabled:opacity-50"
+          className="-mr-2 -mt-1 text-muted"
         >
-          <span aria-hidden>×</span>
-        </button>
+          <X aria-hidden="true" />
+        </Button>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:px-6">
         <p className="text-sm">{proposal.summary}</p>
 
         {view.notice && (
-          <p role="status" className="mt-3 rounded-md border border-border bg-foreground/5 p-3 text-xs">
+          <p role="status" className="mt-3 rounded-xl border border-border bg-foreground/5 p-3 text-xs">
             {view.notice}
           </p>
         )}
 
         <div className="mt-3">
-          <button
-            type="button"
-            disabled={pending || asking || channelId === null}
-            onClick={askClaude}
-            className="min-h-11 rounded-md border border-border px-3 text-sm font-medium hover:bg-foreground/5 disabled:opacity-60"
-          >
+          <Button variant="outline" disabled={pending || asking || channelId === null} onClick={askClaude}>
             {asking ? 'Asking Claude…' : view.source === 'model' ? 'Ask Claude again' : 'Ask Claude to review'}
-          </button>
+          </Button>
           <p className="mt-1 text-xs text-muted">
             Claude sees task ids, weeks and types, never your task titles. You approve every change.
           </p>
           {askError && (
-            <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="mt-2 text-sm text-danger">
               {askError}
             </p>
           )}
@@ -242,8 +236,8 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
                 return (
                   <li key={move.taskId}>
                     <label
-                      className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3 ${
-                        isOn ? 'border-accent/60' : 'border-border opacity-70'
+                      className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border p-3 ${
+                        isOn ? 'border-accent/50 bg-accent/5' : 'border-border opacity-80'
                       }`}
                     >
                       <input
@@ -256,9 +250,7 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-medium">{task?.title ?? 'A task'}</span>
                         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                          <span className="rounded-full bg-accent/10 px-2.5 py-1 font-medium text-accent">
-                            {REBALANCE_ACTION_LABELS[move.action]}
-                          </span>
+                          <span className="chip chip-accent">{REBALANCE_ACTION_LABELS[move.action]}</span>
                           <span className="text-muted">
                             {task ? `${TASK_TYPE_LABELS[task.taskType]} · ${task.minutes} min` : ''}
                           </span>
@@ -287,7 +279,7 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
         )}
 
         {!hasMoves && proposal.warnings.length === 0 && (
-          <p className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted">
+          <p className="mt-4 rounded-xl border border-dashed border-border p-4 text-sm text-muted">
             Nothing is behind, so there is nothing to rebalance.
           </p>
         )}
@@ -298,28 +290,18 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
           rendered below a long list would be out of sight. */}
       <footer className="shrink-0 border-t border-border p-4 lg:px-6">
         {error && (
-          <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="mb-3 text-sm text-danger">
             {error}
           </p>
         )}
         <div className="flex flex-wrap justify-between gap-2">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={onClose}
-            className="min-h-11 rounded-md border border-border px-4 text-sm disabled:opacity-50"
-          >
+          <Button variant="outline" disabled={pending} onClick={onClose}>
             {hasMoves ? 'Keep my plan' : 'Close'}
-          </button>
+          </Button>
           {hasMoves && (
-            <button
-              type="button"
-              disabled={pending || chosen.length === 0}
-              onClick={apply}
-              className="min-h-11 rounded-md bg-accent px-5 text-sm font-medium text-background disabled:opacity-50"
-            >
+            <Button disabled={pending || chosen.length === 0} onClick={apply}>
               {pending ? 'Applying…' : `Apply ${chosen.length} ${chosen.length === 1 ? 'shift' : 'shifts'}`}
-            </button>
+            </Button>
           )}
         </div>
       </footer>
@@ -360,7 +342,7 @@ export function RebalanceDrawer({ open, onClose, view, channelId, hint = null, m
       onClick={(e) => {
         if (e.target === dialogRef.current && !busy) onClose();
       }}
-      className="ml-auto mr-0 h-dvh max-h-none w-[min(26rem,100vw)] max-w-none border-l border-border bg-panel p-0 text-foreground backdrop:bg-black/50 open:animate-[drawer-in_200ms_ease-out] motion-reduce:animate-none"
+      className="sheet-surface ml-auto mr-0 h-dvh max-h-none w-[min(26rem,100vw)] max-w-none rounded-none border-y-0 border-r-0 p-0 text-foreground backdrop:bg-black/60 open:animate-[drawer-in_200ms_ease-out] motion-reduce:animate-none"
     >
       {open &&
         (view ? (
@@ -391,13 +373,9 @@ export function RebalanceDrawer({ open, onClose, view, channelId, hint = null, m
               </p>
             </div>
             <footer className="flex shrink-0 justify-end border-t border-border p-4 lg:px-6">
-              <button
-                type="button"
-                onClick={onClose}
-                className="min-h-11 rounded-md border border-border px-4 text-sm"
-              >
+              <Button variant="outline" onClick={onClose}>
                 Close
-              </button>
+              </Button>
             </footer>
           </div>
         ))}
