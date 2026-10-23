@@ -1,7 +1,7 @@
 # MOM-75: Plan Execution Framework Spec
 
 > **Status:** Spec only, not built. **Jira:** MOM-75 (under MOM-16). **Written:** 2026-10-22, against `main` @ `e8e43ed`.
-> Build this after Sessions 1 and 2 of the current plan have been run by hand, so the commands reflect real friction.
+> Build this after a full day of blocks has been run by hand, so the commands reflect real friction. (Plan sessions were renumbered on 2026-10-23, so this no longer names session numbers.)
 
 ## 1. Goal
 
