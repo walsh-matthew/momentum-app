@@ -14,7 +14,7 @@ Items below were triaged into Jira on 2026-10-21 under `MOM-16` (EPIC 5: Phase 2
 | Layout and UI | MOM-30, MOM-31, MOM-32 (Closed), MOM-33, MOM-36, MOM-76, MOM-77, MOM-78, MOM-84, MOM-85 |
 | Wizard | MOM-34, MOM-35, MOM-79, MOM-80, MOM-81, MOM-82, MOM-83 |
 | Integrations | MOM-37, MOM-38, MOM-39, MOM-40, MOM-41, MOM-62, MOM-71, MOM-72 |
-| Velocity | MOM-42, MOM-43, MOM-44, MOM-45, MOM-46, MOM-69 |
+| Velocity | MOM-42, MOM-43, MOM-44, MOM-45, MOM-46, MOM-69, MOM-86 |
 | Rebalance | MOM-47, MOM-48, MOM-49, MOM-50, MOM-51, MOM-52, MOM-53, MOM-73 |
 | Tests | MOM-54, MOM-55, MOM-56, MOM-57, MOM-58, MOM-59, MOM-61, MOM-67 |
 | Deployment | MOM-60 |
@@ -126,3 +126,8 @@ Items found while working on tickets. Add new items at the bottom with the ticke
 - [ ] Focus card: the home page reads the signed-in user's tasks twice per request, once for the focus feed (`getFocusFeed`) and once for velocity and rebalancing (`loadPlan`). Build the feed from the tasks `loadPlan` already holds. *Source: MOM-36.* *Jira: MOM-84.*
 - [ ] Focus card: Recently done offers only the last 3 completed tasks, so older ones cannot be reopened from the UI, and it shows no completion time (left out to avoid a server/client time-zone mismatch). Add a "show all done" view with dates. *Source: MOM-36.* *Jira: MOM-85.*
 - [ ] Focus card: the feed covers all of the user's tasks across goals, in one order, like the old single focus task. With several goals it should follow the channel selected in the sidebar, together with velocity. *Source: MOM-36.* *Jira: MOM-44.*
+- [x] Progress: nothing computed how far along each goal is. Resolved in MOM-86: `listGoalProgress` in `lib/services/tasks.ts` returns, for each of the signed-in user's goals, tasks done of total, a whole percent rounded down (100 only when every task is done), and the plan week today falls in, with `not_started` / `past_plan` / `unknown` timelines instead of a made-up week. The counting is the pure `summarizeAllGoalProgress` in `lib/utils/progress.ts`; it counts tasks, not minutes, and it only reads. A goal with no tasks is listed as 0 of 0. Types are in `types/progress.ts`. *Source: owner request, 2026-10-23.* *Jira: MOM-86.*
+- [ ] Progress: `listGoalProgress` has no caller yet. The sidebar goal list and the wireframe's goal cards with progress should show it. *Source: MOM-86.* *Jira: MOM-77, MOM-31.*
+- [ ] Progress: it measures tasks only. A goal also has a checklist of completion criteria (`goal_channels.criteria`, for example the seven in the career pivot plan), and that checklist is the real definition of done. Decide whether the goal card shows task progress, criteria progress or both; criteria cannot be ticked from the UI yet. *Source: MOM-86, `docs/NINETY_DAY_PLAN_CONTEXT.md` §1.* *Jira: MOM-79.*
+- [ ] Progress: the total grows as tasks are added (rebalancing, ingested activities, later weeks), so the percentage can fall without anything being un-ticked. Say so on the goal card, or fix the total to the original plan. Isolation relies on RLS for the session client, as the other reads do; there is no extra user filter. *Source: MOM-86.* *Jira: MOM-77.*
+- [ ] Progress: `listGoalProgress` reads goals and tasks (two queries), and the home page already reads both for velocity and the focus feed. Share one read when the cards are wired. *Source: MOM-86.* *Jira: MOM-84.*
