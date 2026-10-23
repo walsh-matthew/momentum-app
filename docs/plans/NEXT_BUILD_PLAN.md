@@ -8,7 +8,7 @@
 
 ## Executive Overview & Architectural Invariants
 
-This build cycle makes the app safe to hand to a first real user: a new account starts empty and gets sensible empty states (Session 1), the app looks and lays out like the original v0 wireframes (Session 2), real browser tests guard sign-up, route protection and the wizard's failure paths (Session 3), the external provider UIs and adapters connect (Session 4), and CI plus LLM spend governance protect production (Session 5). Every block preserves the three non-negotiable invariants:
+This build cycle makes the app safe to hand to a first real user: a new account starts empty and gets sensible empty states (Session 1), the app looks and lays out like the original v0 wireframes (Session 2), real browser tests guard sign-up, route protection and the wizard's failure paths (Session 3), the external provider UIs and adapters connect (Session 4), CI plus LLM spend governance protect production (Session 5), and the daily build loop becomes three Claude Code commands instead of hand-pasted prompts (Session 6). Every block preserves the three non-negotiable invariants:
 
 1. **Human-Only Completion:** Only the signed-in owner ever changes a task's `status` or `completed_at`. No background job, webhook, ingestion run or LLM may write them, and nothing creates a task as `done`. Enforced by the `micro_tasks_guard_completion` trigger (migration 002) and by source-level tests.
 2. **No-Delete / Carry-Forward:** Unfinished work is never cut or hard-deleted. The only moves are `carry_over` and `pull_forward`; work that cannot fit is named in a `cannot_hold` warning. `task_rebalance_history` is append-only.
@@ -46,9 +46,11 @@ SESSION 4: EXTERNAL INTEGRATIONS & UI (MOM-62, MOM-38)
   - Google consent flow and Hevy key forms, then real adapters and signed webhooks (MOM-38 needs Hevy samples from you)
 SESSION 5: CI PROTECTION & COST GOVERNANCE (MOM-67, MOM-73)
   - GitHub Actions CI with a disposable database, then durable LLM rate limits, usage logging and spend caps
+SESSION 6: PLAN EXECUTION COMMANDS (MOM-75)
+  - /day-start, /run-block <MOM-n> and /day-end in .claude/commands/, a plan format test in npm test, and a "Today's runbook" section in the plan
 ```
 
-*Order matters. In Session 1, MOM-19 comes last: the seed must not be removed until a new user sees a sensible empty state (MOM-18; the wizard already builds the plan: MOM-34, MOM-35, live-verified in MOM-83). Session 2 comes before the Playwright session so its component and hydration tests are written against the final UI, and before MOM-62 so the connect forms land on the new Connected Apps page; MOM-76 (styling) comes before MOM-77 (layout). MOM-61 comes after MOM-19 so its browser tests start from an empty new account, and before MOM-67 so CI has a browser suite to run. MOM-62 comes before MOM-38 because the adapters need the connect flows. Safe stopping points: after Block 1.2 (a new user gets an empty account and the wizard), after each session. If the day runs short, stop after Session 3; Sessions 4 and 5 move to the next day, and Block 4.2 is the first to drop (it also waits on Hevy samples from you).*
+*Order matters. In Session 1, MOM-19 comes last: the seed must not be removed until a new user sees a sensible empty state (MOM-18; the wizard already builds the plan: MOM-34, MOM-35, live-verified in MOM-83). Session 2 comes before the Playwright session so its component and hydration tests are written against the final UI, and before MOM-62 so the connect forms land on the new Connected Apps page; MOM-76 (styling) comes before MOM-77 (layout). MOM-61 comes after MOM-19 so its browser tests start from an empty new account, and before MOM-67 so CI has a browser suite to run. MOM-62 comes before MOM-38 because the adapters need the connect flows. MOM-75 comes last so its commands and format test are written against the final shape of this plan and its day-end section; it touches no app code and no production, so it can also run on its own on any later day. Safe stopping points: after Block 1.2 (a new user gets an empty account and the wizard), after each session. If the day runs short, stop after Session 3; Sessions 4 to 6 move to the next day, and Block 4.2 is the first to drop (it also waits on Hevy samples from you).*
 
 ---
 
@@ -391,6 +393,52 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 
 ---
 
+# SESSION 6: PLAN EXECUTION COMMANDS
+
+**Your prerequisites before this session:** none. This session changes tooling only: no app code, no migration, nothing on production. It is safe to run on its own on any day. The spec's "run a full day by hand first" bar was met on 2026-10-23, and that day-end is the friction the commands should remove: the step B loop needed Git Bash, the smoke-test account had to be created by hand, the Vercel output needed explaining, and step D needed a pause before Jira transitions.
+
+## Block 6.1: Plan Execution Commands and Plan Format Check (MOM-75)
+
+* **Objective & Scope:** Implement `docs/mom-75-plan-execution-spec.md`: three Claude Code commands in `.claude/commands/` (`/day-start`, `/run-block <MOM-n>`, `/day-end`) that read whatever `docs/plans/NEXT_BUILD_PLAN.md` is current and never name tickets; a Vitest format check in `npm test`; a "Today's runbook" section in the plan; a read-only allowlist in `.claude/settings.json`; and the daily loop documented in `CLAUDE.md`. The commands orchestrate the plan's own prompts and keep every approval stop; automation removes copy-paste, not visibility.
+* **Core Invariants to Protect:** *Production approval*: no command runs `supabase db push`, `git push`, `vercel env` or any production write without your explicit OK, and none of them is in the allowlist. *Secrets*: prerequisite checks name env vars only and never print values; the standing smoke-test account's password is never asked for. The three domain invariants are untouched: this block changes no app code.
+* **CLI Session Config:** Model: Sonnet | Effort: Medium
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-75: build the plan execution commands and the plan format check.
+
+Task Instructions:
+1. Read ticket MOM-75 in Jira first; its five acceptance criteria are the definition of done. Then read docs/mom-75-plan-execution-spec.md in full; it is the design. If the ticket and the spec disagree, stop and flag it.
+2. Read CLAUDE.md, package.json, vitest.config.mts, scripts/generate-execution-plan.ts (the existing plan generator; keep its style), tests/ (how existing tests read repo files) and the whole of docs/plans/NEXT_BUILD_PLAN.md, including the Final Day-End section (steps A to F) and the Standing Rules (standing smoke-test account, production approval).
+3. Before writing any command, look up the current Claude Code documentation for custom slash commands (file location, frontmatter, how $ARGUMENTS is passed), for allowlist syntax in .claude/settings.json, and for how a session's model and effort are read or set (the spec leaves effort as an open question). Tell me what you found and what each command can and cannot do automatically. Do not guess.
+4. Create the feature branch `feature/MOM-75-plan-execution-commands` off a clean `main`.
+5. Format check first: tests/build-plan-format.test.ts per spec sections 3 and 4. Headings in this plan look like `## Block 1.1: <title> (MOM-18)`; each block must have exactly one ticket key, a `CLI Session Config` line, exactly one fenced `text` prompt and a `User Verification Gate` checklist; the plan must have the metadata header and a "Today's runbook" section. Failing fixtures go in tests/fixtures/, one per rule, and each failure message names the block. The check reads the plan from disk but must not fail just because a session is not today's.
+6. Add the "Today's runbook" section near the top of docs/plans/NEXT_BUILD_PLAN.md (block order, the one command to type per block, what to check at each gate, in plain language), so the test passes on the current plan. Update the plan's day-end step E prompt so tomorrow's generator always produces the runbook and the contract.
+7. Commands in .claude/commands/, each short and orchestrating the plan rather than repeating it:
+   - /run-block <MOM-n>: spec 2.1, steps 1 to 8. It finds the block by key, stops on zero or several matches, runs the preflight, shows the block's CLI Session Config and stops with the exact fix on a model mismatch, asks me to confirm effort, checks the block's prerequisites by name only, resumes an existing feature branch, says in one line what each step does before doing it, keeps every stop in the block's prompt, and ends with the gate (deferred post-push items appended to docs/plans/.pending-live-checks.md, git-ignored) and a five-line summary.
+   - /day-start: spec 2.2. Read-only. Include: the standing smoke-test account is a manual check (it cannot be verified without production credentials, so it is listed as "confirm in the dashboard", not checked).
+   - /day-end: spec 2.3, in the order A, B, D, E, one push, C, deferred gates. Lessons from 2026-10-23 to build in: on Windows the step B verify loop runs in Git Bash, which Claude Code already uses; the step B user count expects exactly 1 (the standing smoke-test account); step D pauses for my OK before any Jira transition to Closed or Done; E archives the finished plan to docs/plans/archive/YYYY-MM-DD.md before writing the new one and runs the format check on it; the single push waits for my explicit OK after showing `git log origin/main..main --oneline`; C reads the newest production deployment's status and explains it in one line.
+8. Permissions: .claude/settings.json allowlist for the read-only commands in spec section 5 only. `supabase db push`, `git push`, `vercel env` and any production write must still ask. Show me the file before committing it.
+9. Docs: document the three commands and the daily loop (/day-start, then /run-block per block, then /day-end) in CLAUDE.md, and add docs/plans/.pending-live-checks.md to .gitignore. Show me the CLAUDE.md diff and apply it only if I approve.
+10. Dry run without side effects: run /day-start for real (it is read-only), and walk /run-block against one already-finished block in a read-only mode or by describing exactly what it would do, so I can see it find the block, show the config and the gate. Do not execute any block prompt and do not push.
+11. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass, and the format test must fail on each fixture.
+12. Update BACKLOG.md for MOM-75 (tick the Tooling item; add follow-ups with Jira keys) and mark docs/mom-75-plan-execution-spec.md as built, noting any part that differs from the spec and why.
+13. Commit with "feat(MOM-75): add plan execution commands and the plan format check" and merge into main with --no-ff. Do not push.
+14. Update MOM-75 in Jira: Done only if all five acceptance criteria are met; criterion 4 (/day-end end to end) can only be proven on a real day-end, so comment what was dry-run and leave the ticket open until I have run one.
+
+Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes (including the new format test); committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
+```
+
+* **User Verification Gate:**
+  - [ ] The CLI showed you what the Claude Code docs say about commands, the allowlist, and model and effort, before writing anything.
+  - [ ] `npm test` passes on the current plan, and you saw the format test fail on a plan missing a key, a config line, a prompt and a gate.
+  - [ ] `/day-start` ran and reported clearly; `/run-block` found a block by key and stopped on a model mismatch, without running the block.
+  - [ ] `.claude/settings.json` allows only read-only commands; `git push` and `supabase db push` still ask.
+  - [ ] On your next real day-end, run `/day-end` instead of steps A to F by hand; only then close MOM-75.
+
+---
+
 # FINAL DAY-END BUILD VERIFICATION & REMOTE PUSH
 
 Run after the last block of the day. Stop on the first failure.
@@ -506,6 +554,7 @@ git push origin main
 | **Dark only until MOM-30** | MOM-76 makes the app dark regardless of the device setting. Light mode with a follow-device default is MOM-30, not scheduled. |
 | **Live Claude paths** | The MOM-83 smoke test did not exercise the wait message, Try again or the starter plan on production; Block 3.1 covers them against the local stack with the API key absent. Production has never seen the failure path. |
 | **Model cost** | MOM-35's generator and MOM-47's rebalance call Claude Opus 5.5 per click; MOM-73 (Block 5.2) is what bounds that. Until it ships, do not invite real users. |
+| **MOM-75 changes how you run a day** | After Block 6.1, a build day is `/day-start`, then `/run-block MOM-n` per block, then `/day-end`, instead of pasting prompts. The commands keep every approval stop and cannot switch the model for you. Until it ships, keep running this plan by hand. |
 | **Direct pushes to `main`** | Every change is merged and pushed to `main` by hand. After MOM-67 and branch protection are on, step C becomes a pull request. |
 | **Not scheduled, still recommended** | **MOM-45** (the plan week can be off by one around midnight outside UTC; you are in Pacific time), **MOM-65** (revoke EXECUTE on `handle_new_user` and `rls_auto_enable`; Block 1.2 comments on its outdated seed criterion), MOM-66 (table grants check), MOM-68 (`.env*` gitignore, now also the untracked `AGENTS.md`, `supabase/.branches/` and `supabase/snippets/`), MOM-74 (retire `HEVY_API_KEY`; delete it from Vercel Production afterwards), MOM-91 (`connection()` instead of `force-dynamic`; the selected-channel URL depends on the page being rendered per request). |
 | **Not scheduled, product decisions** | MOM-79 (tick a goal criterion; also the only way to make the 7 criteria real), MOM-80 (review the drafted criteria), MOM-81 (plan-shape rules, including giving the generator the goal's criteria), MOM-82 (unused `createGoalChannel`), MOM-85 (reopen older completed tasks), MOM-89 (paused and finished goals are invisible), MOM-90 with MOM-53 (move the day-90 checkpoint when the plan cannot hold), MOM-20 to MOM-26 (schema), MOM-33 (AI chat), MOM-64 (password reset, abuse protection). |
