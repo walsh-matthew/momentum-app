@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(npm test *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npm run build)",
+      "Bash(npm run plan *)",
+      "Bash(npm run plan:check *)",
+      "Bash(npx supabase migration list *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(supabase db push *)",
+      "Bash(npx supabase db push *)",
+      "Bash(vercel env *)",
+      "Bash(npx vercel env *)",
+      "Bash(gh pr merge *)"
+    ]
+  }
+}

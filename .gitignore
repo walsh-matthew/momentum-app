@@ -11,3 +11,6 @@ supabase/.temp/
 # Playwright output (npm run test:e2e)
 test-results/
 playwright-report/
+
+# Post-push checks deferred by /run-block, cleared by /day-end (MOM-75)
+docs/plans/.pending-live-checks.md

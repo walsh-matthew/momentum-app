@@ -1,6 +1,6 @@
 # MOM-75: Plan Execution Framework Spec
 
-> **Status:** Spec only, not built. **Jira:** MOM-75 (under MOM-16). **Written:** 2026-10-22, against `main` @ `e8e43ed`.
+> **Status:** **Built in MOM-75** (2026-10-24). Section 9 lists where the build differs from this spec, and why; the pull-request workflow is the main difference. Acceptance criterion 4 (`/day-end` end to end) is unproven until a real day-end, so the ticket stays open. **Jira:** MOM-75 (under MOM-16). **Written:** 2026-10-22, against `main` @ `e8e43ed`.
 > Build this after a full day of blocks has been run by hand, so the commands reflect real friction. (Plan sessions were renumbered on 2026-10-23, so this no longer names session numbers.)
 
 ## 1. Goal
@@ -104,3 +104,34 @@ Add an allowlist in `.claude/settings.json` for read-only commands (`git status`
 - Document the three commands and the daily loop in `CLAUDE.md`.
 - The current plan's blocks already follow most of the contract; the runbook section and the strict one-prompt-per-block rule are the new parts.
 - Keep the commands short: they orchestrate the plan's own prompts rather than repeating them.
+
+## 9. As built (MOM-75): where it differs from this spec
+
+Written 2026-10-24. Everything above is the original design; this section is what was built and why it differs.
+
+**The pull-request workflow (the main difference).** This spec was written before `main` was protected. It says `/day-end` ends with ONE push to `origin/main` and that `/run-block` starts with `git checkout main && git pull --ff-only`. Since MOM-67, `main` takes changes only through a pull request with the CI jobs `checks` and `database` green (CLAUDE.md), so:
+
+- The `/run-block` preflight is `git status --short` (only the owner's uncommitted logs, `AGENTS.md`, `supabase/.branches/` and `supabase/snippets/` are expected), then `git fetch origin`, then a check that `main` matches `origin/main`; if `main` is only behind, `git switch main` and `git pull --ff-only`, each on its own.
+- `/run-block` commits on the feature branch and never merges into `main` and never pushes. Where an older block prompt says "merge into main with --no-ff", it skips that step. It does not move a Jira ticket to Done or Closed. `/day-end` step D runs before anything has merged, so it only comments on tickets, creates tickets and proposes Closed for obsolete ones, with the owner's OK. Done transitions are a separate step after the merge and the tidy-up: it lists each merged ticket with its acceptance criteria (met or unmet, with evidence), and waits for the owner's OK before moving anything, including epics whose children are all Done or Closed.
+- "One push" became one approval stop in `/day-end`: it shows `git log origin/main..<branch> --oneline` for every one of the day's branches (including the step D and E branches), waits for the owner's explicit OK, then runs `git push -u origin <branch>` for each (never `main`) and prints the pull request link. Pull requests merge with a merge commit once both jobs are green. Step C (live checks) runs after the merge, when Vercel has deployed.
+- A production migration is applied after CI is green on its pull request and the owner's OK, and before that pull request merges (merging deploys to Vercel and the new code needs the new schema). So a block with a migration has its branch pushed mid-day, with the owner's OK, rather than at the end.
+- A block that needs another ticket's code stops if that code is not in `origin/main` yet, and offers: push and merge that pull request first, or stack on its branch (only with the owner's OK). The spec did not foresee this; it is a follow-up in BACKLOG.md.
+
+**Effort (the open question in 2.1 step 4).** Found in the Claude Code docs (2026-10-24): `/effort`, the `effortLevel` setting, `--effort` and `CLAUDE_CODE_EFFORT_LEVEL` set it, and the session header shows it to the owner, but the docs do not say Claude can read it. A command's `model:` and `effort:` frontmatter are fixed per command and apply only while it runs, so one command serving blocks with different settings cannot use them. So `/run-block` compares the block's model with the model the session reports for itself, stops on a mismatch with the exact `/model` to type, and always asks the owner to confirm effort. It recommends the `/effort` slider with `s` (this session only), because typing `/effort <level>` saves the level as the owner's default for that model.
+
+**The format check** is a script, not only a test: `scripts/check-plan-format.ts` (`npm run plan:check`), with `tests/build-plan-format.test.ts` and 28 fixtures in `tests/fixtures/plans/` (one per rule). `/run-block` uses `npm run plan:check -- --block MOM-<n>` for step 1, so finding the block and stopping on zero or several matches is deterministic, and `/day-end` step E runs `--strict`. Beyond section 3, it also requires that a block's prompt names its own ticket and carries a commit message with that key, that a key heads one block only, that the runbook comes before the first block with one row per block in the plan's order and plain-language gate text, and that each session has a prerequisites note (added to Sessions 3 and 5 of the current plan). A prompt that still says to merge into `main` with `--no-ff` is a warning, not an error.
+
+**Permissions.** `.claude/settings.json` allows `git status`, `npm test`, `npx tsc --noEmit`, `npm run build`, `npm run plan`, `npm run plan:check` (new) and `npx supabase migration list`. It does not list `git log` and `git diff`: Claude Code already runs their read-only forms without asking, and an `allow` rule such as `git log *` would also approve `git log --output=<file>`, which writes a file. It adds explicit `ask` rules for `git push`, `supabase db push`, `vercel env` and `gh pr merge`, which are also not in `allow`. Rules match the command as written, so `git -C . push` would not match an `ask` rule; anything not allowed prompts anyway.
+
+**Commands.** They are in `.claude/commands/` (the older format; it still works) with `disable-model-invocation: true`, so Claude never starts a block or a day-end on its own. New files there were not picked up by an already-running session, so Claude Code must be restarted once.
+
+**Added from experience (2026-10-23).** Step B expects exactly 1 user; step D pauses for the owner's OK before any Jira transition to Closed or Done, and stages only the log entries the owner approved; step E archives the finished plan before writing the new one; step C reads the newest production deployment's status and explains it in one line; `/run-block` says so when a block's own commits are already in `origin/main`.
+
+**Acceptance criteria, as built.**
+
+- [x] 1. `.claude/commands/` holds `/run-block`, `/day-start` and `/day-end`; `/run-block` finds any block by key without naming tickets.
+- [x] 2. `/run-block` halts on a model mismatch and asks the owner to confirm effort (dry-run against a finished block; not run against a mismatching session).
+- [x] 3. The format test runs in `npm test`, passes on the current plan, and fails on a plan missing a key, config line, prompt or gate (also shown on the real plan).
+- [ ] 4. `/day-end` end to end: written, not yet run. Proven only on a real day-end.
+- [ ] 5. The log review (step D) is written into `/day-end`; proven with criterion 4.
+- [x] 6. No command runs a production change without explicit approval: none is in `allow`, `git push`, `supabase db push`, `vercel env` and `gh pr merge` are set to ask, and each command says to wait for the owner's OK.
