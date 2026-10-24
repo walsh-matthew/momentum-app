@@ -60,6 +60,9 @@ beforeEach(() => {
 });
 afterEach(() => errorLog.mockRestore());
 
+// What the test reply reports as used (see reply() above): read off the response and handed back, even on a refusal.
+const USAGE = { inputTokens: 10, outputTokens: 10 };
+
 describe('what it sends', () => {
   it('asks the default model, with effort set and the answer constrained by a JSON schema', async () => {
     const { client, create } = clientReturning();
@@ -122,14 +125,14 @@ describe('what it sends', () => {
 describe('what it returns', () => {
   it("hands back the model's JSON exactly as it came, with the model that answered", async () => {
     const { client } = clientReturning(reply({ model: 'claude-opus-5-5' }));
-    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: true, raw: proposalJson, model: 'claude-opus-5-5' });
+    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: true, raw: proposalJson, model: 'claude-opus-5-5', usage: USAGE });
   });
 
   it('does not clean up, fix or filter the answer (the caller validates it)', async () => {
     const hostile = { ...proposalJson, moves: [{ ...proposalJson.moves[0], action: 'delete', status: 'done' }] };
     const { client } = clientReturning(reply({ content: [{ type: 'text', text: JSON.stringify(hostile), citations: null }] }));
     const r = await requestRebalanceFromModel(facts, { client });
-    expect(r).toEqual({ ok: true, raw: hostile, model: 'claude-opus-5-5' });
+    expect(r).toEqual({ ok: true, raw: hostile, model: 'claude-opus-5-5', usage: USAGE });
   });
 
   it('reads the text block even when thinking blocks come first', async () => {
@@ -149,19 +152,19 @@ describe('what it returns', () => {
 describe('when the model does not give a usable answer', () => {
   it('a refusal', async () => {
     const { client } = clientReturning(reply({ stop_reason: 'refusal', content: [] }));
-    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: false, reason: 'refused' });
+    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: false, reason: 'refused', usage: USAGE });
   });
   it('running out of tokens', async () => {
     const { client } = clientReturning(reply({ stop_reason: 'max_tokens' }));
-    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: false, reason: 'bad_output' });
+    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: false, reason: 'bad_output', usage: USAGE });
   });
   it('no text block', async () => {
     const { client } = clientReturning(reply({ content: [] }));
-    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: false, reason: 'bad_output' });
+    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: false, reason: 'bad_output', usage: USAGE });
   });
   it('text that is not JSON', async () => {
     const { client } = clientReturning(reply({ content: [{ type: 'text', text: 'Sure! Here is a plan:', citations: null }] }));
-    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: false, reason: 'bad_output' });
+    expect(await requestRebalanceFromModel(facts, { client })).toEqual({ ok: false, reason: 'bad_output', usage: USAGE });
   });
 });
 

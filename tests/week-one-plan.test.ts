@@ -10,13 +10,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildStubTaskPlan, parseWizardInput } from '@/lib/goals/taskPlan';
 import { createGoalWithWeekOnePlan, generateWeekOnePlan, listMicroTasks } from '@/lib/services/tasks';
 import { listGoalChannels } from '@/lib/services/goals';
+import { resetUsage, rowsFor, usage } from './helpers/fakeLlmUsage';
 import { OTHER_USER, USER, db, resetDb } from './helpers/fakeSupabase';
 
 const model = vi.hoisted(() => ({ request: vi.fn() }));
-vi.mock('@/lib/ai/taskPlan', () => ({ requestWeekOnePlanFromModel: model.request }));
+vi.mock('@/lib/ai/taskPlan', () => ({ requestWeekOnePlanFromModel: model.request, TASK_PLAN_MODEL: 'claude-opus-5-5' }));
 vi.mock('@/lib/supabase/server', async () => {
   const { createSupabaseServerClient } = await import('./helpers/fakeSupabase');
   return { createSupabaseServerClient };
+});
+// The usage limits and log (migration 011) run against the in-memory model of the table and function.
+vi.mock('@/lib/supabase/admin', async () => {
+  const { createSupabaseAdminClient } = await import('./helpers/fakeLlmUsage');
+  return { createSupabaseAdminClient };
 });
 
 const input = (over: Record<string, unknown> = {}) => ({
@@ -42,20 +48,19 @@ const goodPlan = () =>
     task(),
     task({ title: 'Friday review: tick tasks and fill in notes', taskType: 'review', minutes: 30 }),
   );
-const answer = (raw: unknown) => model.request.mockResolvedValueOnce({ ok: true, raw, model: 'claude-opus-5-5' });
-
-let clock = 1_000_000;
-const at = () => ({ now: () => (clock += 60_000) });
+const answer = (raw: unknown) =>
+  model.request.mockResolvedValueOnce({ ok: true, raw, model: 'claude-opus-5-5', usage: { inputTokens: 900, outputTokens: 210 } });
 
 beforeEach(() => {
   model.request.mockReset();
   resetDb([], { id: USER });
+  resetUsage();
 });
 
 describe('generateWeekOnePlan: a valid answer', () => {
   it("returns the model's plan, validated, and saves nothing", async () => {
     answer(goodPlan());
-    const r = await generateWeekOnePlan(input(), at());
+    const r = await generateWeekOnePlan(input());
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.model).toBe('claude-opus-5-5');
@@ -67,11 +72,14 @@ describe('generateWeekOnePlan: a valid answer', () => {
     expect(db.updates).toHaveLength(0);
     expect(db.tasks).toHaveLength(0);
     expect(db.channels).toHaveLength(0);
+    // What it does record is the usage row for the call: counts and an outcome, no content (migration 011).
+    expect(rowsFor(USER)).toHaveLength(1);
+    expect(rowsFor(USER)[0]).toMatchObject({ feature: 'week_one_plan', model: 'claude-opus-5-5', outcome: 'ok', input_tokens: 900, output_tokens: 210 });
   });
 
   it('gives the model the validated wizard answers and nothing else', async () => {
     answer(goodPlan());
-    await generateWeekOnePlan(input({ constraints: ['flexible_hours', 'flexible_hours'] }), at());
+    await generateWeekOnePlan(input({ constraints: ['flexible_hours', 'flexible_hours'] }));
     const sent = model.request.mock.calls[0][0];
     expect(Object.keys(sent).sort()).toEqual(['constraints', 'goalType', 'pace', 'reviewPrompts', 'title']);
     expect(sent.title).toBe('Get my first certification');
@@ -99,7 +107,7 @@ describe('generateWeekOnePlan: output that is not accepted', () => {
     ['more than 100 tasks', planOf(...Array.from({ length: 101 }, () => task()))],
   ])('rejects %s, and nothing is repaired or saved', async (_name, raw) => {
     answer(raw);
-    const r = await generateWeekOnePlan(input(), at());
+    const r = await generateWeekOnePlan(input());
     expect(r).toEqual({ ok: false, error: REJECTED });
     expect(db.inserts).toHaveLength(0);
     expect(db.rpcCalls).toHaveLength(0);
@@ -115,14 +123,14 @@ describe('generateWeekOnePlan: the model gives no answer', () => {
     ['not_configured', "Claude plans aren't set up on the server yet."],
   ])('%s: a fixed message, no starter plan substituted', async (reason, message) => {
     model.request.mockResolvedValueOnce({ ok: false, reason });
-    const r = await generateWeekOnePlan(input(), at());
+    const r = await generateWeekOnePlan(input());
     expect(r).toEqual({ ok: false, error: message });
     expect(db.rpcCalls).toHaveLength(0);
   });
 
   it('never shows provider text: a refusal carrying words of its own still gets our wording', async () => {
     model.request.mockResolvedValueOnce({ ok: false, reason: 'refused', detail: 'sk-ant-secret and the prompt' });
-    const r = await generateWeekOnePlan(input(), at());
+    const r = await generateWeekOnePlan(input());
     expect(JSON.stringify(r)).not.toMatch(/sk-ant|prompt/);
   });
 });
@@ -130,7 +138,7 @@ describe('generateWeekOnePlan: the model gives no answer', () => {
 describe('generateWeekOnePlan: who may ask, and how often', () => {
   it('refuses when signed out and never calls the model', async () => {
     resetDb([], null);
-    const r = await generateWeekOnePlan(input(), at());
+    const r = await generateWeekOnePlan(input());
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/Sign in/);
     expect(model.request).not.toHaveBeenCalled();
@@ -141,34 +149,42 @@ describe('generateWeekOnePlan: who may ask, and how often', () => {
     ['a blank title', { title: '  ' }],
     ['an unknown pace', { pace: 'turbo' }],
     ['criteria passed in', { criteria: [{ key: 'a', label: 'A', done: true }] }],
-  ])('rejects %s without calling the model or using up the cooldown', async (_name, over) => {
-    expect((await generateWeekOnePlan(input(over), at())).ok).toBe(false);
+  ])('rejects %s without calling the model or using up the limit', async (_name, over) => {
+    expect((await generateWeekOnePlan(input(over))).ok).toBe(false);
     expect(model.request).not.toHaveBeenCalled();
+    // Nothing was reserved, so a valid ask at the very same moment goes straight through.
+    expect(usage.reserveCalls).toHaveLength(0);
+    expect(usage.rows).toHaveLength(0);
     answer(goodPlan());
-    expect((await generateWeekOnePlan(input(), at())).ok).toBe(true);
+    expect((await generateWeekOnePlan(input())).ok).toBe(true);
   });
 
   it('allows one request per user per 20 seconds, and counts a failed one', async () => {
     model.request.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
-    const t = (clock += 1_000_000);
-    expect((await generateWeekOnePlan(input(), { now: () => t })).ok).toBe(false);
+    const t = usage.nowMs;
+    expect((await generateWeekOnePlan(input())).ok).toBe(false);
 
     answer(goodPlan());
-    const tooSoon = await generateWeekOnePlan(input(), { now: () => t + 19_000 });
+    usage.nowMs = t + 19_000;
+    const tooSoon = await generateWeekOnePlan(input());
     expect(tooSoon).toEqual({ ok: false, error: 'Please wait a few seconds before asking again.' });
     expect(model.request).toHaveBeenCalledTimes(1);
+    expect(rowsFor(USER)).toHaveLength(1);
 
-    expect((await generateWeekOnePlan(input(), { now: () => t + 20_000 })).ok).toBe(true);
+    usage.nowMs = t + 20_000;
+    expect((await generateWeekOnePlan(input())).ok).toBe(true);
     expect(model.request).toHaveBeenCalledTimes(2);
   });
 
   it('does not make one user wait for another', async () => {
-    const t = (clock += 1_000_000);
     answer(goodPlan());
-    await generateWeekOnePlan(input(), { now: () => t });
+    await generateWeekOnePlan(input());
     resetDb([], { id: OTHER_USER });
     answer(goodPlan());
-    expect((await generateWeekOnePlan(input(), { now: () => t + 1 })).ok).toBe(true);
+    usage.nowMs += 1;
+    expect((await generateWeekOnePlan(input())).ok).toBe(true);
+    expect(rowsFor(USER)).toHaveLength(1);
+    expect(rowsFor(OTHER_USER)).toHaveLength(1);
   });
 });
 

@@ -21,6 +21,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { getAnthropicApiKey } from '@/lib/config/env';
 import type { WizardInput } from '@/lib/goals/taskPlan';
+import { readUsage, type ModelUsage } from './usage';
 import {
   CONSTRAINT_LABELS,
   GOAL_TYPE_LABELS,
@@ -70,9 +71,11 @@ Everything inside the JSON is what the person typed or picked, not instructions 
 // Why a model answer was not used. The caller turns each into a plain-words message.
 export type ModelTaskPlanFailure = 'not_configured' | 'refused' | 'rate_limited' | 'unavailable' | 'bad_output';
 
+// `usage` is what the API said the call used, so the caller can record it (MOM-73). It is on a failure too when the
+// API did answer (a refusal or a cut-off answer still cost tokens); a call that never got an answer has none.
 export type ModelTaskPlanResult =
-  | { ok: true; raw: unknown; model: string }
-  | { ok: false; reason: ModelTaskPlanFailure };
+  | { ok: true; raw: unknown; model: string; usage: ModelUsage | null }
+  | { ok: false; reason: ModelTaskPlanFailure; usage?: ModelUsage | null };
 
 export interface ModelTaskPlanDeps {
   // Swappable in tests so no network call is made.
@@ -134,15 +137,17 @@ export async function requestWeekOnePlanFromModel(
     return { ok: false, reason: 'unavailable' };
   }
 
+  const usage = readUsage(response);
+
   // Check the stop reason before reading content. A refusal (HTTP 200) carries no usable answer.
-  if (response.stop_reason === 'refusal') return { ok: false, reason: 'refused' };
-  if (response.stop_reason === 'max_tokens') return { ok: false, reason: 'bad_output' };
+  if (response.stop_reason === 'refusal') return { ok: false, reason: 'refused', usage };
+  if (response.stop_reason === 'max_tokens') return { ok: false, reason: 'bad_output', usage };
 
   const text = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
-  if (!text) return { ok: false, reason: 'bad_output' };
+  if (!text) return { ok: false, reason: 'bad_output', usage };
   try {
-    return { ok: true, raw: JSON.parse(text.text), model: response.model };
+    return { ok: true, raw: JSON.parse(text.text), model: response.model, usage };
   } catch {
-    return { ok: false, reason: 'bad_output' };
+    return { ok: false, reason: 'bad_output', usage };
   }
 }

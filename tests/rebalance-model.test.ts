@@ -8,13 +8,19 @@ import { proposeRebalance, requestModelRebalance } from '@/lib/services/tasks';
 import { buildRebalanceProposal, buildModelFacts, checkProposalAgainstTasks, MAX_MODEL_TASKS } from '@/lib/utils/rebalance';
 import { computeVelocity } from '@/lib/utils/velocity';
 import { parseRebalanceProposal } from '@/types/rebalance';
+import { resetUsage, rowsFor, usage } from './helpers/fakeLlmUsage';
 import { OTHER_USER, USER, channelRow, db, newId, resetDb, taskRow, type TaskRow } from './helpers/fakeSupabase';
 
 const model = vi.hoisted(() => ({ request: vi.fn() }));
-vi.mock('@/lib/ai/rebalance', () => ({ requestRebalanceFromModel: model.request }));
+vi.mock('@/lib/ai/rebalance', () => ({ requestRebalanceFromModel: model.request, REBALANCE_MODEL: 'claude-opus-5-5' }));
 vi.mock('@/lib/supabase/server', async () => {
   const { createSupabaseServerClient } = await import('./helpers/fakeSupabase');
   return { createSupabaseServerClient };
+});
+// The usage limits and log (migration 011) run against the in-memory model of the table and function.
+vi.mock('@/lib/supabase/admin', async () => {
+  const { createSupabaseAdminClient } = await import('./helpers/fakeLlmUsage');
+  return { createSupabaseAdminClient };
 });
 
 // Week 4 of a plan that started 2026-10-14; the seeded-style tasks sit in weeks 2 and 3.
@@ -24,11 +30,15 @@ const asMicroTasks = (rows: TaskRow[]) => rows as never;
 
 const goodMove = (t: TaskRow, toWeek = 4) => ({ action: 'carry_over', taskId: t.id, fromWeek: t.week_of, toWeek, reason: 'Unfinished in week 2; week 4 has room.' });
 const proposalFor = (moves: unknown[], warnings: unknown[] = []) => ({ summary: 'Move the work that slipped.', moves, warnings });
-const answer = (raw: unknown) => model.request.mockResolvedValueOnce({ ok: true, raw, model: 'claude-opus-5-5' });
+const answer = (raw: unknown) =>
+  model.request.mockResolvedValueOnce({ ok: true, raw, model: 'claude-opus-5-5', usage: { inputTokens: 1200, outputTokens: 340 } });
+// Whose call it is: in the app this is the verified session's user.
+const BUDGET = { userId: USER };
 
 beforeEach(() => {
   model.request.mockReset();
   resetDb([], { id: USER });
+  resetUsage();
 });
 
 describe('without a user action', () => {
@@ -46,7 +56,7 @@ describe('when the user asks Claude', () => {
     const b = behind({ title: 'Second real title' });
     answer(proposalFor([goodMove(a), goodMove(b, 5)]));
 
-    const r = await proposeRebalance(asMicroTasks([a, b]), 4, TODAY, { useModel: true });
+    const r = await proposeRebalance(asMicroTasks([a, b]), 4, TODAY, { useModel: true, budget: BUDGET });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data).toMatchObject({ source: 'model', model: 'claude-opus-5-5', notice: null, currentWeek: 4 });
@@ -58,7 +68,7 @@ describe('when the user asks Claude', () => {
   it('shows the proposal that passed the schema, with the fields the schema produces', async () => {
     const a = behind();
     answer(proposalFor([goodMove(a)]));
-    const r = await proposeRebalance(asMicroTasks([a]), 4, TODAY, { useModel: true });
+    const r = await proposeRebalance(asMicroTasks([a]), 4, TODAY, { useModel: true, budget: BUDGET });
     expect(r.ok && parseRebalanceProposal(r.data.proposal).ok).toBe(true);
   });
 
@@ -71,14 +81,14 @@ describe('when the user asks Claude', () => {
         [{ kind: 'cannot_hold', weeks: [4], taskIds: [stuck.id], message: 'This does not fit before the plan ends.' }],
       ),
     );
-    const r = await proposeRebalance(asMicroTasks([early, stuck]), 4, TODAY, { useModel: true });
+    const r = await proposeRebalance(asMicroTasks([early, stuck]), 4, TODAY, { useModel: true, budget: BUDGET });
     expect(r.ok && r.data.source).toBe('model');
   });
 
   it('tells the model about the plan without any task titles', async () => {
     const a = behind({ title: 'Secret job application notes' });
     answer(proposalFor([goodMove(a)]));
-    await proposeRebalance(asMicroTasks([a]), 4, TODAY, { useModel: true, velocity: { score: 50, trend: 'flat', risk: 'low', pressureStreak: 0 } });
+    await proposeRebalance(asMicroTasks([a]), 4, TODAY, { useModel: true, budget: BUDGET, velocity: { score: 50, trend: 'flat', risk: 'low', pressureStreak: 0 } });
 
     const sent = model.request.mock.calls[0][0] as ReturnType<typeof buildModelFacts>;
     expect(JSON.stringify(sent)).not.toContain('Secret job application notes');
@@ -90,7 +100,7 @@ describe('when the user asks Claude', () => {
     const todo = behind();
     const done = taskRow(2, { status: 'done', completed_at: '2026-10-20T00:00:00Z' });
     answer(proposalFor([goodMove(todo)]));
-    await proposeRebalance(asMicroTasks([todo, done]), 4, TODAY, { useModel: true });
+    await proposeRebalance(asMicroTasks([todo, done]), 4, TODAY, { useModel: true, budget: BUDGET });
     const sent = model.request.mock.calls[0][0] as ReturnType<typeof buildModelFacts>;
     expect(sent.tasks.map((t) => t.id)).toEqual([todo.id]);
     expect(sent.weeks).toEqual([{ week: 2, unfinished: 1, finished: 1 }]);
@@ -101,8 +111,10 @@ describe('a model proposal is rejected, and the rule-based one shown with a noti
   const rulesFor = (tasks: TaskRow[]) => buildRebalanceProposal(asMicroTasks(tasks), 4, TODAY);
 
   async function expectFallback(tasks: TaskRow[], raw: unknown, notice: RegExp) {
+    // A minute on from any earlier ask in the same test, so the 20 second spacing does not stop this one.
+    usage.nowMs += 60_000;
     answer(raw);
-    const r = await proposeRebalance(asMicroTasks(tasks), 4, TODAY, { useModel: true });
+    const r = await proposeRebalance(asMicroTasks(tasks), 4, TODAY, { useModel: true, budget: BUDGET });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.source).toBe('rules');
@@ -191,7 +203,7 @@ describe('when the model call itself fails', () => {
   ])('%s gives the rule-based proposal with a plain-words notice', async (reason, notice) => {
     const tasks = [behind()];
     model.request.mockResolvedValueOnce({ ok: false, reason });
-    const r = await proposeRebalance(asMicroTasks(tasks), 4, TODAY, { useModel: true });
+    const r = await proposeRebalance(asMicroTasks(tasks), 4, TODAY, { useModel: true, budget: BUDGET });
     expect(r.ok && r.data).toMatchObject({ source: 'rules', model: null });
     expect(r.ok && r.data.notice).toMatch(notice);
     expect(r.ok && r.data.proposal).toEqual(buildRebalanceProposal(asMicroTasks(tasks), 4, TODAY));
@@ -200,7 +212,7 @@ describe('when the model call itself fails', () => {
   it('a plan too large to send never reaches the model', async () => {
     // Late in the plan, so none of it is behind and the rule-based proposal is simply empty.
     const tasks = Array.from({ length: MAX_MODEL_TASKS + 1 }, () => taskRow(9));
-    const r = await proposeRebalance(asMicroTasks(tasks), 4, TODAY, { useModel: true });
+    const r = await proposeRebalance(asMicroTasks(tasks), 4, TODAY, { useModel: true, budget: BUDGET });
     expect(r.ok && r.data.notice).toMatch(/too large/);
     expect(model.request).not.toHaveBeenCalled();
   });
@@ -213,7 +225,7 @@ describe('when the model call itself fails', () => {
 
   it('a notice is only ever our own wording', async () => {
     model.request.mockResolvedValueOnce({ ok: false, reason: 'unavailable', detail: 'Provider said: <script>alert(1)</script>' });
-    const r = await proposeRebalance(asMicroTasks([behind()]), 4, TODAY, { useModel: true });
+    const r = await proposeRebalance(asMicroTasks([behind()]), 4, TODAY, { useModel: true, budget: BUDGET });
     expect(r.ok && r.data.notice).not.toContain('script');
   });
 });
@@ -236,11 +248,16 @@ describe('checkProposalAgainstTasks', () => {
 });
 
 describe('requestModelRebalance (the "Ask Claude" click, for one goal channel)', () => {
-  // Distinct clock values keep the per-user cooldown from leaking between tests. The date is 2026-11-04 plus
-  // a few minutes: a goal that started 2026-10-14 is in plan week 4, one that started today is in week 1.
+  // The date is 2026-11-04 plus a few minutes: a goal that started 2026-10-14 is in plan week 4, one that started
+  // today is in week 1. Each ask moves the clock on by a minute, for the app and for the database's usage clock alike,
+  // so asking twice in one test is not stopped by the 20 second spacing; the tests of the limits set the clock themselves.
   let tick = 0;
   const nextNow = () => Date.parse('2026-11-04T12:00:00Z') + ++tick * 60_000;
-  const ask = (channelId: unknown) => requestModelRebalance(channelId, { now: nextNow });
+  const ask = (channelId: unknown) => {
+    const t = nextNow();
+    usage.nowMs = t;
+    return requestModelRebalance(channelId, { now: () => t });
+  };
   const NOT_A_CHANNEL = { ok: false, error: 'Choose one of your goal channels.' };
 
   // A goal for the signed-in user (or another), and a task that belongs to it.
@@ -322,13 +339,18 @@ describe('requestModelRebalance (the "Ask Claude" click, for one goal channel)',
       expect(model.request).not.toHaveBeenCalled();
     });
 
-    it('a bad id does not use up the cooldown', async () => {
+    it('a refused id does not use up the limit: nothing is reserved, and the next ask at the same moment goes through', async () => {
       const mine = goal();
       setup([inGoal(mine)], [mine]);
       const t = nextNow();
+      usage.nowMs = t;
       expect(await requestModelRebalance('nope', { now: () => t })).toEqual(NOT_A_CHANNEL);
+      expect(await requestModelRebalance(newId(), { now: () => t })).toEqual(NOT_A_CHANNEL);
+      expect(usage.reserveCalls).toHaveLength(0);
+      expect(usage.rows).toHaveLength(0);
       answer(proposalFor([]));
-      expect((await requestModelRebalance(mine.id, { now: () => t + 1 })).ok).toBe(true);
+      expect((await requestModelRebalance(mine.id, { now: () => t })).ok).toBe(true);
+      expect(rowsFor(USER)).toHaveLength(1);
     });
   });
 
@@ -494,6 +516,9 @@ describe('requestModelRebalance (the "Ask Claude" click, for one goal channel)',
     expect(db.rpcCalls).toHaveLength(0);
     expect(db.deleteCalls).toBe(0);
     expect(db.tasks[0]).toMatchObject({ week_of: 2, status: 'todo', completed_at: null });
+    // The one thing it records is the usage row for the call (migration 011): counts and an outcome, no content.
+    expect(rowsFor(USER)).toHaveLength(1);
+    expect(rowsFor(USER)[0]).toMatchObject({ feature: 'rebalance', model: 'claude-opus-5-5', outcome: 'ok', input_tokens: 1200, output_tokens: 340 });
   });
 
   it('limits one user to a request every 20 seconds across all their channels, and counts a failed request', async () => {
@@ -502,15 +527,17 @@ describe('requestModelRebalance (the "Ask Claude" click, for one goal channel)',
     setup([inGoal(a), inGoal(b)], [a, b]);
     const start = nextNow();
     model.request.mockResolvedValue({ ok: false, reason: 'unavailable' });
+    const askAt = (channelId: string, ms: number) => {
+      usage.nowMs = ms;
+      return requestModelRebalance(channelId, { now: () => ms });
+    };
 
-    expect((await requestModelRebalance(a.id, { now: () => start })).ok).toBe(true);
+    expect((await askAt(a.id, start)).ok).toBe(true);
     // Asking about the other channel straight away does not get round the limit.
-    expect(await requestModelRebalance(b.id, { now: () => start + 19_000 })).toEqual({
-      ok: false,
-      error: 'Please wait a few seconds before asking again.',
-    });
+    expect(await askAt(b.id, start + 19_000)).toEqual({ ok: false, error: 'Please wait a few seconds before asking again.' });
     expect(model.request).toHaveBeenCalledTimes(1);
-    expect((await requestModelRebalance(b.id, { now: () => start + 21_000 })).ok).toBe(true);
+    expect(rowsFor(USER)).toHaveLength(1);
+    expect((await askAt(b.id, start + 21_000)).ok).toBe(true);
     expect(model.request).toHaveBeenCalledTimes(2);
   });
 

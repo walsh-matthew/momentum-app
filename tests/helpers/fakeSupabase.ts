@@ -18,6 +18,7 @@
 // tests/migrations.test.ts keeps this file honest by checking each rule exists in the SQL.
 
 import { CONSTRAINTS, GOAL_TYPES, PACES, TASK_TYPES } from '@/types/database.types';
+import { usageQuery } from './fakeLlmUsage';
 
 export interface TaskRow {
   id: string;
@@ -520,6 +521,9 @@ export function fakeClient() {
           : { data: { user: null }, error: { message: 'Auth session missing' } },
     },
     from: (table: string) => {
+      // llm_usage_logs (migration 011): a signed-in user can read their own rows and nothing else.
+      // (Typed as Query so the other tests' calls keep their types; it has no insert, as the signed-in user has no grant.)
+      if (table === 'llm_usage_logs') return usageQuery(db.rls ? (db.user?.id ?? null) : 'all', false) as unknown as Query;
       if (table !== 'micro_tasks' && table !== 'task_rebalance_history' && table !== 'goal_channels') {
         throw new Error(`unexpected table ${table}`);
       }

@@ -16,8 +16,8 @@
 // deletes a task, and applyRebalance never touches status or completed_at. Each move also lands in
 // task_rebalance_history (migration 003), written by the same database call that moves the task.
 
-import { requestRebalanceFromModel, type ModelRebalanceFailure } from '@/lib/ai/rebalance';
-import { requestWeekOnePlanFromModel, type ModelTaskPlanFailure } from '@/lib/ai/taskPlan';
+import { REBALANCE_MODEL, requestRebalanceFromModel, type ModelRebalanceFailure } from '@/lib/ai/rebalance';
+import { TASK_PLAN_MODEL, requestWeekOnePlanFromModel, type ModelTaskPlanFailure } from '@/lib/ai/taskPlan';
 import { parseWeekOnePlan, parseWizardInput, type TaskPlan } from '@/lib/goals/taskPlan';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { summarizeAllGoalProgress } from '@/lib/utils/progress';
@@ -46,6 +46,7 @@ import {
 } from '@/types/rebalance';
 import type { GoalProgress } from '@/types/progress';
 import { MAX_KEY_ATTEMPTS, UNIQUE_VIOLATION, buildNewGoalFields, channelKeyFor, listGoalChannels } from './goals';
+import { TOO_SOON_MESSAGE, dailyLimitClause, dailyRetrySentence, reportModelResult, runWithinBudget } from './llm';
 import type { ServiceResult } from './result';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -152,7 +153,8 @@ export async function setTaskStatus(taskId: unknown, status: unknown): Promise<S
 
 // Why the user got the rule-based suggestion when they asked for Claude's. Fixed wording from our own
 // code: nothing the model or the provider wrote is ever shown as a notice.
-const MODEL_FALLBACK_NOTICES: Record<ModelRebalanceFailure | 'invalid' | 'too_large', string> = {
+const MODEL_FALLBACK_NOTICES: Record<ModelRebalanceFailure | 'invalid' | 'too_large' | 'unchecked', string> = {
+  unchecked: "Claude's usage limits could not be checked, so this is the rule-based suggestion.",
   not_configured: "Claude suggestions aren't set up on the server yet, so this is the rule-based suggestion.",
   refused: 'Claude declined to write a suggestion, so this is the rule-based suggestion.',
   rate_limited: 'Claude is busy right now, so this is the rule-based suggestion. Try again in a minute.',
@@ -176,11 +178,19 @@ const MODEL_FALLBACK_NOTICES: Record<ModelRebalanceFailure | 'invalid' | 'too_la
 //   in the week it says, and are not sent into the past);
 // - titles come from `tasks`, never from the model.
 // If anything fails, the user gets the rule-based proposal with a notice saying why, never an error.
+//
+// Claude is only called inside the usage limits (MOM-73, @/lib/services/llm.ts), and only for a caller that says whose
+// call it is: `budget.userId` comes from the verified session. Without it `useModel` does nothing, so no code path can
+// reach the model unmetered. The limits give three outcomes:
+// - the 20 second spacing: an error ("please wait"), as before: asking twice in a row is not a reason for a fallback;
+// - a daily cap (yours, or the shared one): the rule-based proposal, labelled with a notice that names the limit and
+//   says when Claude can be asked again. Never silently: `source` is 'rules' and the notice says why;
+// - limits that cannot be checked: the rule-based proposal with a notice, and no model call (fail closed).
 export async function proposeRebalance(
   tasks: readonly MicroTask[],
   currentWeek: number,
   asOf: string,
-  options: { useModel?: boolean; velocity?: ModelRebalanceFacts['velocity'] } = {},
+  options: { useModel?: boolean; velocity?: ModelRebalanceFacts['velocity']; budget?: { userId: string } } = {},
 ): Promise<ServiceResult<RebalanceProposalView>> {
   const fromRules = (notice: string | null): ServiceResult<RebalanceProposalView> => {
     try {
@@ -195,7 +205,24 @@ export async function proposeRebalance(
 
   if (tasks.filter((t) => t.status === 'todo').length > MAX_MODEL_TASKS) return fromRules(MODEL_FALLBACK_NOTICES.too_large);
 
-  const answer = await requestRebalanceFromModel(buildModelFacts(tasks, currentWeek, asOf, options.velocity ?? null));
+  if (!options.budget) return fromRules(MODEL_FALLBACK_NOTICES.unchecked);
+
+  const facts = buildModelFacts(tasks, currentWeek, asOf, options.velocity ?? null);
+  const call = await runWithinBudget({
+    userId: options.budget.userId,
+    feature: 'rebalance',
+    model: REBALANCE_MODEL,
+    call: () => requestRebalanceFromModel(facts),
+    report: reportModelResult,
+  });
+  if (call.kind === 'unchecked') return fromRules(MODEL_FALLBACK_NOTICES.unchecked);
+  if (call.kind === 'limited') {
+    if (call.limit === 'too_soon') return { ok: false, error: TOO_SOON_MESSAGE };
+    return fromRules(
+      `${dailyLimitClause(call.limit)}, so this is the rule-based suggestion. ${dailyRetrySentence(call.limit, call.retryAfterSeconds)}`,
+    );
+  }
+  const answer = call.result;
   if (!answer.ok) return fromRules(MODEL_FALLBACK_NOTICES[answer.reason]);
 
   const parsed = parseRebalanceProposal(answer.raw);
@@ -217,15 +244,15 @@ export async function proposeRebalance(
 
 // A user asked Claude to write the rebalance proposal for one goal channel (MOM-87). Reachable from a Server
 // Action, so it authenticates, loads the user's own plan through RLS, and limits how often one user can
-// call it: each call is a paid model request. The limit is per server instance and best effort (BACKLOG.md).
+// call it: each call is a paid model request. The limits (spacing, a daily cap per user and one for everyone) live in
+// the database and are checked in proposeRebalance through @/lib/services/llm.ts, so they hold across serverless
+// instances and cold starts. A request refused below, before the model step, uses none of them up.
 //
 // The channel id comes from the browser, so it is only trusted after it is found among the signed-in user's
 // own active goals: another user's goal, a paused goal and an id that does not exist are all refused the same
 // way, before anything is sent to the model. The proposal is then built from that goal's tasks and that
 // goal's own plan week, never from the user's other goals, so the model sees only this channel's work and
 // checkProposalAgainstTasks() rejects any move that names a task outside it.
-const MODEL_REQUEST_COOLDOWN_MS = 20_000;
-const lastModelRequestAt = new Map<string, number>();
 const NOT_A_CHANNEL = 'Choose one of your goal channels.';
 
 export async function requestModelRebalance(
@@ -245,13 +272,6 @@ export async function requestModelRebalance(
   if (!goal) return { ok: false, error: NOT_A_CHANNEL };
 
   const now = (deps.now ?? Date.now)();
-  const last = lastModelRequestAt.get(auth.user.id);
-  if (last !== undefined && now - last < MODEL_REQUEST_COOLDOWN_MS) {
-    return { ok: false, error: 'Please wait a few seconds before asking again.' };
-  }
-  // Set before the call, so a failing or slow request still counts.
-  lastModelRequestAt.set(auth.user.id, now);
-
   const today = new Date(now).toISOString().slice(0, 10);
   const week = currentPlanWeek(goal.start_date, today);
   if (week === null) return { ok: false, error: 'Could not work out your plan week.' };
@@ -261,6 +281,8 @@ export async function requestModelRebalance(
   const snapshot: VelocitySnapshot = computeVelocity(own, week, today, history.ok ? history.data : []);
   return proposeRebalance(own, week, today, {
     useModel: true,
+    // The verified session's user: the usage limits and log are keyed on it, never on anything from the request.
+    budget: { userId: auth.user.id },
     velocity: {
       score: snapshot.score,
       trend: snapshot.trend,
@@ -340,7 +362,8 @@ export async function applyRebalance(rawProposal: unknown): Promise<ServiceResul
 // Why Claude's plan was not used. Fixed wording from our own code: nothing the model or the provider
 // wrote is ever shown. The wizard offers a retry next to every one of these, and a starter plan the
 // user can choose themselves; nothing is substituted for them.
-const PLAN_FAILURE_MESSAGES: Record<ModelTaskPlanFailure | 'invalid', string> = {
+const PLAN_FAILURE_MESSAGES: Record<ModelTaskPlanFailure | 'invalid' | 'unchecked', string> = {
+  unchecked: "Claude plans can't be used right now because their usage limits could not be checked.",
   not_configured: "Claude plans aren't set up on the server yet.",
   refused: 'Claude declined to write a plan.',
   rate_limited: 'Claude is busy right now.',
@@ -349,27 +372,24 @@ const PLAN_FAILURE_MESSAGES: Record<ModelTaskPlanFailure | 'invalid', string> = 
   invalid: "Claude's plan did not pass our checks, so none of it was used.",
 };
 
-// One model request per user per 20 seconds; each call is a paid request. Like requestModelRebalance
-// this is per server instance and best effort (BACKLOG.md), and it counts failed requests too.
-const PLAN_REQUEST_COOLDOWN_MS = 20_000;
-const lastPlanRequestAt = new Map<string, number>();
-
 export interface GeneratedWeekOnePlan {
   plan: TaskPlan;
   model: string;
 }
 
 // A user clicked "Generate" in the goal wizard. Reachable from a Server Action, so it validates the
-// answers, authenticates and rate-limits. It reads and writes nothing in the database: the plan is only
-// shown to the user, and saved later by createGoalWithWeekOnePlan if they confirm it.
+// answers, authenticates and limits how often it is used (each call is a paid request). It reads and writes nothing in
+// the plan tables: the plan is only shown to the user, and saved later by createGoalWithWeekOnePlan if they confirm
+// it. The only thing it records is the usage row for the call (@/lib/services/llm.ts), with no prompt or answer.
+//
+// Here a limit never turns into a plan. If the spacing or a daily cap stops the call, or the limits cannot be checked,
+// the user gets a message and nothing else: the wizard keeps the starter plan as a choice the person makes
+// themselves, and nothing is substituted for them. The daily-cap messages say which cap and when to try again.
 //
 // The model sees only the wizard's answers. Its raw JSON goes through parseTaskPlan() unchanged (via
 // parseWeekOnePlan, which also insists on week 1), so a status, an unknown task type, a week 14 or an
 // empty plan is rejected rather than repaired.
-export async function generateWeekOnePlan(
-  rawInput: unknown,
-  deps: { now?: () => number } = {},
-): Promise<ServiceResult<GeneratedWeekOnePlan>> {
+export async function generateWeekOnePlan(rawInput: unknown): Promise<ServiceResult<GeneratedWeekOnePlan>> {
   const parsedInput = parseWizardInput(rawInput);
   if (!parsedInput.ok) return { ok: false, error: parsedInput.error };
 
@@ -377,15 +397,19 @@ export async function generateWeekOnePlan(
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth.user) return { ok: false, error: 'Sign in to generate a plan.' };
 
-  const now = (deps.now ?? Date.now)();
-  const last = lastPlanRequestAt.get(auth.user.id);
-  if (last !== undefined && now - last < PLAN_REQUEST_COOLDOWN_MS) {
-    return { ok: false, error: 'Please wait a few seconds before asking again.' };
+  const call = await runWithinBudget({
+    userId: auth.user.id,
+    feature: 'week_one_plan',
+    model: TASK_PLAN_MODEL,
+    call: () => requestWeekOnePlanFromModel(parsedInput.data),
+    report: reportModelResult,
+  });
+  if (call.kind === 'unchecked') return { ok: false, error: PLAN_FAILURE_MESSAGES.unchecked };
+  if (call.kind === 'limited') {
+    if (call.limit === 'too_soon') return { ok: false, error: TOO_SOON_MESSAGE };
+    return { ok: false, error: `${dailyLimitClause(call.limit)}. ${dailyRetrySentence(call.limit, call.retryAfterSeconds)}` };
   }
-  // Set before the call, so a failing or slow request still counts.
-  lastPlanRequestAt.set(auth.user.id, now);
-
-  const answer = await requestWeekOnePlanFromModel(parsedInput.data);
+  const answer = call.result;
   if (!answer.ok) return { ok: false, error: PLAN_FAILURE_MESSAGES[answer.reason] };
 
   const plan = parseWeekOnePlan(answer.raw);
