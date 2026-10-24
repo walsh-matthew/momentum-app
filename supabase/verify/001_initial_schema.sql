@@ -36,7 +36,7 @@ begin
   values (a, 'mom9-verify-a@example.invalid'), (b, 'mom9-verify-b@example.invalid');
 
   select count(*) into v from public.users where id in (a, b);
-  res := res || jsonb_build_object('c', 'Signup trigger creates users rows', 'p', v = 2, 'd', format('%s of 2', v));
+  res := res || jsonb_build_object('c', 'Signup trigger creates users rows', 'p', v = 3, 'd', format('%s of 2', v));
 
   -- New in MOM-19: a fresh signup starts empty.
   select count(*) into v from public.goal_channels where user_id in (a, b);
