@@ -77,6 +77,20 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** Reading the printed output of the new checks line by line rather than only the pass count. Fixed before commit.
 - **Predicted it?** _owner to answer_
 
+### F-013 · 2026-10-23 · build tool · `unreviewed`
+- **Asked:** Show the proposed CLAUDE.md wording for a pull-request workflow as a diff, so the owner could approve it (MOM-67).
+- **What went wrong:** The diff shown in the chat reply had a typo in the last Definition of Done line ("director" where the CI job is called "database"), and it was shortened with "..." in the middle, so it was not the exact text that would have been applied.
+- **Why:** The diff was retyped by hand into the reply instead of pasted from the tool output. The scratch copy that was going to be applied was correct.
+- **Caught by:** The model noticed the typo and flagged it at the end of the same reply, and the owner named the correct wording in the next instruction. Nothing wrong was applied.
+- **Predicted it?** _owner to answer_
+
+### F-014 · 2026-10-23 · build tool · `unreviewed`
+- **Asked:** Build a runner that runs every SQL verify script in CI, "using `supabase db query --local -f <file> -o json`" (MOM-67 build prompt).
+- **What went wrong:** That command cannot run any of the verify scripts. It stops with "cannot insert multiple commands into a prepared statement" (also with a direct database address), because it sends a file as one statement and the scripts use several statements in one session. The build prompt named it as the way to do the job.
+- **Why:** The prompt's command was not checked against what the project had already recorded: `BACKLOG.md` already said this command fails on every verify script and that the runner must go through the database container instead. The model's first read of the files did not include that backlog item either, so it learned the same thing by running the command. Whether the prompt's author or the plan generator missed the note was not traced.
+- **Caught by:** Trying the command on one script before building on it. The runner uses `psql` inside the local database container instead.
+- **Predicted it?** _owner to answer_
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
