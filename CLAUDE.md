@@ -79,6 +79,16 @@ Before writing or changing any domain logic, read these files. They override ass
 - [ ] Code committed using the `type(MOM-X)` message format (`feat`, `fix`, `test`, `docs`).
 - [ ] Pull request open with CI (`checks` and `database`) green, then merged to `main` through the pull request, and the Jira ticket moved to `Done`.
 
+### 5. Daily Build Loop (MOM-75)
+A build day is run from `docs/plans/NEXT_BUILD_PLAN.md` with three Claude Code commands in `.claude/commands/`. They read whatever plan is current and never name a ticket.
+1. `/day-start` runs first. It is read-only: it reports uncommitted files, whether `main` matches `origin/main`, branches and pull requests left over from earlier days, whether the plan passes the format check, and missing environment variable names (names only, never values), and it prints the plan's "Today's runbook". The standing smoke-test account is a manual check ("confirm in the dashboard").
+2. `/run-block MOM-<n>` runs once per block, in the runbook's order. It finds the block by key, runs the preflight, and shows the block's `CLI Session Config`. It cannot switch your model or effort: on a mismatch it stops and prints the `/model` and `/effort` to type, and it always asks you to confirm effort. It checks the block's prerequisites by name only, resumes an existing feature branch, then follows the block's own prompt and keeps every stop in it. It commits on the feature branch and never merges or pushes.
+3. `/day-end` runs after the last block, in the order A (build checks), B (production database verification), D (backlog and Jira sync, with the RAID and failure log review), E (archive the finished plan and generate tomorrow's), then one approval stop to push the day's feature branches (never `main`). Once the pull requests have merged it lists the Jira "Done" transitions with each ticket's acceptance criteria and waits for your OK (step D never moves a ticket to Done, because nothing has merged yet), and then runs C (live checks) when Vercel has deployed.
+
+Rules the commands follow: git steps run one at a time and stop on the first error; they never stage `docs/FAILURE_LOG.md`, `docs/RAID_LOG.md`, `AGENTS.md`, `supabase/.branches/` or `supabase/snippets/` unless the day-end review approved log entries; they never push, merge or apply a migration to production without your explicit OK; and `.claude/settings.json` allows only read-only commands, with `git push`, `supabase db push`, `gh pr merge` and `vercel env` set to ask.
+
+`npm run plan:check` checks the plan against the format contract (it also runs in `npm test`, so a plan that breaks the contract fails the build); `npm run plan:check -- --block MOM-<n>` shows one block. The contract is in `docs/mom-75-plan-execution-spec.md` section 3.
+
 ---
 
 ## Coding Standards & Environment Safeguards

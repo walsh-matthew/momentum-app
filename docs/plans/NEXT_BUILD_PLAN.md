@@ -6,6 +6,27 @@
 
 ---
 
+## Today's runbook
+
+**How to run a day.** Type `/day-start` first: it only reads and reports. Then type the command in the table below for each block, in this order, and skip any block whose Jira ticket is already Done. Each command first shows the block's model and effort: if your session differs, it stops and tells you the exact `/model` and `/effort` to type (use the session-only choice in the `/effort` slider, so your saved default is left alone), and you start the command again. When the last block is done, type `/day-end`. Nothing is pushed, merged or applied to production without your explicit OK, and work reaches `main` only through a pull request once both CI jobs are green.
+
+| # | Type | Session setting | What to check at the gate |
+| --- | --- | --- | --- |
+| 1 | `/run-block MOM-18` | Sonnet / Medium | Tests pass and the CLI listed every test it changed; it explained why the signed-out state is normally unreachable. The live check of all four states waits for the next block. |
+| 2 | `/run-block MOM-19` | Sonnet / High | You reviewed the verify-script diff; after the production push every verify script passes; you recreated the standing smoke-test account and the count-only check shows no goals; signed in as it you see the no-goals state. |
+| 3 | `/run-block MOM-76` | Sonnet / Medium | Signed in as the standing smoke-test account, at 390px and 1280px the screen looks like the wireframe (dark, lime accent); ticking the focus task and the drawer still work. |
+| 4 | `/run-block MOM-77` | Sonnet / High | Three columns at 1280px and one scroll at 390px with no tab bar; picking a goal changes the feed, ring and nudge and survives a reload; Review opens the drawer and nothing moves until you apply. |
+| 5 | `/run-block MOM-61` | Sonnet / Medium | `npm test` and `npm run test:e2e` pass with Docker running; you watched the hydration test fail on a deliberately broken page; no test used the standing smoke-test account. |
+| 6 | `/run-block MOM-62` | Sonnet / High | After the push, connect and disconnect Google Calendar and Hevy as the standing smoke-test account; a count-only query confirms the credential row is gone; no secret appears in the browser's network tab. |
+| 7 | `/run-block MOM-38` | Sonnet / High | You gave the Hevy sample before the adapter was written; an unsigned request to the webhook route returns 401 and changes nothing; no task changes state. |
+| 8 | `/run-block MOM-67` | Sonnet / High | Both CI jobs run green on a pull request; a deliberately broken check turns it red and cannot merge; branch protection requires both checks. |
+| 9 | `/run-block MOM-73` | Sonnet / High | You approved the table design before any migration; every verify script passes on production; two quick Ask Claude clicks, the second is refused; a count-only query shows usage rows with no text. |
+| 10 | `/run-block MOM-75` | Sonnet / Medium | The CLI showed what the Claude Code docs say before writing anything; `npm test` passes and the format test fails on each bad fixture; `/day-start` ran and `/run-block` stopped on a model mismatch; the allowlist holds only read-only commands. Close the ticket only after a real `/day-end`. |
+
+If a block needs another ticket's code, `/run-block` checks that code is already in `origin/main`. If it is only on an unmerged branch, it stops and offers two ways forward: push that branch and merge its pull request first, or stack this block on that branch (only with your OK).
+
+---
+
 ## Executive Overview & Architectural Invariants
 
 This build cycle makes the app safe to hand to a first real user: a new account starts empty and gets sensible empty states (Session 1), the app looks and lays out like the original v0 wireframes (Session 2), real browser tests guard sign-up, route protection and the wizard's failure paths (Session 3), the external provider UIs and adapters connect (Session 4), CI plus LLM spend governance protect production (Session 5), and the daily build loop becomes three Claude Code commands instead of hand-pasted prompts (Session 6). Every block preserves the three non-negotiable invariants:
@@ -20,15 +41,21 @@ This build cycle makes the app safe to hand to a first real user: a new account 
 - **Production changes need your approval.** A prompt stops before `supabase db push`, `vercel env`, or any push to `origin`, shows what will happen, and waits. Never use the SQL Editor. Tests never run against production and never use production credentials.
 - **Database checks are not part of `npm test`.** The 171 checks live in 8 SQL scripts in `supabase/verify/` and run with `npx supabase db query --linked -f <file> -o table` (production) or `npx supabase db query --local -f <file> -o table` (local stack). After any migration, run **all** of them; every row must show `passed = true`.
 - **New migrations** continue the numbering (check `ls supabase/migrations`; the next free number today is 010). Never edit an applied migration.
-- **Nothing is pushed inside a block.** Each block merges to `main` locally; the single push happens in the Final Day-End section.
+- **Pull requests, not local merges.** `main` is protected: work reaches it only through a pull request with the CI jobs `checks` and `database` green, merged with a merge commit (CLAUDE.md). A block commits on its feature branch and stops: it never merges into `main` and never pushes `main`. Branches are pushed once, at day-end (step F), after your explicit OK. Where an older block prompt below still says "merge into main with --no-ff", `/run-block` skips that step; the pull request replaces it.
+- **A migration is applied before its pull request merges.** A block with a migration runs `npm run verify:sql` locally, shows the migration and `npx supabase db push --dry-run`, and applies it to production (then runs ALL the verify scripts there) only after CI is green on its pull request and you say OK. This happens before the pull request merges, because merging deploys to Vercel and the new code needs the new schema.
 - **Standing smoke-test account.** Production keeps ONE standing test account, `smoke-test@momentum-app.test`, created by you in the Supabase dashboard (Authentication → Add user, Auto Confirm User on). Its password lives only in your password manager: Claude never asks for it, prints it or stores it in the repo, and never creates, edits or deletes users on production. Every live sign-in check in this plan says "sign in as the standing smoke-test account". Claude may read its data with **count-only** queries. If its data gets cluttered, you delete and recreate it in the dashboard (it starts empty once migration 010 is live). The SQL verify scripts create and delete their own passwordless temporary users inside one transaction and leave nothing behind, so production should always hold exactly one user. Browser tests (Session 3) use throwaway users on the **local** stack only.
 
 ## Session Preflight (run before every block)
 
+`/run-block` does this for you, one command at a time. By hand:
+
 ```bash
 cd C:\Users\matth\momentum-app
-git checkout main && git pull --ff-only && git status --short   # expect clean (AGENTS.md, supabase/.branches/ and supabase/snippets/ may be untracked; MOM-68)
-npm run plan -- MOM-<n>                                          # optional: the generator's view of the ticket
+git status --short          # expect only your uncommitted docs/FAILURE_LOG.md and docs/RAID_LOG.md edits, plus untracked AGENTS.md, supabase/.branches/ and supabase/snippets/ (MOM-68); anything else stops the block
+git fetch origin
+git rev-parse main origin/main   # the two must match. If main is only behind: git switch main, then git pull --ff-only (each on its own)
+npm run plan -- MOM-<n>           # optional: the generator's view of the ticket
+npm run plan:check -- --block MOM-<n>   # optional: what this plan says about the block (config, prompt lines, gate)
 ```
 
 ---
@@ -207,6 +234,8 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 
 # SESSION 3: E2E, HYDRATION & COMPONENT TESTS
 
+**Your prerequisites before this session:** Docker Desktop running (Block 3.1 starts the local Supabase stack with `npx supabase start`), and `npm run dev` stopped (Next.js 16 allows one dev server per project folder, and the browser tests start their own). Nothing on production is touched, and the standing smoke-test account is not used by any test.
+
 ## Block 3.1: Playwright E2E, Hydration Checks and Component Tests (MOM-61)
 
 * **Objective & Scope:** Jira's three criteria: Playwright with `npm run test:e2e`; a console check that fails on any hydration error at 390px and 1280px; Testing Library with jsdom for component tests (already installed in MOM-36, so this block fills in the remaining component tests). This plan adds browser specs on top, run **only against a local Supabase stack** (`supabase start`, which needs Docker; confirmation emails are read from the local Mailpit inbox): sign-up, sign-in, protected-route guards, sign-out, and the wizard paths the MOM-83 live smoke test could not reach (the 20 second wait message, the Try again failure and "Use the starter plan instead"). It never signs up users on production and never touches the standing smoke-test account.
@@ -321,6 +350,8 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 ---
 
 # SESSION 5: CI PROTECTION & COST GOVERNANCE
+
+**Your prerequisites before this session:** Docker Desktop running (the CI `database` job and the local checks use the local Supabase stack, `npx supabase start`). Block 5.1 needs you in GitHub: open the pull request, confirm both jobs are green, and turn on branch protection requiring `checks` and `database`; the CLI cannot do that for you. Block 5.2 stops for your approval before any migration touches production.
 
 ## Block 5.1: GitHub Actions CI with a Disposable Database (MOM-67)
 
@@ -439,25 +470,31 @@ Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test
 
 ---
 
-# FINAL DAY-END BUILD VERIFICATION & REMOTE PUSH
+# FINAL DAY-END BUILD VERIFICATION & PULL REQUESTS
 
-Run after the last block of the day. Stop on the first failure.
+Run after the last block of the day, or type `/day-end` and let it run these in this order: **A, B, D, E, then F (the one push, after your OK), then C (live checks, after the pull requests have merged and Vercel has deployed)**. Stop on the first failure.
 
 ## A. Build and repository checks (PowerShell or Git Bash)
 
+`/day-end` runs this. A feature branch is checked on its own, because nothing has been merged into `main` locally. List the day's branches, then check each one in turn; docs-only branches (D and E) need only `npm test` and `npm run plan`.
+
 ```bash
 cd C:\Users\matth\momentum-app
-git checkout main && git status --short            # clean (AGENTS.md, supabase/.branches/ and supabase/snippets/ may be untracked)
+git status --short                                  # only your uncommitted logs, AGENTS.md, supabase/.branches/ and supabase/snippets/
+git branch --no-merged origin/main                   # the day's feature branches: work not yet in origin/main
+# then, on each of those branches, one at a time:
+git switch <branch>
 npx tsc --noEmit                                    # expect no output
-npm test                                            # expect all passing (1015+)
+npm test                                            # expect all passing
 npm run build                                       # expect "Compiled successfully"
-npm run test:e2e                                    # only after Block 3.1 has been merged
 npm run plan                                        # expect "Every open item has a Jira key."
 ```
 
+`npm run test:e2e` and `npm run verify:sql` also run in CI on every pull request. Run them here too for a branch that changed pages, auth, the wizard, the drawer or a migration (stop `npm run dev` first).
+
 ## B. Database verification (production), only if migrations were applied today
 
-**Git Bash only.** This loop uses `/tmp`, `grep`, `$(...)` and `for ... done`, which do not work in PowerShell. `npm test` does **not** run these scripts. Every script must report `false 0` and a non-zero `true` count (0 and 0 means the script errored).
+A migration is applied to production inside its own block (after CI is green on its pull request and your OK, before that pull request merges). B is the day's re-check of production once all blocks are done. **Git Bash only.** This loop uses `/tmp`, `grep`, `$(...)` and `for ... done`, which do not work in PowerShell. `npm test` does **not** run these scripts. Every script must report `false 0` and a non-zero `true` count (0 and 0 means the script errored).
 
 ```bash
 npx supabase migration list                         # local and remote columns must match for every migration
@@ -466,22 +503,10 @@ for f in supabase/verify/*.sql; do
   npx supabase db query --linked -f "$f" -o table > /tmp/v.txt 2>&1
   t=$(grep -cE '│ true ' /tmp/v.txt); fl=$(grep -cE '│ false ' /tmp/v.txt)
   echo "$(basename $f): true $t false $fl"; T=$((T+t)); F=$((F+fl))
-done; echo "TOTAL true $T false $F"                 # expect false 0 and true = 171 plus the checks added by Block 1.2 and any later migration
+done; echo "TOTAL true $T false $F"                 # expect false 0 and true = every check in supabase/verify/ (231 across 9 scripts after migration 011, plus any added today)
 npx supabase db query --linked -o table "select count(*) as users from auth.users"   # expect 1: only the standing smoke-test account
 ```
 
-## C. Remote push and live check
-
-```bash
-git log origin/main..main --oneline                 # review exactly what will be published
-git push origin main
-npx vercel ls --prod                                # needs the Vercel CLI (npm i -g vercel; not installed today); otherwise check the deployment in the Vercel dashboard. It must reach "Ready"
-curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://momentum-app-eight-chi.vercel.app/    # 307 to /login
-curl -s -o /dev/null -w "%{http_code}\n" https://momentum-app-eight-chi.vercel.app/login               # 200
-```
-
-- [ ] Sign in as the standing smoke-test account and walk the flows you touched today.
-- [ ] Only the standing smoke-test account exists (`users = 1` in step B, until real users exist). If its data is cluttered, delete and recreate it in the Supabase dashboard (Add user, Auto Confirm); never share or store its password.
 
 ## D. Automated End-of-Day Backlog, Obsolescence & Jira Sync (copy-paste)
 
@@ -492,25 +517,26 @@ Task Instructions:
 1. Scan BACKLOG.md, ROADMAP.md, code TODO tags and today's commits (`git log --since=midnight --no-merges`) for newly discovered gaps, TODOs or deferred items. Run `npm run plan` and treat every open item without a Jira key as un-ticketed.
 2. Audit the "To Do" and "In Progress" tickets in Jira under the active Phase epic against the code on main:
    a. Read each candidate ticket's acceptance criteria and check them against the code and tests before judging. A ticket is obsolete, redundant or fully satisfied only if EVERY criterion is met or moot. Partly satisfied is not obsolete: add a comment saying what is done and what remains.
-   b. Transition truly obsolete or redundant tickets to "Closed" with a brief comment explaining why; use "Done" only for delivered work.
+   b. Propose truly obsolete or redundant tickets for "Closed" (the pause in step 6 applies) with a brief comment explaining why. Never transition anything to "Done" in this step: step D runs before the day's pull requests have merged, so nothing is delivered yet. Done transitions are made in step F, after the merge.
    c. Annotate or remove the matching entries in BACKLOG.md (tick resolved items, re-key items pinned to closed tickets to the ticket that now owns the work).
-   d. Check every epic in the MOM project, including the Phase 1 epics MOM-4 to MOM-7: if every child is Done or Closed, move the epic to Done with a comment listing its children. Leave an epic with any open child alone. Do not re-parent tickets.
+   d. Check every epic in the MOM project, including the Phase 1 epics MOM-4 to MOM-7, and note which would have every child Done or Closed once today's merged tickets are Done. Do not transition an epic here: step F lists those epic transitions after the merge. Leave an epic with any open child alone. Do not re-parent tickets.
 3. Confirm the active Phase Epic key and that every ticket created today is its child.
 4. For each un-ticketed item found, group related items, then:
    a. Write the ticket in our format (Title, Summary, Technical Scope, Acceptance Criteria);
    b. Create it in Jira under the active Phase Epic (check for duplicates first; if a call times out, search before retrying);
    c. Add the new Jira key to the item in BACKLOG.md and to the ticket table.
-5. Audit today's tickets: everything finished today must be Done in Jira; anything with unmet acceptance criteria must say so in a comment. Report any mismatch between a Jira ticket's real scope and its key in BACKLOG.md instead of guessing.
-6. PAUSE before any Jira transition to "Closed" or "Done" (tickets or epics): list every transition you intend to make, with the reason and the children or criteria that justify it, and wait for my OK. Comments and ticket creation do not need the pause.
+5. Audit today's tickets: list what was finished today with its branch and pull request (it becomes Done in step F, after the merge); anything with unmet acceptance criteria must say so in a comment. Report any mismatch between a Jira ticket's real scope and its key in BACKLOG.md instead of guessing.
+6. PAUSE before any Jira transition. In this step the only one allowed is "Closed" for an obsolete or redundant ticket: list every transition you intend to make, with the reason that justifies it, and wait for my OK. Comments and ticket creation do not need the pause. Never move a ticket or an epic to "Done" in step D.
 7. RAID and failure log review (MOM-92; rules in CLAUDE.md, "RAID and Failure Logs"):
    a. From today's sessions (corrections I made, failed checks, claims that proved false, today's commits and new BACKLOG items), draft any missing entries in docs/FAILURE_LOG.md and docs/RAID_LOG.md, marked `unreviewed`. Keep RAID rows general: the repo is public.
    b. Show me every unreviewed entry as a short numbered list: for a failure, one line on what went wrong and your draft of why, then "predicted it? yes / no / partly"; for a RAID row, the row with your suggested owner, trigger, response and NIST function.
-   c. Wait for my plain-language reply (for example "ok all", "drop 2", "3: partly"). Apply it, remove the `unreviewed` marks on approved entries, and record my predicted answer. Never ask me to edit the files or run a command. If I skip, leave the entries unreviewed for the next day-end; nothing unreviewed is committed.
+   c. Wait for my plain-language reply (for example "ok all", "drop 2", "3: partly"). Apply it, remove the `unreviewed` marks on approved entries, and record my predicted answer. Never ask me to edit the files or run a command. If I skip, leave the entries unreviewed for the next day-end; nothing unreviewed is committed. If some entries are approved and others are not, stage only the approved entries (never the whole file), so that no unreviewed entry is committed; the working copy keeps the rest.
    d. A RAID response that needs build work gets a BACKLOG.md item, ticketed by step 4 above.
-8. Create a feature branch (`feature/MOM-16-eod-backlog-sync`; if it already exists and is fully merged, fast-forward it to main), commit BACKLOG.md (ROADMAP.md if changed, and the reviewed docs/RAID_LOG.md and docs/FAILURE_LOG.md) with "chore(MOM-16): sync end-of-day backlog, prune obsolete tickets, and update Jira", merge into main with --no-ff. Do not push; the push is step F.
+8. Create a feature branch off an up-to-date `main` (`feature/MOM-16-eod-backlog-sync`; if it already exists and is fully merged into origin/main, delete it with `git branch -d` and create it again) and commit BACKLOG.md (ROADMAP.md if changed, and only the docs/RAID_LOG.md and docs/FAILURE_LOG.md entries I approved in step 7) with "chore(MOM-16): sync end-of-day backlog, prune obsolete tickets, and update Jira", staging files by name. Do not merge it into main and do not push: it is pushed with the day's other branches at step F and merged through its pull request.
 
-Definition of Done: tsc --noEmit passes; npm test passes; npm run plan reports every open item has a Jira key; merged to main.
+Definition of Done: tsc --noEmit passes; npm test passes; npm run plan reports every open item has a Jira key; committed on its feature branch (not merged, not pushed).
 ```
+
 
 ## E. Day-End Master Plan Generator for Tomorrow (copy-paste)
 
@@ -524,23 +550,53 @@ Task Instructions:
 4. Generate the complete "🚀 MOMENTUM BUILD: NEXT-PHASE MASTER EXECUTION PLAN" strictly following our established structure:
    - Metadata Header at the top: `> **Date:** YYYY-MM-DD | **Active Epic:** MOM-XX | **Base Commit:** <SHORT_HASH>`
    - Executive Overview & Architectural Invariants, and the Standing Rules (Jira first, production approval, verify scripts, no pushes inside blocks, standing smoke-test account).
-   - Logical Session Blocks grouping high-priority tickets, in dependency order.
+   - A "Today's runbook" section near the top, after the metadata header and before the first block: a table with one row per block, in order, giving `/run-block MOM-n`, the session setting (model / effort) and, in plain words, what to check at the gate. It also says that `/day-start` comes first and `/day-end` last.
+   - Logical Session Blocks grouping high-priority tickets, in dependency order, each in the format `npm run plan:check` enforces: a heading `## Block <n>.<m>: <title> (MOM-<n>)` with exactly one ticket key (unique in the plan); a `* **CLI Session Config:** Model: X | Effort: Y` line; exactly one fenced `text` prompt that names its ticket and carries a commit message `type(MOM-n): ...`; and a `* **User Verification Gate:**` checklist. Before each session's first block, a `**Your prerequisites before this session:**` note (it may say none).
+   - Block prompts that follow the pull-request workflow (CLAUDE.md): create the feature branch off an up-to-date `main`; commit on it with the Jira key; do NOT merge into `main` and do NOT push (the one push is at day-end, step F, after my OK); end with "Definition of Done: ...; committed on the feature branch." A block with a migration says: run `npm run verify:sql` locally, show the migration and `npx supabase db push --dry-run`, and run production `db push` and then ALL the verify scripts only after CI is green on its pull request and I say OK, and before that pull request merges (merging deploys to Vercel). A block that needs another ticket's code says it "must already be in origin/main" and stops if it is not.
    - Dynamic CLI Session Config (Sonnet / High for architecture, security and database work; Sonnet / Medium or Low for standard UI and tests).
    - Copy-pasteable prompts including tsc --noEmit, npm test, npm run build, feature branching, merging to main (--no-ff), BACKLOG.md and Jira updates.
    - User Verification Gates for each block.
-   - Final Day-End Build Verification & Remote Push section, with the step B verify loop marked Git Bash only, a pause for my OK before any Jira transition to Closed or Done in step D, and step D's RAID and failure log review (MOM-92) carried over word for word, including this instruction in step E.
+   - Final Day-End Build Verification & Pull Requests section (steps A, B, D, E, then F the one push, then C the live checks after the merge), with the step B verify loop marked Git Bash only, step D never moving a ticket or an epic to Done (it only comments, creates tickets and proposes Closed, with a pause for my OK), step F ending with a post-merge list of Done transitions that waits for my OK, and step D's RAID and failure log review (MOM-92) carried over word for word, including this instruction in step E.
    - An updated Open Decisions and Risks table.
-5. Save the generated plan to `docs/plans/NEXT_BUILD_PLAN.md`.
-6. Create a feature branch `feature/MOM-XX-next-build-plan-doc`, commit `docs/plans/NEXT_BUILD_PLAN.md` with "docs(MOM-XX): add generated next build plan" (MOM-XX is the active Phase Epic), merge to main (--no-ff). Do not push; show me `git log origin/main..main --oneline` and wait. The push is step F.
+5. Archive the finished plan first: copy the current `docs/plans/NEXT_BUILD_PLAN.md` to `docs/plans/archive/YYYY-MM-DD.md`, using its own metadata date (create the folder if needed). Then save the generated plan to `docs/plans/NEXT_BUILD_PLAN.md` and run `npm run plan:check -- --strict`; fix the plan until it reports no errors and no warnings.
+6. Create a feature branch `feature/MOM-XX-next-build-plan-doc` off an up-to-date `main` (before step 5 writes any file) and commit the archive file and `docs/plans/NEXT_BUILD_PLAN.md` with "docs(MOM-XX): add generated next build plan" (MOM-XX is the active Phase Epic), staging files by name. Do not merge it and do not push; show me `git log origin/main..<branch> --oneline` and wait. It is pushed with the day's other branches at step F.
 ```
 
-## F. Synchronize Remote Repository (PowerShell)
 
-```powershell
-git checkout main
-git status
-git push origin main
+## F. Push the day's branches and merge the pull requests (the one push)
+
+This is the day's single push and it needs your explicit OK. Nothing here pushes `main`: work reaches `main` only through pull requests.
+
+```bash
+git log origin/main..<branch> --oneline            # for EACH of the day's feature branches, including the step D and E branches: exactly what will be published
+git push -u origin <branch>                         # after your OK, one branch at a time; never main. The link to open the pull request is printed
 ```
+
+1. Open a pull request for each branch (the link printed by the push; `gh pr create` only if `gh` is installed and you say yes).
+2. Wait for CI: both jobs, `checks` and `database`, must be green on every pull request.
+3. For a branch with a migration: production `npx supabase db push --dry-run`, then `db push`, then ALL the verify scripts (step B's loop), only after CI is green and your OK, and **before** that pull request merges.
+4. Merge each pull request with a merge commit (the GitHub button, or `gh pr merge` after your OK), in dependency order.
+5. Then update your copy and tidy up:
+
+```bash
+git switch main
+git pull --ff-only
+git branch -d <branch>                              # only -d, for each merged branch; -D is never used
+```
+
+6. **Jira: Done transitions, only for what has merged.** For each ticket whose pull request merged today (the merge commits on `origin/main` since midnight, and the `(MOM-n):` commit prefixes), list the proposed transition to "Done" with the ticket's acceptance criteria, each marked met or unmet with its evidence (a test, a commit, a production check, a gate item). A ticket with an unmet criterion or a live gate still pending stays open, with a comment saying what remains. List any epic whose children are now all Done or Closed, with those children. Wait for my OK, then make exactly the transitions I approved and comment what shipped. Never move a ticket to Done before its pull request has merged.
+
+## C. Live checks (after the last pull request has merged and Vercel has deployed)
+
+```bash
+npx vercel ls --prod                                # needs the Vercel CLI (npx works); otherwise check the deployment in the Vercel dashboard. The newest production deployment must reach "Ready"
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://momentum-app-eight-chi.vercel.app/    # 307 to /login
+curl -s -o /dev/null -w "%{http_code}\n" https://momentum-app-eight-chi.vercel.app/login               # 200
+```
+
+- [ ] Sign in as the standing smoke-test account and walk the flows you touched today.
+- [ ] Only the standing smoke-test account exists (`users = 1` in step B, until real users exist). If its data is cluttered, delete and recreate it in the Supabase dashboard (Add user, Auto Confirm); never share or store its password.
+- [ ] Walk every item in `docs/plans/.pending-live-checks.md` (the post-push checks the blocks deferred), then clear the file.
 
 ---
 
@@ -559,8 +615,8 @@ git push origin main
 | **Dark only until MOM-30** | MOM-76 makes the app dark regardless of the device setting. Light mode with a follow-device default is MOM-30, not scheduled. |
 | **Live Claude paths** | The MOM-83 smoke test did not exercise the wait message, Try again or the starter plan on production; Block 3.1 covers them against the local stack with the API key absent. Production has never seen the failure path. |
 | **Model cost** | MOM-35's generator and MOM-47's rebalance call Claude Opus 5.5 per click; MOM-73 (Block 5.2) is what bounds that. Until it ships, do not invite real users. |
-| **MOM-75 changes how you run a day** | After Block 6.1, a build day is `/day-start`, then `/run-block MOM-n` per block, then `/day-end`, instead of pasting prompts. The commands keep every approval stop and cannot switch the model for you. Until it ships, keep running this plan by hand. |
+| **MOM-75 changes how you run a day** | After Block 6.1, a build day is `/day-start`, then `/run-block MOM-n` per block, then `/day-end`, instead of pasting prompts. The commands keep every approval stop and cannot switch the model or the effort for you. `/day-end` can only be proven on a real day-end, so MOM-75 stays open until you have run one. |
 | **Product risks live in the RAID log** | This table covers decisions for this build cycle. Product risks, assumptions, issues and dependencies (privacy of goal data, stored tokens and health data, model cost, CI) are in `docs/RAID_LOG.md`, and AI misses in `docs/FAILURE_LOG.md`; both are reviewed in step D every day-end (MOM-92). |
-| **Direct pushes to `main`** | Every change is merged and pushed to `main` by hand. After MOM-67 and branch protection are on, step C becomes a pull request. |
+| **Pull requests, not direct pushes** | `main` is protected (MOM-67): every change reaches it through a pull request with `checks` and `database` green, merged with a merge commit. `/run-block` commits on a feature branch and never merges; `/day-end` pushes the day's branches once, after your OK. A production migration is applied before its pull request merges (merging deploys to Vercel). A block that needs an earlier block's code stops if that code is not in `origin/main` yet and offers: push and merge that pull request first, or stack on its branch (only with your OK). |
 | **Not scheduled, still recommended** | **MOM-45** (the plan week can be off by one around midnight outside UTC; you are in Pacific time), **MOM-65** (revoke EXECUTE on `handle_new_user` and `rls_auto_enable`; Block 1.2 comments on its outdated seed criterion), MOM-66 (table grants check), MOM-68 (`.env*` gitignore, now also the untracked `AGENTS.md`, `supabase/.branches/` and `supabase/snippets/`), MOM-74 (retire `HEVY_API_KEY`; delete it from Vercel Production afterwards), MOM-91 (`connection()` instead of `force-dynamic`; the selected-channel URL depends on the page being rendered per request). |
 | **Not scheduled, product decisions** | MOM-79 (tick a goal criterion; also the only way to make the 7 criteria real), MOM-80 (review the drafted criteria), MOM-81 (plan-shape rules, including giving the generator the goal's criteria), MOM-82 (unused `createGoalChannel`), MOM-85 (reopen older completed tasks), MOM-89 (paused and finished goals are invisible), MOM-90 with MOM-53 (move the day-90 checkpoint when the plan cannot hold), MOM-20 to MOM-26 (schema), MOM-33 (AI chat), MOM-64 (password reset, abuse protection). |
