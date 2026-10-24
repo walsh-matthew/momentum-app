@@ -1,0 +1,4 @@
+# Line endings (MOM-67, from failure-log entry F-008). Every tracked file is stored with LF. `eol=lf` makes working
+# copies LF on every machine (the owner's Windows checkout, project threads, CI), so a line-ending-only difference
+# never shows a file as modified or blocks a pull. `text=auto` leaves anything git detects as binary alone.
+* text=auto eol=lf
