@@ -508,7 +508,10 @@ function applyTaskMove(args: {
   return { data: true, error: null };
 }
 
-export async function createSupabaseServerClient() {
+// The fake client itself. createSupabaseServerClient is the signed-in user's client; createSupabaseAdminClient is the
+// service-role one, which the real app makes synchronously. Tests that need it to see every user's rows switch
+// row level security off with `db.rls = false`, so what they prove is that the service filters by user id itself.
+export function fakeClient() {
   return {
     auth: {
       getUser: async () =>
@@ -530,6 +533,12 @@ export async function createSupabaseServerClient() {
     },
   };
 }
+
+export async function createSupabaseServerClient() {
+  return fakeClient();
+}
+
+export const createSupabaseAdminClient = fakeClient;
 
 // ---------------------------------------------------------------------------
 // Row builders shared by the tests

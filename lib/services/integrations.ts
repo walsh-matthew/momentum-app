@@ -541,5 +541,6 @@ async function refreshAccessToken(
   return { ok: false, error: 'Could not refresh that connection. Try again shortly.' };
 }
 
-// TODO(MOM-Phase2): real HTTP clients in @/lib/adapters/hevy.ts and @/lib/adapters/google.ts.
-// TODO(MOM-Phase2): webhook handlers at app/api/webhooks/[provider]/route.ts.
+// The real HTTP clients are in @/lib/adapters/hevy.ts and @/lib/adapters/google.ts (MOM-38). They take the credential
+// this service returns and never touch Supabase. The webhook routes are not built yet: they need stored per-user
+// webhook tokens, which need a migration (BACKLOG.md, docs/INTEGRATIONS_SPEC.md "Webhook endpoints").

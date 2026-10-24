@@ -41,18 +41,28 @@ All provider adapters must output data adhering to this standardized interface i
 ## 3. Provider Specifications
 
 ### A. Hevy Strength Training (REST API)
-* **Auth Method:** Direct API key header (`api-key: <HEVY_API_KEY>`).
+* **Auth Method:** the user's own API key in the `api-key` header (a UUID from Hevy's developer settings). It is read from the user's stored credential through the integrations service and passed to the adapter; there is no app-wide Hevy key.
 * **Base Endpoint:** `https://api.hevyapp.com/v1/workouts`
 * **Target Channel:** `physical_fitness`
-* **Sync Strategy:** Polling via `/v1/workouts/events` (or `/v1/workouts`).
+* **Sync Strategy:** Polling via `/v1/workouts` (newest first, 10 a page at most) and `/v1/workouts/{workoutId}`; `/v1/workouts/events` (changes since a date) is not built yet. Hevy also supports webhooks (below).
+* **Built (MOM-38):** `lib/adapters/hevy.ts` (`listHevyWorkouts`, `getHevyWorkout`, `normalizeHevyWorkout`), checked against Hevy's published API description and a redacted real response (`tests/fixtures/hevy-workouts.redacted.json`).
+
+**Hevy webhooks.** Hevy lets the user register a webhook in the Hevy app (Settings, Developer). Facts, from the owner's own setup of it:
+* The body is only `{"workoutId": "<uuid>"}`: no workout data, so the handler fetches the workout with `getHevyWorkout()` using that user's stored key.
+* Authentication is **not a signature**. Hevy sends a static `Authorization` header whose value the user typed into Hevy. It can be checked only against a secret we issued to that user.
+* Hevy expects an HTTP 200 within 5 seconds, so the handler must verify, answer, and do the work without waiting on the provider call.
+* Hevy's public API description has **no endpoint that registers or lists webhook subscriptions** (checked 2026-10: the description has no webhook path at all). The user pastes our address and token into Hevy by hand.
+* Because the only credential is a static header, a webhook route needs a stored per-user token (hashed at rest) to tell which user a call is for; without one it cannot resolve a user id. See "Webhook endpoints" below.
 
 **Hevy Mapping Rules:**
 * `externalId` <- `workout.id`
 * `timestamp` <- `workout.end_time`
 * `title` <- `workout.title` (e.g., "Push Day")
 * `durationMinutes` <- `(end_time - start_time)` in minutes
-* `metrics.volumeLbs` <- sum of `(reps * weight_kg/lbs)` across all completed sets
-* `metrics.setsCompleted` <- count of sets where `indicator == 'completed'`
+* `metrics.volumeLbs` <- sum of `(reps * weight_kg)` over the sets that have both, converted to pounds (Hevy always sends kilograms), rounded to 0.1
+* `metrics.setsCompleted` <- the number of sets in the workout. **Changed in MOM-38:** this rule used to read "count of sets where `indicator == 'completed'`", but Hevy has no such field. Its API returns only logged sets, each with a `type` of `normal`, `warmup`, `dropset` or `failure`, so every set counts, and `metrics.metadata.warmupSets` records how many were warm-ups. The owner should confirm this reading.
+* `metrics.metadata` <- `{ exerciseCount, warmupSets }`
+* `timestamp` is `end_time` converted to UTC (Hevy sends `+00:00` offsets); a workout that ends before it starts, or lasts more than a day, is refused with a fixed reason.
 
 **Sample Mock Ingest Payload (for MOM-13 development):**
 {
@@ -91,6 +101,14 @@ All provider adapters must output data adhering to this standardized interface i
 * **Auth Method:** OAuth2 (`Bearer <access_token>`) with Refresh Token rotation.
 * **Target Channel:** `career_pivot` / `productivity`
 * **Sync Strategy:** Push Notification Webhook triggers or periodic sync tokens (`/calendar/v3/users/me/calendarList`).
+* **Built (MOM-38):** `lib/adapters/google.ts` (`listGoogleCalendarEvents`, `normalizeGoogleEvent`). It lists the primary calendar (`GET /calendar/v3/calendars/primary/events`, allowed by the `calendar.readonly` scope) with `singleEvents=true`, so each occurrence of a recurring event has its own id. All-day events (a `date`, not a `dateTime`) and cancelled events with no times are counted and set aside, not turned into tasks. There is no recorded real Google response yet; the tests use bodies built from Google's documentation.
+
+**Google push notifications.** Facts from Google's documentation, which shape the follow-up:
+* A push message has **no body**. The call carries `X-Goog-Channel-ID`, `X-Goog-Channel-Token`, `X-Goog-Resource-State` (`sync` on creation, then `exists`) and `X-Goog-Message-Number` headers, so it only says "something changed"; the handler lists events to find out what.
+* A watch channel is registered per user (`events.watch`) with a channel id and a token we choose, and the address must be HTTPS on a domain verified in the Google Cloud console. It cannot be tested on localhost.
+* A channel expires (Google returns the expiry when the channel is created; check the current maximum lifetime in its docs before building) and is not renewed by Google: we must register a new one before it lapses, or fall back to polling.
+* Messages can repeat or arrive out of order, so the handler keeps the last message number per channel.
+* So, like Hevy, a handler needs a stored mapping from channel id and token to a user. See "Webhook endpoints" below.
 
 **Google Calendar Mapping Rules:**
 * `externalId` <- `event.id`
@@ -101,7 +119,7 @@ All provider adapters must output data adhering to this standardized interface i
 
 **Connect flow (MOM-62).** The Connected Apps page posts to `/api/integrations/google/start`, which sends the signed-in user to Google's consent screen with the single scope `https://www.googleapis.com/auth/calendar.readonly`, `access_type=offline`, `prompt=consent`, a random `state` and a PKCE S256 challenge. The `state`, the code verifier, the user id and the redirect URI sit in a ten-minute httpOnly, SameSite=Lax cookie scoped to the callback path. Google returns to `/api/auth/callback/google`, an authenticated route (not in `PUBLIC_PATHS`), which refuses a missing session, a missing or expired cookie, a state that does not match, a different user or a different address; reads a denial as `denied`; exchanges the code on the server with the client secret and the verifier; refuses a response that lacks the calendar scope; and passes the validated response to `saveOAuthTokens()`. It always redirects to `/connections?google=<outcome>` with one of a fixed set of outcome codes and clears the cookie: no token, code or provider text goes in an address or a log. The redirect URI to register in the Google Cloud console is `<origin>/api/auth/callback/google` for each origin the app is served from (for example `http://localhost:3000` and the production domain); preview deployments need their own entries. All of this is in `lib/services/googleOAuth.ts`; no component imports it.
 
-**Hevy key form (MOM-62).** A Server Action (`saveHevyApiKey`) passes the pasted key to `saveApiKey()`. The key is checked for shape only; it goes into a password field, is not echoed or kept in client state, and the form returns only a message. Calling Hevy to confirm the key works belongs to the Phase 2 adapter.
+**Hevy key form (MOM-62).** A Server Action (`saveHevyApiKey`) passes the pasted key to `saveApiKey()`. The key is checked for shape only; it goes into a password field, is not echoed or kept in client state, and the form returns only a message. Calling Hevy to confirm the key works (for example `GET /v1/user/info`) is not built yet; see `BACKLOG.md`.
 
 ---
 
@@ -112,8 +130,17 @@ All provider adapters must output data adhering to this standardized interface i
   * Implement mock provider adapters (`getMockHevyActivity()`, `getMockCalendarActivity()`).
   * Build UI toggle cards in the Integration Panel that store active states in Supabase `connected_apps` without making live third-party network requests.
 * **Phase 2 (Post-MVP):**
-  * Implement real HTTP clients (`@/lib/adapters/hevy.ts`, `@/lib/adapters/google.ts`) utilizing stored API keys/OAuth tokens from `integration_credentials` (via `getAccessToken()` in `@/lib/services/integrations.ts`).
-  * Add background webhook route handlers at `app/api/webhooks/[provider]/route.ts`.
+  * Real HTTP clients (`@/lib/adapters/hevy.ts`, `@/lib/adapters/google.ts`) utilizing stored API keys/OAuth tokens from `integration_credentials` (via `getAccessToken()` in `@/lib/services/integrations.ts`). **Built in MOM-38**, along with the session-less ingestion entry point (below).
+  * Background webhook route handlers at `app/api/webhooks/[provider]/route.ts`. **Not built yet**: they need the webhook endpoint storage below, which needs a migration. Tracked in `BACKLOG.md`.
+
+### Webhook endpoints (planned)
+
+Neither provider's webhook can say which user it is for on its own: Hevy sends a user-chosen static header and a workout id, Google sends headers and no body. So both need a stored per-user record, which one migration can cover for both providers:
+* a **hashed** token (the plain value is shown to the user once, to paste into Hevy, or sent to Google as the channel token; only its hash is stored);
+* for Google: the channel id, its expiry, the last message number seen, and a renewal step before expiry;
+* a route per provider that checks the token **before any database read of user data**, resolves the user id from that record only, answers 200 quickly, and returns the same generic 401 for every failure. The routes are public to the session proxy (`PUBLIC_PATHS`) because they authenticate by token instead.
+
+The "webhook rejects an unauthenticated call" acceptance criterion belongs to that follow-up, and it must be tested on a production or preview deployment, not on localhost (Google needs a verified HTTPS domain).
 
 ---
 
@@ -137,4 +164,5 @@ All provider adapters must output data adhering to this standardized interface i
 4. **The task:** `task_type` is `event` (a timed, dated item), `minutes` is the rounded duration (at least 1), `status` is `'todo'` and `completed_at` is unset. The normalized activity is kept in `micro_tasks.source_evidence`, with `source_provider` and `source_external_id` (migration 007).
 5. **Idempotent:** a provider and external id make at most one task per user, so webhook retries and overlapping polls create nothing new. Re-ingesting never touches a task the user has since edited or ticked.
 6. **Set aside, not lost:** every skipped, invalid or failed item appears in the returned summary and is logged (provider, id and reason only).
-7. **Scope:** it runs as the signed-in user through RLS and only inserts. Code with no session (a signed webhook) needs its own entry point; see `BACKLOG.md`.
+7. **Scope:** `ingestActivities()` runs as the signed-in user through RLS and only inserts.
+8. **No session (MOM-38):** `ingestActivitiesForUser(userId, batch)` in `@/lib/services/ingestionForUser.ts` is for a verified webhook or a sync job. It runs the same core (`runBatch`) with the service-role client, which bypasses RLS, so isolation is the code's job: every query is keyed on the given user id, every insert sets it, and the task table's same-owner foreign key refuses another user's goal channel. The id must be a `VerifiedUserId` (made only by `asVerifiedUserId()`, which checks the shape), and the caller must have resolved it from verified credentials, never from a request body, header or address. The batch is checked before the service-role client is made. `ingestion.ts` itself never imports that client, and a test enforces it.
