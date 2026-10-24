@@ -119,6 +119,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The day-end review, when the committed log was compared with the working copy and four marked entries were already in `HEAD`.
 - **Predicted it?** No.
 
+### F-016 · 2026-10-24 · build tool (project thread)
+- **Asked:** Give the owner paste-ready git commands to finish after the MOM-67 pull request merged (switch to main, pull, delete the feature branch).
+- **What went wrong:** The switch to main aborted because uncommitted log edits would have been overwritten. The commands ran anyway, so the pull fast-forwarded the feature branch instead of main, and the local branch delete failed because that branch was still checked out. Nothing was lost.
+- **Why:** The commands assumed a clean working tree, though the owner's last report listed uncommitted log files. They were also chained with no stop on the first error.
+- **Caught by:** The owner pasted the terminal output. A follow-up `git branch -f main origin/main` and switch fixed it.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
