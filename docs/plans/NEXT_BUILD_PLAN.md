@@ -1,8 +1,8 @@
 # 🚀 MOMENTUM BUILD: NEXT-PHASE MASTER EXECUTION PLAN
 
-> **Date:** 2026-10-23 | **Active Epic:** MOM-16 | **Base Commit:** 9c3310b
+> **Date:** 2026-10-24 | **Active Epic:** MOM-16 | **Base Commit:** 80b0503
 >
-> **Since the 2026-10-22 plan:** MOM-34, MOM-35 (live smoke test passed, MOM-83), MOM-36, MOM-44, MOM-84, MOM-86, MOM-87 and MOM-88 are done, MOM-31 was delivered inside MOM-44 (so its old Block 2.2 is gone), and the Phase 1 epics MOM-5 and MOM-6 are Done. Not built yet: **MOM-18, MOM-19, MOM-76, MOM-77, MOM-61** (all in Sessions 1 to 3 below). Production verification is now **171 checks across 8 scripts** in `supabase/verify/`; the next free migration number is **010**; `npm test` runs 1015 tests.
+> **Since the 2026-10-23 plan:** every block of that plan merged through pull requests: MOM-18, MOM-19, MOM-76, MOM-77, MOM-61, MOM-62, MOM-67 and MOM-73 are Done; MOM-38's adapters and session-less ingestion merged but the ticket stays open for the webhook routes (now MOM-98); MOM-75 is In Review until a real `/day-end` has completed (this one was the first). `main` is protected (`checks` and `database` must be green). New tickets from the day-end sync: **MOM-98** (webhook endpoints), **MOM-99** (adapter follow-ups), **MOM-100** (CI hardening), **MOM-101** (LLM usage follow-ups), **MOM-102** (privacy approach) and **MOM-103** (Connected Apps status failure); none is scheduled today except MOM-101, MOM-102 and MOM-103. Production verification is now **231 checks across 9 scripts** in `supabase/verify/`; the next free migration number is **012**; `npm test` runs 1752 tests; production holds exactly one user (the standing smoke-test account).
 
 ---
 
@@ -12,24 +12,24 @@
 
 | # | Type | Session setting | What to check at the gate |
 | --- | --- | --- | --- |
-| 1 | `/run-block MOM-18` | Sonnet / Medium | Tests pass and the CLI listed every test it changed; it explained why the signed-out state is normally unreachable. The live check of all four states waits for the next block. |
-| 2 | `/run-block MOM-19` | Sonnet / High | You reviewed the verify-script diff; after the production push every verify script passes; you recreated the standing smoke-test account and the count-only check shows no goals; signed in as it you see the no-goals state. |
-| 3 | `/run-block MOM-76` | Sonnet / Medium | Signed in as the standing smoke-test account, at 390px and 1280px the screen looks like the wireframe (dark, lime accent); ticking the focus task and the drawer still work. |
-| 4 | `/run-block MOM-77` | Sonnet / High | Three columns at 1280px and one scroll at 390px with no tab bar; picking a goal changes the feed, ring and nudge and survives a reload; Review opens the drawer and nothing moves until you apply. |
-| 5 | `/run-block MOM-61` | Sonnet / Medium | `npm test` and `npm run test:e2e` pass with Docker running; you watched the hydration test fail on a deliberately broken page; no test used the standing smoke-test account. |
-| 6 | `/run-block MOM-62` | Sonnet / High | After the push, connect and disconnect Google Calendar and Hevy as the standing smoke-test account; a count-only query confirms the credential row is gone; no secret appears in the browser's network tab. |
-| 7 | `/run-block MOM-38` | Sonnet / High | You gave the Hevy sample before the adapter was written; an unsigned request to the webhook route returns 401 and changes nothing; no task changes state. |
-| 8 | `/run-block MOM-67` | Sonnet / High | Both CI jobs run green on a pull request; a deliberately broken check turns it red and cannot merge; branch protection requires both checks. |
-| 9 | `/run-block MOM-73` | Sonnet / High | You approved the table design before any migration; every verify script passes on production; two quick Ask Claude clicks, the second is refused; a count-only query shows usage rows with no text. |
-| 10 | `/run-block MOM-75` | Sonnet / Medium | The CLI showed what the Claude Code docs say before writing anything; `npm test` passes and the format test fails on each bad fixture; `/day-start` ran and `/run-block` stopped on a model mismatch; the allowlist holds only read-only commands. Close the ticket only after a real `/day-end`. |
+| 1 | `/run-block MOM-68` | Sonnet / Low | `git check-ignore .env.example` prints nothing while `.env.local` and `.vercel` are still ignored; you answered the question about `AGENTS.md`; the new test passes. |
+| 2 | `/run-block MOM-65` | Sonnet / High | You read the findings about both functions before the migration was written; a signed-in role gets "permission denied" calling either; a real sign-up on the local stack still creates the user row; the CLI showed the migration and the dry run and did not push. |
+| 3 | `/run-block MOM-66` | Sonnet / High | The new grants check passes on the real tables and you saw it fail on a throwaway table made by hand on the local stack only; the decision about `task_rebalance_history` is written down and nothing was granted without your OK. |
+| 4 | `/run-block MOM-93` | Sonnet / Medium | When the plan cannot be read, the home page says so and offers Try again, with no goal wizard prompt; a user with no goals still sees the no-goals state. |
+| 5 | `/run-block MOM-103` | Sonnet / Medium | With connection status unreadable, Connected Apps says so and offers Try again and shows none of the old switch-only cards; the desktop side panel is untouched. |
+| 6 | `/run-block MOM-57` | Sonnet / Low | The new tests cover refusals and success for turning an app on or off, and the mock payloads are checked against the contract; no app code changed unless a test found a bug and you were told. |
+| 7 | `/run-block MOM-45` | Sonnet / High | You chose where the time zone lives before any migration was written; a unit test shows a Los Angeles user still in the old week at 23:30 local while UTC has rolled over; the CLI showed the migration and the dry run and did not push. |
+| 8 | `/run-block MOM-101` | Sonnet / High | You chose the retention period and how the purge is scheduled before the migration was written; Settings shows only your own Claude use for the last 24 hours; a test fails when the fake and the real limit function disagree. |
+| 9 | `/run-block MOM-64` | Sonnet / High | You set up the CAPTCHA and the redirect address before the block built on them; the password reset works end to end on the local stack; the sidebar shows who is signed in; nothing about the standing smoke-test account was changed. |
+| 10 | `/run-block MOM-102` | Sonnet / Medium | The data inventory and the list of what each Claude prompt sends are accurate; you reviewed every `[OWNER TO CONFIRM]` line in the notice; `/privacy` opens without signing in. The delete-my-data criterion is reported as not met. |
 
-If a block needs another ticket's code, `/run-block` checks that code is already in `origin/main`. If it is only on an unmerged branch, it stops and offers two ways forward: push that branch and merge its pull request first, or stack this block on that branch (only with your OK).
+If a block needs another ticket's code, `/run-block` checks that code is already in `origin/main`. If it is only on an unmerged branch, it stops and offers two ways forward: push that branch and merge its pull request first, or stack this block on that branch (only with your OK). No block in this plan needs another block's code, so none should stop for that. The three migrations (012, 013, 014) are the one place the blocks touch: see "Migrations are stacked" in the Standing Rules.
 
 ---
 
 ## Executive Overview & Architectural Invariants
 
-This build cycle makes the app safe to hand to a first real user: a new account starts empty and gets sensible empty states (Session 1), the app looks and lays out like the original v0 wireframes (Session 2), real browser tests guard sign-up, route protection and the wizard's failure paths (Session 3), the external provider UIs and adapters connect (Session 4), CI plus LLM spend governance protect production (Session 5), and the daily build loop becomes three Claude Code commands instead of hand-pasted prompts (Session 6). Every block preserves the three non-negotiable invariants:
+This build cycle makes the app safe to put in front of a first real user. It closes the database and repository loose ends the audit found (Session 1), makes the app say so when it cannot read data instead of showing an empty account (Session 2), fixes the week boundary for users outside UTC (Session 3), and finishes what real users need before an invitation: usage-record retention, password reset with sign-up abuse protection, and a privacy notice (Session 4). The webhook endpoints (MOM-98), adapter follow-ups (MOM-99) and CI hardening (MOM-100) wait for a later day. Every block preserves the three non-negotiable invariants:
 
 1. **Human-Only Completion:** Only the signed-in owner ever changes a task's `status` or `completed_at`. No background job, webhook, ingestion run or LLM may write them, and nothing creates a task as `done`. Enforced by the `micro_tasks_guard_completion` trigger (migration 002) and by source-level tests.
 2. **No-Delete / Carry-Forward:** Unfinished work is never cut or hard-deleted. The only moves are `carry_over` and `pull_forward`; work that cannot fit is named in a `cannot_hold` warning. `task_rebalance_history` is append-only.
@@ -39,11 +39,13 @@ This build cycle makes the app safe to hand to a first real user: a new account 
 
 - **Read the Jira ticket first.** If its title, scope or acceptance criteria disagree with the prompt, stop and flag it.
 - **Production changes need your approval.** A prompt stops before `supabase db push`, `vercel env`, or any push to `origin`, shows what will happen, and waits. Never use the SQL Editor. Tests never run against production and never use production credentials.
-- **Database checks are not part of `npm test`.** The 171 checks live in 8 SQL scripts in `supabase/verify/` and run with `npx supabase db query --linked -f <file> -o table` (production) or `npx supabase db query --local -f <file> -o table` (local stack). After any migration, run **all** of them; every row must show `passed = true`.
-- **New migrations** continue the numbering (check `ls supabase/migrations`; the next free number today is 010). Never edit an applied migration.
-- **Pull requests, not local merges.** `main` is protected: work reaches it only through a pull request with the CI jobs `checks` and `database` green, merged with a merge commit (CLAUDE.md). A block commits on its feature branch and stops: it never merges into `main` and never pushes `main`. Branches are pushed once, at day-end (step F), after your explicit OK. Where an older block prompt below still says "merge into main with --no-ff", `/run-block` skips that step; the pull request replaces it.
-- **A migration is applied before its pull request merges.** A block with a migration runs `npm run verify:sql` locally, shows the migration and `npx supabase db push --dry-run`, and applies it to production (then runs ALL the verify scripts there) only after CI is green on its pull request and you say OK. This happens before the pull request merges, because merging deploys to Vercel and the new code needs the new schema.
-- **Standing smoke-test account.** Production keeps ONE standing test account, `smoke-test@momentum-app.test`, created by you in the Supabase dashboard (Authentication → Add user, Auto Confirm User on). Its password lives only in your password manager: Claude never asks for it, prints it or stores it in the repo, and never creates, edits or deletes users on production. Every live sign-in check in this plan says "sign in as the standing smoke-test account". Claude may read its data with **count-only** queries. If its data gets cluttered, you delete and recreate it in the dashboard (it starts empty once migration 010 is live). The SQL verify scripts create and delete their own passwordless temporary users inside one transaction and leave nothing behind, so production should always hold exactly one user. Browser tests (Session 3) use throwaway users on the **local** stack only.
+- **Database checks are not part of `npm test`.** The 231 checks live in 9 SQL scripts in `supabase/verify/` and run with `npm run verify:sql` (local stack) or, against production, with the step B loop. After any migration, run **all** of them; every row must show `passed = true`.
+- **New migrations use the numbers this plan assigns:** MOM-65 takes **012**, MOM-45 takes **013**, MOM-101 takes **014**, so the three branches never choose the same number. Never edit an applied migration.
+- **Pull requests, not local merges.** `main` is protected: work reaches it only through a pull request with the CI jobs `checks` and `database` green, merged with a merge commit (CLAUDE.md). A block commits on its feature branch and stops: it never merges into `main` and never pushes. Branches are pushed once, at day-end (step F), after your explicit OK.
+- **A migration is applied before its pull request merges.** A block with a migration runs `npm run verify:sql` locally, shows the migration and `npx supabase db push --dry-run`, and stops. At day-end step F, once CI is green on its pull request and you say OK, the production `db push` and then ALL the verify scripts run, before that pull request merges (merging deploys to Vercel, and the new code needs the new schema).
+- **Migrations are stacked.** Branches 012, 013 and 014 each carry only their own migration file, because each was cut from `main`. At step F, handle them in numeric order: merge the first pull request, then use GitHub's "Update branch" on the next one (so it carries the earlier migration), wait for CI again, apply its migration to production, merge it, and repeat. Applying a later migration from a branch that lacks an earlier applied one makes `supabase db push` refuse.
+- **Standing smoke-test account.** Production keeps ONE standing test account, `smoke-test@momentum-app.test`, created by you in the Supabase dashboard (Authentication → Add user, Auto Confirm User on). Its password lives only in your password manager: Claude never asks for it, prints it or stores it in the repo, and never creates, edits or deletes users on production. Every live sign-in check in this plan says "sign in as the standing smoke-test account". Claude may read its data with **count-only** queries. If its data gets cluttered, you delete and recreate it in the dashboard (it starts empty). The SQL verify scripts create and delete their own passwordless temporary users inside one transaction and leave nothing behind, so production should always hold exactly one user. Browser tests use throwaway users on the **local** stack only.
+- **The repo is public.** Anything written to a committed file (logs, docs, tests, fixtures) names categories, never secrets, personal data or exploit steps.
 
 ## Session Preflight (run before every block)
 
@@ -51,7 +53,7 @@ This build cycle makes the app safe to hand to a first real user: a new account 
 
 ```bash
 cd C:\Users\matth\momentum-app
-git status --short          # expect only your uncommitted docs/FAILURE_LOG.md and docs/RAID_LOG.md edits, plus untracked AGENTS.md, supabase/.branches/ and supabase/snippets/ (MOM-68); anything else stops the block
+git status --short          # expect only your uncommitted docs/FAILURE_LOG.md and docs/RAID_LOG.md edits, plus untracked AGENTS.md, supabase/.branches/ and supabase/snippets/ (MOM-68 settles this in Block 1.1); anything else stops the block
 git fetch origin
 git rev-parse main origin/main   # the two must match. If main is only behind: git switch main, then git pull --ff-only (each on its own)
 npm run plan -- MOM-<n>           # optional: the generator's view of the ticket
@@ -63,410 +65,383 @@ npm run plan:check -- --block MOM-<n>   # optional: what this plan says about th
 ## High-Priority Ticket Sequence & Session Blocks
 
 ```text
-SESSION 1: EMPTY STATES & CLEAN SIGNUP (MOM-18, MOM-19)
-  - Real empty states first, then drop the signup seed so a new account starts empty
-SESSION 2: WIREFRAME LOOK AND FEEL (MOM-76, MOM-77)
-  - Dark design system from the v0 wireframes, then the wireframe layout with single-scroll mobile
-SESSION 3: E2E, HYDRATION & COMPONENT TESTS (MOM-61)
-  - supabase init, then Playwright against a local Supabase stack: sign-up, route guards, hydration at 390px and 1280px, and the wizard paths the live smoke test could not reach
-SESSION 4: EXTERNAL INTEGRATIONS & UI (MOM-62, MOM-38)
-  - Google consent flow and Hevy key forms, then real adapters and signed webhooks (MOM-38 needs Hevy samples from you)
-SESSION 5: CI PROTECTION & COST GOVERNANCE (MOM-67, MOM-73)
-  - GitHub Actions CI with a disposable database, then durable LLM rate limits, usage logging and spend caps
-SESSION 6: PLAN EXECUTION COMMANDS (MOM-75)
-  - /day-start, /run-block <MOM-n> and /day-end in .claude/commands/, a plan format test in npm test, and a "Today's runbook" section in the plan
+SESSION 1: REPOSITORY AND DATABASE HYGIENE (MOM-68, MOM-65, MOM-66)
+  - Ignore rules for secret env files, then revoke API-role EXECUTE on the two trigger functions (migration 012), then a check that every public table has the grants its role needs
+SESSION 2: HONEST FAILURE STATES AND TESTS (MOM-93, MOM-103, MOM-57)
+  - A could-not-load state on the home page, the same on Connected Apps, then the missing integration tests
+SESSION 3: TIME ZONE (MOM-45)
+  - The plan week rolls over at the user's local midnight (migration 013 if the zone is stored in the database)
+SESSION 4: WHAT REAL USERS NEED (MOM-101, MOM-64, MOM-102)
+  - Usage-record retention and a Settings readout (migration 014), password reset with sign-up abuse protection, then the privacy approach and notice
 ```
 
-*Order matters. In Session 1, MOM-19 comes last: the seed must not be removed until a new user sees a sensible empty state (MOM-18; the wizard already builds the plan: MOM-34, MOM-35, live-verified in MOM-83). Session 2 comes before the Playwright session so its component and hydration tests are written against the final UI, and before MOM-62 so the connect forms land on the new Connected Apps page; MOM-76 (styling) comes before MOM-77 (layout). MOM-61 comes after MOM-19 so its browser tests start from an empty new account, and before MOM-67 so CI has a browser suite to run. MOM-62 comes before MOM-38 because the adapters need the connect flows. MOM-75 comes last so its commands and format test are written against the final shape of this plan and its day-end section; it touches no app code and no production, so it can also run on its own on any later day. Safe stopping points: after Block 1.2 (a new user gets an empty account and the wizard), after each session. If the day runs short, stop after Session 3; Sessions 4 to 6 move to the next day, and Block 4.2 is the first to drop (it also waits on Hevy samples from you).*
+*Order matters. In Session 1, MOM-68 is a no-risk warm-up, MOM-65 comes before MOM-66 so the grants work starts from the revoked state (the grants check itself does not need MOM-65's code). Session 2 puts MOM-93 first so its wording sets the pattern MOM-103 follows, and MOM-57 last because it only adds tests. MOM-45 is its own session because it touches how every "today" is computed and may add a column. In Session 4, MOM-101 comes first because the retention period it decides is a fact the privacy notice states; MOM-64 sits between them because it needs you to set up a CAPTCHA first, which gives you time; MOM-102 comes last because the notice describes everything else. Safe stopping points: after Session 1, after Session 2, after each block of Session 4. If the day runs short, MOM-102 drops first (it is the only block that needs several of your decisions), then MOM-64.*
 
 ---
 
-# SESSION 1: EMPTY STATES & CLEAN SIGNUP
+# SESSION 1: REPOSITORY AND DATABASE HYGIENE
 
-**Your prerequisites before this session:** none for Block 1.1. **One-time, during Block 1.2:** the standing smoke-test account already exists (recreated 2026-10-23 at about 15:50 UTC, **before** migration 010), so it holds the old Career Pivot seed. **After** Block 1.2 has pushed migration 010 (the CLI tells you when), delete it and create it again: Supabase dashboard → Authentication → Users → delete `smoke-test@momentum-app.test`, then Add user → same email, password from your password manager, **Auto Confirm User on**. Recreated after 010 it starts empty, which is the live proof of MOM-19. This is the first block that needs a live sign-in.
+**Your prerequisites before this session:** none for Block 1.1. Docker Desktop must be running for Blocks 1.2 and 1.3 (they use the local Supabase stack, `npx supabase start`), and `npm run dev` stopped when a block runs the browser tests. Block 1.1 asks you one question about `AGENTS.md`. Nothing on production is touched in this session; the migration in Block 1.2 is applied at day-end step F.
 
-## Block 1.1: Distinguish Signed-Out, No-Goals, No-Tasks and All-Done Empty States (MOM-18)
+## Block 1.1: Narrow the .env Ignore Pattern and Settle the Untracked Files (MOM-68)
 
-* **Objective & Scope:** Replace the placeholder in `MainFeed` (and its `TODO(MOM-Phase2)`) with real states. The ticket predates MOM-36, MOM-44 and MOM-88: the focus task now comes from per-channel views (`buildChannelViews`), so the state is computed there, once, instead of the UI inferring it from emptiness. States: signed out (sign-in prompt), no goals (wizard call to action), a channel with no tasks, everything done (completion state that keeps the Recently done undo).
-* **Core Invariants to Protect:** *Human-Only Completion*: "all done" is derived from the user's own ticks, never set by the system; no empty state creates or ticks a task. *Service RLS*: the UI receives a typed state; no Supabase call in a component.
-* **CLI Session Config:** Model: Sonnet | Effort: Medium
+* **Objective & Scope:** `vercel link` added `.env*` to `.gitignore`, which also matches the tracked `.env.example`, so edits to it never show in `git status` and a new variable can be forgotten. Narrow the pattern while keeping every secret file ignored, and settle the three paths that always show as untracked (`AGENTS.md`, `supabase/.branches/`, `supabase/snippets/`).
+* **Core Invariants to Protect:** *Security (CLAUDE.md)*: `.env.local` and every other secret env file stays ignored; nothing secret may become trackable. *Service RLS*: no app code changes.
+* **CLI Session Config:** Model: Sonnet | Effort: Low
 
 #### Exact Copy-Paste Prompt for Claude Code CLI
 
 ```text
-Implement MOM-18: distinguish signed-out, no-tasks and all-done empty states in MainFeed.
+Implement MOM-68: narrow the .gitignore .env* pattern so .env.example edits show in git status.
 
 Task Instructions:
-1. Read ticket MOM-18 in Jira first; its acceptance criteria are the definition of done. NOTE: the ticket names getFocusTask, which no longer exists (MOM-44 replaced it with getPlanSnapshot and buildChannelViews). Follow the code as it is today and say so. If anything else disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, app/page.tsx, components/layout/ (MainFeed, AppShell, NavSidebar), lib/utils/channelViews.ts, types/channelViews.ts, lib/utils/focusFeed.ts, types/focusFeed.ts, lib/services/auth.ts (getCurrentUser), lib/supabase/proxy.ts, components/tasks/, components/goals/GoalBuilderWizard.tsx, tests/channel-selection.test.tsx and tests/focus-card.test.tsx.
-3. Create the feature branch `feature/MOM-18-empty-states` off a clean `main`.
-4. State: add a discriminated FeedState ('signed_out' | 'no_goals' | 'no_tasks' | 'all_done' | 'tasks') to types/channelViews.ts and put it on every ChannelView, computed in the pure buildChannelViews: the all-channels view is 'no_goals' when there is no active goal; a channel (or all channels) whose goals have zero tasks is 'no_tasks'; one with finished tasks and nothing left to do is 'all_done'; otherwise 'tasks'. A channel's state looks only at that channel's tasks. 'signed_out' comes from app/page.tsx: ask getCurrentUser() and, when there is no session, pass a SIGNED_OUT_CHANNEL_VIEWS constant instead of reading anything. The UI never infers a state from emptiness.
-5. Reachability: lib/supabase/proxy.ts already redirects signed-out visitors to /login, so the signed-out state is normally unreachable. Build it anyway as the safe default for a session that expires between the proxy and the render, do not change the proxy, and add a Jira comment on MOM-18 saying acceptance criterion 1 is met at the component and state level only, and why. Do not edit the ticket's criteria.
-6. Components under components/tasks (exported ...Props interfaces, no Supabase calls, no service imports): SignedOutState (sign-in call to action linking /login), NoGoalsState (call to action that opens the goal wizard), NoTasksState (a channel with no tasks; offers to start another goal), AllDoneState (a completion state; keep rendering the existing RecentlyDoneList beneath it so the last task can still be reopened). Lift the wizard's open state from NavSidebar to AppShell so the call to action and "+ New Goal Wizard" open the same single GoalBuilderWizard (rendered once). Remove the TODO(MOM-Phase2) comment in MainFeed and the old placeholder.
-7. Tests: the builder for every state, including a channel whose own tasks are all done while another channel still has work (that channel is all_done, the other is tasks), a paused goal, a goal with no tasks and the signed-out constant; jsdom component tests for each state component and for MainFeed choosing the right one, including the wizard call to action opening the dialog (jsdom has no showModal: use the stand-in from tests/channel-selection.test.tsx); a source-level test that app/page.tsx calls getCurrentUser and that no component imports a service. Update the tests that assert the old "No tasks yet." text (tests/channel-selection.test.tsx, tests/focus-card.test.tsx) and list each change.
-8. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
-9. Update BACKLOG.md for MOM-18 (tick the Focus card empty-state item; add findings with Jira keys).
-10. Commit with "feat(MOM-18): distinguish signed-out, no-goals, no-tasks and all-done empty states" and merge into main with --no-ff. Do not push.
-11. Update MOM-18 in Jira: Done only if all four acceptance criteria are met (say plainly that criterion 1 is met at the component level, and why).
+1. Read ticket MOM-68 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md (the "Environment Files" rule and the daily-loop paragraph that lists the files never to stage), .gitignore, .env.example, and the BACKLOG.md items under MOM-68. Run `git check-ignore -v .env.example .env.local .vercel` and show me the current result.
+3. Create the feature branch `feature/MOM-68-gitignore-env-example` off an up-to-date `main`.
+4. Replace the `.env*` line in .gitignore with patterns that still ignore every secret env file (`.env`, `.env.*`) but not the tracked example (`!.env.example`). Keep `.env.local`, `.env*.local` and `.vercel`. Prove it with `git check-ignore -v` for `.env`, `.env.local`, `.env.production`, `.env.development.local`, `.vercel` (all must be ignored) and `.env.example` (must print nothing).
+5. Add `supabase/.branches/` and `supabase/snippets/` to .gitignore (local-only folders the Supabase CLI writes), after showing me the one-line reason for each.
+6. STOP and ask me one question about AGENTS.md: it is rewritten by `next dev` and shows as untracked. Options: commit it, or ignore it. Give your recommendation and the reason. Apply only my answer. If I choose to ignore it, add it to .gitignore; if I choose to commit it, stage it by name.
+7. Search .claude/commands/, CLAUDE.md and docs/plans/NEXT_BUILD_PLAN.md for wording that says these paths "always show as untracked" or must never be staged, and list each place. Change nothing there without my OK (the wording is harmless if the paths are now ignored).
+8. Add tests/gitignore.test.ts: it runs `git check-ignore -q <path>` (with the child process API, no shell) and asserts the exit code for each path in step 4, so a future edit that makes the example ignored, or a secret file trackable, fails `npm test`.
+9. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. Edit .env.example by adding and then removing a blank line to show `git status` notices the change; leave the file as it was.
+10. Update BACKLOG.md for MOM-68 (tick the two items and note my AGENTS.md answer). Comment on MOM-68 in Jira with what changed and which acceptance criteria are met; do not move it to Done (Done follows the merge at day-end).
+11. Commit with "chore(MOM-68): ignore secret env files but not .env.example, and settle the untracked files". Do not merge into main and do not push.
 
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
 ```
 
 * **User Verification Gate:**
-  - [ ] `npm test` passes and the CLI listed every test it changed for the old placeholder text.
-  - [ ] The CLI explained why the signed-out state is built but normally unreachable (the proxy redirect) and commented that on MOM-18.
-  - [ ] The live check of all four states needs an empty account, so it happens in Block 1.2's gate (sign in as the standing smoke-test account).
+  - [ ] `git check-ignore .env.example` prints nothing, and `.env.local` and `.vercel` are still ignored.
+  - [ ] You answered the `AGENTS.md` question and the CLI applied only your answer.
+  - [ ] `npm test` passes, including the new ignore test.
+  - [ ] `git status` is quieter on the branch (the Supabase folders no longer show as untracked).
 
 ---
 
-## Block 1.2: Remove the Career Pivot Seed from New-Account Signup (MOM-19)
+## Block 1.2: Revoke API-Role EXECUTE on handle_new_user and rls_auto_enable (MOM-65)
 
-* **Objective & Scope:** A new account starts empty and uses the wizard. Drop the `seed_career_pivot()` call from `handle_new_user()` in a **new** migration (010). Existing accounts keep their data (production has no users today). **Hazard:** six verify scripts (001, 002, 003, 004, 007, 008) rely on the signup seed to create their fixtures; each must be rewritten to build its own fixtures with every check preserved. Scripts 005 and 009 look independent but must be run to prove it.
-* **Core Invariants to Protect:** *Service RLS*: `handle_new_user` stays SECURITY DEFINER with `search_path` pinned; its grants must not widen (MOM-65 owns closing them). *No-Delete*: nothing deletes existing users' goals or tasks.
+* **Objective & Scope:** On production both functions are executable by API roles. Neither takes arguments and both exist to fire from triggers; the same drift once let any signed-in user call `seed_career_pivot`. Find out what each function is and who owns it, then revoke EXECUTE from every API role in migration **012**, without breaking sign-up. The ticket's second acceptance criterion predates MOM-19 ("signing up still seeds the default goal"): since migration 010 a new account has no goals, so it should read "signing up still creates the `users` row, and a fresh signup has no goals". Do not edit the ticket's criteria; comment.
+* **Core Invariants to Protect:** *Service RLS*: grants must narrow, never widen; `handle_new_user` stays SECURITY DEFINER with a pinned `search_path`. *No-Delete*: nothing touches existing users' data. A Supabase-owned object is not to be worked around: if the migration cannot revoke it, stop and report.
 * **CLI Session Config:** Model: Sonnet | Effort: High
 
 #### Exact Copy-Paste Prompt for Claude Code CLI
 
 ```text
-Implement MOM-19: remove the Career Pivot seed from new-account signup.
+Implement MOM-65: revoke API-role EXECUTE on handle_new_user and rls_auto_enable.
 
 Task Instructions:
-1. Read ticket MOM-19 in Jira first; its acceptance criteria are the definition of done. MOM-18 must already be merged (a new user must see sensible empty states); the wizard and its Claude-written week 1 plan are already live (MOM-34, MOM-35, MOM-83). If MOM-18 is not merged, stop and tell me. If the ticket disagrees with these instructions, stop and flag it. Also read MOM-65: if it is still open, its second acceptance criterion ("signing up still seeds the default goal") stops being true after this ticket. Add a Jira comment on MOM-65 saying that criterion should now read "signing up still creates the users row, and a fresh signup has no goals", and leave MOM-65 otherwise unchanged.
-2. Read CLAUDE.md, docs/NINETY_DAY_PLAN_CONTEXT.md (the seed data section; if the docs say the seed is required, flag it), migration 001 (seed_career_pivot and handle_new_user), migration 004 (the micro_tasks_record_initial_move trigger), migration 008 (seed_career_pivot was re-created to record goal_type), migration 009, and every file in supabase/verify/.
-3. Create the feature branch `feature/MOM-19-remove-signup-seed` off a clean `main`.
-4. Inventory first: list every verify script and unit test that depends on the seeded Career Pivot channel, its 11 tasks or its one history row. Expected from my audit: verify 001, 002, 003, 004, 007 and 008 depend on it (003 reads the seeded tasks and counts 4 and 1 history rows; 008 checks the seed's goal_type and the backfill); 005 and 009 look independent (009 compares goal and task counts before and after) but you must prove it by running them. Unit tests that mention the seed: tests/goal-criteria.test.ts (reads the seed SQL in migration 008, which stays valid because migrations are never edited), tests/migrations.test.ts, tests/goals-service.test.ts, tests/rebalance-builder.test.ts, tests/rebalance-model.test.ts; check each. Show me the list.
-5. Write supabase/migrations/010_remove_signup_seed.sql (never edit an applied migration) that replaces handle_new_user() without the seed call, keeping security definer and search_path = ''. `create or replace` keeps the existing grants; do not widen them. Keep seed_career_pivot() itself for dev seeding, still not executable by API roles. Do not touch existing users' rows.
-6. Rewrite the dependent verify scripts so each builds its own fixtures as postgres instead of relying on signup: right after creating a throwaway user, call `perform public.seed_career_pivot(<user id>)` (postgres can; API roles cannot) wherever the script needs the seeded channel, tasks or history. A check that only tested "signing up seeds the goal" must change to the new truth, and you must list each one. All 171 existing checks must still be present and pass. Add checks that a fresh signup has zero goal channels, zero tasks and zero history rows but does have its users row, that handle_new_user is still not executable by API roles, and that a goal created through create_goal_with_week_one_plan with the key career_pivot succeeds on a fresh account with exactly that key (no _2 suffix).
-7. Add a unit test that a wizard goal titled "Career pivot" gets the key career_pivot against an empty account (extend the fake if needed), and check toChannelKey/channelKeyFor need no change.
-8. Verify locally first: `npx supabase db reset`, then run every file in supabase/verify/ with `npx supabase db query --local -f <file> -o table`; all must pass. The local test user `test@example.com` is wiped by the reset; that is expected.
-9. STOP before production. Show me the migration, the diff of every verify script (grouped by script, with the changed checks listed) and `npx supabase db push --dry-run`. Wait for my go-ahead, then push and run ALL scripts in supabase/verify/ against production; all must pass. Then tell me to delete and recreate the standing smoke-test account in the dashboard (it was created before migration 010 and holds the old seed; see the plan's Session 1 prerequisites) and wait for my confirmation.
-10. With my confirmation, run a COUNT-ONLY query on production for smoke-test@momentum-app.test: users row 1, goal channels 0, tasks 0, history rows 0. Print counts only, nothing else about the account.
-11. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
-12. Update BACKLOG.md for MOM-19 and any seed-related items (the two Wizard/Layout items that mention the seed).
-13. Commit with "feat(MOM-19): remove the Career Pivot seed from new-account signup" and merge into main with --no-ff. Do not push.
-14. Update MOM-19 in Jira: Done only if all three acceptance criteria are met (comment what shipped and how verified).
-
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
-```
-
-* **User Verification Gate:**
-  - [ ] You reviewed the verify-script diff: the same checks, now with explicit fixtures, and the signup-seed checks rewritten to the new truth.
-  - [ ] After the push, the verify total is all passing (171 plus the new checks).
-  - [ ] You deleted and recreated the standing smoke-test account in the dashboard **after** migration 010 was live; the CLI's count-only query shows zero goals, tasks and history for it.
-  - [ ] After the day-end push, sign in as the standing smoke-test account: you see the **no-goals** state with the wizard call to action (Block 1.1), create a goal in the wizard, tick every task for that channel and see the **all-done** state with the undo still available. If its data gets cluttered, delete and recreate it in the dashboard.
-
----
-
-# SESSION 2: WIREFRAME LOOK AND FEEL (MOM-76, MOM-77)
-
-**Your prerequisites before this session:** (1) the v0 wireframe export stays **outside** the repo at `C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\` (it is there today; the prompts read it as reference and never copy its `package.json`, lockfile or `public/` placeholders); (2) the live wireframe open for comparison: https://momentum-teal-phi.vercel.app; (3) the standing smoke-test account exists (Session 1) for the look checks, run with `npm run dev`, which uses your `.env.local` backend. Decisions already made (2026-10-23): **dark only** for now (light mode is MOM-30), and **single scroll on mobile** (the tab bar goes; MOM-32 is Closed). The placement of MOM-76 and MOM-77 under the Phase 1 epic MOM-4 is intentional.
-
-## Block 2.1: Adopt the Wireframe Design System, Dark (MOM-76)
-
-* **Objective & Scope:** Port the wireframe's tokens, CSS classes, icons and Button onto the existing components so the app looks like the wireframe. Layout, navigation and data stay as they are (Block 2.2). Same stack as the wireframe (Next 16, React 19, Tailwind v4), so the CSS ports directly.
-* **Core Invariants to Protect:** *Human-Only Completion*: the restyled task check is still the owner's own click and nothing else. *Service RLS*: styling only; no new data access. Behavior is unchanged, so existing test assertions must not change.
-* **CLI Session Config:** Model: Sonnet | Effort: Medium
-
-#### Exact Copy-Paste Prompt for Claude Code CLI
-
-```text
-Implement MOM-76: adopt the wireframe design system (dark).
-
-Task Instructions:
-1. Read ticket MOM-76 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, app/globals.css, app/layout.tsx and every component under components/ (auth, goals, integrations, layout, rebalance, tasks including UpNextList, RecentlyDoneList and useTaskToggle, velocity). Then read the wireframe reference at C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\ (app/globals.css, app/layout.tsx, components/momentum-dashboard.tsx, components/ui/button.tsx, components.json). If that folder is missing, stop and ask me for the path. It is reference only: never copy its package.json, lockfile, analytics or public/ placeholders into this repo.
-3. Create the feature branch `feature/MOM-76-wireframe-design-system` off a clean `main`.
-4. Tokens: port the wireframe's dark tokens into app/globals.css (color-scheme dark, oklch palette, lime #c6f36d, radius 0.85rem, surface and channel colors). Map this repo's existing token names (background, foreground, panel, border, muted, accent) onto the new palette or update every use; nothing may be left pointing at the old indigo values. Set viewport themeColor #111513 in app/layout.tsx. Do not add a light palette or a theme toggle (that is MOM-30).
-5. Classes: port only the wireframe classes this repo uses now (score card and ring, focus card and task check, connected-app row and toggle, eyebrow, badges, buttons, channel card and track). Leave the .desktop-* layout rules and .adaptive-sheet for MOM-77.
-6. Add lucide-react and the shadcn/ui Button (npx shadcn add button, or port components/ui/button.tsx with its class-variance-authority dependency). Show me the package.json diff before installing anything else.
-7. Restyle without changing behavior: VelocityHero (ring gauge with the score; keep the text alternative), FocusTaskCard, UpNextList, RecentlyDoneList, BurnoutRiskBadge, NavSidebar, MainFeed, IntegrationCardList, RebalanceSideCard, RebalanceDrawer, GoalBuilderWizard and the sign-in page (app/login/page.tsx, components/auth/SignInForm.tsx). Keep every role, aria attribute and label the tests rely on (the jsdom tests in tests/channel-selection.test.tsx and tests/focus-card.test.tsx query by role and name); color must never carry meaning alone; text stays WCAG AA on the dark background.
-8. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. If a test fails, fix the style change, not the assertion; selector-only updates are allowed and must be listed.
-9. Run `npm run dev`, and show me the main view at 390px and 1280px next to the wireframe (I sign in as the standing smoke-test account; you never see its password). Wait for my OK on the look before committing.
-10. Update BACKLOG.md: tick the MOM-76 item, add anything deferred with its Jira key.
-11. Commit with "feat(MOM-76): adopt the wireframe design system (dark)" and merge into main with --no-ff. Do not push.
-12. Update MOM-76 in Jira: Done only if all acceptance criteria are met.
-
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
-```
-
-* **User Verification Gate:**
-  - [ ] Sign in as the standing smoke-test account. Locally at 390px and 1280px, the velocity ring, focus card, integration cards and rebalance card look like the wireframe, dark, with the lime accent.
-  - [ ] Ticking and unticking the focus task still works, and the drawer still opens and applies only on your click.
-
----
-
-## Block 2.2: Adopt the Wireframe Layout and Navigation, Single-Scroll Mobile (MOM-77)
-
-* **Objective & Scope:** Match the wireframe's structure: a three-column desktop from 1200px (232px / fluid / 326px) with a sidebar workspace nav, goal cards with progress, the connected stack and an inline Momentum AI rebalance nudge; on mobile, one scrolling column with a header and the nudge as a dismissible bottom sheet. Remove `MobileTabBar`. Add a Connected Apps page (reachable on mobile and desktop) and a Settings stub with sign-out. No streak badge yet (MOM-78). Everything built since the last plan must keep working: channel selection in the URL (`?channel=<goal id>`, MOM-88), per-channel views and velocity (MOM-44), per-channel rebalancing (MOM-87) and the empty states (MOM-18).
-* **Core Invariants to Protect:** *No-Delete / Carry-Forward* and *Human-Only Completion*: the nudge only summarises and opens the existing drawer; applying stays a user click in the drawer, and nothing auto-applies. *Service RLS*: progress counts come from the page's single `getPlanSnapshot` read through pure functions, scoped to the signed-in user.
-* **CLI Session Config:** Model: Sonnet | Effort: High
-
-#### Exact Copy-Paste Prompt for Claude Code CLI
-
-```text
-Implement MOM-77: adopt the wireframe layout and navigation with a single-scroll mobile view.
-
-Task Instructions:
-1. Read ticket MOM-77 in Jira first; its acceptance criteria are the definition of done. Also read MOM-32 (Closed: superseded by this ticket), MOM-62 (its connect forms will land on the new Connected Apps page) and MOM-78 (streak, not in scope). If MOM-77 disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, docs/NINETY_DAY_PLAN_CONTEXT.md section 5, app/page.tsx, app/layout.tsx, lib/supabase/proxy.ts (PUBLIC_PATHS), components/layout/ (AppShell, NavSidebar, MainFeed, ConnectedStackPanel, MobileTabBar, panels.ts), lib/utils/channelViews.ts, lib/utils/channelParam.ts, lib/utils/progress.ts, types/channelViews.ts, components/rebalance/, components/integrations/, components/auth/SignOutButton.tsx and tests/channel-selection.test.tsx. Then read the wireframe reference at C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\ (components/momentum-dashboard.tsx and the .desktop-*, .mobile-header, .goal-builder-* and .adaptive-sheet rules in app/globals.css). MOM-76 and MOM-18 must already be merged; if not, stop and tell me.
-3. Create the feature branch `feature/MOM-77-wireframe-layout` off a clean `main`.
-4. Desktop (from 1200px): three columns as in the wireframe. Left: logo mark, burnout badge, workspace nav (Daily Dashboard, Goal Channels, Connected Apps, Settings), active goals with progress, "Your pace" footer. Centre: the goal-builder banner (New Goal Wizard and Adjust Weekly Pace open what they open today; omit Review Milestones unless it has a real target, and tell me), date, headline, velocity ring, focus card, goal cards. Right: connected stack summary and the Momentum AI nudge. Choosing a goal keeps working through ?channel=<goal id> (withChannelParam, resolveChannel) and still changes the feed, velocity and rebalance proposal to that channel's.
-5. Mobile (below 1200px): one scrolling column with a header (logo, burnout badge, avatar with the signed-in user's initials). Delete MobileTabBar and the per-panel view state in AppShell and components/layout/panels.ts. The rebalance nudge is a bottom sheet the user can dismiss; dismissal is per session and changes no data. Keep RebalanceDrawer rendered outside any hidden panel. With several active goals and All channels selected, the nudge keeps saying to choose a channel (ChannelView.rebalanceHint), as the side card does.
-6. Pages: a Connected Apps page (app/connections/page.tsx) that renders IntegrationCardList, linked from the nav on desktop and from the mobile header or menu; a Settings stub page (app/settings/page.tsx) with sign-out. Both are authenticated routes: do NOT add them to PUBLIC_PATHS, and check the proxy redirects them to /login when signed out.
-7. Goal progress: do NOT add a new service or a second read. listGoalProgress and the pure summarizeAllGoalProgress (lib/utils/progress.ts, MOM-86) already exist; build the sidebar and goal-card progress from the page's single getPlanSnapshot with summarizeAllGoalProgress, pass it down as props, and add tests for the wiring (another user's tasks never count; carried-over tasks count once). If you think listGoalProgress should be removed or reused, tell me rather than deciding.
-8. The nudge shows the proposal summary from the selected channel's existing rebalance view and a "Review" action that opens the drawer. No new "Accept" path that applies without the drawer; if you want one, stop and ask me.
-9. No streak badge (MOM-78). No Supabase call in any component; every new component exports an interface ...Props.
-10. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. The "on a phone" tests in tests/channel-selection.test.tsx depend on MobileTabBar (the Channels and Feed tab buttons): update or remove them and list what you changed; keep every other assertion.
-11. Run `npm run dev`; show me 390px and 1280px next to the wireframe, and confirm there are no hydration warnings in the console at either width. I sign in as the standing smoke-test account. Wait for my OK.
-12. Update BACKLOG.md: tick the MOM-77 item, retire the MOM-32 item, note the Progress items it resolves, and add any follow-ups with Jira keys.
-13. Commit with "feat(MOM-77): adopt the wireframe layout and single-scroll mobile view" and merge into main with --no-ff. Do not push.
-14. Update MOM-77 in Jira: Done only if all acceptance criteria are met.
-
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
-```
-
-* **User Verification Gate:**
-  - [ ] Sign in as the standing smoke-test account (create two goals in the wizard if it has fewer). Locally at 1280px: three columns with the nav, goal cards with real progress, the connected stack and the nudge, matching the wireframe; picking a goal changes the feed, the ring and the nudge, and survives a reload.
-  - [ ] Locally at 390px: one scroll, no tab bar; the nudge slides up and can be dismissed; Connected Apps opens from the menu.
-  - [ ] "Review" opens the drawer and nothing moves until you apply there. After the day-end push, repeat on the live site as the standing smoke-test account.
-
----
-
-# SESSION 3: E2E, HYDRATION & COMPONENT TESTS
-
-**Your prerequisites before this session:** Docker Desktop running (Block 3.1 starts the local Supabase stack with `npx supabase start`), and `npm run dev` stopped (Next.js 16 allows one dev server per project folder, and the browser tests start their own). Nothing on production is touched, and the standing smoke-test account is not used by any test.
-
-## Block 3.1: Playwright E2E, Hydration Checks and Component Tests (MOM-61)
-
-* **Objective & Scope:** Jira's three criteria: Playwright with `npm run test:e2e`; a console check that fails on any hydration error at 390px and 1280px; Testing Library with jsdom for component tests (already installed in MOM-36, so this block fills in the remaining component tests). This plan adds browser specs on top, run **only against a local Supabase stack** (`supabase start`, which needs Docker; confirmation emails are read from the local Mailpit inbox): sign-up, sign-in, protected-route guards, sign-out, and the wizard paths the MOM-83 live smoke test could not reach (the 20 second wait message, the Try again failure and "Use the starter plan instead"). It never signs up users on production and never touches the standing smoke-test account.
-* **Core Invariants to Protect:** *Service RLS*: tests never use production URLs, keys or the real service-role key; the config refuses to run unless the Supabase URL is local. Protected routes must reject unauthenticated sessions. *Human-Only Completion*: component tests prove the UI offers no control that completes a task other than the owner's own toggle.
-* **CLI Session Config:** Model: Sonnet | Effort: Medium
-
-#### Exact Copy-Paste Prompt for Claude Code CLI
-
-```text
-Implement MOM-61: Playwright E2E, hydration checks and component tests, plus local auth and wizard specs.
-
-Task Instructions:
-1. Read ticket MOM-61 in Jira first (its description is three bullets; treat them as the criteria), then the 2026-10-23 audit comment on it. Also read MOM-54, MOM-55 to MOM-59 and the BACKLOG.md "Tests" and "E2E" items. The browser specs below (auth, route guards, and the MOM-83 live paths) are an extension agreed in the build plan: add a Jira comment on MOM-61 saying so. If anything else disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, package.json, vitest.config.mts, tests/channel-selection.test.tsx and tests/focus-card.test.tsx (the jsdom pattern: a "// @vitest-environment jsdom" first line, server actions mocked, and a stand-in for next/navigation), components/, app/login/page.tsx, app/auth/callback/route.ts, lib/supabase/proxy.ts, lib/config/env.ts and lib/services/tasks.ts (generateWeekOnePlan and its 20 second cooldown). FIRST STEP: the repo has no supabase/config.toml, which `supabase start` needs. Run `npx supabase init` (do not run `supabase link` or change the linked project), enable local email confirmations (the sign-up must send a confirmation email) and keep the local Mailpit inbox on, and show me the generated supabase/config.toml before committing it; it must hold no secrets or production project ref. Check that supabase/.branches, supabase/.temp and supabase/snippets need no .gitignore entry beyond MOM-68's scope, and tell me.
-3. Create the feature branch `feature/MOM-61-e2e-and-component-tests` off a clean `main`.
-4. Component tests (jsdom and Testing Library are already installed; keep the vitest environment node by default and opt in per file): FocusTaskCard's own carried-over and pulled-forward markers and its "Moved N times" line; BurnoutRiskBadge at each risk level; RebalanceDrawer including a successful "Ask Claude to review" replacing the proposal on screen, and Apply, with the server actions mocked; GoalBuilderWizard with the actions mocked: the steps, Generate showing a plan labelled "Written by Claude", a failure showing its message with a Try again button and no automatic fallback, "Use the starter plan instead" showing a plan labelled as the starter plan and Create sending that plan to the create action, and the 20 second wait message shown when the action returns it.
-5. Playwright: install it and add `npm run test:e2e`. The Playwright config starts `next dev` with env from `npx supabase status -o env` (never printed) and throws if NEXT_PUBLIC_SUPABASE_URL is not localhost or 127.0.0.1; add a unit test for that guard. It also makes sure ANTHROPIC_API_KEY is NOT set for the dev server (check how lib/config/env.ts treats an empty value) and the specs fail loudly if the key is present.
-6. Specs against the local stack only (tests/e2e/): (a) hydration: /login and, once signed in, the home page, each at 390px and 1280px, failing on any console error or warning that mentions hydration. (b) auth: sign up with a unique throwaway email through the normal sign-up form, read the confirmation link from the local Mailpit inbox, land signed in, confirm "/" redirects to /login when signed out (also /connections and /settings if MOM-77 added them), sign out, sign in again. Do NOT create users through the local auth admin API: BACKLOG.md records that it returns 500 and leaves NULL token columns. (c) wizard paths from an empty new account (migration 010 means no seed): pick a goal type, reach Review, click Generate with no ANTHROPIC_API_KEY and assert the failure message and a working Try again; click Try again at once and assert the wait message (a failed request counts toward the 20 second limit; verify this against lib/services/tasks.ts); click "Use the starter plan instead", assert it is labelled as the starter plan, click Create, and assert the goal appears in the sidebar with unticked tasks, that reloading on ?channel=<goal id> keeps it, and that the back button returns to All channels. Adapt the exact texts to the code and tell me where they differ from my wording.
-7. If Docker or the local stack is unavailable, tell me, still ship steps 4 and 5's guard and the hydration spec for /login, and list exactly which specs are blocked and why. Do not fake them.
-8. Prove the hydration check can fail: temporarily introduce a mismatch, show the test failing, then revert.
-9. Keep `npm test` fast and independent of Playwright. Propose wording to add both commands to CLAUDE.md's Definition of Done and apply it only if I approve.
-10. Run `npx tsc --noEmit`, `npm test`, `npm run test:e2e` and `npm run build`; all must pass.
-11. Update BACKLOG.md (tick the E2E items you cover, including the two I added on 2026-10-23). Update the 2026-10-23 audit comments on MOM-55 to MOM-59 with what is now covered; propose Done for any ticket whose criteria are ALL covered and tell me, but do not transition anything.
-12. Commit with "test(MOM-61): add Playwright hydration checks, component tests and local auth and wizard specs" and merge into main with --no-ff. Do not push.
-13. Update MOM-61 in Jira: Done only if all three Jira bullets are met; otherwise say what is blocked and leave it open.
-
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the type(MOM-X) format; merged to main; Jira updated.
-```
-
-* **User Verification Gate:**
-  - [ ] `npm test` and `npm run test:e2e` both pass locally (Docker running).
-  - [ ] You watched the hydration test **fail** on the deliberately broken page.
-  - [ ] The CLI showed the guard refusing a non-local Supabase URL, and listed any specs still blocked.
-  - [ ] The wizard spec exercised the wait message, Try again and the starter plan for real (these were the three paths the live smoke test could not reach).
-  - [ ] The standing smoke-test account was not used by any test.
-
----
-
-# SESSION 4: EXTERNAL INTEGRATIONS & UI
-
-**Your prerequisites before this session:** (1) a Google Cloud OAuth client (Web application, Calendar read-only scope) with redirect URIs `https://momentum-app-eight-chi.vercel.app/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/google`, yourself added as a test user; (2) `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set in Vercel Production and in `.env.local`; (3) for Block 4.2, a **redacted real Hevy API response** or the Hevy API documentation saved in the repo, and a Hevy Pro API key; (4) the standing smoke-test account for the live connection checks.
-
-## Block 4.1: Google OAuth Consent Flow and Hevy API-Key Forms (MOM-62)
-
-* **Objective & Scope:** The Google consent redirect and callback route `/api/auth/callback/google`, a Hevy key form, and connect/disconnect buttons wired to `lib/services/integrations.ts`, shown on the existing integration cards in `components/integrations/`, which MOM-77 (Block 2.2) renders on the Connected Apps page. Token storage, retrieval and refresh already exist (MOM-37). The provider catalog has two providers, Hevy and Google Calendar; there is no Jira provider. MOM-77 adds a Settings stub, but integration controls stay on the Connected Apps page, and no drawer is added.
-* **Core Invariants to Protect:** *Service RLS / secrets*: no token, key or client secret reaches the browser (only `IntegrationAccount` does); the callback requires a verified session and takes the user id from it, never the request; `state` is checked. *Human-Only Completion*: connecting an app creates and completes no tasks.
-* **CLI Session Config:** Model: Sonnet | Effort: High
-
-#### Exact Copy-Paste Prompt for Claude Code CLI
-
-```text
-Implement MOM-62: build the Google OAuth consent flow and Hevy API key UI forms.
-
-Task Instructions:
-1. Read ticket MOM-62 in Jira first (the description is a bullet list; treat each bullet as a criterion). If anything disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, docs/INTEGRATIONS_SPEC.md (sections 3.C and 5), lib/services/integrations.ts (saveApiKey, saveOAuthTokens, disconnectIntegration, listIntegrationAccounts), types/integrations.ts, components/integrations/, app/actions/integrations.ts, lib/config/env.ts (getGoogleOAuthEnv) and lib/supabase/proxy.ts. Confirm GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set locally (names only; never print values) or tell me what is missing.
-3. Create the feature branch `feature/MOM-62-connect-flows` off a clean `main`.
-4. Google: a route that starts the consent redirect (state and PKCE in an httpOnly short-lived cookie, minimal scope calendar.readonly, access_type=offline) and the callback at app/api/auth/callback/google/route.ts that requires a signed-in session, verifies state, exchanges the code server-side, validates the response and calls saveOAuthTokens(). The callback is an authenticated route: do NOT add it to PUBLIC_PATHS. Handle denial, bad state and exchange failure with a friendly message and no token or provider text in URLs or logs.
-5. Hevy: a Server Action form that calls saveApiKey(); the key is never echoed back or stored client-side.
-6. UI: connect and disconnect buttons on each existing card from listIntegrationAccounts() (IntegrationAccount only), including a "needs reconnect" state for status needs_reauth. The cards live on the Connected Apps page from MOM-77. Only Google Calendar and Hevy exist as providers; do not add Jira, integration controls on the Settings page, or a drawer. If you think one is needed, stop and ask.
-7. Remove the TODO(MOM-Phase2) comment about the connect flow in lib/services/integrations.ts.
-8. Tests: state mismatch, missing session, exchange failure, denial, no token or secret in any returned value, and a boundary test that no component imports the Google exchange code. Mock the network.
-9. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. Confirm the client output contains no secret names or values.
-10. Update BACKLOG.md for MOM-62 (tick resolved items, add findings with Jira keys).
-11. Commit with "feat(MOM-62): build the Google consent flow and Hevy key forms" and merge into main with --no-ff. Do not push.
-12. Update MOM-62 in Jira: leave it open until I confirm both connections work live; comment what shipped and what I must test.
-
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
-```
-
-* **User Verification Gate:** *(after the day-end push and deploy; sign in as the standing smoke-test account)*
-  - [ ] Connect Google Calendar with your real Google account: the card shows connected. Revoke access in your Google account, trigger a refresh, and the card shows "needs reconnect".
-  - [ ] Connect Hevy with your real key, then disconnect; ask the CLI for a **count-only** query confirming the credential row is gone.
-  - [ ] In the browser Network tab during connect, no token, key or client secret appears in any response.
-
----
-
-## Block 4.2: Hevy and Google HTTP Adapters and Signed Webhook Routes (MOM-38)
-
-* **Objective & Scope:** Real clients in `lib/adapters/hevy.ts` and `lib/adapters/google.ts` whose output matches `InboundActivityPayload` (`docs/INTEGRATIONS_SPEC.md`), plus `app/api/webhooks/[provider]/route.ts` with signature verification. Adapters only normalize; they hand results to the existing ingestion engine (`lib/services/ingestion.ts`), and only services touch Supabase. **This block cannot be built honestly for Hevy without Hevy's real API documentation or a redacted sample response; the prompt stops if none is provided.**
-* **Core Invariants to Protect:** *Human-Only Completion*: ingestion writes evidence and never `status` or `completed_at`, and never completes or creates a completed task. *Service RLS*: the Hevy key is **per user**, read server-side from `integration_credentials` via the integrations service; the global `HEVY_API_KEY` env var is vestigial (MOM-74) and must not be used. The webhook rejects unsigned or invalid requests before touching the database.
-* **CLI Session Config:** Model: Sonnet | Effort: High
-
-#### Exact Copy-Paste Prompt for Claude Code CLI
-
-```text
-Implement MOM-38: Hevy and Google HTTP clients and provider webhook routes.
-
-Task Instructions:
-1. Read ticket MOM-38 in Jira first; its acceptance criteria are the definition of done. MOM-62 must already be merged; if not, stop and tell me. If anything disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, docs/INTEGRATIONS_SPEC.md (the InboundActivityPayload contract, sections 3, 5 and 6), lib/services/integrations.ts (getMockHevyActivity, getMockCalendarActivity, getAccessToken, getMyAccessToken), lib/services/ingestion.ts and tests/ingestion.test.ts.
-3. Ask me for the Hevy API documentation or a redacted real /v1/workouts response. If I have not provided one, STOP before writing the Hevy adapter and tell me; do not invent field names. The Google Calendar adapter may proceed from Google's public API.
-4. Create the feature branch `feature/MOM-38-real-adapters-and-webhooks` off a clean `main`.
-5. Write lib/adapters/hevy.ts and lib/adapters/google.ts (HTTP clients; Zod-validate every response; output valid InboundActivityPayload objects). The Hevy key comes from the user's stored credential through the integrations service, sent as the `api-key` header. Do NOT read HEVY_API_KEY. Adapters never touch Supabase.
-6. Write app/api/webhooks/[provider]/route.ts: verify the provider's signature or token (per the spec; if the spec does not define it for a provider, stop and ask) BEFORE any database access, reject unsigned or invalid requests with a generic 401, resolve the user from the verified payload and hand the normalized activities to the ingestion engine. Never log payload bodies or secrets.
-7. Remove both TODO(MOM-Phase2) comments in lib/services/integrations.ts (the HTTP clients and the webhook handlers).
-8. Tests (network mocked, using the redacted sample): each adapter returns valid payloads for real-shaped responses and rejects malformed ones; the webhook rejects unsigned, mis-signed and replayed requests; a source-level test that nothing in the adapter or webhook path writes status or completed_at.
+1. Read ticket MOM-65 in Jira first; its acceptance criteria are the definition of done. Read its comments: if nobody has yet noted that acceptance criterion 2 is out of date (signing up no longer seeds a goal since migration 010), add a Jira comment saying it should now read "signing up still creates the users row, and a fresh signup has no goals". Do not edit the criteria. If anything else disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, migration 001 (handle_new_user, seed_career_pivot and their REVOKEs), migration 010, migration 011 (how grants are written today), supabase/verify/001 and 011, the comment above `Functions` in types/database.types.ts, and the BACKLOG.md items that mention MOM-65.
+3. Create the feature branch `feature/MOM-65-revoke-trigger-functions` off an up-to-date `main`.
+4. Investigate first, read-only, on the LOCAL stack (`npx supabase start`; `npx supabase db reset --local` for a clean database): who owns each function, what each is (a trigger function on auth.users? an event trigger function installed by Supabase?), which role fires the trigger on a sign-up (supabase_auth_admin?) and so needs EXECUTE, and the current privileges with has_function_privilege for public, anon, authenticated, service_role and supabase_auth_admin. Show me a table and your proposed revoke list. STOP and wait for my OK.
+5. Write supabase/migrations/012_revoke_trigger_function_execute.sql (the number is fixed by the plan; do not pick another) that revokes EXECUTE on both functions from public, anon, authenticated and service_role, and keeps whatever step 4 showed the sign-up trigger needs. If the migration role cannot revoke a Supabase-owned function, do not work around it: stop, report the exact error and what you would propose, and wait.
+6. Add supabase/verify/012_revoke_trigger_function_execute.sql in the style of the existing scripts (one transaction, rolled back, no leftover rows, safe to run against production): has_function_privilege is false for anon, authenticated and service_role on both; calling each as `authenticated` fails with 42501; a row inserted into auth.users still produces its public.users row and no goals; the sign-up trigger's role keeps what it needs. All 231 existing checks stay.
+7. Make the false statement in the types/database.types.ts comment true or correct it, whichever matches the migration. Tests: extend tests/migrations.test.ts only if it checks migration files by number or contents.
+8. Verify locally: `npx supabase db reset --local`, then `npm run verify:sql`; all scripts must pass. Because the sign-up path is touched, also run `npm run test:e2e` (Docker running, `npm run dev` stopped); the auth spec signs up through the real form and must pass.
 9. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
-10. No migration is expected; if one is needed, stop and ask me.
-11. Update BACKLOG.md for MOM-38 (tick resolved items, add findings with Jira keys).
-12. Commit with "feat(MOM-38): build Hevy and Google adapters and signed webhook routes" and merge into main with --no-ff. Do not push.
-13. Update MOM-38 in Jira: Done only if all three acceptance criteria are met; otherwise comment what is unmet and leave it open.
+10. STOP before production, and do NOT run `supabase db push`. Show me the migration and `npx supabase db push --dry-run`. Say plainly: the production push and then ALL the verify scripts run at day-end step F, after CI is green on this branch's pull request and I say OK, and before the pull request merges.
+11. Update BACKLOG.md for MOM-65 (tick the two items about these functions). Comment on MOM-65 in Jira with what changed, each acceptance criterion met or unmet and how verified; do not move it to Done.
+12. Commit with "fix(MOM-65): revoke API-role EXECUTE on handle_new_user and rls_auto_enable". Do not merge into main and do not push.
 
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; npm run verify:sql and npm run test:e2e pass locally; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
 ```
 
 * **User Verification Gate:**
-  - [ ] You provided the Hevy sample before the Hevy adapter was written.
-  - [ ] An unsigned `curl` POST to the webhook route returns 401 and changes nothing.
-  - [ ] After the push, signed in as the standing smoke-test account, a real activity from your connected account shows up as evidence and **no task changes state**.
+  - [ ] You read the findings about both functions and approved the revoke list before the migration was written.
+  - [ ] `npm run verify:sql` passes with the new script; calling either function as a signed-in role gives "permission denied"; the sign-up browser spec still passes.
+  - [ ] You saw the migration and the dry run, and nothing was pushed.
+  - [ ] After day-end step F applies it: every production verify script passes, and a count-only catalogue query shows no EXECUTE for anon, authenticated or service_role on either function. Real sign-up is proven on the local stack only; do not create a second user on production.
 
 ---
 
-# SESSION 5: CI PROTECTION & COST GOVERNANCE
+## Block 1.3: Check That Every Public Table Has the Grants Its Role Needs (MOM-66)
 
-**Your prerequisites before this session:** Docker Desktop running (the CI `database` job and the local checks use the local Supabase stack, `npx supabase start`). Block 5.1 needs you in GitHub: open the pull request, confirm both jobs are green, and turn on branch protection requiring `checks` and `database`; the CLI cannot do that for you. Block 5.2 stops for your approval before any migration touches production.
-
-## Block 5.1: GitHub Actions CI with a Disposable Database (MOM-67)
-
-* **Objective & Scope:** `.github/workflows/ci.yml` with two jobs. Job 1 runs `npx tsc --noEmit`, `npm test`, `npm run build` and `npm run test:e2e` (from MOM-61) on every push and PR. Job 2 starts a **local** Supabase stack, applies every migration, and runs every file in `supabase/verify/`, failing on any `passed = false` or error.
-* **Core Invariants to Protect:** All three; this ticket exists to guard them. CI must **never** hold production credentials or the production project ref.
+* **Objective & Scope:** New tables here get no SELECT, INSERT, UPDATE or DELETE for any API role by default, and migration 005 once forgot that. Add a verify check that fails when a public table has no grant for the role that must use it, with an explicit allow-list for tables that are deliberately closed (for example `task_rebalance_history` for `service_role`), and record a decision on whether any no-session job needs to read `task_rebalance_history`.
+* **Core Invariants to Protect:** *Service RLS*: the check only reads the catalogue. *No-Delete*: `task_rebalance_history` stays append-only; do not grant anything on it without my explicit OK. The check must be safe against production: no DDL, no data written.
 * **CLI Session Config:** Model: Sonnet | Effort: High
 
 #### Exact Copy-Paste Prompt for Claude Code CLI
 
 ```text
-Implement MOM-67: run the SQL verify scripts, type check, tests and build in CI.
+Implement MOM-66: check that every public table has the grants its role needs, and decide service_role access to task_rebalance_history.
 
 Task Instructions:
-1. Read ticket MOM-67 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, package.json, supabase/config.toml (added by MOM-61; if it is missing, MOM-61 was not merged: stop and tell me), every file in supabase/verify/ and supabase/migrations/, and how the scripts report results (a table with a `passed` column). Production has 8 scripts and 171 checks today, plus whatever MOM-19 added.
-3. Create the feature branch `feature/MOM-67-ci-pipeline` off a clean `main`.
-4. Add .github/workflows/ci.yml with two jobs. Job 1: install, `npx tsc --noEmit`, `npm test`, `npm run build` with dummy NEXT_PUBLIC_SUPABASE_* values and no real secrets, and `npm run test:e2e` against the local stack (it needs Docker and `supabase start`, so run it in Job 2 if that is simpler, and say which). Job 2: supabase/setup-cli plus `supabase start`, apply every migration, run every file in supabase/verify/ against the local database, and fail if any script returns passed = false or errors. No production credentials, tokens or project ref anywhere in the workflow.
-5. Put the verify runner in scripts/ (not inline YAML; scripts/generate-execution-plan.ts is the existing style) so it runs locally too, using `npx supabase db query --local -f <file> -o json`, with a unit test of its pass/fail parsing.
-6. Verify what you can locally (run the runner against a local stack if Docker is available; say what you could not test). Do not push or open a PR.
-7. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
-8. CLAUDE.md currently describes direct merges to main. Propose wording for a PR-based workflow with branch protection and show me the diff; apply it only if I approve.
-9. Update BACKLOG.md (tick the CI item, add anything new with Jira keys).
-10. Commit with "feat(MOM-67): run type check, tests, build and SQL verify scripts in CI" and merge into main with --no-ff. Do not push. Tell me exactly which steps need me: pushing, opening a PR, and turning on branch protection in GitHub.
-11. Update MOM-67 in Jira: leave it open until I confirm the workflow ran green on GitHub and a failing check blocks a merge; comment what is done and what is waiting on me.
+1. Read ticket MOM-66 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, migrations 003, 005, 006 and 011 (how each table's grants were written), supabase/verify/005 and 011 (script style), scripts/run-sql-verify.ts and tests/migrations.test.ts (whether a verify script must pair with a migration number; follow whatever convention they enforce and tell me what you found), and the BACKLOG.md items under MOM-66.
+3. Create the feature branch `feature/MOM-66-table-grants-check` off an up-to-date `main`.
+4. List every table in the public schema on the local stack with its RLS flag and each API role's privileges (anon, authenticated, service_role). Show me the matrix and, for each table, the role(s) that must use it, taken from the code (lib/services/) and the migrations, not guessed.
+5. Write the check as supabase/verify/015_table_grants.sql unless step 2 says another name is required. It holds an explicit allow-list of (table, role, privileges expected), including tables deliberately closed to a role, and fails when: a public table is missing from the list (so a new table cannot ship unchecked), a listed grant is missing, or a grant exists that the list does not expect. It must be read-only and safe to run against production: it does not create tables, rows or users.
+6. Prove the check fails on a table with no grants WITHOUT putting that into the script: on the local stack only, by hand, create a throwaway table with no grants, run the script, show me the failing row, then drop the table. Do this only against the local database, never production.
+7. Decision on task_rebalance_history and service_role: look for any no-session job in the code or the plan (the Friday weekly-plan build, ingestion, the usage purge planned for MOM-101) that needs to read it. Write a recommendation (my default expectation: keep it closed, because nothing reads it without a session today) and STOP for my OK. Record the decision in BACKLOG.md and as a comment inside the allow-list. If I decide a grant is needed, do not write a migration here: record it as a BACKLOG item for a separate ticket.
+8. Verify: `npm run verify:sql` passes locally with the new script and the others unchanged.
+9. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
+10. Update BACKLOG.md for MOM-66 (the schema-grants item and the rebalance-history item). Comment on MOM-66 in Jira with each acceptance criterion met or unmet and how verified; do not move it to Done.
+11. Commit with "test(MOM-66): check that every public table has the grants its role needs". Do not merge into main and do not push.
 
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; npm run verify:sql passes locally; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
 ```
 
 * **User Verification Gate:**
-  - [ ] Push a throwaway branch and open a PR: both jobs run **green**.
-  - [ ] Break one verify check on purpose: the PR goes **red** and cannot merge.
-  - [ ] Enable branch protection requiring both checks on `main`; the ticket stays open until you do.
-  - [ ] No production secret exists in the repository's Actions secrets.
+  - [ ] The matrix of tables and roles was shown, and the new check passes on the real tables.
+  - [ ] You saw the check fail on a throwaway table made by hand on the local stack, and the table was dropped.
+  - [ ] The decision about `task_rebalance_history` is written in BACKLOG.md and nothing was granted without your OK.
+  - [ ] After day-end step F: the new script runs against production and reports every check `true`, none `false` (it writes nothing).
 
 ---
 
-## Block 5.2: LLM Rate Limiting, Usage Logging and Spend Caps (MOM-73)
+# SESSION 2: HONEST FAILURE STATES AND TESTS
 
-* **Objective & Scope:** Jira's scope: a durable per-user rate limit and a daily cap per user and overall; per-call token and latency records with no prompt or answer content, and a way to read them; a written decision on the SDK choice and on server-side fallbacks. Applies to both Claude call sites: `requestModelRebalance` and the week 1 plan generator `generateWeekOnePlan` (MOM-35), whose 20 second limits live in server memory today.
-* **Core Invariants to Protect:** *Service RLS*: the new `llm_usage_logs` table needs RLS and **explicit grants** (a signed-in user may read only their own rows; only server-only code scoped to a verified user id may write), plus a verify script. *Human-Only Completion*: governance code never touches tasks. A tripped limit must not silently substitute output: rebalance may fall back to the existing rule-based proposal, clearly labelled; the plan generator shows the limit message and offers the rule-based starter plan only as the user's explicit choice.
-* **CLI Session Config:** Model: Sonnet | Effort: High
+**Your prerequisites before this session:** none. Docker Desktop running if you want the CLI to run `npm run test:e2e` (it will say when it needs it), and `npm run dev` stopped when it does. No migration, nothing on production.
 
-#### Exact Copy-Paste Prompt for Claude Code CLI
+## Block 2.1: Show a Could-Not-Load State Instead of "No Goals Yet" (MOM-93)
 
-```text
-Implement MOM-73: harden the Claude calls with a durable rate limit, spend cap, usage logging and an SDK and fallback decision.
-
-Task Instructions:
-1. Read ticket MOM-73 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
-2. Read CLAUDE.md, lib/ai/rebalance.ts, lib/ai/taskPlan.ts, lib/services/tasks.ts (requestModelRebalance(channelId, ...) and generateWeekOnePlan with their in-memory cooldown maps), lib/supabase/admin.ts, migrations 005 and 006 (how a server-only table is granted), migration 009 (a function granted to authenticated only) and supabase/verify/005.
-3. Create the feature branch `feature/MOM-73-llm-governance` off a clean `main`.
-4. Design before coding: the llm_usage_logs table (user_id, feature, model, input_tokens, output_tokens, latency_ms, outcome, created_at; NO prompt or answer content), who can read and write it, how the durable per-user limit and the daily per-user and overall caps are computed from it, and the fallback behaviour for each of the two call sites. Wait for my OK.
-5. Implement lib/services/llm.ts (server-only) wrapping both Claude call sites: check the limit and caps before calling, record usage after, and return a typed "limited" result. Apply the fallback rules exactly: rebalance may use the rule-based proposal, labelled; plan generation shows the message and offers the starter plan only as the user's explicit choice. Never silently substitute. A refused channel id or a bad input must still not use up the limit (see the existing tests).
-6. Write the next migration (011 if MOM-19 took 010) with RLS, explicit grants, and nothing for anon. Add supabase/verify/<n>_llm_usage_logs.sql: a user cannot read another user's rows, API roles cannot write directly, and the content columns do not exist.
-7. STOP before production. Show me the migration and `npx supabase db push --dry-run`, wait for my go-ahead, then push and run ALL scripts in supabase/verify/; all must pass.
-8. Write the SDK and fallback decision in docs (keep @anthropic-ai/sdk unless you find a reason; server-side fallbacks need a beta header, so do not enable them without testing against the real API, which needs my approval because it costs money).
-9. Tests: the limit holds across simulated instances, the cap trips and falls back as specified for both call sites, usage rows carry no content, and nothing in the path writes status or completed_at.
-10. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
-11. Update BACKLOG.md for MOM-73 and its related items (the rebalance and wizard rate-limit items).
-12. Commit with "feat(MOM-73): add durable rate limiting, usage logging and spend caps for LLM calls" and merge into main with --no-ff. Do not push.
-13. Update MOM-73 in Jira: Done only if all three acceptance criteria are met.
-
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes; committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
-```
-
-* **User Verification Gate:**
-  - [ ] You approved the table design and the fallback rules before any migration was written.
-  - [ ] The verify total is all passing.
-  - [ ] After the push, signed in as the standing smoke-test account, two rapid "Ask Claude" clicks from two browser tabs: the second is refused. Ask the CLI for a **count-only** query showing usage rows exist and contain no text.
-
----
-
-# SESSION 6: PLAN EXECUTION COMMANDS
-
-**Your prerequisites before this session:** none. This session changes tooling only: no app code, no migration, nothing on production. It is safe to run on its own on any day. The spec's "run a full day by hand first" bar was met on 2026-10-23, and that day-end is the friction the commands should remove: the step B loop needed Git Bash, the smoke-test account had to be created by hand, the Vercel output needed explaining, and step D needed a pause before Jira transitions.
-
-## Block 6.1: Plan Execution Commands and Plan Format Check (MOM-75)
-
-* **Objective & Scope:** Implement `docs/mom-75-plan-execution-spec.md`: three Claude Code commands in `.claude/commands/` (`/day-start`, `/run-block <MOM-n>`, `/day-end`) that read whatever `docs/plans/NEXT_BUILD_PLAN.md` is current and never name tickets; a Vitest format check in `npm test`; a "Today's runbook" section in the plan; a read-only allowlist in `.claude/settings.json`; and the daily loop documented in `CLAUDE.md`. The commands orchestrate the plan's own prompts and keep every approval stop; automation removes copy-paste, not visibility.
-* **Core Invariants to Protect:** *Production approval*: no command runs `supabase db push`, `git push`, `vercel env` or any production write without your explicit OK, and none of them is in the allowlist. *Secrets*: prerequisite checks name env vars only and never print values; the standing smoke-test account's password is never asked for. The three domain invariants are untouched: this block changes no app code.
+* **Objective & Scope:** When the home page cannot read the plan (for example the database is unreachable) it falls back to the empty views, so a user who has goals is told "No goals yet" and invited to set up a first goal. Give that case its own state: a plain message, a Try again action and no wizard call to action. A successful read that finds no goals must still show the no-goals state.
+* **Core Invariants to Protect:** *Human-Only Completion*: a failed read shows nothing that can be ticked and writes nothing. *Service RLS*: the page tells "read failed" from "read found nothing" by the service result, and no component calls Supabase. Never invent data to fill the gap.
 * **CLI Session Config:** Model: Sonnet | Effort: Medium
 
 #### Exact Copy-Paste Prompt for Claude Code CLI
 
 ```text
-Implement MOM-75: build the plan execution commands and the plan format check.
+Implement MOM-93: show a read-failed state instead of "No goals yet" when the plan cannot be loaded.
 
 Task Instructions:
-1. Read ticket MOM-75 in Jira first; its five acceptance criteria are the definition of done. Then read docs/mom-75-plan-execution-spec.md in full; it is the design. If the ticket and the spec disagree, stop and flag it.
-2. Read CLAUDE.md, package.json, vitest.config.mts, scripts/generate-execution-plan.ts (the existing plan generator; keep its style), tests/ (how existing tests read repo files) and the whole of docs/plans/NEXT_BUILD_PLAN.md, including the Final Day-End section (steps A to F) and the Standing Rules (standing smoke-test account, production approval).
-3. Before writing any command, look up the current Claude Code documentation for custom slash commands (file location, frontmatter, how $ARGUMENTS is passed), for allowlist syntax in .claude/settings.json, and for how a session's model and effort are read or set (the spec leaves effort as an open question). Tell me what you found and what each command can and cannot do automatically. Do not guess.
-4. Create the feature branch `feature/MOM-75-plan-execution-commands` off a clean `main`.
-5. Format check first: tests/build-plan-format.test.ts per spec sections 3 and 4. Headings in this plan look like `## Block 1.1: <title> (MOM-18)`; each block must have exactly one ticket key, a `CLI Session Config` line, exactly one fenced `text` prompt and a `User Verification Gate` checklist; the plan must have the metadata header and a "Today's runbook" section. Failing fixtures go in tests/fixtures/, one per rule, and each failure message names the block. The check reads the plan from disk but must not fail just because a session is not today's.
-6. Add the "Today's runbook" section near the top of docs/plans/NEXT_BUILD_PLAN.md (block order, the one command to type per block, what to check at each gate, in plain language), so the test passes on the current plan. Update the plan's day-end step E prompt so tomorrow's generator always produces the runbook and the contract.
-7. Commands in .claude/commands/, each short and orchestrating the plan rather than repeating it:
-   - /run-block <MOM-n>: spec 2.1, steps 1 to 8. It finds the block by key, stops on zero or several matches, runs the preflight, shows the block's CLI Session Config and stops with the exact fix on a model mismatch, asks me to confirm effort, checks the block's prerequisites by name only, resumes an existing feature branch, says in one line what each step does before doing it, keeps every stop in the block's prompt, and ends with the gate (deferred post-push items appended to docs/plans/.pending-live-checks.md, git-ignored) and a five-line summary.
-   - /day-start: spec 2.2. Read-only. Include: the standing smoke-test account is a manual check (it cannot be verified without production credentials, so it is listed as "confirm in the dashboard", not checked).
-   - /day-end: spec 2.3, in the order A, B, D, E, one push, C, deferred gates. Lessons from 2026-10-23 to build in: on Windows the step B verify loop runs in Git Bash, which Claude Code already uses; the step B user count expects exactly 1 (the standing smoke-test account); step D pauses for my OK before any Jira transition to Closed or Done; step D includes the RAID and failure log review (MOM-92): it lists unreviewed entries, waits for my plain-language reply and commits only what I approve; E archives the finished plan to docs/plans/archive/YYYY-MM-DD.md before writing the new one and runs the format check on it; the single push waits for my explicit OK after showing `git log origin/main..main --oneline`; C reads the newest production deployment's status and explains it in one line.
-8. Permissions: .claude/settings.json allowlist for the read-only commands in spec section 5 only. `supabase db push`, `git push`, `vercel env` and any production write must still ask. Show me the file before committing it.
-9. Docs: document the three commands and the daily loop (/day-start, then /run-block per block, then /day-end) in CLAUDE.md, and add docs/plans/.pending-live-checks.md to .gitignore. Show me the CLAUDE.md diff and apply it only if I approve.
-10. Dry run without side effects: run /day-start for real (it is read-only), and walk /run-block against one already-finished block in a read-only mode or by describing exactly what it would do, so I can see it find the block, show the config and the gate. Do not execute any block prompt and do not push.
-11. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass, and the format test must fail on each fixture.
-12. Update BACKLOG.md for MOM-75 (tick the Tooling item; add follow-ups with Jira keys) and mark docs/mom-75-plan-execution-spec.md as built, noting any part that differs from the spec and why.
-13. Commit with "feat(MOM-75): add plan execution commands and the plan format check" and merge into main with --no-ff. Do not push.
-14. Update MOM-75 in Jira: Done only if all five acceptance criteria are met; criterion 4 (/day-end end to end) can only be proven on a real day-end, so comment what was dry-run and leave the ticket open until I have run one.
+1. Read ticket MOM-93 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, app/page.tsx (the catch blocks that fall back to EMPTY_CHANNEL_VIEWS), types/channelViews.ts (FeedState, EMPTY_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS), lib/utils/channelViews.ts, components/layout/MainFeed.tsx, AppShell.tsx and NavSidebar.tsx, the state components in components/tasks/, tests/channel-selection.test.tsx and the existing empty-state tests, RAID_LOG.md I-04, and the BACKLOG.md items under MOM-93.
+3. Create the feature branch `feature/MOM-93-read-failed-state` off an up-to-date `main`.
+4. State: add a 'load_failed' member to FeedState and a LOAD_FAILED_CHANNEL_VIEWS constant, used only when the snapshot read returns an error or throws. A read that succeeds with zero goals must still produce 'no_goals'. The UI never infers the state from emptiness.
+5. Component: LoadFailedState in components/tasks (exported ...Props interface, no Supabase or service imports) with a plain message ("We couldn't load your plan"), a Try again button that refreshes the route (router.refresh, no data fetched in the component) and no goal wizard call to action. While the state is load_failed, the sidebar's "+ New Goal Wizard", the rebalance nudge and Adjust Weekly Pace must not offer actions that need data that was not loaded; show them disabled or hide them, and tell me which you chose and why.
+6. Wording: keep the message short and calm and reuse it later for MOM-103; do not name internal causes (no table or key names) in what the user sees.
+7. Tests: the page-level choice (read error and thrown error give 'load_failed'; success with no goals gives 'no_goals'), jsdom tests for LoadFailedState (message, Try again calls router.refresh, no wizard prompt anywhere in the output), and MainFeed choosing it. Update any test that asserted the old fallback and list each change.
+8. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
+9. Update BACKLOG.md for MOM-93 and RAID_LOG.md I-04 only by adding the word "built" in the Status of that row if you are certain it is fixed; otherwise leave the RAID row alone and tell me. Comment on MOM-93 in Jira with each acceptance criterion met or unmet and how verified; do not move it to Done.
+10. Commit with "fix(MOM-93): show a could-not-load state instead of No goals yet". Do not merge into main and do not push.
 
-Definition of Done: feature branch off clean main; tsc --noEmit passes; npm test passes (including the new format test); committed with the feat/fix(MOM-X) format; merged to main; Jira updated.
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
 ```
 
 * **User Verification Gate:**
-  - [ ] The CLI showed you what the Claude Code docs say about commands, the allowlist, and model and effort, before writing anything.
-  - [ ] `npm test` passes on the current plan, and you saw the format test fail on a plan missing a key, a config line, a prompt and a gate.
-  - [ ] `/day-start` ran and reported clearly; `/run-block` found a block by key and stopped on a model mismatch, without running the block.
-  - [ ] `.claude/settings.json` allows only read-only commands; `git push` and `supabase db push` still ask.
-  - [ ] On your next real day-end, run `/day-end` instead of steps A to F by hand; only then close MOM-75.
+  - [ ] `npm test` passes and the CLI listed every test it changed.
+  - [ ] You can see in the tests that a read failure gives the could-not-load state with Try again and no goal prompt, and a successful empty read still gives the no-goals state.
+  - [ ] The CLI said how the sidebar actions behave while the state is shown.
+  - [ ] After the push, signed in as the standing smoke-test account, the home page still loads normally (the failure path cannot be triggered on production without breaking it, so it is covered by the tests).
+
+---
+
+## Block 2.2: Show a Visible Error When Connection Status Cannot Be Read (MOM-103)
+
+* **Objective & Scope:** The Connected Apps page silently falls back to the old switch-only cards when connection status cannot be read (a missing server key did exactly that in the MOM-62 live test). Show a "couldn't load connection status" message with Try again instead, and never the cards whose "Connected" only means "switched on". The desktop side panel's old cards are a separate item (MOM-95) and stay as they are.
+* **Core Invariants to Protect:** *Service RLS / secrets*: the page must not import or print any secret; a missing server setting is reported as a fixed message, never as the setting's name. A failed read renders no controls that would write.
+* **CLI Session Config:** Model: Sonnet | Effort: Medium
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-103: Connected Apps hides a status read failure behind the old switch-only cards.
+
+Task Instructions:
+1. Read ticket MOM-103 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, app/connections/page.tsx (its two try/catch fallbacks), components/integrations/IntegrationCardList.tsx and ConnectionControls.tsx, lib/services/integrations.ts (listConnectedApps, listIntegrationAccounts), tests/connect-ui.test.tsx, tests/e2e/connections.spec.ts, and the BACKLOG.md items under MOM-62 and MOM-95. If Block 2.1 (MOM-93) has already merged to origin/main, reuse its wording and look; if not, write the message yourself with the same calm wording ("We couldn't load connection status") and add a BACKLOG item to share one component later.
+3. Create the feature branch `feature/MOM-103-connections-status-error` off an up-to-date `main`.
+4. Behaviour: distinguish a status read that fails (error or throw) from one that succeeds with no connections. On failure show the message and a Try again (refresh the route); do not render the switch-only fallback cards or any connect, disconnect or toggle control. On success with no connections, behaviour is unchanged. Do not touch the desktop side panel (components/layout/ConnectedStackPanel.tsx).
+5. The visible message must be fixed text: it never includes the thrown error, a setting name or a key.
+6. Tests: jsdom tests that a failed status read shows the message and Try again and none of the old cards or controls, and that a successful read is unchanged; update any assertion that relied on the silent fallback and list each change. If tests/e2e can pin the server key empty for one run the way tests/e2e/wizard.spec.ts pins the model key empty, add a browser spec for the real failure; if not, say so and rely on the component tests.
+7. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass. If you added a browser spec, run `npm run test:e2e` (Docker running, `npm run dev` stopped).
+8. Update BACKLOG.md for MOM-103 (tick the silent-fallback item). Comment on MOM-103 in Jira with each acceptance criterion met or unmet and how verified; do not move it to Done.
+9. Commit with "fix(MOM-103): show a visible error when connection status cannot be read". Do not merge into main and do not push.
+
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
+```
+
+* **User Verification Gate:**
+  - [ ] `npm test` passes and the CLI listed every test it changed.
+  - [ ] With status unreadable, the page shows the message and Try again and none of the switch-only cards or controls; with status readable, the page is unchanged.
+  - [ ] The visible text names no setting, key or error text.
+  - [ ] The desktop side panel is untouched.
+
+---
+
+## Block 2.3: Add Tests for Integrations (MOM-57)
+
+* **Objective & Scope:** `setConnectedAppActive` has no test (it is only called from the Server Action), and the mock adapter payloads are not asserted against the ingestion contract. The real Hevy and Google adapters are already checked against `InboundActivityPayloadSchema` in `tests/adapters.test.ts`. Add what is missing so both acceptance criteria are met.
+* **Core Invariants to Protect:** *Human-Only Completion*: nothing under test may write `status` or `completed_at`. *Service RLS*: tests use the in-memory Supabase fake; none uses production credentials or a network.
+* **CLI Session Config:** Model: Sonnet | Effort: Low
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-57: add tests for integrations (setConnectedAppActive validation, payload shapes).
+
+Task Instructions:
+1. Read ticket MOM-57 in Jira first, including today's comment on what is already covered; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, lib/services/integrations.ts (setConnectedAppActive, isSupportedProvider, getMockHevyActivity, getMockCalendarActivity), app/actions/integrations.ts, lib/services/ingestion.ts (InboundActivityPayloadSchema), tests/integrations-service.test.ts, tests/adapters.test.ts and the Supabase fake under tests/helpers/.
+3. Create the feature branch `feature/MOM-57-integration-tests` off an up-to-date `main`.
+4. Tests for setConnectedAppActive: an unsupported provider and a non-boolean state are refused with the fixed messages and touch nothing; a signed-out caller is refused; a signed-in caller turning an app on and then off writes one row scoped to their own user id (upsert on user and provider), leaves other columns untouched and returns only the public columns; a database error comes back as a failed result. Add them to tests/integrations-service.test.ts or a new file, following the existing style.
+5. Contract tests: getMockHevyActivity() and getMockCalendarActivity() each pass InboundActivityPayloadSchema and carry the fields the spec requires (docs/INTEGRATIONS_SPEC.md). Read the spec and say if the mocks and the spec disagree; do not change either silently.
+6. Change no application code. If a test exposes a bug, stop and tell me what it found before fixing anything.
+7. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
+8. Update BACKLOG.md for MOM-57 (the integrations-tests item under MOM-13). Comment on MOM-57 in Jira with each acceptance criterion met or unmet and how verified; do not move it to Done.
+9. Commit with "test(MOM-57): cover setConnectedAppActive and the mock payload contract". Do not merge into main and do not push.
+
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
+```
+
+* **User Verification Gate:**
+  - [ ] `npm test` passes and the CLI listed the new tests by name.
+  - [ ] Refusals (bad provider, bad state, signed out) and the success path are all covered.
+  - [ ] The mock payloads are asserted against the contract.
+  - [ ] No application code changed, or the CLI told you before it changed any.
+
+---
+
+# SESSION 3: TIME ZONE
+
+**Your prerequisites before this session:** Docker Desktop running (the verify scripts and the browser tests use the local stack), and `npm run dev` stopped when the block runs the browser tests. The block stops for your design OK before writing any migration. If you choose to store the zone in the database it adds migration 013, applied at day-end step F.
+
+## Block 3.1: Roll the Plan Week Over at the User's Local Midnight (MOM-45)
+
+* **Objective & Scope:** The current plan week comes from the goal's `start_date` and the server's UTC date, so it is off by one around midnight for a user in Pacific time (about 5 pm local for the week boundary to flip early). Store the user's time zone (or an explicit week boundary), compute "today" in it, and use that everywhere a "today" is taken on the server: the week, the due-so-far logic, goal progress, and the rebalance proposal.
+* **Core Invariants to Protect:** *Human-Only Completion*: nothing here writes a task's status. *Service RLS*: a user can set only their own zone, and an invalid zone is refused and never stored; an unknown or missing zone falls back to UTC and says so in a comment. *No-Delete*: the move history and `carried_from_week` markers do not change; only the arithmetic for "today" does.
+* **CLI Session Config:** Model: Sonnet | Effort: High
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-45: the current plan week can be off by one around midnight outside UTC.
+
+Task Instructions:
+1. Read ticket MOM-45 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, lib/utils/velocity.ts (currentPlanWeek, computeVelocity), lib/utils/progress.ts (planTimeline), lib/utils/channelViews.ts, lib/services/tasks.ts (every place that builds `today` from the UTC date, around lines 87, 100 and 275), lib/services/goals.ts (isoDate), lib/services/ingestion.ts (the week from the activity's own day: that one is the activity's UTC day and belongs to MOM-71, leave it), app/page.tsx, lib/services/auth.ts, migrations 001 and 008 (how public.users is defined and granted), the BACKLOG.md items on the current week and the date line, and RAID_LOG.md I-02.
+3. Create the feature branch `feature/MOM-45-user-time-zone` off an up-to-date `main`.
+4. Design before coding. Compare (A) a nullable IANA time-zone column on public.users, set by the signed-in user through a service and a Server Action, with the browser supplying its own zone, against (B) a cookie the browser sets and the server reads. Recommend one with reasons (my expectation: A, because the ticket says "store" and a cookie is per device), including how a first visit with no zone behaves (UTC, until the browser reports one), how an invalid zone string is refused, and every call site that takes a "today" and what it will use. Wait for my OK.
+5. Implement a pure helper (for example todayInZone(nowMs, timeZone) in lib/utils/) that returns YYYY-MM-DD in the zone using Intl, with UTC as the documented fallback for a missing or invalid zone, and use it at every call site from step 4. Keep currentPlanWeek's signature (it already takes `asOf`); change what callers pass.
+6. If the design is A: write supabase/migrations/013_user_time_zone.sql (the number is fixed by the plan; do not pick another) adding the nullable column with explicit grants (a signed-in user may update only their own row's zone, never read or write another's, nothing for anon), and supabase/verify/013_user_time_zone.sql in the style of the others (one transaction, rolled back, safe on production): own update works, another user's row is untouched, an over-long or empty value is rejected, all existing checks unchanged. Add the typed column to types/database.types.ts.
+7. Tests: the helper at a UTC-versus-Los-Angeles boundary (for example 2026-10-24 06:30 UTC is still 2026-10-23 in America/Los_Angeles; the week rolls at local midnight, not at UTC midnight), across a daylight-saving change, with an invalid zone and with no zone; the service refusing another user's id and an invalid zone; the page/service call sites passing the zone through. Update any test that fixed `today` as a UTC string and list each change.
+8. Verify locally: `npx supabase db reset --local`, then `npm run verify:sql`; all scripts must pass. Because pages change, also run `npm run test:e2e` (Docker running, `npm run dev` stopped).
+9. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
+10. STOP before production, and do NOT run `supabase db push`. If there is a migration, show me it and `npx supabase db push --dry-run`. Say plainly: the production push and then ALL the verify scripts run at day-end step F, after CI is green on this branch's pull request and I say OK, and before it merges.
+11. Update BACKLOG.md for MOM-45 and I-02 wording (tick the week item; the date line stays under MOM-45 as a follow-up). Comment on MOM-45 in Jira with each acceptance criterion met or unmet and how verified; do not move it to Done.
+12. Commit with "fix(MOM-45): roll the plan week over at the user's local midnight". Do not merge into main and do not push.
+
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; npm run verify:sql and npm run test:e2e pass locally; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
+```
+
+* **User Verification Gate:**
+  - [ ] You chose where the zone lives before any migration was written.
+  - [ ] A unit test shows a Los Angeles user still in the previous week at 23:30 local while UTC has already rolled over, and the week rolls at local midnight.
+  - [ ] `npm run verify:sql` and `npm run test:e2e` pass; the CLI listed every test it changed.
+  - [ ] After day-end step F applies the migration: signed in as the standing smoke-test account, a count-only query shows its zone is now set (print the count of accounts with a zone, never the value), and the home page week matches your local date.
+
+---
+
+# SESSION 4: WHAT REAL USERS NEED
+
+**Your prerequisites before this session:** (1) For Block 4.1, be ready to decide a retention period for Claude usage records and how the purge runs; the CLI recommends and waits. (2) For Block 4.2, **before the block builds on them**: pick a CAPTCHA provider that Supabase Auth supports (Cloudflare Turnstile or hCaptcha) and create a site; you will paste the **secret** into the Supabase dashboard (Authentication → Attack Protection) yourself, and the **site key** (public by design) goes in as an environment variable that the CLI names for you. Also add `https://momentum-app-eight-chi.vercel.app/auth/reset` and `http://localhost:3000/auth/reset` to the Auth redirect allow-list. The CLI never sees the secret. (3) For Block 4.3, have a view on who the first invited users are, because the notice states what they are told. (4) Docker Desktop running; `npm run dev` stopped when a block runs the browser tests. Migration 014 (Block 4.1) is applied at day-end step F.
+
+## Block 4.1: Purge Old Claude Usage Records and Show a Person Their Own Use (MOM-101)
+
+* **Objective & Scope:** Nothing deletes old `llm_usage_logs` rows, so a person's pattern of Claude use stays tied to their account indefinitely (RAID R-11). Decide a retention period and run a scheduled purge; add a Settings readout of the signed-in person's own use in the last 24 hours (`listMyLlmUsage()` has no screen); and make a change to `reserve_llm_call()` that is not mirrored in the test fake fail a test. Record the "one lock per reservation" note as accepted unless you find a reason not to.
+* **Core Invariants to Protect:** *Service RLS*: the purge function is SECURITY DEFINER with a pinned `search_path`, executable only by the role that runs the schedule, never by an API role; the readout shows only the signed-in person's own rows and no prompt or answer content (none is stored). *Governance*: the retention period must stay longer than the 24-hour windows the caps are computed from, so a purge can never relax a cap.
+* **CLI Session Config:** Model: Sonnet | Effort: High
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-101: LLM usage follow-ups: purge old usage rows, show a person their own use, keep the fake in step.
+
+Task Instructions:
+1. Read ticket MOM-101 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, docs/LLM_GOVERNANCE.md, migration 011 and supabase/verify/011_llm_usage_logs.sql, lib/services/llm.ts (runWithinBudget, listMyLlmUsage, LLM_LIMITS), tests/helpers/fakeLlmUsage.ts, tests/llm-governance.test.ts, tests/migrations.test.ts, app/settings/page.tsx, components/layout/PageFrame.tsx, RAID_LOG.md R-11 and R-06, and the BACKLOG.md items under MOM-73 and MOM-101.
+3. Create the feature branch `feature/MOM-101-llm-usage-followups` off an up-to-date `main`.
+4. Design before coding, then STOP for my answers: (a) the retention period (recommend one with reasons; it must be longer than the longest cap window, and long enough to measure cost per call and tune the caps, which BACKLOG says needs about a week of real use); (b) how the purge runs: check read-only whether pg_cron is available on this Supabase project (a catalogue query with `npx supabase db query --linked`, nothing written), and otherwise propose a protected Vercel Cron route, saying what secret it would need and that setting it is a `vercel env` step I must approve; (c) the wording of the Settings readout ("Your Claude use, last 24 hours": counts per feature and outcome, tokens and the time of the last call; no content). Wait for my answers.
+5. Migration 014: supabase/migrations/014_llm_usage_retention.sql (the number is fixed by the plan; do not pick another): a purge function that deletes rows older than the chosen retention, SECURITY DEFINER, search_path pinned, EXECUTE granted only to the role that runs the schedule and revoked from public, anon and authenticated, plus the schedule itself if pg_cron is the choice. Add supabase/verify/014_llm_usage_retention.sql (one transaction, rolled back, safe on production): old rows go, recent rows stay, a row inside the longest cap window is never purged, API roles cannot call the function. If the choice is a Vercel Cron route, build the route in lib/ and app/api/ following the webhook rules in docs/INTEGRATIONS_SPEC.md (secret checked first, one generic 401, nothing logged), add its path to PUBLIC_PATHS in lib/supabase/proxy.ts, and do not set any environment variable yourself.
+6. Readout: add a service function that returns a summary of the signed-in person's own calls in the last 24 hours (use listMyLlmUsage or a sibling in lib/services/llm.ts; no new Supabase call in a component), and a small component under components/settings/ for app/settings/page.tsx. It shows nothing about anyone else and no content, and says plainly when there was no use.
+7. Keep the fake in step: add a test that fails when the SQL of reserve_llm_call() and tests/helpers/fakeLlmUsage.ts disagree. For example, drive one table of scenarios (spacing, per-user cap, overall cap, refused call that must not use up the limit) through the fake in a unit test AND emit the same table into a verify check run by `npm run verify:sql`, or parse the constants out of the migration; choose the sturdier option and explain why. The test must fail if you change a limit in only one place (show it failing once, then revert).
+8. Record the lock note in BACKLOG.md as accepted at the current scale, with the revisit trigger.
+9. Verify locally: `npx supabase db reset --local`, then `npm run verify:sql`; all scripts must pass. Settings changes a page, so also run `npm run test:e2e` (Docker running, `npm run dev` stopped).
+10. Run `npx tsc --noEmit`, `npm test` and `npm run build`; all must pass.
+11. STOP before production, and do NOT run `supabase db push`. Show me the migration and `npx supabase db push --dry-run`. Say plainly: the production push and then ALL the verify scripts run at day-end step F, after CI is green on this branch's pull request and I say OK, and before it merges.
+12. Update BACKLOG.md for MOM-101 and RAID_LOG.md R-11 (only its Status, and only if the purge is actually scheduled; otherwise leave the row and tell me). Tell me the retention period you built so I can quote it in the privacy notice (Block 4.3). Comment on MOM-101 in Jira with each acceptance criterion met or unmet and how verified; do not move it to Done.
+13. Commit with "feat(MOM-101): purge old Claude usage records and show a person their own use". Do not merge into main and do not push.
+
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; npm run verify:sql and npm run test:e2e pass locally; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
+```
+
+* **User Verification Gate:**
+  - [ ] You chose the retention period and how the purge is scheduled before any migration was written.
+  - [ ] Settings shows only your own Claude use for the last 24 hours, with no content; nobody else's rows can appear.
+  - [ ] A test fails when the limit function and the fake disagree (you saw it fail once).
+  - [ ] After day-end step F applies the migration: every production verify script passes, and a count-only query shows no usage row older than the retention period. If the purge is a Vercel Cron route, you approved the secret and its first run.
+
+---
+
+## Block 4.2: Password Reset, Sign-Up Abuse Protection and a Signed-In Indicator (MOM-64)
+
+* **Objective & Scope:** Sign-in is email and password only: a user who forgets their password has no way back, sign-up has no throttling or CAPTCHA, and the sidebar does not show who is signed in (Settings already shows the email; check what the sidebar and mobile header do). Build the password reset (request form on `/login`, emailed link, a page to set a new password), CAPTCHA support on sign-up and sign-in that switches on only when its public site key is configured, and the signed-in indicator. OAuth providers are out of scope.
+* **Core Invariants to Protect:** *Security*: the reset request gives the same answer whether or not the email has an account (no account enumeration); the reset page works only with the recovery session the emailed link creates; no secret in the repo, the browser or a log; the CAPTCHA secret lives only in the Supabase dashboard. *Service RLS*: all Supabase Auth calls go through `lib/services/auth.ts`, never from a component.
+* **CLI Session Config:** Model: Sonnet | Effort: High
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-64: complete auth with password reset, sign-up abuse protection and a signed-in indicator.
+
+Task Instructions:
+1. Read ticket MOM-64 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, lib/services/auth.ts, app/actions/auth.ts, app/login/page.tsx, components/auth/SignInForm.tsx and SignOutButton.tsx, app/auth/callback/, lib/supabase/proxy.ts (PUBLIC_PATHS), components/layout/NavSidebar.tsx, WorkspaceSidebar.tsx, MobileHeader.tsx and PageFrame.tsx (what already shows the signed-in email), supabase/config.toml (local auth settings and redirect URLs), tests/e2e/auth.spec.ts and its support files (Mailpit), and the BACKLOG.md items under MOM-64.
+3. Create the feature branch `feature/MOM-64-complete-auth` off an up-to-date `main`.
+4. Prerequisites check, by name only: ask me to confirm I created a CAPTCHA site (Cloudflare Turnstile or hCaptcha), added the reset address to the Supabase Auth redirect allow-list and, if I want it live, set the CAPTCHA secret in the Supabase dashboard. Tell me the name of the public site-key environment variable you will read (never its value). The build must work with the key absent (no CAPTCHA shown, no behaviour change) so local development and the browser tests are unaffected. Do not ask me for a secret and never print one.
+5. Password reset, in lib/services/auth.ts: requestPasswordReset(email) validated like sign-in input, calling Supabase Auth's reset email with a redirect to `/auth/reset` through the existing callback; it always returns the same neutral success result whether or not the account exists, and a fixed message on failure. updatePassword(newPassword) for the signed-in recovery session, with the same strength rules as sign-up. Server Actions in app/actions/auth.ts. UI: a "Forgot password?" request form on /login; a page at app/auth/reset that needs the recovery session (do not add it to PUBLIC_PATHS: the emailed link signs the user in through the callback first) and sets the new password, then sends the user to the app. A stale or invalid link shows a fixed message and a way to request another.
+6. Abuse protection: show the CAPTCHA widget on sign-up and sign-in only when the site key is set, pass its token to the Supabase Auth calls through the service, and show a fixed message when it fails. Do not add your own rate limiter; Supabase Auth's built-in limits are dashboard settings, so list for me which ones to review (sign-up and sign-in rate, email rate) and wait for me to say they are set.
+7. Signed-in indicator: show who is signed in (the email) and the sign-out button in the places the sidebar and mobile header are missing it, reading the email through lib/services/auth.ts. Reuse what PageFrame already does.
+8. Tests: the services with a fake auth client (neutral result for known and unknown email, weak password refused, no CAPTCHA key = no token required), jsdom tests for the forms and the indicator, and a browser spec on the local stack with a throwaway user: request a reset, read the email in Mailpit, follow the link, set a new password, sign in with it. Never use the standing smoke-test account in a test.
+9. Local config: add the reset redirect to supabase/config.toml for the local stack, with CAPTCHA left off locally.
+10. Run `npx tsc --noEmit`, `npm test`, `npm run build` and `npm run test:e2e` (Docker running, `npm run dev` stopped); all must pass.
+11. Update BACKLOG.md for MOM-64 (the auth item and the signed-out-fallback item that mentions the indicator). Comment on MOM-64 in Jira with each acceptance criterion met or unmet and how verified: criterion 2 (throttling or CAPTCHA) is met only once I confirm the dashboard settings; say so plainly. Do not move it to Done.
+12. Commit with "feat(MOM-64): add password reset, sign-up abuse protection and a signed-in indicator". Do not merge into main and do not push.
+
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; npm run test:e2e passes locally; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
+```
+
+* **User Verification Gate:**
+  - [ ] You created the CAPTCHA site, added the reset address to the redirect allow-list and set the dashboard limits, and the CLI never saw a secret.
+  - [ ] The reset works end to end on the local stack in the browser spec (request, Mailpit email, new password, sign-in); asking for a reset for an unknown address gives the same answer as for a known one.
+  - [ ] The sidebar and the mobile header show who is signed in.
+  - [ ] After the push, signed in as the standing smoke-test account, you see the indicator; the CAPTCHA appears on `/login` if the site key is set in Vercel. The reset email is not walked on production, because that would need a second account; this gate item is intentionally local-only.
+
+---
+
+## Block 4.3: Write the Privacy Approach and Notice Before Real Users (MOM-102)
+
+* **Objective & Scope:** Health data is a sensitive category, and goal and task text is sent to the Claude API (RAID R-03, R-04). Audit and write down what is stored from Hevy and Google and what each Claude prompt contains, draft a plain-language privacy notice at `/privacy` (readable without signing in and linked from the sign-in and sign-up page), and mark every statement that needs your decision `[OWNER TO CONFIRM]`. The ticket also asks for a way to delete synced activity; that interacts with the No-Delete invariant and needs its own design, so this block writes the design note and a BACKLOG item and reports that criterion as **not met**.
+* **Core Invariants to Protect:** *No-Delete*: do not build any deletion here. *Honesty*: the notice states only what the code does today (for example that provider tokens are stored as plain text protected by the database's disk encryption, not by field-level encryption, and that call counts are kept for the retention period). *Public repo*: the inventory names categories and fields in general terms; no secrets, no keys, no personal data. This is a plain-language draft, not legal advice.
+* **CLI Session Config:** Model: Sonnet | Effort: Medium
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-102: write the privacy approach for health data and Claude prompts before real users.
+
+Task Instructions:
+1. Read ticket MOM-102 in Jira first; its acceptance criteria are the definition of done. If it disagrees with these instructions, stop and flag it.
+2. Read CLAUDE.md, docs/RAID_LOG.md (R-02, R-03, R-04, R-11, A-02, I-05), docs/INTEGRATIONS_SPEC.md, docs/LLM_GOVERNANCE.md, the migrations that create the tables holding provider credentials, ingested activity and usage records, lib/services/ingestion.ts and lib/adapters/ (what a synced activity keeps), lib/ai/rebalance.ts and lib/ai/taskPlan.ts (exactly what each prompt contains), lib/supabase/proxy.ts (PUBLIC_PATHS), app/login/page.tsx and components/auth/SignInForm.tsx, and the BACKLOG.md privacy items.
+3. Create the feature branch `feature/MOM-102-privacy-notice` off an up-to-date `main`.
+4. Audit, read-only: write docs/PRIVACY_APPROACH.md with (a) a data inventory by category: what is stored from sign-up, goals and tasks, provider connections (what is kept, how it is protected, what disconnecting removes), synced activity (the summary fields kept; confirm no raw biometrics, route maps or heart-rate series are stored, quoting the adapter code), and usage records; (b) for each Claude call, the exact fields sent and the fields never sent (tokens, emails, health detail), checked against the prompt-building code; (c) the Anthropic data-use statement: write [OWNER TO CONFIRM] and the question to check on the provider's current terms rather than stating terms from memory; (d) retention: use the period I tell you was decided in Block 4.1, and ask me for it now (it may exist only on that block's unmerged branch); (e) the open gaps (no field-level encryption: MOM-70; no way for a user to delete synced activity or the account: new item; Google Testing-mode refresh tokens expire after about 7 days).
+5. Deletion design note, same file: describe how a user could delete their synced activity without breaking the No-Delete rule (which protects the user's own unfinished plan work, not evidence the system added), the options (delete evidence rows only; delete system-created tasks the user has not touched; export first), a recommendation, and the migration and tests it would need. Build nothing. Add a BACKLOG.md item for it with the source "MOM-102" (it gets a Jira key at day-end), and say in the Jira comment that acceptance criterion "a user can delete their synced activity" is not met.
+6. Draft app/privacy/page.tsx (a server component, no data fetching) in plain language from the inventory: what we collect and why, who it goes to (Supabase, Vercel, Anthropic, and Google or Hevy only when the user connects them), how long usage records are kept, what we do not do, and how to ask for deletion today (a [OWNER TO CONFIRM] contact route). Put every statement that needs my decision in a visibly marked [OWNER TO CONFIRM] line. Add `/privacy` to PUBLIC_PATHS in lib/supabase/proxy.ts and link it from the sign-in and sign-up page.
+7. STOP and show me the full notice text and every [OWNER TO CONFIRM] line. Apply my answers. Any line I leave unanswered stays marked, and the notice must not be called ready: say so in the Jira comment.
+8. Tests: the page renders without a session; `/privacy` is a public path; the sign-in page links to it; a source-level test that the page imports no service and calls no Supabase; a test that no [OWNER TO CONFIRM] marker is hidden (the page may keep markers, but the test lists how many remain so the count is visible in the output).
+9. Run `npx tsc --noEmit`, `npm test`, `npm run build` and `npm run test:e2e` (Docker running, `npm run dev` stopped); all must pass.
+10. Update BACKLOG.md for MOM-102 (the two privacy items) and RAID_LOG.md R-03 and R-04 only by adding a pointer to docs/PRIVACY_APPROACH.md in the Response column if I approve it. Comment on MOM-102 in Jira with each acceptance criterion met or unmet and how verified; do not move it to Done.
+11. Commit with "feat(MOM-102): add the privacy approach document and notice page". Do not merge into main and do not push.
+
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes; npm run test:e2e passes locally; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented.
+```
+
+* **User Verification Gate:**
+  - [ ] The data inventory and the list of what each Claude prompt sends match the code you were shown.
+  - [ ] You reviewed every `[OWNER TO CONFIRM]` line and answered or kept it marked; the notice is not called ready while any remain.
+  - [ ] The deletion design note exists, nothing was deleted or built, and the "delete my synced activity" criterion is reported as not met.
+  - [ ] After the push, without signing in, `https://momentum-app-eight-chi.vercel.app/privacy` returns 200 and the sign-in page links to it.
 
 ---
 
@@ -604,19 +579,18 @@ curl -s -o /dev/null -w "%{http_code}\n" https://momentum-app-eight-chi.vercel.a
 
 | Item | Why it matters |
 | --- | --- |
-| **Standing smoke-test account** | `smoke-test@momentum-app.test` already exists on production but was created before migration 010, so it holds the old Career Pivot seed. **After** Block 1.2 has pushed migration 010, delete it and recreate it in the Supabase dashboard (Auto Confirm on) so it starts empty; Block 1.2's count-only check expects zero goals and tasks. Every live gate in this plan signs in as it; its password stays in your password manager. If its data gets cluttered, delete and recreate it. |
-| **MOM-18: the signed-out state is normally unreachable** | `lib/supabase/proxy.ts` redirects signed-out visitors to `/login`, so criterion 1 ("signed-out shows a sign-in call to action") can only be met at the component level. Block 1.1 builds it as a safe default and comments on the ticket; decide whether to amend the ticket's wording. |
-| **MOM-19 touches six verify scripts** | Scripts 001, 002, 003, 004, 007 and 008 rely on the signup seed for their fixtures. The prompt keeps all 171 checks by calling `seed_career_pivot()` explicitly as postgres and rewrites the few checks that tested signup seeding itself; review that diff before the push. |
-| **Migration 010 and MOM-73's migration** | Block 1.2 takes 010 and shows you the migration and a dry run before anything is pushed; Block 5.2 then takes 011. Each stops for your approval. |
-| **Hevy API samples** | Block 4.2 cannot build the Hevy adapter honestly without Hevy's API docs or a redacted `/v1/workouts` response. The prompt stops without them. |
-| **Docker and the local stack** | Blocks 3.1 and 5.1 need Docker. The repo still has no `supabase/config.toml`; Block 3.1 creates it with `supabase init`. Creating users through the local auth **admin API** returned HTTP 500 and left NULL token columns on 2026-10-23, so the browser specs sign up through the normal form and read Mailpit. `supabase auth users create` does not exist in CLI v2.121. |
-| **Google verification** | Calendar read-only is a sensitive scope. Testing mode (test users) is fine for you; wider use needs Google's app verification and a verified domain. |
-| **Wireframe reference** | Session 2 reads the v0 export from `C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\` (present today). It must never be copied into the repo. MOM-76, MOM-77 and MOM-78 stay under the Phase 1 epics MOM-4 and MOM-7 on purpose, which is why those epics stay open. |
-| **Dark only until MOM-30** | MOM-76 makes the app dark regardless of the device setting. Light mode with a follow-device default is MOM-30, not scheduled. |
-| **Live Claude paths** | The MOM-83 smoke test did not exercise the wait message, Try again or the starter plan on production; Block 3.1 covers them against the local stack with the API key absent. Production has never seen the failure path. |
-| **Model cost** | MOM-35's generator and MOM-47's rebalance call Claude Opus 5.5 per click; MOM-73 (Block 5.2) is what bounds that. Until it ships, do not invite real users. |
-| **MOM-75 changes how you run a day** | After Block 6.1, a build day is `/day-start`, then `/run-block MOM-n` per block, then `/day-end`, instead of pasting prompts. The commands keep every approval stop and cannot switch the model or the effort for you. `/day-end` can only be proven on a real day-end, so MOM-75 stays open until you have run one. |
-| **Product risks live in the RAID log** | This table covers decisions for this build cycle. Product risks, assumptions, issues and dependencies (privacy of goal data, stored tokens and health data, model cost, CI) are in `docs/RAID_LOG.md`, and AI misses in `docs/FAILURE_LOG.md`; both are reviewed in step D every day-end (MOM-92). |
-| **Pull requests, not direct pushes** | `main` is protected (MOM-67): every change reaches it through a pull request with `checks` and `database` green, merged with a merge commit. `/run-block` commits on a feature branch and never merges; `/day-end` pushes the day's branches once, after your OK. A production migration is applied before its pull request merges (merging deploys to Vercel). A block that needs an earlier block's code stops if that code is not in `origin/main` yet and offers: push and merge that pull request first, or stack on its branch (only with your OK). |
-| **Not scheduled, still recommended** | **MOM-45** (the plan week can be off by one around midnight outside UTC; you are in Pacific time), **MOM-65** (revoke EXECUTE on `handle_new_user` and `rls_auto_enable`; Block 1.2 comments on its outdated seed criterion), MOM-66 (table grants check), MOM-68 (`.env*` gitignore, now also the untracked `AGENTS.md`, `supabase/.branches/` and `supabase/snippets/`), MOM-74 (retire `HEVY_API_KEY`; delete it from Vercel Production afterwards), MOM-91 (`connection()` instead of `force-dynamic`; the selected-channel URL depends on the page being rendered per request). |
-| **Not scheduled, product decisions** | MOM-79 (tick a goal criterion; also the only way to make the 7 criteria real), MOM-80 (review the drafted criteria), MOM-81 (plan-shape rules, including giving the generator the goal's criteria), MOM-82 (unused `createGoalChannel`), MOM-85 (reopen older completed tasks), MOM-89 (paused and finished goals are invisible), MOM-90 with MOM-53 (move the day-90 checkpoint when the plan cannot hold), MOM-20 to MOM-26 (schema), MOM-33 (AI chat), MOM-64 (password reset, abuse protection). |
+| **Three migrations on three branches** | Blocks 1.2 (012), 3.1 (013, only if the time zone is stored in the database) and 4.1 (014) each add a migration, each branch is cut from `main`, and nothing is pushed until day-end. Step F therefore handles them in numeric order: merge the first pull request, use GitHub's "Update branch" on the next so it carries the earlier migration, wait for CI again, apply its migration to production, then merge. Applying 014 from a branch that lacks 012 would make `supabase db push` refuse. If Block 3.1 chooses the cookie design, 013 is not used and 014 stays 014. |
+| **MOM-65 may be partly blocked** | `rls_auto_enable` may be owned by Supabase, in which case a migration run as the project role may not be able to revoke it. The block stops and reports instead of working around it; the ticket then stays open for the part that can be done. |
+| **MOM-45 design choice** | A time-zone column on the users table is clean but adds a migration and a way for the browser to report its zone; a cookie is simpler but per device. The block recommends and waits. Whichever is chosen, a user with no zone yet is treated as UTC. |
+| **MOM-101 retention and scheduling** | You decide how long Claude usage records are kept (it must exceed the longest cap window) and whether the purge runs on the database's own scheduler or a protected Vercel Cron route. The Cron route would need a new secret, set with `vercel env` only with your approval. |
+| **MOM-64 needs your accounts and settings** | A CAPTCHA site (Cloudflare Turnstile or hCaptcha), its secret in the Supabase dashboard, its public key in Vercel, the reset address in the redirect allow-list and the Auth rate limits are all dashboard work only you can do. Without them, the code is built and dormant, and criterion 2 (throttling or CAPTCHA) stays unmet. The reset email is proven on the local stack only: walking it on production would need a second account. |
+| **MOM-102 is a draft, not legal advice** | The notice states what the code does today, with every open question marked `[OWNER TO CONFIRM]`. Have it reviewed before real users are invited. The ticket's "delete my synced activity" criterion is reported as not met: it needs a design that respects the No-Delete rule, so the block writes the note and a BACKLOG item and builds nothing. |
+| **Standing smoke-test account** | `smoke-test@momentum-app.test` exists on production and starts empty (recreated after migration 010). Every live gate signs in as it; its password stays in your password manager. Production must hold exactly one user at day-end step B; no block creates a second one. |
+| **MOM-75 closes only after you say so** | Today's day-end is the first real run of `/day-end`. MOM-75 stays In Review until you have walked it end to end, including the push, the merges and the live checks, and tell me it is finished. |
+| **Dark only until MOM-30** | The app is dark regardless of the device setting. Light mode with a follow-device default is MOM-30, not scheduled. |
+| **Live Claude paths** | Production has never seen the failure path of the plan generator or of Ask Claude (no key, limit reached). The local browser tests cover it. MOM-73's caps are placeholders sized as ceilings; read `llm_usage_daily` after a week of real use and set them from the measured cost. |
+| **Not scheduled, but queued with keys** | **MOM-98** (webhook endpoints: a migration and two public routes, tested on a deployed URL; Google needs a verified domain), **MOM-99** (adapter follow-ups: validate the Hevy key, confirm the set-count rule, a real Google fixture), **MOM-100** (CI: pin actions by SHA, one Node version, fewer duplicate runs). |
+| **Not scheduled, still recommended** | MOM-74 (retire `HEVY_API_KEY`; delete it from Vercel Production afterwards), MOM-91 (`connection()` instead of `force-dynamic`; the selected-channel URL depends on the page being rendered per request), MOM-95 (duplicated desktop controls), MOM-96 (audit jsdom tests for races on server-action results), MOM-97 (revoke at Google on disconnect, sign the state cookie), MOM-70 (field-level encryption of stored provider secrets). |
+| **Not scheduled, product decisions** | MOM-79 (tick a goal criterion; also the only way to make the 7 criteria real), MOM-80 (review the drafted criteria), MOM-81 (plan-shape rules, including giving the generator the goal's criteria), MOM-82 (unused `createGoalChannel`), MOM-85 (reopen older completed tasks), MOM-89 (paused and finished goals are invisible), MOM-90 with MOM-53 (move the day-90 checkpoint when the plan cannot hold), MOM-20 to MOM-26 (schema), MOM-33 (AI chat), MOM-71 and MOM-72 (workout task type, matching activity to planned tasks). |
+| **Product risks live in the RAID log** | This table covers decisions for this build cycle. Product risks, assumptions, issues and dependencies (privacy of goal data, stored tokens and health data, model cost, CI, automated sync acting without a session) are in `docs/RAID_LOG.md`, and AI misses in `docs/FAILURE_LOG.md`; both are reviewed in step D every day-end (MOM-92). |
+| **Pull requests, not direct pushes** | `main` is protected (MOM-67): every change reaches it through a pull request with `checks` and `database` green, merged with a merge commit. `/run-block` commits on a feature branch and never merges; `/day-end` pushes the day's branches once, after your OK. A production migration is applied before its pull request merges (merging deploys to Vercel). |
