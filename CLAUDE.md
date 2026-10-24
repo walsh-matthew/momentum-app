@@ -52,7 +52,9 @@ Before writing or changing any domain logic, read these files. They override ass
   - `MOM-7`: EPIC 4: Adaptive Velocity & Rebalancing
 
 ### 2. Git Branching Standard
-- **Rule:** Never commit directly to `main` during feature development.
+- **Rule:** Never commit directly to `main`. Work on a feature branch and merge it through a pull request.
+- **`main` is protected** in GitHub: a pull request needs the CI jobs `checks` and `database` (`.github/workflows/ci.yml`) to pass before it can merge, and nothing is pushed to `main` directly.
+- **Pushing and pull requests:** push the feature branch and open the pull request only when the owner says so (at day-end). Merge it with a merge commit once CI is green, then delete the branch.
 - **Branch Naming Pattern:** `feature/MOM-<number>-short-description`
 - **Examples:**
   - `feature/MOM-8-project-safeguards`
@@ -72,9 +74,10 @@ Before writing or changing any domain logic, read these files. They override ass
 - [ ] Static type verification passes (`npx tsc --noEmit`).
 - [ ] Unit and component tests pass (`npm test`). Add or update tests in `tests/` for any change to domain logic, services, components or SQL migrations.
 - [ ] Browser tests pass (`npm run test:e2e`; needs Docker and `npx supabase start`) for any change to pages, layout, auth, the goal wizard or the rebalance drawer. Stop `npm run dev` first.
+- [ ] SQL verify scripts pass (`npm run verify:sql`; needs `npx supabase start`) for any change to a migration or a script in `supabase/verify/`. A new migration gets a verify script.
 - [ ] Verified locally via `npm run dev`.
 - [ ] Code committed using the `type(MOM-X)` message format (`feat`, `fix`, `test`, `docs`).
-- [ ] Branch merged to `main` and Jira ticket moved to `Done`.
+- [ ] Pull request open with CI (`checks` and `database`) green, then merged to `main` through the pull request, and the Jira ticket moved to `Done`.
 
 ---
 
