@@ -25,6 +25,8 @@ Seeded 2026-10-23 (MOM-92) from the project's build sessions. The owner reviews 
 | R-07 | **Unreviewed changes reach production.** Changes merge and push to the main branch directly, with no CI. | Manage | Owner | Each day-end push. | CI on every push, then branch protection so production changes go through pull requests. | open | MOM-67 |
 | R-08 | **Sensitive detail leaks through the public repo**: personal data, security specifics or secrets in docs and commits. | Govern | Owner | Any commit to docs, logs or seed data. | Repo rules in `CLAUDE.md` and `docs/NINETY_DAY_PLAN_CONTEXT.md` §11, the generality rule above, and ignored environment files. | mitigated | MOM-68 |
 | R-09 | **The AI build tool reports work as done or verified when it is not** (see `docs/FAILURE_LOG.md`). | Measure | Owner | A ticket is closed or a status is reported. | Every block ends with a verification gate the owner checks; a "done" claim must name the check that proves it; live checks run after each push. | open | — |
+| R-10 | **Automated sync code acts for a user with no signed-in session and with database access that skips per-user protection**, so a mistake could write into the wrong person's plan. | Manage | Owner | Any new automated entry point, such as a notification endpoint or a scheduled sync. | The user id comes only from verified credentials and every query is keyed on it; tests switch per-user protection off to prove the code isolates users itself; the first real run is checked by hand before more entry points are added. | open | MOM-98 |
+| R-11 | **Privacy: how long Claude usage records are kept.** Every Claude call leaves a record of who made it, which feature, how many tokens it used, how long it took and how it ended, but never the question or the answer. Nothing deletes old records, so a person's pattern of use stays tied to their account for as long as it exists. | Govern | Owner | Before real users are invited, or when the privacy notice is written. | Decide a retention period, delete older records on a schedule, and state it in the privacy notice. The records already go when an account is deleted. | open | MOM-101 |
 
 ## Assumptions
 
@@ -34,6 +36,7 @@ Seeded 2026-10-23 (MOM-92) from the project's build sessions. The owner reviews 
 | A-02 | Calendar access in the provider's testing mode is enough for the prototype. | Map | Owner | Anyone outside the test-user list needs to connect. | Complete the provider's app verification, which needs a verified domain. | open |
 | A-03 | Velocity derived from ticks and carry-over (not logged hours) reflects real workload. | Measure | Owner | Feedback from the first users. | Add signals such as review notes and skipped days. | open |
 | A-04 | Platform encryption at rest is acceptable for stored secrets at prototype stage. | Govern | Owner | First real user connects a provider. | See R-02. | open |
+| A-05 | The calendar integration was built from the provider's documentation, not from a recorded real response, so its mapping may differ from what a real calendar returns. | Map | Build agent | The first real calendar sync. | Record a redacted real response, add it as a test fixture, and correct the mapping (MOM-99). | open |
 
 ## Issues
 
@@ -42,7 +45,8 @@ Seeded 2026-10-23 (MOM-92) from the project's build sessions. The owner reviews 
 | I-01 | The model failure paths (wait message, Try again, starter plan) have never run in production. | Measure | Build agent | — (current) | Browser tests cover them against a local stack. | open | MOM-61 |
 | I-02 | The plan week can be off by one around midnight for users outside UTC. | Measure | Build agent | — (current) | Store the user's time zone or week boundary explicitly. | open | MOM-45 |
 | I-03 | Database rule checks run by hand against production, not in CI. | Manage | Build agent | — (current) | Run them in CI against a disposable database. | open | MOM-67 |
-| I-04 | **A failed data load is shown as an empty account.** When the plan cannot be read, the home screen tells a user who has goals that they have none and invites them to start one. | Manage | Build agent | — (current) | Add a distinct "could not load" screen with a retry and no goal prompt. | unreviewed | MOM-93 |
+| I-04 | **A failed data load is shown as an empty account.** When the plan cannot be read, the home screen tells a user who has goals that they have none and invites them to start one. | Manage | Build agent | — (current) | Add a distinct "could not load" screen with a retry and no goal prompt. | open | MOM-93 |
+| I-05 | **One provider has no way to register a notification subscription automatically**, and authenticates it with a fixed value the user chooses, so a user must set it up by hand with a secret we issue. | Map | Build agent | Building the notification endpoints. | Explain the steps on the connect screen, store only a hash of the secret, and re-check the provider's documentation then in case that has changed. | open | MOM-98 |
 
 ## Dependencies
 
