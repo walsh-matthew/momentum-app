@@ -15,6 +15,8 @@ import {
   GOAL_TYPES,
   PACES,
   INTEGRATION_AUTH_TYPES,
+  LLM_FEATURES,
+  LLM_OUTCOMES,
   SHIFT_TYPES,
   TASK_STATUSES,
   TASK_TYPES,
@@ -286,5 +288,98 @@ describe('ingested tasks record their source (migration 007)', () => {
   it('only adds structure: it does not touch status or completed_at', () => {
     expect(sql).not.toMatch(/\b(status|completed_at)\b/i);
     expect(sql).not.toMatch(/\b(update|delete|insert)\b/i);
+  });
+});
+
+describe('LLM usage logs and limits (migration 011, MOM-73)', () => {
+  const sql = sqlOf('011');
+  // The statement that defines the function, so the order of its checks can be read.
+  const reserve = sql.slice(sql.indexOf('create function public.reserve_llm_call'));
+
+  it('the feature and outcome lists match types/database.types.ts', () => {
+    expect(inList(sql, 'llm_usage_logs_feature_check')).toEqual([...LLM_FEATURES]);
+    expect(inList(sql, 'llm_usage_logs_outcome_check')).toEqual([...LLM_OUTCOMES]);
+  });
+
+  it('has exactly the approved columns: nothing that could hold a prompt or an answer', () => {
+    const body = /create table public\.llm_usage_logs \(([\s\S]*?)\n\);/.exec(sql)![1];
+    const columns = [...body.matchAll(/^\s{2}([a-z_]+)\s+(uuid|text|integer|timestamptz)\b/gm)].map((m) => m[1]);
+    expect(columns).toEqual(['id', 'user_id', 'feature', 'model', 'input_tokens', 'output_tokens', 'latency_ms', 'outcome', 'created_at']);
+    expect(body).not.toMatch(/\b(jsonb?|bytea|xml)\b|\[\]/i);
+    // The only text columns are the three that hold a fixed word or a model id, and the model id is length-limited.
+    expect([...body.matchAll(/^\s{2}([a-z_]+)\s+text\b/gm)].map((m) => m[1])).toEqual(['feature', 'model', 'outcome']);
+    expect(sql).toMatch(/length\(model\) between 1 and 100/);
+  });
+
+  it('has the CHECK constraints the fake enforces', () => {
+    for (const name of ['llm_usage_logs_tokens_check', 'llm_usage_logs_latency_check', 'llm_usage_logs_finished_check']) {
+      expect(sql).toMatch(new RegExp(`constraint ${name}\\b`));
+    }
+    expect(sql).toMatch(/\(outcome = 'pending'\) = \(latency_ms is null\)/);
+  });
+
+  it('is read-only for a signed-in user, limited to their own rows, and closed to a signed-out client', () => {
+    expect(sql).toMatch(/alter table public\.llm_usage_logs enable row level security/);
+    expect(sql).toMatch(/revoke all on table public\.llm_usage_logs from anon, authenticated, service_role/);
+    expect(sql).toMatch(/grant select on table public\.llm_usage_logs to authenticated/);
+    expect(sql).toMatch(/for select to authenticated using \(\(select auth\.uid\(\)\) = user_id\)/);
+    // No grant to authenticated beyond select, and none at all to anon.
+    expect(sql).not.toMatch(/grant [^;]*\bto\b[^;]*\banon\b/i);
+    expect([...sql.matchAll(/grant ([a-z, ]+) on table public\.llm_usage_logs to authenticated/g)].map((m) => m[1])).toEqual(['select']);
+  });
+
+  it('the service role can read, insert and update, and cannot delete', () => {
+    expect(sql).toMatch(/grant select, insert, update on table public\.llm_usage_logs to service_role/);
+    expect(sql).not.toMatch(/grant [^;]*\bdelete\b[^;]*llm_usage_logs/i);
+  });
+
+  it('only the service role can reserve a call: it is taken from everyone else, then granted to it alone', () => {
+    expect(sql).toMatch(
+      /revoke execute on function public\.reserve_llm_call\(uuid, text, text, integer, integer, integer\)\s+from public, anon, authenticated, service_role/,
+    );
+    expect(sql).toMatch(/grant execute on function public\.reserve_llm_call\([^)]*\) to service_role/);
+    expect(sql).not.toMatch(/grant execute on function public\.reserve_llm_call\([^)]*\) to [^;]*\b(authenticated|anon|public)\b/);
+  });
+
+  it('checks the limits in the order the service and the fake report them: your cap, the shared cap, then the spacing', () => {
+    const order = ["'user_daily'", "'overall_daily'", "'too_soon'"].map((word) => reserve.indexOf(word));
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('is atomic: one lock covers the check and the insert, and the clock is the database\'s', () => {
+    expect(reserve).toMatch(/pg_advisory_xact_lock\(/);
+    expect(reserve.indexOf('pg_advisory_xact_lock')).toBeLessThan(reserve.indexOf('insert into public.llm_usage_logs'));
+    expect(reserve).toMatch(/clock_timestamp\(\)/);
+  });
+
+  it('counts a rolling 24 hours, not a calendar day', () => {
+    expect(reserve).toMatch(/interval '24 hours'/);
+    expect(reserve).not.toMatch(/date_trunc/i);
+  });
+
+  it('a refusal returns before the insert, so a refused call writes nothing', () => {
+    const insertAt = reserve.indexOf('insert into public.llm_usage_logs');
+    for (const reason of ["'user_daily'", "'overall_daily'", "'too_soon'"]) {
+      expect(reserve.indexOf(reason)).toBeLessThan(insertAt);
+    }
+  });
+
+  it('a finished row cannot change, and its user, feature, model and time never do', () => {
+    expect(sql).toMatch(/if old\.outcome <> 'pending' then/);
+    expect(sql).toMatch(/new\.user_id <> old\.user_id/);
+    expect(sql).toMatch(/new\.created_at <> old\.created_at/);
+    expect(sql).toMatch(/create trigger llm_usage_logs_guard before update/);
+  });
+
+  it('the owner\'s daily view is for the service role alone', () => {
+    expect(sql).toMatch(/create view public\.llm_usage_daily with \(security_invoker = true\)/);
+    expect(sql).toMatch(/revoke all on table public\.llm_usage_daily from anon, authenticated, service_role/);
+    expect(sql).toMatch(/grant select on table public\.llm_usage_daily to service_role/);
+  });
+
+  it('only adds a usage table: it does not touch tasks, status or completed_at', () => {
+    expect(sql).not.toMatch(/\b(status|completed_at)\b/i);
+    expect(sql).not.toMatch(/micro_tasks|task_rebalance_history|goal_channels/);
   });
 });

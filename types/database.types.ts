@@ -58,6 +58,13 @@ export type IntegrationAuthType = (typeof INTEGRATION_AUTH_TYPES)[number];
 export const CREDENTIAL_STATUSES = ['connected', 'needs_reauth', 'error'] as const;
 export type CredentialStatus = (typeof CREDENTIAL_STATUSES)[number];
 
+// The two places the app calls Claude, and how a call can end. Match llm_usage_logs.feature and .outcome
+// (migration 011). 'pending' is a call that has been reserved but not yet recorded as finished.
+export const LLM_FEATURES = ['rebalance', 'week_one_plan'] as const;
+export type LlmFeature = (typeof LLM_FEATURES)[number];
+export const LLM_OUTCOMES = ['pending', 'ok', 'refused', 'provider_rate_limited', 'unavailable', 'bad_output', 'not_configured'] as const;
+export type LlmOutcome = (typeof LLM_OUTCOMES)[number];
+
 export const TASK_TYPES = [
   'job_search',
   'interview_fill_in',
@@ -431,6 +438,40 @@ export type Database = {
           },
         ];
       };
+      // One row per Claude call (migration 011): who, which feature and model, tokens, latency, outcome. It has
+      // no prompt or answer column. A signed-in user can read their own rows; only the service-role client in
+      // lib/services/llm.ts writes them (reserve_llm_call inserts, the finishing update fills in the result).
+      llm_usage_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          feature: LlmFeature;
+          model: string;
+          input_tokens: number | null;
+          output_tokens: number | null;
+          latency_ms: number | null;
+          outcome: LlmOutcome;
+          created_at: string;
+        };
+        // Reserved by reserve_llm_call, never inserted directly by the app, so Insert is typed `never`.
+        Insert: never;
+        // Only how the call ended can be recorded, and only once (the database guard refuses anything else).
+        Update: {
+          input_tokens?: number | null;
+          output_tokens?: number | null;
+          latency_ms?: number | null;
+          outcome?: LlmOutcome;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'llm_usage_logs_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     // seed_career_pivot, handle_new_user and the trigger functions are not executable by API roles, so
@@ -463,6 +504,19 @@ export type Database = {
           p_due_date: string | null;
         };
         Returns: boolean;
+      };
+      // Reserves one Claude call for a user, or says which limit stopped it (migration 011). Executable by the
+      // service role only, never by a signed-in browser. Returns { allowed, reason, retry_after_seconds, log_id }.
+      reserve_llm_call: {
+        Args: {
+          p_user_id: string;
+          p_feature: LlmFeature;
+          p_model: string;
+          p_min_interval_seconds: number;
+          p_user_daily_cap: number;
+          p_overall_daily_cap: number;
+        };
+        Returns: unknown;
       };
     };
     Enums: Record<never, never>;
