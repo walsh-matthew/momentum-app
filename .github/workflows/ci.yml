@@ -1,0 +1,86 @@
+# CI (MOM-67). Runs on every push and every pull request.
+#
+# Two jobs, named so branch protection can require them: "checks" and "database".
+#   checks    type check, unit and component tests, production build. No database, no Docker.
+#   database  starts the local Supabase stack in Docker (which applies every migration to an empty database), runs
+#             every SQL verify script in supabase/verify/, then the browser tests. The browser tests need that
+#             stack, so they run in this job and not in "checks".
+#
+# Nothing here holds a credential. There are no repository secrets, no access token and no project reference, and
+# the only database is the throwaway one inside the runner, so these jobs cannot reach a hosted project.
+# tests/ci-workflow.test.ts enforces that.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request replaces a run that is still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Placeholders. The build only needs these two names to exist and be well formed: the server-only keys are
+      # read lazily at request time, never during the build. The address is this machine, so it points nowhere real.
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Unit and component tests
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  database:
+    name: database
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install
+        run: npm ci
+      # The same CLI version as package.json, so CI and a developer machine run the same stack.
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+      - name: Start the local Supabase stack (applies every migration)
+        run: supabase start
+      - name: SQL verify scripts
+        run: npm run verify:sql
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser tests
+        run: npm run test:e2e
+      - name: Keep the browser test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-results
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop the stack
+        if: always()
+        run: supabase stop --no-backup

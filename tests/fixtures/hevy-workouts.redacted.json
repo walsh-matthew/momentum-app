@@ -1,0 +1,251 @@
+{
+    "page": 1,
+    "page_count": 111,
+    "workouts": [
+         {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "title": "Upper A (Heavy Bench)",
+              "routine_id": "00000000-0000-0000-0000-000000000002",
+              "description": "",
+              "start_time": "2026-10-19T17:28:34+00:00",
+              "end_time": "2026-10-19T18:12:38+00:00",
+              "updated_at": "2026-10-19T18:12:52.165Z",
+              "created_at": "2026-10-19T18:12:52.165Z",
+              "exercises": [
+                   {
+                        "index": 0,
+                        "title": "Rowing Machine",
+                        "notes": null,
+                        "exercise_template_id": "00000000",
+                        "superset_id": null,
+                        "sets": [
+                            {
+                                "index": 0,
+                                "type": "normal",
+                                "weight_kg": null,
+                                "reps": null,
+                                "distance_meters": 0,
+                                "duration_seconds": 600,
+                                "rpe": null,
+                                "custom_metric": null
+                            }
+                        ]
+                   },
+                   {
+                        "index": 1,
+                        "title": "Bench Press (Barbell)",
+                        "notes": null,
+                        "exercise_template_id": "00000000",
+                        "superset_id": null,
+                        "sets": [
+                            {
+                                "index": 0,
+                                "type": "normal",
+                                "weight_kg": 61.235042773811365,
+                                "reps": 5,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 1,
+                                "type": "normal",
+                                "weight_kg": 61.235042773811365,
+                                "reps": 5,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 2,
+                                "type": "normal",
+                                "weight_kg": 61.235042773811365,
+                                "reps": 5,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 3,
+                                "type": "normal",
+                                "weight_kg": 61.235042773811365,
+                                "reps": 5,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            }
+                        ]
+                   },
+                   {
+                        "index": 2,
+                        "title": "Incline Bench Press (Dumbbell)",
+                        "notes": null,
+                        "exercise_template_id": "00000000",
+                        "superset_id": null,
+                        "sets": [
+                            {
+                                "index": 0,
+                                "type": "normal",
+                                "weight_kg": 9.071858188712795,
+                                "reps": 10,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 1,
+                                "type": "normal",
+                                "weight_kg": 9.071858188712795,
+                                "reps": 10,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 2,
+                                "type": "normal",
+                                "weight_kg": 9.071858188712795,
+                                "reps": 10,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            }
+                        ]
+                   },
+                   {
+                        "index": 3,
+                        "title": "Chest Supported Incline Row (Dumbbell)",
+                        "notes": null,
+                        "exercise_template_id": "00000000",
+                        "superset_id": null,
+                        "sets": [
+                            {
+                                "index": 0,
+                                "type": "normal",
+                                "weight_kg": 9.071858188712795,
+                                "reps": 10,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 1,
+                                "type": "normal",
+                                "weight_kg": 9.071858188712795,
+                                "reps": 10,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 2,
+                                "type": "normal",
+                                "weight_kg": 9.071858188712795,
+                                "reps": 10,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 3,
+                                "type": "normal",
+                                "weight_kg": 9.071858188712795,
+                                "reps": 10,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            }
+                        ]
+                   },
+                   {
+                        "index": 4,
+                        "title": "Seated Overhead Press (Barbell)",
+                        "notes": null,
+                        "exercise_template_id": "00000000",
+                        "superset_id": null,
+                        "sets": [
+                            {
+                                "index": 0,
+                                "type": "normal",
+                                "weight_kg": 22.67964547178199,
+                                "reps": 8,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 1,
+                                "type": "normal",
+                                "weight_kg": 22.67964547178199,
+                                "reps": 8,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 2,
+                                "type": "normal",
+                                "weight_kg": 22.67964547178199,
+                                "reps": 8,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            }
+                        ]
+                   },
+                   {
+                        "index": 5,
+                        "title": "Face Pull",
+                        "notes": null,
+                        "exercise_template_id": "00000000",
+                        "superset_id": null,
+                        "sets": [
+                            {
+                                "index": 0,
+                                "type": "normal",
+                                "weight_kg": 6.8038936415345965,
+                                "reps": 20,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 1,
+                                "type": "normal",
+                                "weight_kg": 6.8038936415345965,
+                                "reps": 20,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            },
+                            {
+                                "index": 2,
+                                "type": "normal",
+                                "weight_kg": 6.8038936415345965,
+                                "reps": 20,
+                                "distance_meters": null,
+                                "duration_seconds": null,
+                                "rpe": null,
+                                "custom_metric": null
+                            }
+                        ]
+                   }
+              ]
+         }
+    ]
+}

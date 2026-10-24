@@ -11,9 +11,11 @@
 //   system never marks one done on their behalf (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6). This
 //   module only inserts. It never updates or deletes a row, so it has no code path to status or
 //   completed_at, and migration 002 would refuse it anyway.
-// - It runs as the signed-in user through the anon-key client, so row level security scopes every read
-//   and write to their rows, and user_id is taken from the verified session, never from the payload.
-//   Code with no session (a signed webhook, MOM-38) cannot use it yet; see BACKLOG.md.
+// - ingestActivities() runs as the signed-in user through the anon-key client, so row level security scopes
+//   every read and write to their rows, and user_id is taken from the verified session, never from the payload.
+// - The core (runBatch) is shared with lib/services/ingestionForUser.ts (MOM-38), the entry point for code with no
+//   session. That file alone holds the service-role client, so this one can be checked for never using it. The
+//   core is the same code for both, so the same rules apply: it only inserts, and every task is 'todo'.
 // - It is idempotent: a provider and external id make at most one task per user (migration 007), so a
 //   webhook retry or an overlapping poll creates nothing new.
 // - Activity it cannot place is set aside by a fixed rule, reported in the result and logged. Nothing
@@ -21,9 +23,10 @@
 
 import { z } from 'zod';
 import { SUPPORTED_PROVIDER_IDS } from '@/lib/integrations/catalog';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { currentPlanWeek } from '@/lib/utils/velocity';
-import { PLAN_WEEKS, type MicroTaskInsert, type TaskSourceEvidence } from '@/types/database.types';
+import { PLAN_WEEKS, type Database, type MicroTaskInsert, type TaskSourceEvidence } from '@/types/database.types';
 import type {
   IngestionItemResult,
   IngestionOutcome,
@@ -154,11 +157,32 @@ function logSet(aside: IngestionItemResult): void {
 // comes from an adapter reading external JSON, or from a direct Server Action POST; each item is
 // validated on its own, so one bad item does not hold up the rest.
 export async function ingestActivities(rawActivities: unknown): Promise<ServiceResult<IngestionSummary>> {
+  // Checked first, so a bad batch is refused before the session is asked about.
+  const refused = refuseBadBatch(rawActivities);
+  if (refused) return refused;
+  if ((rawActivities as unknown[]).length === 0) return runBatch(null, '', rawActivities as unknown[]);
+
+  const supabase = await createSupabaseServerClient();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) return { ok: false, error: 'Sign in to sync your activity.' };
+  return runBatch(supabase as unknown as Db, auth.user.id, rawActivities as unknown[]);
+}
+
+export type Db = SupabaseClient<Database>;
+
+// Exported for lib/services/ingestionForUser.ts, the session-less entry point, which is the only other caller.
+export function refuseBadBatch(rawActivities: unknown): { ok: false; error: string } | null {
   if (!Array.isArray(rawActivities)) return { ok: false, error: 'Invalid activity batch.' };
   if (rawActivities.length > MAX_ACTIVITIES_PER_BATCH) {
     return { ok: false, error: `Send at most ${MAX_ACTIVITIES_PER_BATCH} activities at a time.` };
   }
+  return null;
+}
 
+// The shared core. `db` is the user's own session client or the service-role client, and `userId` is the user the
+// batch is for in both cases; nothing below reads a user id from the payload. `db` is null only for an empty
+// batch, which touches nothing.
+export async function runBatch(db: Db | null, userId: string, rawActivities: unknown[]): Promise<ServiceResult<IngestionSummary>> {
   const results: IngestionItemResult[] = rawActivities.map((_, index) => ({
     index,
     provider: null,
@@ -181,12 +205,8 @@ export async function ingestActivities(rawActivities: unknown): Promise<ServiceR
     };
   };
 
-  if (rawActivities.length === 0) return { ok: true, data: summarize() };
-
-  const supabase = await createSupabaseServerClient();
-  const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError || !auth.user) return { ok: false, error: 'Sign in to sync your activity.' };
-  const userId = auth.user.id;
+  if (rawActivities.length === 0 || db === null) return { ok: true, data: summarize() };
+  const supabase = db;
 
   // 1. Validate each item and set aside what a provider handler or a fixed rule rejects.
   const candidates: Array<{ index: number; activity: ValidActivity; draft: TaskDraft }> = [];
