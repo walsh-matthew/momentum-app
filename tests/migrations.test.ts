@@ -9,17 +9,37 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  BALANCE_MENTIONS,
+  CAPACITY_UNITS,
+  CARRY_OVER_KINDS,
+  CELEBRATION_LEVELS,
+  CHECK_IN_MODES,
+  COMPLETED_VIA,
+  COMPLETION_MODES,
   CONSTRAINTS,
+  CORRECTION_ACTIONS,
   CREDENTIAL_STATUSES,
   GOAL_CHANNEL_STATUSES,
+  GOAL_SHAPES,
+  GOAL_STATES,
   GOAL_TYPES,
+  MEASURES,
   PACES,
+  PERIOD_KINDS,
   INTEGRATION_AUTH_TYPES,
   LLM_FEATURES,
   LLM_OUTCOMES,
+  REMINDER_MODES,
+  RETURN_KINDS,
+  REVIEW_DEPTHS,
+  REVIEW_PLANNING_MODES,
   SHIFT_TYPES,
+  SOURCE_KINDS,
+  TARGET_ROLES,
   TASK_STATUSES,
   TASK_TYPES,
+  TONES,
+  WORK_ITEM_KINDS,
 } from '@/types/database.types';
 
 const DIR = join(process.cwd(), 'supabase', 'migrations');
@@ -400,5 +420,262 @@ describe('LLM usage logs and limits (migration 011, MOM-73)', () => {
   it('only adds a usage table: it does not touch tasks, status or completed_at', () => {
     expect(sql).not.toMatch(/\b(status|completed_at)\b/i);
     expect(sql).not.toMatch(/micro_tasks|task_rebalance_history|goal_channels/);
+  });
+});
+
+describe('the goal model tables (migration 013, MOM-107)', () => {
+  const sql = sqlOf('013');
+  const NEW_TABLES = [
+    'person_settings',
+    'person_day_types',
+    'person_priorities',
+    'person_handling_rules',
+    'goals',
+    'targets',
+    'work_items',
+    'work_item_steps',
+    'sources',
+    'target_sources',
+    'entries',
+    'entry_corrections',
+    'period_snapshots',
+  ] as const;
+  // What each API role is granted, as approved by the owner. anon gets nothing anywhere.
+  const APPROVED: Record<string, { authenticated: string; service_role: string }> = {
+    person_settings: { authenticated: 'select, insert, update', service_role: '' },
+    person_day_types: { authenticated: 'select, insert, update, delete', service_role: '' },
+    person_priorities: { authenticated: 'select, insert, update, delete', service_role: '' },
+    person_handling_rules: { authenticated: 'select, insert, update, delete', service_role: '' },
+    goals: { authenticated: 'select, insert, update', service_role: '' },
+    targets: { authenticated: 'select, insert, update', service_role: '' },
+    work_items: { authenticated: 'select, insert, update, delete', service_role: '' },
+    work_item_steps: { authenticated: 'select, insert, update, delete', service_role: '' },
+    sources: { authenticated: 'select, insert, update, delete', service_role: 'select' },
+    target_sources: { authenticated: 'select, insert, delete', service_role: 'select' },
+    entries: { authenticated: 'select, insert', service_role: 'select, insert, update' },
+    entry_corrections: { authenticated: 'select, insert, update, delete', service_role: '' },
+    period_snapshots: { authenticated: 'select, insert', service_role: '' },
+  };
+  const grantsOf = (table: string, role: string) =>
+    [...sql.matchAll(new RegExp(`grant ([a-z, ]+) on table public\\.${table} to ${role}\\b`, 'g'))].map((m) => m[1]).join(', ');
+  const policiesOn = (table: string) =>
+    [...sql.matchAll(new RegExp(`create policy "[^"]+" on public\\.${table}\\s+for (select|insert|update|delete|all)`, 'g'))].map((m) => m[1]);
+  const bodyOf = (table: string) => new RegExp(`create table public\\.${table} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1] ?? '';
+
+  it('creates exactly the 13 approved tables, each with row level security', () => {
+    expect([...sql.matchAll(/create table public\.([a-z_]+)/g)].map((m) => m[1])).toEqual([...NEW_TABLES]);
+    for (const table of NEW_TABLES) {
+      expect(sql).toMatch(new RegExp(`alter table public\\.${table}\\s+enable row level security`));
+    }
+  });
+
+  it('adds only new tables: no old table, function or row is changed', () => {
+    const altered = [...sql.matchAll(/alter table public\.([a-z_]+)/g)].map((m) => m[1]);
+    expect(altered.filter((t) => !(NEW_TABLES as readonly string[]).includes(t))).toEqual([]);
+    expect(sql).not.toMatch(/\b(drop|truncate|delete from|insert into|update public)\b/i);
+    expect(sql).not.toMatch(/create (or replace )?function/i);
+    expect(sql).not.toMatch(/on public\.(goal_channels|micro_tasks|task_rebalance_history|connected_apps|users)\b/);
+    expect(sql).not.toMatch(/references public\.(goal_channels|micro_tasks|task_rebalance_history|connected_apps)\b/);
+  });
+
+  it('takes every default privilege back (TRUNCATE, REFERENCES and TRIGGER included), then grants only the approved', () => {
+    const revoke = /revoke all on table([\s\S]*?)from anon, authenticated, service_role/i.exec(sql)?.[1] ?? '';
+    expect([...revoke.matchAll(/public\.([a-z_]+)/g)].map((m) => m[1])).toEqual([...NEW_TABLES]);
+    for (const table of NEW_TABLES) {
+      expect(grantsOf(table, 'authenticated'), `${table} authenticated`).toBe(APPROVED[table].authenticated);
+      expect(grantsOf(table, 'service_role'), `${table} service_role`).toBe(APPROVED[table].service_role);
+    }
+  });
+
+  it('grants nothing to anon or public, and never truncate, references, trigger or all', () => {
+    expect(sql).not.toMatch(/grant [^;]*\bto\b[^;]*\b(anon|public)\b/i);
+    expect(sql).not.toMatch(/grant [^;]*\b(truncate|references|trigger|all)\b/i);
+  });
+
+  it('has a policy for each operation a person is granted, and no other', () => {
+    for (const table of NEW_TABLES) {
+      expect(policiesOn(table).sort(), table).toEqual(APPROVED[table].authenticated.split(', ').sort());
+    }
+    expect(sql).not.toMatch(/create policy[^;]*\bto (anon|public|service_role)\b/i);
+    expect([...sql.matchAll(/create policy/g)]).toHaveLength(
+      NEW_TABLES.reduce((sum, t) => sum + APPROVED[t].authenticated.split(', ').length, 0),
+    );
+  });
+
+  it('period_snapshots are append-only: select and insert for the person, nothing for the service role', () => {
+    expect(grantsOf('period_snapshots', 'authenticated')).toBe('select, insert');
+    expect(grantsOf('period_snapshots', 'service_role')).toBe('');
+    expect(policiesOn('period_snapshots').sort()).toEqual(['insert', 'select']);
+  });
+
+  it('entries: a person writes only through their own manual sources, and nobody deletes', () => {
+    expect(sql).toMatch(/create policy "entries_insert_own_manual" on public\.entries\s+for insert to authenticated/);
+    expect(sql).toMatch(/s\.id = entries\.source_id and s\.user_id = entries\.user_id and s\.kind = 'manual'/);
+    expect(policiesOn('entries').sort()).toEqual(['insert', 'select']);
+    expect(grantsOf('entries', 'authenticated')).not.toMatch(/update|delete/);
+    expect(grantsOf('entries', 'service_role')).not.toMatch(/delete/);
+  });
+
+  it('goals and targets cannot be deleted by an API role: a person parks a goal', () => {
+    for (const table of ['goals', 'targets']) {
+      expect(grantsOf(table, 'authenticated')).not.toMatch(/delete/);
+      expect(policiesOn(table)).not.toContain('delete');
+    }
+  });
+
+  it('every table is owned by one person and removed with the account', () => {
+    for (const table of NEW_TABLES) {
+      expect(bodyOf(table), table).toMatch(/user_id\s+uuid (primary key |not null )?references public\.users \(id\) on delete cascade/);
+    }
+  });
+
+  it('every table with an updated_at column has the trigger that sets it', () => {
+    for (const table of NEW_TABLES) {
+      if (/\bupdated_at\b/.test(bodyOf(table))) {
+        expect(sql, table).toMatch(new RegExp(`create trigger ${table}_set_updated_at before update on public\\.${table}`));
+      }
+    }
+  });
+
+  it("rows that point at another table use a same-owner key, so one person cannot link to another person's row", () => {
+    for (const parent of ['goals', 'targets', 'sources', 'work_items']) {
+      expect(sql).toMatch(new RegExp(`constraint ${parent}_id_user_unique unique \\(id, user_id\\)`));
+    }
+    expect(sql).toMatch(/foreign key \(goal_id, user_id\) references public\.goals \(id, user_id\)/);
+    expect(sql).toMatch(/foreign key \(target_id, user_id\) references public\.targets \(id, user_id\)/);
+    expect(sql).toMatch(/foreign key \(source_id, user_id\) references public\.sources \(id, user_id\)/);
+    expect(sql).toMatch(/foreign key \(work_item_id, user_id\)\s+references public\.work_items \(id, user_id\)/);
+  });
+
+  describe('never assume anything about the person', () => {
+    it('person_settings: every time anchor and setting is nullable with no default', () => {
+      const settings = bodyOf('person_settings');
+      for (const column of [
+        'time_zone', 'week_start', 'day_end', 'tone', 'reminders', 'check_ins', 'celebrations', 'balance_mentions',
+        'review_depth', 'review_planning', 'quiet_times', 'slipping_periods', 'planning_weekday', 'planning_time',
+      ]) {
+        const line = new RegExp(`^\\s{2}${column}\\s+[a-z]+\\s*,`, 'm').exec(settings)?.[0];
+        expect(line, column).toBeDefined();
+        expect(line, column).not.toMatch(/not null|default/i);
+      }
+    });
+    it("a goal's start date is required with no default, and so is a deadline task's \"date can move\" answer", () => {
+      expect(bodyOf('goals')).toMatch(/^\s{2}start_date\s+date not null,/m);
+      expect(bodyOf('work_items')).toMatch(/^\s{2}date_can_move\s+boolean,/m);
+      expect(sql).toMatch(/constraint work_items_date_can_move_matches_kind check \(\(kind = 'deadline_task'\) = \(date_can_move is not null\)\)/);
+    });
+    it('no column has a default time zone, week start or day end', () => {
+      expect(sql).not.toMatch(/\b(time_zone|week_start|day_end)\b[^,\n]*\bdefault\b/i);
+    });
+  });
+
+  describe('enum lists match types/database.types.ts', () => {
+    it('person_settings and person_day_types', () => {
+      expect(inList(sql, 'person_settings_tone_check')).toEqual([...TONES]);
+      expect(inList(sql, 'person_settings_reminders_check')).toEqual([...REMINDER_MODES]);
+      expect(inList(sql, 'person_settings_check_ins_check')).toEqual([...CHECK_IN_MODES]);
+      expect(inList(sql, 'person_settings_celebrations_check')).toEqual([...CELEBRATION_LEVELS]);
+      expect(inList(sql, 'person_settings_balance_mentions_check')).toEqual([...BALANCE_MENTIONS]);
+      expect(inList(sql, 'person_settings_review_depth_check')).toEqual([...REVIEW_DEPTHS]);
+      expect(inList(sql, 'person_settings_review_planning_check')).toEqual([...REVIEW_PLANNING_MODES]);
+      expect(inList(sql, 'person_day_types_capacity_unit_check')).toEqual([...CAPACITY_UNITS]);
+    });
+    it('goals', () => {
+      expect(inList(sql, 'goals_shape_check')).toEqual([...GOAL_SHAPES]);
+      expect(inList(sql, 'goals_state_check')).toEqual([...GOAL_STATES]);
+      expect(inList(sql, 'goals_return_kind_check')).toEqual([...RETURN_KINDS]);
+      expect(inList(sql, 'goals_completion_mode_check')).toEqual([...COMPLETION_MODES]);
+      expect(inList(sql, 'goals_tone_check')).toEqual([...TONES]);
+    });
+    it('targets and their snapshots', () => {
+      for (const table of ['targets', 'period_snapshots']) {
+        expect(inList(sql, `${table}_measure_check`)).toEqual([...MEASURES]);
+        expect(inList(sql, `${table}_role_check`)).toEqual([...TARGET_ROLES]);
+        expect(inList(sql, `${table}_period_kind_check`)).toEqual([...PERIOD_KINDS]);
+        expect(inList(sql, `${table}_carry_over_kind_check`)).toEqual([...CARRY_OVER_KINDS]);
+      }
+      expect(inList(sql, 'targets_completion_mode_check')).toEqual([...COMPLETION_MODES]);
+      expect(inList(sql, 'targets_tone_check')).toEqual([...TONES]);
+    });
+    it('work items, steps, sources and corrections', () => {
+      expect(inList(sql, 'work_items_kind_check')).toEqual([...WORK_ITEM_KINDS]);
+      expect(inList(sql, 'work_items_completed_via_check')).toEqual([...COMPLETED_VIA]);
+      expect(inList(sql, 'work_item_steps_completed_via_check')).toEqual([...COMPLETED_VIA]);
+      expect(inList(sql, 'sources_kind_check')).toEqual([...SOURCE_KINDS]);
+      expect(inList(sql, 'entry_corrections_action_check')).toEqual([...CORRECTION_ACTIONS]);
+    });
+  });
+
+  describe('the rules the engine and the services rely on', () => {
+    it('a correction is unique per source and source record id, with no foreign key to entries', () => {
+      expect(sql).toMatch(/constraint entry_corrections_source_record_unique unique \(source_id, source_record_id\)/);
+      expect(bodyOf('entry_corrections')).not.toMatch(/references public\.entries/);
+    });
+    it('a resync of the same record is the same entry', () => {
+      expect(sql).toMatch(/constraint entries_target_source_record_unique unique \(target_id, source_id, source_record_id\)/);
+    });
+    it('entries carry only a raw value: no total, count or sum column', () => {
+      const body = bodyOf('entries');
+      const columns = [...body.matchAll(/^\s{2}([a-z_]+)\s+(uuid|text|timestamptz|numeric|jsonb)\b/gm)].map((m) => m[1]);
+      expect(columns).toEqual([
+        'id', 'user_id', 'target_id', 'source_id', 'source_record_id', 'work_item_id', 'occurred_at', 'value', 'evidence', 'created_at', 'updated_at',
+      ]);
+      expect([...body.matchAll(/^\s{2}([a-z_]+)\s+numeric\b/gm)].map((m) => m[1])).toEqual(['value']);
+    });
+    it('history is never cut: the links to goals, targets and sources have no ON DELETE action', () => {
+      for (const constraint of ['targets_goal_fk', 'work_items_goal_fk', 'work_items_target_fk', 'entries_target_fk', 'entries_source_fk', 'period_snapshots_target_fk']) {
+        const fk = new RegExp(`constraint ${constraint} foreign key[^;]*?references public\\.[a-z_]+ \\(id, user_id\\)(\\s+on delete)?`).exec(sql);
+        expect(fk, constraint).not.toBeNull();
+        expect(fk?.[1], constraint).toBeUndefined();
+      }
+    });
+    it("a work item's steps go with it, and its entries stay", () => {
+      expect(sql).toMatch(/foreign key \(work_item_id, user_id\)\s+references public\.work_items \(id, user_id\) on delete cascade/);
+      expect(sql).toMatch(/references public\.work_items \(id, user_id\)\s+on delete set null \(work_item_id\)/);
+    });
+    it("a snapshot copies the target's values and the anchors in force, is unique per target and period, and holds no result", () => {
+      expect(sql).toMatch(/constraint period_snapshots_target_period_unique unique \(target_id, period_start\)/);
+      const body = bodyOf('period_snapshots');
+      for (const column of ['time_zone', 'week_start', 'day_end', 'measure', 'role', 'period_kind', 'floor', 'aspiration', 'qualifying_threshold', 'carry_over_kind']) {
+        expect(body, column).toMatch(new RegExp(`^\\s{2}${column}\\s`, 'm'));
+      }
+      expect(body).not.toMatch(/^\s{2}(total|result|count|progress|score)\w*\s/m);
+    });
+    it('has the other CHECK constraints the services and the verify script rely on', () => {
+      for (const name of [
+        'goals_end_date_matches_shape', 'goals_parked_return', 'targets_effort_has_floor', 'targets_aspiration_above_floor',
+        'targets_cumulative_needs_deadline', 'targets_due_date_matches_period', 'targets_slots_match_period',
+        'work_items_habit_has_target', 'work_items_due_date_matches_kind', 'work_items_date_can_move_matches_kind',
+        'work_items_habit_never_completes', 'entries_value_positive', 'entries_evidence_is_object',
+        'period_snapshots_week_start_needed', 'sources_provider_matches_kind',
+      ]) {
+        expect(sql, name).toMatch(new RegExp(`constraint ${name}\\b`));
+      }
+    });
+  });
+});
+
+describe('the grants allow-list covers the goal model tables (supabase/verify/900_table_grants.sql)', () => {
+  const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8').replace(/--.*$/gm, '');
+  const entry = (table: string, role: string) => new RegExp(`\\('${table}',\\s+'${role}',\\s+'([A-Z,]*)'\\)`).exec(allow)?.[1];
+
+  it.each([
+    ['person_settings', 'SELECT,INSERT,UPDATE', ''],
+    ['person_day_types', 'SELECT,INSERT,UPDATE,DELETE', ''],
+    ['person_priorities', 'SELECT,INSERT,UPDATE,DELETE', ''],
+    ['person_handling_rules', 'SELECT,INSERT,UPDATE,DELETE', ''],
+    ['goals', 'SELECT,INSERT,UPDATE', ''],
+    ['targets', 'SELECT,INSERT,UPDATE', ''],
+    ['work_items', 'SELECT,INSERT,UPDATE,DELETE', ''],
+    ['work_item_steps', 'SELECT,INSERT,UPDATE,DELETE', ''],
+    ['sources', 'SELECT,INSERT,UPDATE,DELETE', 'SELECT'],
+    ['target_sources', 'SELECT,INSERT,DELETE', 'SELECT'],
+    ['entries', 'SELECT,INSERT', 'SELECT,INSERT,UPDATE'],
+    ['entry_corrections', 'SELECT,INSERT,UPDATE,DELETE', ''],
+    ['period_snapshots', 'SELECT,INSERT', ''],
+  ])('%s: anon nothing, authenticated %s, service_role %s', (table, authenticated, service) => {
+    expect(entry(table, 'anon')).toBe('');
+    expect(entry(table, 'authenticated')).toBe(authenticated);
+    expect(entry(table, 'service_role')).toBe(service);
   });
 });
