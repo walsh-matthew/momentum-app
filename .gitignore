@@ -5,8 +5,15 @@ node_modules/
 next-env.d.ts
 *.tsbuildinfo
 supabase/.temp/
+supabase/.branches/
+supabase/snippets/
+
+# Rewritten by `next dev` (MOM-68)
+AGENTS.md
 .vercel
-.env*
+.env
+.env.*
+!.env.example
 
 # Playwright output (npm run test:e2e)
 test-results/
