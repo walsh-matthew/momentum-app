@@ -64,6 +64,35 @@ export async function confirmationLinkFor(email: string): Promise<string> {
   throw new Error(`No confirmation email for ${email} reached the local Mailpit inbox within 30 seconds.`);
 }
 
+// The password reset link in a message sent to `email`: the Auth server's verify link whose type is `recovery`. A
+// message that is not a reset (the sign-up confirmation) has `type=signup`, so it is skipped. Polls like the above.
+export async function recoveryLinkFor(email: string): Promise<string> {
+  const base = mailpit();
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const search = await fetch(`${base}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`);
+    if (search.ok) {
+      const { messages } = (await search.json()) as { messages?: { ID: string }[] };
+      for (const { ID } of messages ?? []) {
+        const detail = await fetch(`${base}/api/v1/message/${ID}`);
+        const body = (await detail.json()) as { Text?: string; HTML?: string };
+        const text = `${body.Text ?? ''}\n${body.HTML ?? ''}`.replace(/&amp;/g, '&');
+        const link = text.match(/https?:\/\/[^\s"'<>]*\/auth\/v1\/verify[^\s"'<>]*/g)?.find((l) => /[?&]type=recovery/.test(l));
+        if (link) return link;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`No password reset email for ${email} reached the local Mailpit inbox within 30 seconds.`);
+}
+
+// How many messages the local Mailpit inbox holds for `email`.
+export async function messageCountFor(email: string): Promise<number> {
+  const search = await fetch(`${mailpit()}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`);
+  const { messages } = (await search.json()) as { messages?: unknown[] };
+  return messages?.length ?? 0;
+}
+
 // Fills the sign-in page's form and presses one of its two buttons.
 export async function submitCredentials(page: Page, email: string, password: string, button: 'Sign in' | 'Create account') {
   await page.getByLabel('Email').fill(email);

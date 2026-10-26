@@ -22,17 +22,19 @@ interface NavSidebarProps {
   // True while the plan could not be loaded (FeedState 'load_failed'): both actions need data that was not
   // read, so they stay visible but disabled.
   actionsDisabled?: boolean;
+  // The signed-in user's email, for the account line at the foot of the sidebar; null when there is no session.
+  userEmail?: string | null;
 }
 
 // The desktop sidebar of the home page: the workspace navigation plus the goal channels. Choosing a channel is
 // a button, not a link, because the page only changes its address (?channel=<goal id>) and shows the view it
 // already has. Each button's text is the goal's name only; the count and the bar sit beside it, so its
 // accessible name stays the name.
-export function NavSidebar({ channels, selected, onSelect, onAdjustPace, onNewGoal, progress = [], burnoutRisk = null, actionsDisabled = false }: NavSidebarProps) {
+export function NavSidebar({ channels, selected, onSelect, onAdjustPace, onNewGoal, progress = [], burnoutRisk = null, actionsDisabled = false, userEmail = null }: NavSidebarProps) {
   const byGoal = new Map(progress.map((p) => [p.goalId, p]));
 
   return (
-    <WorkspaceSidebar ariaLabel="Goal channels" active="dashboard" burnoutRisk={burnoutRisk} showPace>
+    <WorkspaceSidebar ariaLabel="Goal channels" active="dashboard" burnoutRisk={burnoutRisk} showPace userEmail={userEmail}>
       <section id="active-goals" className="desktop-channel-list" aria-labelledby="active-goals-heading">
         <div className="sidebar-section-heading">
           <h2 id="active-goals-heading" className="sidebar-label">

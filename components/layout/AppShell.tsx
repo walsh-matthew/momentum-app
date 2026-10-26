@@ -77,6 +77,7 @@ export function AppShell({ views, connectedApps, moveChains, progress = [], user
           progress={progress}
           burnoutRisk={burnoutRisk}
           actionsDisabled={loadFailed}
+          userEmail={userEmail}
         />
         <section className="desktop-workspace" aria-label="Daily workspace">
           <div className="workspace-content">

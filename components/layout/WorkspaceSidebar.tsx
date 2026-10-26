@@ -17,6 +17,8 @@ interface WorkspaceSidebarProps {
   burnoutRisk?: BurnoutRisk | null;
   // Show the pace note in the footer. Only the dashboard has a channel to say it about.
   showPace?: boolean;
+  // The signed-in user's email, shown above the sign-out button; null when there is no session.
+  userEmail?: string | null;
   // The goal channel list, on the home page. Other pages leave it out.
   children?: ReactNode;
 }
@@ -31,7 +33,7 @@ const PACE_NOTES: Record<BurnoutRisk, string> = {
 
 // The desktop sidebar (from 1200px; below that it is hidden and the mobile header and goal cards take over):
 // logo, burnout badge, workspace navigation, then whatever the page puts in `children`. No data access.
-export function WorkspaceSidebar({ ariaLabel, active, burnoutRisk = null, showPace = false, children }: WorkspaceSidebarProps) {
+export function WorkspaceSidebar({ ariaLabel, active, burnoutRisk = null, showPace = false, userEmail = null, children }: WorkspaceSidebarProps) {
   const link = (page: WorkspacePage) => (active === page ? ('page' as const) : undefined);
 
   return (
@@ -78,6 +80,12 @@ export function WorkspaceSidebar({ ariaLabel, active, burnoutRisk = null, showPa
           <p className="sidebar-footer">
             <span className="sidebar-footer-dot" aria-hidden="true" />
             {burnoutRisk ? PACE_NOTES[burnoutRisk] : 'Choose a channel to see your pace'}
+          </p>
+        )}
+        {userEmail && (
+          <p className="sidebar-account" title={userEmail}>
+            <span className="sidebar-label">Signed in as</span>
+            <span className="sidebar-account-email">{userEmail}</span>
           </p>
         )}
         <SignOutButton className="pt-1" />

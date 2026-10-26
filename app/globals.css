@@ -506,6 +506,7 @@ button:disabled {
     z-index: 15;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 10px;
     margin: 0 -16px;
@@ -513,6 +514,23 @@ button:disabled {
     border-bottom: 1px solid rgb(255 255 255 / 6%);
     background: rgb(17 21 19 / 92%);
     backdrop-filter: blur(10px);
+  }
+  /* Who is signed in, and the way to sign out: a second row of the sticky header, full width under the logo row. */
+  .mobile-account {
+    display: flex;
+    flex: 0 0 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: -4px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .mobile-account-email {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .mobile-brand {
     display: inline-flex;
@@ -870,6 +888,20 @@ button:disabled {
     padding: 15px 9px 3px;
     color: #a2ada5;
     font-size: 12px;
+  }
+  /* Who is signed in, above the sign-out button (WorkspaceSidebar). The email can be long, so it truncates. */
+  .sidebar-account {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 12px 0;
+  }
+  .sidebar-account-email {
+    overflow: hidden;
+    color: var(--foreground);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .sidebar-footer-dot {
     width: 7px;

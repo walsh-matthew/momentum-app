@@ -65,6 +65,52 @@ export type LlmFeature = (typeof LLM_FEATURES)[number];
 export const LLM_OUTCOMES = ['pending', 'ok', 'refused', 'provider_rate_limited', 'unavailable', 'bad_output', 'not_configured'] as const;
 export type LlmOutcome = (typeof LLM_OUTCOMES)[number];
 
+// The goal model (migration 013, MOM-107; docs/DOMAIN_MODEL.md section 1). Match the CHECK lists of the new tables.
+export const GOAL_SHAPES = ['ongoing', 'finite', 'project'] as const;
+export type GoalShape = (typeof GOAL_SHAPES)[number];
+export const GOAL_STATES = ['active', 'parked'] as const;
+export type GoalState = (typeof GOAL_STATES)[number];
+// How a parked goal comes back: on a date, when a condition the person put in words holds, or only when asked.
+export const RETURN_KINDS = ['date', 'condition', 'on_request'] as const;
+export type ReturnKind = (typeof RETURN_KINDS)[number];
+export const COMPLETION_MODES = ['auto', 'confirm', 'manual'] as const;
+export type CompletionMode = (typeof COMPLETION_MODES)[number];
+export const TONES = ['gentle', 'middle', 'direct'] as const;
+export type Tone = (typeof TONES)[number];
+export const MEASURES = ['count', 'quantity', 'time', 'checklist'] as const;
+export type Measure = (typeof MEASURES)[number];
+export const TARGET_ROLES = ['effort', 'outcome'] as const;
+export type TargetRole = (typeof TARGET_ROLES)[number];
+export const PERIOD_KINDS = ['weekly', 'day_slots', 'deadline'] as const;
+export type PeriodKind = (typeof PERIOD_KINDS)[number];
+// habit: a shortfall never rolls into the next period. cumulative: it stays owed until the deadline.
+export const CARRY_OVER_KINDS = ['habit', 'cumulative'] as const;
+export type CarryOverKind = (typeof CARRY_OVER_KINDS)[number];
+export const WORK_ITEM_KINDS = ['habit', 'milestone', 'deadline_task'] as const;
+export type WorkItemKind = (typeof WORK_ITEM_KINDS)[number];
+// Who completed a work item or step: the person, or a source (an automatic completion, shown and undoable).
+export const COMPLETED_VIA = ['person', 'source'] as const;
+export type CompletedVia = (typeof COMPLETED_VIA)[number];
+export const SOURCE_KINDS = ['synced', 'manual'] as const;
+export type SourceKind = (typeof SOURCE_KINDS)[number];
+// The person's word on one source record: remove it (restorable) or count it though it is below the threshold.
+export const CORRECTION_ACTIONS = ['hide', 'count_anyway'] as const;
+export type CorrectionAction = (typeof CORRECTION_ACTIONS)[number];
+export const CAPACITY_UNITS = ['hours', 'sessions'] as const;
+export type CapacityUnit = (typeof CAPACITY_UNITS)[number];
+export const REMINDER_MODES = ['off', 'tied_to_plan'] as const;
+export type ReminderMode = (typeof REMINDER_MODES)[number];
+export const CHECK_IN_MODES = ['never', 'end_of_day', 'end_of_week'] as const;
+export type CheckInMode = (typeof CHECK_IN_MODES)[number];
+export const CELEBRATION_LEVELS = ['low_key', 'medium', 'big'] as const;
+export type CelebrationLevel = (typeof CELEBRATION_LEVELS)[number];
+export const BALANCE_MENTIONS = ['weekly_planning', 'near_deadlines', 'leave_to_me'] as const;
+export type BalanceMention = (typeof BALANCE_MENTIONS)[number];
+export const REVIEW_DEPTHS = ['recap_only', 'recap_offer', 'full'] as const;
+export type ReviewDepth = (typeof REVIEW_DEPTHS)[number];
+export const REVIEW_PLANNING_MODES = ['one_sitting', 'separate'] as const;
+export type ReviewPlanningMode = (typeof REVIEW_PLANNING_MODES)[number];
+
 export const TASK_TYPES = [
   'job_search',
   'interview_fill_in',
@@ -145,6 +191,202 @@ export type GoalChannelRow = {
   preferences: GoalPreferences;
   created_at: string;
   updated_at: string;
+};
+
+// ---------------------------------------------------------------------------
+// Goal model rows (migration 013, MOM-107). Dates are 'YYYY-MM-DD' strings, times of day 'HH:MM:SS', and numeric
+// columns are numbers. Type aliases, not interfaces, for the same reason as GoalChannelRow.
+// ---------------------------------------------------------------------------
+
+// One row per person, created by the first setup. Every time anchor and setting is null until the person chooses it:
+// nothing about their life is assumed, and the code supplies the starting values (docs/DOMAIN_MODEL.md section 4.1).
+export type PersonSettingsRow = {
+  user_id: string;
+  time_zone: string | null;
+  // 1 to 7, Monday is 1. A label for the day the person's week starts on.
+  week_start: number | null;
+  day_end: string | null;
+  tone: Tone | null;
+  reminders: ReminderMode | null;
+  check_ins: CheckInMode | null;
+  celebrations: CelebrationLevel | null;
+  balance_mentions: BalanceMention | null;
+  review_depth: ReviewDepth | null;
+  review_planning: ReviewPlanningMode | null;
+  // Null: not asked yet. []: asked, and none.
+  quiet_times: Json[] | null;
+  slipping_periods: number | null;
+  planning_weekday: number | null;
+  planning_time: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PersonDayTypeRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  capacity_unit: CapacityUnit | null;
+  capacity_amount: number | null;
+  reminder_time: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PersonPriorityRow = {
+  id: string;
+  user_id: string;
+  label: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PersonHandlingRuleRow = {
+  id: string;
+  user_id: string;
+  rule_text: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GoalRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  why: string | null;
+  start_date: string;
+  shape: GoalShape;
+  end_date: string | null;
+  block_weeks: number | null;
+  state: GoalState;
+  return_kind: ReturnKind | null;
+  return_date: string | null;
+  return_note: string | null;
+  completion_mode: CompletionMode | null;
+  tone: Tone | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TargetRow = {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  title: string;
+  measure: Measure;
+  unit: string | null;
+  role: TargetRole;
+  period_kind: PeriodKind;
+  due_date: string | null;
+  // day_slots only: the weekdays the person named, 1 to 7 (Monday is 1).
+  slot_weekdays: number[] | null;
+  floor: number | null;
+  aspiration: number | null;
+  qualifying_threshold: number | null;
+  carry_over_kind: CarryOverKind;
+  completion_mode: CompletionMode | null;
+  tone: Tone | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkItemRow = {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  target_id: string | null;
+  kind: WorkItemKind;
+  title: string;
+  sort_order: number;
+  due_date: string | null;
+  date_can_move: boolean | null;
+  estimate_minutes: number | null;
+  completed_at: string | null;
+  completed_via: CompletedVia | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkItemStepRow = {
+  id: string;
+  user_id: string;
+  work_item_id: string;
+  title: string;
+  sort_order: number;
+  // For display. Checklist progress is computed from entries: a tick writes a manual entry whose source_record_id
+  // is this step's id.
+  completed_at: string | null;
+  completed_via: CompletedVia | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SourceRow = {
+  id: string;
+  user_id: string;
+  kind: SourceKind;
+  // Required for a synced source, null for a manual one.
+  provider: ExternalProviderId | null;
+  label: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TargetSourceRow = {
+  target_id: string;
+  source_id: string;
+  user_id: string;
+  created_at: string;
+};
+
+export type EntryRow = {
+  id: string;
+  user_id: string;
+  target_id: string;
+  source_id: string;
+  // The source's own id for the record (a checklist tick uses the step's id).
+  source_record_id: string;
+  work_item_id: string | null;
+  occurred_at: string;
+  // The raw amount: 1 for a count or a tick, the number for a quantity, minutes for time. Never a total.
+  value: number;
+  evidence: Record<string, Json | undefined>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EntryCorrectionRow = {
+  id: string;
+  user_id: string;
+  source_id: string;
+  source_record_id: string;
+  action: CorrectionAction;
+  created_at: string;
+  updated_at: string;
+};
+
+// The target a closed period was judged by, with the time anchors in force, copied when the period closed.
+export type PeriodSnapshotRow = {
+  id: string;
+  user_id: string;
+  target_id: string;
+  period_start: string;
+  period_end: string;
+  time_zone: string;
+  week_start: number | null;
+  day_end: string | null;
+  measure: Measure;
+  unit: string | null;
+  role: TargetRole;
+  period_kind: PeriodKind;
+  slot_weekdays: number[] | null;
+  floor: number | null;
+  aspiration: number | null;
+  qualifying_threshold: number | null;
+  carry_over_kind: CarryOverKind;
+  created_at: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -472,6 +714,562 @@ export type Database = {
           },
         ];
       };
+      // The goal model (migration 013, MOM-107). Only services in lib/services/ touch these tables. A signed-in
+      // person reaches their own rows through RLS; the service role reaches only sources, target_sources and
+      // entries (ingestion without a session).
+      person_settings: {
+        Row: PersonSettingsRow;
+        Insert: {
+          user_id: string;
+          time_zone?: string | null;
+          week_start?: number | null;
+          day_end?: string | null;
+          tone?: Tone | null;
+          reminders?: ReminderMode | null;
+          check_ins?: CheckInMode | null;
+          celebrations?: CelebrationLevel | null;
+          balance_mentions?: BalanceMention | null;
+          review_depth?: ReviewDepth | null;
+          review_planning?: ReviewPlanningMode | null;
+          quiet_times?: Json[] | null;
+          slipping_periods?: number | null;
+          planning_weekday?: number | null;
+          planning_time?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          time_zone?: string | null;
+          week_start?: number | null;
+          day_end?: string | null;
+          tone?: Tone | null;
+          reminders?: ReminderMode | null;
+          check_ins?: CheckInMode | null;
+          celebrations?: CelebrationLevel | null;
+          balance_mentions?: BalanceMention | null;
+          review_depth?: ReviewDepth | null;
+          review_planning?: ReviewPlanningMode | null;
+          quiet_times?: Json[] | null;
+          slipping_periods?: number | null;
+          planning_weekday?: number | null;
+          planning_time?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'person_settings_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: true;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      person_day_types: {
+        Row: PersonDayTypeRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          capacity_unit?: CapacityUnit | null;
+          capacity_amount?: number | null;
+          reminder_time?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          capacity_unit?: CapacityUnit | null;
+          capacity_amount?: number | null;
+          reminder_time?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'person_day_types_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      person_priorities: {
+        Row: PersonPriorityRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          label: string;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          label?: string;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'person_priorities_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      person_handling_rules: {
+        Row: PersonHandlingRuleRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          rule_text: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          rule_text?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'person_handling_rules_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      // No delete for any API role: a person parks a goal.
+      goals: {
+        Row: GoalRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          why?: string | null;
+          // Required, no database default: the person's own date (setup proposes today visibly).
+          start_date: string;
+          shape: GoalShape;
+          end_date?: string | null;
+          block_weeks?: number | null;
+          state?: GoalState;
+          return_kind?: ReturnKind | null;
+          return_date?: string | null;
+          return_note?: string | null;
+          completion_mode?: CompletionMode | null;
+          tone?: Tone | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          why?: string | null;
+          start_date?: string;
+          shape?: GoalShape;
+          end_date?: string | null;
+          block_weeks?: number | null;
+          state?: GoalState;
+          return_kind?: ReturnKind | null;
+          return_date?: string | null;
+          return_note?: string | null;
+          completion_mode?: CompletionMode | null;
+          tone?: Tone | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'goals_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      // No delete for any API role: a target with history stays.
+      targets: {
+        Row: TargetRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          goal_id: string;
+          title: string;
+          measure: Measure;
+          unit?: string | null;
+          role: TargetRole;
+          period_kind: PeriodKind;
+          due_date?: string | null;
+          slot_weekdays?: number[] | null;
+          floor?: number | null;
+          aspiration?: number | null;
+          qualifying_threshold?: number | null;
+          carry_over_kind: CarryOverKind;
+          completion_mode?: CompletionMode | null;
+          tone?: Tone | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          goal_id?: string;
+          title?: string;
+          measure?: Measure;
+          unit?: string | null;
+          role?: TargetRole;
+          period_kind?: PeriodKind;
+          due_date?: string | null;
+          slot_weekdays?: number[] | null;
+          floor?: number | null;
+          aspiration?: number | null;
+          qualifying_threshold?: number | null;
+          carry_over_kind?: CarryOverKind;
+          completion_mode?: CompletionMode | null;
+          tone?: Tone | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'targets_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'targets_goal_fk';
+            columns: ['goal_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'goals';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      work_items: {
+        Row: WorkItemRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          goal_id: string;
+          target_id?: string | null;
+          kind: WorkItemKind;
+          title: string;
+          sort_order?: number;
+          due_date?: string | null;
+          // Required for a deadline task, with no default: the person answers whether the date can move.
+          date_can_move?: boolean | null;
+          estimate_minutes?: number | null;
+          completed_at?: string | null;
+          completed_via?: CompletedVia | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          goal_id?: string;
+          target_id?: string | null;
+          kind?: WorkItemKind;
+          title?: string;
+          sort_order?: number;
+          due_date?: string | null;
+          date_can_move?: boolean | null;
+          estimate_minutes?: number | null;
+          completed_at?: string | null;
+          completed_via?: CompletedVia | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'work_items_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'work_items_goal_fk';
+            columns: ['goal_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'goals';
+            referencedColumns: ['id', 'user_id'];
+          },
+          {
+            foreignKeyName: 'work_items_target_fk';
+            columns: ['target_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'targets';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      work_item_steps: {
+        Row: WorkItemStepRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          work_item_id: string;
+          title: string;
+          sort_order?: number;
+          completed_at?: string | null;
+          completed_via?: CompletedVia | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          work_item_id?: string;
+          title?: string;
+          sort_order?: number;
+          completed_at?: string | null;
+          completed_via?: CompletedVia | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'work_item_steps_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'work_item_steps_item_fk';
+            columns: ['work_item_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'work_items';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      sources: {
+        Row: SourceRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          kind: SourceKind;
+          provider?: ExternalProviderId | null;
+          label: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          kind?: SourceKind;
+          provider?: ExternalProviderId | null;
+          label?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'sources_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      // The person's binding of a source to a target. A binding has no update: it is added or removed.
+      target_sources: {
+        Row: TargetSourceRow;
+        Insert: {
+          target_id: string;
+          source_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: 'target_sources_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'target_sources_target_fk';
+            columns: ['target_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'targets';
+            referencedColumns: ['id', 'user_id'];
+          },
+          {
+            foreignKeyName: 'target_sources_source_fk';
+            columns: ['source_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'sources';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      // Raw records, never totals. A signed-in person inserts only through their own manual sources and cannot
+      // update or delete (a removal is an entry_corrections row); the service role inserts and updates synced ones.
+      entries: {
+        Row: EntryRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          target_id: string;
+          source_id: string;
+          source_record_id: string;
+          work_item_id?: string | null;
+          occurred_at: string;
+          value: number;
+          evidence?: Record<string, Json | undefined>;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          target_id?: string;
+          source_id?: string;
+          source_record_id?: string;
+          work_item_id?: string | null;
+          occurred_at?: string;
+          value?: number;
+          evidence?: Record<string, Json | undefined>;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'entries_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'entries_target_fk';
+            columns: ['target_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'targets';
+            referencedColumns: ['id', 'user_id'];
+          },
+          {
+            foreignKeyName: 'entries_source_fk';
+            columns: ['source_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'sources';
+            referencedColumns: ['id', 'user_id'];
+          },
+          {
+            foreignKeyName: 'entries_work_item_fk';
+            columns: ['work_item_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'work_items';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      // The person's word on one source record, keyed to the source's own record id (no foreign key to entries, so
+      // a resync cannot undo it). Restoring deletes the row.
+      entry_corrections: {
+        Row: EntryCorrectionRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          source_id: string;
+          source_record_id: string;
+          action: CorrectionAction;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          source_id?: string;
+          source_record_id?: string;
+          action?: CorrectionAction;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'entry_corrections_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'entry_corrections_source_fk';
+            columns: ['source_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'sources';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      // Append-only: the person's session inserts a snapshot before a re-baseline; no role updates or deletes one.
+      period_snapshots: {
+        Row: PeriodSnapshotRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          target_id: string;
+          period_start: string;
+          period_end: string;
+          time_zone: string;
+          week_start?: number | null;
+          day_end?: string | null;
+          measure: Measure;
+          unit?: string | null;
+          role: TargetRole;
+          period_kind: PeriodKind;
+          slot_weekdays?: number[] | null;
+          floor?: number | null;
+          aspiration?: number | null;
+          qualifying_threshold?: number | null;
+          carry_over_kind: CarryOverKind;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: 'period_snapshots_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'period_snapshots_target_fk';
+            columns: ['target_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'targets';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     // handle_new_user and the other trigger functions are not executable by anon, authenticated or service_role
@@ -546,6 +1344,21 @@ export type ConnectedApp = Tables<'connected_apps'>;
 export type ConnectedAppPublic = ConnectedApp;
 // Server only. Holds secrets: never pass it to a client component or return it from an action.
 export type IntegrationCredential = Tables<'integration_credentials'>;
+
+// The goal model (migration 013). Not to be confused with the old GoalChannel and MicroTask above.
+export type PersonSettings = Tables<'person_settings'>;
+export type PersonDayType = Tables<'person_day_types'>;
+export type PersonPriority = Tables<'person_priorities'>;
+export type PersonHandlingRule = Tables<'person_handling_rules'>;
+export type Goal = Tables<'goals'>;
+export type Target = Tables<'targets'>;
+export type WorkItem = Tables<'work_items'>;
+export type WorkItemStep = Tables<'work_item_steps'>;
+export type Source = Tables<'sources'>;
+export type TargetSource = Tables<'target_sources'>;
+export type Entry = Tables<'entries'>;
+export type EntryCorrection = Tables<'entry_corrections'>;
+export type PeriodSnapshot = Tables<'period_snapshots'>;
 
 export type GoalChannelInsert = TablesInsert<'goal_channels'>;
 export type GoalChannelUpdate = TablesUpdate<'goal_channels'>;
