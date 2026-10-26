@@ -23,11 +23,12 @@ export type VelocityHint = ChannelHint;
 // What the main feed shows (MOM-18). Decided once, where the views are built, so the UI never works it out
 // from an empty list:
 //   signed_out  there is no session (app/page.tsx; the proxy normally redirects first, see SIGNED_OUT_CHANNEL_VIEWS)
-//   no_goals    signed in with no active goal (all channels only)
+//   load_failed the plan could not be read (an error or a throw, app/page.tsx); says nothing about the goals
+//   no_goals    signed in, the read succeeded and found no active goal (all channels only)
 //   no_tasks    the channel's goals have no tasks at all
 //   all_done    the channel has tasks, every one of them finished
 //   tasks       at least one unfinished task: the focus card and its lists
-export type FeedState = 'signed_out' | 'no_goals' | 'no_tasks' | 'all_done' | 'tasks';
+export type FeedState = 'signed_out' | 'load_failed' | 'no_goals' | 'no_tasks' | 'all_done' | 'tasks';
 
 export interface ChannelView {
   // Which of the feed's screens to show; see FeedState.
@@ -70,8 +71,13 @@ const emptyViews = (feedState: FeedState): ChannelViews => ({
   },
 });
 
-// A signed-in user with nothing to show. Also what the page falls back to when their data cannot be read.
+// A signed-in user whose plan was read and has no active goal. Not a fallback for a failed read (see
+// LOAD_FAILED_CHANNEL_VIEWS): a failed read must never tell someone who has goals that they have none.
 export const EMPTY_CHANNEL_VIEWS: ChannelViews = emptyViews('no_goals');
+
+// What the page passes when the signed-in user's plan could not be read (an error result or a thrown error, for
+// example the database is unreachable). The same empty shape, so nothing of a plan can show, but its own state.
+export const LOAD_FAILED_CHANNEL_VIEWS: ChannelViews = emptyViews('load_failed');
 
 // What the page passes when there is no session, instead of reading anything. proxy.ts redirects a signed-out
 // visitor to /login before the page renders, so this is only reached when the session ends between the proxy

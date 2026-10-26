@@ -19,13 +19,16 @@ interface NavSidebarProps {
   // Each active goal's tasks done and total (summarizeActiveGoalProgress). A goal with no entry shows no count.
   progress?: GoalProgress[];
   burnoutRisk?: BurnoutRisk | null;
+  // True while the plan could not be loaded (FeedState 'load_failed'): both actions need data that was not
+  // read, so they stay visible but disabled.
+  actionsDisabled?: boolean;
 }
 
 // The desktop sidebar of the home page: the workspace navigation plus the goal channels. Choosing a channel is
 // a button, not a link, because the page only changes its address (?channel=<goal id>) and shows the view it
 // already has. Each button's text is the goal's name only; the count and the bar sit beside it, so its
 // accessible name stays the name.
-export function NavSidebar({ channels, selected, onSelect, onAdjustPace, onNewGoal, progress = [], burnoutRisk = null }: NavSidebarProps) {
+export function NavSidebar({ channels, selected, onSelect, onAdjustPace, onNewGoal, progress = [], burnoutRisk = null, actionsDisabled = false }: NavSidebarProps) {
   const byGoal = new Map(progress.map((p) => [p.goalId, p]));
 
   return (
@@ -94,11 +97,11 @@ export function NavSidebar({ channels, selected, onSelect, onAdjustPace, onNewGo
           );
         })}
 
-        <Button variant="outline" onClick={onNewGoal} className="mt-1 justify-start border-dashed">
+        <Button variant="outline" onClick={onNewGoal} disabled={actionsDisabled} className="mt-1 justify-start border-dashed">
           + New Goal Wizard
         </Button>
         {/* docs/NINETY_DAY_PLAN_CONTEXT.md §9: opens the rebalance drawer, which uses the carry-over language of §5 rule 1. */}
-        <Button variant="outline" onClick={onAdjustPace} className="justify-start border-dashed">
+        <Button variant="outline" onClick={onAdjustPace} disabled={actionsDisabled} className="justify-start border-dashed">
           Adjust Weekly Pace
         </Button>
       </section>

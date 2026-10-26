@@ -1,5 +1,6 @@
 import { AllDoneState } from '@/components/tasks/AllDoneState';
 import { FocusTaskCard } from '@/components/tasks/FocusTaskCard';
+import { LoadFailedState } from '@/components/tasks/LoadFailedState';
 import { NoGoalsState } from '@/components/tasks/NoGoalsState';
 import { NoTasksState } from '@/components/tasks/NoTasksState';
 import { RecentlyDoneList } from '@/components/tasks/RecentlyDoneList';
@@ -61,6 +62,7 @@ export function MainFeed({
         )
       )}
       {feedState === 'signed_out' && <SignedOutState />}
+      {feedState === 'load_failed' && <LoadFailedState />}
       {feedState === 'no_goals' && <NoGoalsState onNewGoal={onNewGoal} />}
       {feedState === 'no_tasks' && <NoTasksState channelTitle={channelTitle} onNewGoal={onNewGoal} />}
       {feedState === 'all_done' && (

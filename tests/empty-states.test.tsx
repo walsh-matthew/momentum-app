@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The main feed's empty states in a DOM (MOM-18): signed out, no goals, no tasks and all done. These render
+// The main feed's empty states in a DOM (MOM-18, MOM-93): signed out, could not load, no goals, no tasks and all done. These render
 // the real components, MainFeed and AppShell with views built by the real buildChannelViews; only the server
 // actions behind the buttons are replaced. Which state applies is decided by buildChannelViews and the page
 // (tests/feed-state.test.ts); here MainFeed must follow the state it is given, never the shape of the feed.
@@ -13,11 +13,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '@/components/layout/AppShell';
 import { MainFeed } from '@/components/layout/MainFeed';
 import { AllDoneState } from '@/components/tasks/AllDoneState';
+import { LoadFailedState } from '@/components/tasks/LoadFailedState';
 import { NoGoalsState } from '@/components/tasks/NoGoalsState';
 import { NoTasksState } from '@/components/tasks/NoTasksState';
 import { SignedOutState } from '@/components/tasks/SignedOutState';
 import { buildChannelViews } from '@/lib/utils/channelViews';
-import { SIGNED_OUT_CHANNEL_VIEWS, EMPTY_CHANNEL_VIEWS, type FeedState } from '@/types/channelViews';
+import {
+  SIGNED_OUT_CHANNEL_VIEWS,
+  EMPTY_CHANNEL_VIEWS,
+  LOAD_FAILED_CHANNEL_VIEWS,
+  type FeedState,
+} from '@/types/channelViews';
 import type { MicroTask } from '@/types/database.types';
 import type { FocusFeed } from '@/types/focusFeed';
 
@@ -29,6 +35,7 @@ const actions = vi.hoisted(() => ({
   generateWeekOnePlanAction: vi.fn(),
   signOutAction: vi.fn(),
   toggleConnectedApp: vi.fn(),
+  routerRefresh: vi.fn(),
 }));
 vi.mock('@/app/actions/tasks', () => ({
   toggleTaskStatus: actions.toggleTaskStatus,
@@ -54,7 +61,11 @@ vi.mock('next/navigation', async () => {
     };
   };
   const read = () => window.location.search;
-  return { useSearchParams: () => new URLSearchParams(useSyncExternalStore(subscribe, read, read)) };
+  return {
+    useSearchParams: () => new URLSearchParams(useSyncExternalStore(subscribe, read, read)),
+    // Try again (MOM-93) refreshes the route; the test only needs to see that it did.
+    useRouter: () => ({ refresh: actions.routerRefresh }),
+  };
 });
 
 // pushState does not notify anyone by itself; Next's router does, so tell the stand-in above. Patched once.
@@ -127,6 +138,33 @@ describe('SignedOutState', () => {
   });
 });
 
+describe('LoadFailedState', () => {
+  it('says the plan could not be loaded, with Try again and no goal prompt anywhere', () => {
+    render(<LoadFailedState />);
+    expect(screen.getByRole('heading', { name: "We couldn't load your plan" })).toBeTruthy();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Try again']);
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    const text = document.body.textContent ?? '';
+    expect(text).not.toMatch(/no goals|first goal|start another goal|wizard/i);
+    noActionCalled();
+  });
+
+  it('Try again refreshes the route, and only when it is clicked', () => {
+    render(<LoadFailedState />);
+    expect(actions.routerRefresh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(actions.routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the retry it is given instead of refreshing when it is given one', () => {
+    const onRetry = vi.fn();
+    render(<LoadFailedState onRetry={onRetry} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(actions.routerRefresh).not.toHaveBeenCalled();
+  });
+});
+
 describe('NoGoalsState', () => {
   it('explains there are no goals and opens the wizard only when the call to action is clicked', () => {
     const onNewGoal = vi.fn();
@@ -178,6 +216,7 @@ describe('MainFeed chooses the screen from the state it is given', () => {
   const last = finished('g', 2, { title: 'The very last task' });
   const feeds: Record<FeedState, FocusFeed> = {
     signed_out: emptyFeed,
+    load_failed: emptyFeed,
     no_goals: emptyFeed,
     no_tasks: emptyFeed,
     all_done: { focus: null, upNext: [], recentlyDone: [last] },
@@ -185,6 +224,7 @@ describe('MainFeed chooses the screen from the state it is given', () => {
   };
   const headings: Record<Exclude<FeedState, 'tasks'>, string> = {
     signed_out: 'Sign in to see your plan',
+    load_failed: "We couldn't load your plan",
     no_goals: 'No goals yet',
     no_tasks: 'No tasks yet',
     all_done: 'All done',
@@ -215,6 +255,23 @@ describe('MainFeed chooses the screen from the state it is given', () => {
     renderFeed('signed_out');
     expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/login');
     expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('load_failed offers Try again and no way to start a goal, whatever onNewGoal is', () => {
+    const onNewGoal = vi.fn();
+    renderFeed('load_failed', emptyFeed, onNewGoal);
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Try again']);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onNewGoal).not.toHaveBeenCalled();
+    expect(actions.routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('load_failed shows the failure even when the feed it is handed has work in it', () => {
+    renderFeed('load_failed', feeds.tasks);
+    expect(screen.getByRole('heading', { name: "We couldn't load your plan" })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Do this now' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Up next' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'No goals yet' })).toBeNull();
   });
 
   it('no_goals and no_tasks open the wizard through onNewGoal', () => {
@@ -268,6 +325,40 @@ describe('the empty states in the app shell', () => {
     expect(sidebar().getAllByRole('button').map((b) => b.textContent)).toContain('All channels');
     expect(screen.queryByRole('region', { name: 'Velocity' })).toBeNull();
     noActionCalled();
+  });
+
+  it('could not load: Try again, no goal prompt, and the wizard and pace actions are disabled everywhere', () => {
+    renderShell(LOAD_FAILED_CHANNEL_VIEWS);
+    const main = within(screen.getByRole('main'));
+    expect(main.getByRole('heading', { name: "We couldn't load your plan" })).toBeTruthy();
+    expect(main.queryByRole('heading', { name: 'No goals yet' })).toBeNull();
+    expect(main.queryByRole('button', { name: 'Set up your first goal' })).toBeNull();
+
+    // The sidebar and the banner still show these actions, but they cannot be used: they need data that was not read.
+    const buttons = [
+      sidebar().getByRole('button', { name: '+ New Goal Wizard' }),
+      sidebar().getByRole('button', { name: 'Adjust Weekly Pace' }),
+      screen.getByRole('button', { name: 'New Goal Wizard' }),
+      within(screen.getByRole('group', { name: 'Quick goal actions' })).getByRole('button', { name: 'Adjust Weekly Pace' }),
+    ];
+    expect(buttons).toHaveLength(4);
+    for (const b of buttons) {
+      expect((b as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(b);
+    }
+    expect(wizard()).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // No nudge, nothing to tick, and nothing was written.
+    expect(screen.queryByRole('heading', { name: 'A little room to rebalance?' })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    noActionCalled();
+  });
+
+  it('a successful read with no goals still shows the no-goals state, with its actions enabled', () => {
+    renderShell(buildChannelViews([], [], [], TODAY));
+    expect(screen.queryByRole('heading', { name: "We couldn't load your plan" })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'No goals yet' })).toBeTruthy();
+    expect((sidebar().getByRole('button', { name: '+ New Goal Wizard' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('no goals: the call to action opens the goal wizard, which is closed until then', () => {
