@@ -7,6 +7,7 @@
 
 import 'server-only';
 import { z } from 'zod';
+import type { CaptchaConfig } from '@/types/auth';
 
 const publicSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
@@ -29,6 +30,15 @@ const anthropicSchema = serverSchema.pick({ ANTHROPIC_API_KEY: true });
 const googleOAuthSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
+});
+
+// The CAPTCHA widget's public site key (MOM-64). Optional on purpose: with no key, no widget is shown and the
+// auth calls carry no token, so local development, the browser tests and any deployment that has not switched
+// CAPTCHA on behave as before. Both values are public by design; the secret lives only in the Supabase dashboard.
+const CAPTCHA_PROVIDERS = ['turnstile', 'hcaptcha'] as const;
+const captchaSchema = z.object({
+  NEXT_PUBLIC_CAPTCHA_SITE_KEY: z.string().trim().min(1),
+  NEXT_PUBLIC_CAPTCHA_PROVIDER: z.enum(CAPTCHA_PROVIDERS).default('turnstile'),
 });
 
 export type PublicEnv = z.infer<typeof publicSchema>;
@@ -60,6 +70,22 @@ export function getPublicEnv(): PublicEnv {
     'public',
   );
   return publicEnv;
+}
+
+// The CAPTCHA to show on sign-up and sign-in, or null when no site key is set. An unset or empty provider means
+// Turnstile; a provider that is set but unknown throws, so a typo cannot silently switch the check off.
+export function getCaptchaConfig(): CaptchaConfig | null {
+  const siteKey = process.env.NEXT_PUBLIC_CAPTCHA_SITE_KEY?.trim();
+  if (!siteKey) return null;
+  const parsed = parseEnv(
+    captchaSchema,
+    {
+      NEXT_PUBLIC_CAPTCHA_SITE_KEY: siteKey,
+      NEXT_PUBLIC_CAPTCHA_PROVIDER: process.env.NEXT_PUBLIC_CAPTCHA_PROVIDER?.trim() || undefined,
+    },
+    'CAPTCHA',
+  );
+  return { provider: parsed.NEXT_PUBLIC_CAPTCHA_PROVIDER, siteKey: parsed.NEXT_PUBLIC_CAPTCHA_SITE_KEY };
 }
 
 export function getServerEnv(): ServerEnv {

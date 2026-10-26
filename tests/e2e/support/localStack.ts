@@ -54,6 +54,9 @@ export function localStackEnvFrom(status: Record<string, string>): LocalStackEnv
       HEVY_API_KEY: '',
       GOOGLE_CLIENT_ID: '',
       GOOGLE_CLIENT_SECRET: '',
+      // No CAPTCHA widget: the local Auth server has CAPTCHA off, so a site key from .env.local would break sign-in (MOM-64).
+      NEXT_PUBLIC_CAPTCHA_SITE_KEY: '',
+      NEXT_PUBLIC_CAPTCHA_PROVIDER: '',
     },
   };
 }
