@@ -168,6 +168,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The day-end tool, on a second, full read of the output before reporting the branch as passed. The fix is tracked in MOM-104.
 - **Predicted it?** No.
 
+### F-023 · 2026-10-26 · build tool
+- **Asked:** Run the day-end with each git command on its own, never joined with `&&`, stopping on the first error.
+- **What went wrong:** While committing the end-of-day backlog sync, it joined two git commands with `&&` (staging the files, then showing what was staged), and earlier ran a read-only git command in the same call. Both succeeded and nothing was affected, but the rule exists so that a failing step stops before the next one runs and the owner sees each result.
+- **Why:** It treated a stage followed by a read-only check as one harmless step and grouped them for speed, instead of applying the rule to every git command.
+- **Caught by:** The day-end tool itself, which reported it to the owner before the push.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
