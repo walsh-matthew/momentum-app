@@ -9,16 +9,16 @@ Items below were triaged into Jira on 2026-10-21 under `MOM-16` (EPIC 5: Phase 2
 | Area | Tickets |
 | --- | --- |
 | Auth and live verification | MOM-17, MOM-18, MOM-64 |
-| Security and DB safeguards | MOM-19, MOM-27, MOM-28, MOM-29, MOM-65, MOM-66, MOM-70, MOM-102 |
+| Security and DB safeguards | MOM-19, MOM-27, MOM-28, MOM-29, MOM-65, MOM-66, MOM-70, MOM-102, MOM-119 |
 | Schema | MOM-20, MOM-21, MOM-22, MOM-23, MOM-24, MOM-25, MOM-26 |
 | Layout and UI | MOM-30, MOM-31, MOM-32 (Closed), MOM-33, MOM-36, MOM-76, MOM-77, MOM-78, MOM-84, MOM-85, MOM-88, MOM-89 |
 | Wizard | MOM-34, MOM-35, MOM-79, MOM-80, MOM-81, MOM-82, MOM-83 |
 | Integrations | MOM-37, MOM-38, MOM-39, MOM-40, MOM-41, MOM-62, MOM-71, MOM-72, MOM-98, MOM-99, MOM-103 |
 | Velocity | MOM-42, MOM-43, MOM-44, MOM-45, MOM-46, MOM-69, MOM-86 |
 | Rebalance | MOM-47, MOM-48, MOM-49, MOM-50, MOM-51, MOM-52, MOM-53, MOM-73, MOM-87, MOM-90, MOM-101 |
-| Tests | MOM-54, MOM-55, MOM-56, MOM-57, MOM-58, MOM-59, MOM-61, MOM-67, MOM-100 |
+| Tests | MOM-54, MOM-55, MOM-56, MOM-57, MOM-58, MOM-59, MOM-61, MOM-67, MOM-100, MOM-120 |
 | Deployment | MOM-60 |
-| Tooling | MOM-63, MOM-68, MOM-74, MOM-75 |
+| Tooling | MOM-63, MOM-68, MOM-74, MOM-75, MOM-104 |
 | Goal model thin slice (EPIC 6) | MOM-105, MOM-106, MOM-107, MOM-108, MOM-109, MOM-110, MOM-111, MOM-112, MOM-113, MOM-114, MOM-115, MOM-116, MOM-117, MOM-118 |
 
 ## Discovered In-Flight
@@ -186,6 +186,11 @@ Items found while working on tickets. Add new items at the bottom with the ticke
 - [ ] Tooling: the new commands in `.claude/commands/` appear only after Claude Code is restarted; the docs promise a live reload only for `.claude/skills/`. Moving them to `.claude/skills/<name>/SKILL.md` (the current format, picked up in a running session) would remove the restart. Decide after the first real day. *Source: MOM-75.* *Jira: MOM-75.*
 - [ ] Tooling: a session's effort level cannot be read by Claude (the docs do not say it can), and a command's `effort:` is fixed per command, so `/run-block` always asks the owner to confirm effort and recommends `/effort` with `s` (this session only). Revisit if Claude Code documents a way to read it. *Source: MOM-75.* *Jira: MOM-75.*
 - [ ] Tooling: under the pull-request workflow, a block that needs an earlier block's code stops until that code is in `origin/main` (push and merge its pull request first, or stack on its branch with the owner's OK). After the first multi-block day, decide whether one of those should be the default, or whether dependent blocks should be run on separate days. *Source: MOM-75.* *Jira: MOM-75.*
+- [ ] Tooling: day-end step A expects "Every open item has a Jira key", but a block that logs a new backlog item leaves it unkeyed for step D, which runs after A, so A fails on that branch. `npm run plan` exits 0 either way, so only its printed text shows the problem. Make `npm run plan` exit non-zero when an open item has no key, or have step A report such items as handed to step D. *Source: day-end 2026-10-26 (MOM-66 branch, failure-log F-022).* *Jira: MOM-104.*
+- [ ] Tooling: `/run-block`'s close-out should end with "Next: /clear, then /run-block MOM-n (model / effort)" for the next block in the runbook, or "/day-end (Opus / High)" after the last one. *Source: day-end 2026-10-26 (owner).* *Jira: MOM-104.*
+- [ ] Plan: step E's runbook table should start with a row for `/day-start` (Sonnet / Low) and end with a row for `/day-end` (Opus / High), and `npm run plan:check -- --strict` should enforce it. *Source: day-end 2026-10-26 (owner).* *Jira: MOM-104.*
+- [ ] Tooling: `/day-end` should end with "Tomorrow: /day-start (Sonnet / Low)". *Source: day-end 2026-10-26 (owner).* *Jira: MOM-104.*
+- [ ] Tests: the e2e wizard specs make the dev server log "The destination stream errored while writing data" twice (digest 3200485758). All tests pass, and it also appears in `main`'s CI (run 40347840369), so it predates the 2026-10-26 work. Trace the request whose stream errors and fix the cause; do not filter the message. Until then, `/run-block` reports and day-end step A call it known noise. *Source: day-end 2026-10-26 (MOM-93, MOM-103 e2e runs).* *Jira: MOM-120.*
 - [ ] Tooling: step B of the plan verifies production with a Git Bash loop over `-o table` output. A committed production runner (JSON through `--linked`, the same pass/fail rules as `scripts/run-sql-verify.ts`, with a unit test) would make B one command and replace the ad hoc one used for MOM-73. *Source: MOM-75.* *Jira: MOM-75.*
 - [ ] Tooling: `.claude/settings.json` allows only the read-only commands in the spec (plus `plan:check`). `git fetch`, `git switch`, `git pull --ff-only`, `gh pr list`, `docker info` and `npx vercel ls` are not allowed, so they prompt each time; `git log` and `git diff` need no rule because Claude Code runs their read-only forms without asking. Add the safe ones once the prompts prove to be a nuisance. *Source: MOM-75.* *Jira: MOM-75.*
 - [ ] Plan: the ten finished blocks in `docs/plans/NEXT_BUILD_PLAN.md` still tell the CLI to merge into `main` with `--no-ff` (`npm run plan:check` reports ten `legacy-merge` warnings) and `/run-block` overrides that step. Tomorrow's plan, generated by day-end step E, must pass `npm run plan:check -- --strict` with none. *Source: MOM-75.* *Jira: MOM-75.*
