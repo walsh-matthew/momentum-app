@@ -212,6 +212,25 @@ describe('functions only the database should call have no EXECUTE grant', () => 
   });
 });
 
+describe('the signup and RLS trigger functions are closed to API roles (migration 012, MOM-65)', () => {
+  const sql = sqlOf('012');
+
+  it('revokes handle_new_user from public and every API role, and keeps the auth service role', () => {
+    expect(sql).toMatch(/revoke execute on function public\.handle_new_user\(\) from public, anon, authenticated, service_role/i);
+    expect(sql).toMatch(/grant execute on function public\.handle_new_user\(\) to supabase_auth_admin/i);
+    expect(sql).not.toMatch(/grant execute[^;]*\bto\b[^;]*\b(public|anon|authenticated|service_role)\b/i);
+  });
+  it('revokes rls_auto_enable only when it exists, and stops the migration if an API role can still run it', () => {
+    expect(sql).toMatch(/if exists \([\s\S]*proname = 'rls_auto_enable'[\s\S]*\) then/i);
+    expect(sql).toMatch(/revoke execute on function public\.rls_auto_enable\(\) from public, anon, authenticated, service_role/i);
+    expect(sql).toMatch(/has_function_privilege\('authenticated', 'public\.rls_auto_enable\(\)', 'execute'\)/i);
+    expect(sql).toMatch(/raise exception[\s\S]*errcode = '42501'/i);
+  });
+  it('only narrows privileges: no new function, trigger, policy, table change or row change', () => {
+    expect(sql).not.toMatch(/\b(create|drop|alter|insert|update|delete|truncate)\b/i);
+  });
+});
+
 describe('provider tokens are out of reach of the browser (migration 005)', () => {
   const sql = sqlOf('005');
 
