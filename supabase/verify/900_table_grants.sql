@@ -63,7 +63,65 @@ allow_list (rel, role, privs) as (values
   -- function under its own ticket, not a grant here.
   ('task_rebalance_history',  'anon',          ''),
   ('task_rebalance_history',  'authenticated', 'SELECT'),
-  ('task_rebalance_history',  'service_role',  '')
+  ('task_rebalance_history',  'service_role',  ''),
+
+  -- The goal model (013, MOM-107). Signed-in users reach their own rows through RLS. service_role is closed except
+  -- for what Hevy ingestion needs without a session: read sources and their bindings, write entries.
+  ('person_settings',         'anon',          ''),
+  ('person_settings',         'authenticated', 'SELECT,INSERT,UPDATE'),
+  ('person_settings',         'service_role',  ''),
+
+  ('person_day_types',        'anon',          ''),
+  ('person_day_types',        'authenticated', 'SELECT,INSERT,UPDATE,DELETE'),
+  ('person_day_types',        'service_role',  ''),
+
+  ('person_priorities',       'anon',          ''),
+  ('person_priorities',       'authenticated', 'SELECT,INSERT,UPDATE,DELETE'),
+  ('person_priorities',       'service_role',  ''),
+
+  ('person_handling_rules',   'anon',          ''),
+  ('person_handling_rules',   'authenticated', 'SELECT,INSERT,UPDATE,DELETE'),
+  ('person_handling_rules',   'service_role',  ''),
+
+  -- No DELETE on goals and targets: a person parks a goal, and a target with history cannot be removed.
+  ('goals',                   'anon',          ''),
+  ('goals',                   'authenticated', 'SELECT,INSERT,UPDATE'),
+  ('goals',                   'service_role',  ''),
+
+  ('targets',                 'anon',          ''),
+  ('targets',                 'authenticated', 'SELECT,INSERT,UPDATE'),
+  ('targets',                 'service_role',  ''),
+
+  ('work_items',              'anon',          ''),
+  ('work_items',              'authenticated', 'SELECT,INSERT,UPDATE,DELETE'),
+  ('work_items',              'service_role',  ''),
+
+  ('work_item_steps',         'anon',          ''),
+  ('work_item_steps',         'authenticated', 'SELECT,INSERT,UPDATE,DELETE'),
+  ('work_item_steps',         'service_role',  ''),
+
+  ('sources',                 'anon',          ''),
+  ('sources',                 'authenticated', 'SELECT,INSERT,UPDATE,DELETE'),
+  ('sources',                 'service_role',  'SELECT'),
+
+  ('target_sources',          'anon',          ''),
+  ('target_sources',          'authenticated', 'SELECT,INSERT,DELETE'),
+  ('target_sources',          'service_role',  'SELECT'),
+
+  -- Entries: a person adds through their own manual sources only (an RLS check); the sync writes the rest. Nobody
+  -- deletes: a removal is a correction.
+  ('entries',                 'anon',          ''),
+  ('entries',                 'authenticated', 'SELECT,INSERT'),
+  ('entries',                 'service_role',  'SELECT,INSERT,UPDATE'),
+
+  ('entry_corrections',       'anon',          ''),
+  ('entry_corrections',       'authenticated', 'SELECT,INSERT,UPDATE,DELETE'),
+  ('entry_corrections',       'service_role',  ''),
+
+  -- Append-only: the person's session writes a snapshot before a re-baseline; nobody changes or deletes one.
+  ('period_snapshots',        'anon',          ''),
+  ('period_snapshots',        'authenticated', 'SELECT,INSERT'),
+  ('period_snapshots',        'service_role',  '')
 ),
 roles (role) as (values ('anon'), ('authenticated'), ('service_role')),
 dml (ord, priv) as (values (1, 'SELECT'), (2, 'INSERT'), (3, 'UPDATE'), (4, 'DELETE')),
