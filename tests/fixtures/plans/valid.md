@@ -8,8 +8,10 @@ Type these in order, one per block.
 
 | # | Type | Session setting | What to check at the gate |
 | --- | --- | --- | --- |
+| 0 | `/day-start` | Sonnet / Low | It reports a clean tree and a plan that passes its format check. |
 | 1 | `/run-block MOM-101` | Sonnet / Medium | The new screen shows the state and the tests pass. |
 | 2 | `/run-block MOM-102` | Sonnet / High | The migration dry run is shown and nothing is pushed yet. |
+| 3 | `/day-end` | Opus / High | The day's branches pass their checks and nothing is pushed without your OK. |
 
 ## Standing Rules
 
