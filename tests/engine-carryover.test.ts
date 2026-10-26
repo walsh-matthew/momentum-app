@@ -64,4 +64,22 @@ describe('a habit shortfall is not owed the next week', () => {
     expect(week1).toMatchObject({ periodStart: '2026-10-05', counted: 2, remainingToFloor: 1, owed: 0 });
     expect(week2).toMatchObject({ periodStart: '2026-10-12', floor: 3, remainingToFloor: 3, owed: 0 });
   });
+
+  it('a worked week 2 reaches its floor of 3 and is not judged against 4', () => {
+    const board = computeScoreboard(
+      input({
+        today: '2026-10-14',
+        entries: [entry('2026-10-05'), entry('2026-10-06'), entry('2026-10-12'), entry('2026-10-13'), entry('2026-10-14')],
+      }),
+    );
+    expect(board.history[0]).toMatchObject({ periodStart: '2026-10-05', counted: 2, owed: 0 });
+    expect(board.results[0]).toMatchObject({
+      periodStart: '2026-10-12',
+      counted: 3,
+      floor: 3,
+      level: 'floor',
+      remainingToFloor: 0,
+      owed: 0,
+    });
+  });
 });
