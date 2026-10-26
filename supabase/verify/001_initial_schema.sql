@@ -184,7 +184,7 @@ begin
   end;
 
   -- New in MOM-19: the signup trigger function is a trigger function, so calling it by hand does nothing
-  -- (its EXECUTE grants are a separate question, MOM-65).
+  -- (its EXECUTE grants are revoked by migration 012 and checked in verify/012, MOM-65).
   begin
     perform public.handle_new_user();
     res := res || jsonb_build_object('c', 'handle_new_user cannot be run by hand by a signed-in user', 'p', false, 'd', 'call succeeded');

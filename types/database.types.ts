@@ -474,8 +474,10 @@ export type Database = {
       };
     };
     Views: Record<never, never>;
-    // seed_career_pivot, handle_new_user and the trigger functions are not executable by API roles, so
-    // they are not exposed. apply_task_move is the only one a signed-in user can call.
+    // handle_new_user and the other trigger functions are not executable by anon, authenticated or service_role
+    // (migrations 002, 004 and 012), and seed_career_pivot is not executable by anon or authenticated (server code
+    // with the service role key can still run it, for dev seeding), so none of them is exposed. A signed-in user
+    // can call apply_task_move and create_goal_with_week_one_plan, and nothing else.
     Functions: {
       // Creates a wizard goal and its week 1 tasks in one transaction (migration 009). The owner is
       // auth.uid(); there is no user id, status or completed_at argument, every task is 'todo' in week 1, and
