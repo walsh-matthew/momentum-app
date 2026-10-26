@@ -57,7 +57,7 @@ This build day starts the goal-model thin slice: the smallest build that lets th
 
 ```bash
 cd C:\Users\matth\momentum-app
-git status --short          # expect only your uncommitted docs/FAILURE_LOG.md and docs/RAID_LOG.md edits; anything else stops the block
+git status --short          # expect a clean tree (AGENTS.md and the Supabase folders are git-ignored since MOM-68); only your uncommitted docs/FAILURE_LOG.md and docs/RAID_LOG.md may also show; anything else, even an untracked file, stops the block
 git fetch origin
 git rev-parse main origin/main   # the two must match. If main is only behind: git switch main, then git pull --ff-only (each on its own)
 npm run plan -- MOM-<n>           # optional: the generator's view of the ticket
@@ -303,29 +303,37 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 
 # FINAL DAY-END BUILD VERIFICATION & PULL REQUESTS
 
-Run after the last block of the day, or type `/day-end` and let it run these in this order: **A, B, D, E, then F (the one push, after your OK), then C (live checks, after the pull requests have merged and Vercel has deployed)**. Stop on the first failure.
+Run after the last block of the day, or type `/day-end` and let it run these in this order: **A, B, D, E, then F (the one push, after your OK), then C (live checks, after the pull requests have merged and Vercel has deployed)**. Stop on the first failure. When the whole sequence has finished and you say so, `/day-end` ends with the line `Tomorrow: /day-start (Sonnet / Low)`.
+
+**The build day's window.** The day starts at the previous day-end's last merge, not at midnight, so a day-end that runs past midnight sees the same work. It is the newest merge on `origin/main` of a step E branch, found by the branch name, which always ends in `-next-build-plan-doc`: `git log origin/main --merges -n 1 --grep="next-build-plan-doc" --format="%h %cI %s"`. `/day-end` prints it as `Window: after <hash> (<date>, <subject>)` at the start and reuses that hash in steps B, D and F (it never recomputes it, because today's own step E branch will have merged by then). If there is none, you give a start date. Below, `<window>` means that hash.
+
+**When there is nothing to sync.** `/day-end` stops at the start only if all four hold: no unmerged branches; no open backlog item without a Jira key; no entry marked `unreviewed` in the two logs; and no ticket with commits on `origin/main` in the window that Jira still shows as neither Done nor Closed. It names each condition, and says which ones kept the run going.
+
+**Your log edits and branch switches.** If you hold uncommitted edits to `docs/FAILURE_LOG.md` or `docs/RAID_LOG.md` and a branch's copy of either file differs, a plain `git switch` aborts. Before each switch `/day-end` checks for this, says so in plain words, backs both files up, stashes them (`git stash push -- <the two files>`), switches and pops. If the pop conflicts, it stops, restores from the backup and asks you. It never stages a log file for this; only the entries you approve in step D are staged.
 
 ## A. Build and repository checks (PowerShell or Git Bash)
 
-`/day-end` runs this. A feature branch is checked on its own, because nothing has been merged into `main` locally. List the day's branches, then check each one in turn; docs-only branches (D and E) need only `npm test` and `npm run plan`.
+`/day-end` runs this. A feature branch is checked on its own, because nothing has been merged into `main` locally. List the day's branches, then check each one in turn; docs-only branches (D and E) need only `npm test` and `npm run plan`. Read the whole output of each command, never a filtered part of it.
 
 ```bash
 cd C:\Users\matth\momentum-app
-git status --short                                  # only your uncommitted logs, AGENTS.md, supabase/.branches/ and supabase/snippets/
+git status --short                                  # a clean tree; only your uncommitted docs/FAILURE_LOG.md and docs/RAID_LOG.md may also show
 git branch --no-merged origin/main                   # the day's feature branches: work not yet in origin/main
 # then, on each of those branches, one at a time:
-git switch <branch>
+git switch <branch>                                  # see "Your log edits and branch switches" above
 npx tsc --noEmit                                    # expect no output
 npm test                                            # expect all passing
 npm run build                                       # expect "Compiled successfully"
-npm run plan                                        # expect "Every open item has a Jira key."
+npm run plan                                        # always exits 0: read its closing lines
 ```
+
+`npm run plan` ends with "Every open item has a Jira key." or lists the items without one. On a block's own branch, an unkeyed item is expected: the block logged it and step D gives it a key, so step A lists it as "handed to step D" and does not fail the branch. Step D's Definition of Done is where every open item must have a key.
 
 `npm run test:e2e` and `npm run verify:sql` also run in CI on every pull request. Run them here too for a branch that changed pages, auth, the wizard, the drawer or a migration (stop `npm run dev` first). Until MOM-120 merges, "The destination stream errored while writing data" during the wizard specs is known noise; any other server error is a failure.
 
-## B. Database verification (production), only if migrations were applied today
+## B. Database verification (production), only if migrations were applied in the window
 
-A migration is applied to production inside its own block (after CI is green on its pull request and your OK, before that pull request merges). B is the day's re-check of production once all blocks are done. **Git Bash only.** This loop uses `/tmp`, `grep`, `$(...)` and `for ... done`, which do not work in PowerShell. `npm test` does **not** run these scripts. Every script must report `false 0` and a non-zero `true` count (0 and 0 means the script errored).
+A migration is applied to production inside its own block (after CI is green on its pull request and your OK, before that pull request merges). B is the day's re-check of production once all blocks are done. A migration is in the window when `git log --branches --remotes --not <window> --name-only --format=%h -- supabase/migrations` lists a file. **Git Bash only.** This loop uses `/tmp`, `grep`, `$(...)` and `for ... done`, which do not work in PowerShell. `npm test` does **not** run these scripts. Every script must report `false 0` and a non-zero `true` count (0 and 0 means the script errored).
 
 ```bash
 npx supabase migration list                         # local and remote columns must match for every migration
@@ -345,7 +353,7 @@ npx supabase db query --linked -o table "select count(*) as users from auth.user
 Perform end-of-day backlog synchronization, obsolescence audit, and ticket generation.
 
 Task Instructions:
-1. Scan BACKLOG.md, ROADMAP.md, code TODO tags and today's commits (`git log --since=midnight --no-merges`) for newly discovered gaps, TODOs or deferred items. Run `npm run plan` and treat every open item without a Jira key as un-ticketed.
+1. Scan BACKLOG.md, ROADMAP.md, code TODO tags and the window's commits (`git log --branches --remotes --not <window> --no-merges`, the window being the one `/day-end` printed at its start) for newly discovered gaps, TODOs or deferred items. Run `npm run plan` and treat every open item without a Jira key as un-ticketed.
 2. Audit the "To Do" and "In Progress" tickets in Jira under the active Phase epic against the code on main:
    a. Read each candidate ticket's acceptance criteria and check them against the code and tests before judging. A ticket is obsolete, redundant or fully satisfied only if EVERY criterion is met or moot. Partly satisfied is not obsolete: add a comment saying what is done and what remains.
    b. Propose truly obsolete or redundant tickets for "Closed" (the pause in step 6 applies) with a brief comment explaining why. Never transition anything to "Done" in this step: step D runs before the day's pull requests have merged, so nothing is delivered yet. Done transitions are made in step F, after the merge.
@@ -381,16 +389,16 @@ Task Instructions:
 4. Generate the complete "🚀 MOMENTUM BUILD: NEXT-PHASE MASTER EXECUTION PLAN" strictly following our established structure:
    - Metadata Header at the top: `> **Date:** YYYY-MM-DD | **Active Epic:** MOM-XX | **Base Commit:** <SHORT_HASH>`
    - Executive Overview & Architectural Invariants, and the Standing Rules (Jira first, production approval, verify scripts, no pushes inside blocks, standing smoke-test account).
-   - A "Today's runbook" section near the top, after the metadata header and before the first block: a table with one row per block, in order, giving `/run-block MOM-n`, the session setting (model / effort) and, in plain words, what to check at the gate. It also says that `/day-start` comes first and `/day-end` last.
+   - A "Today's runbook" section near the top, after the metadata header and before the first block: a table with one row per block, in order, giving `/run-block MOM-n`, the session setting (model / effort) and, in plain words, what to check at the gate. The table's first row is `/day-start` (Sonnet / Low) and its last row is `/day-end` (Opus / High), each with its own plain-words gate text; `npm run plan:check -- --strict` warns when either is missing or out of place. The text above the table also says that `/day-start` comes first and `/day-end` last.
    - Logical Session Blocks grouping high-priority tickets, in dependency order, each in the format `npm run plan:check` enforces: a heading `## Block <n>.<m>: <title> (MOM-<n>)` with exactly one ticket key (unique in the plan); a `* **CLI Session Config:** Model: X | Effort: Y` line; exactly one fenced `text` prompt that names its ticket and carries a commit message `type(MOM-n): ...`; and a `* **User Verification Gate:**` checklist. Before each session's first block, a `**Your prerequisites before this session:**` note (it may say none).
    - Block prompts that follow the pull-request workflow (CLAUDE.md): create the feature branch off an up-to-date `main`; commit on it with the Jira key; do NOT merge into `main` and do NOT push (the one push is at day-end, step F, after my OK); end with "Definition of Done: ...; committed on the feature branch." A block with a migration says: run `npm run verify:sql` locally, show the migration and `npx supabase db push --dry-run`, and run production `db push` and then ALL the verify scripts only after CI is green on its pull request and I say OK, and before that pull request merges (merging deploys to Vercel). A block that needs another ticket's code says it "must already be in origin/main" and stops if it is not.
    - Dynamic CLI Session Config (Sonnet / High for architecture, security and database work; Sonnet / Medium or Low for standard UI and tests).
-   - Copy-pasteable prompts including tsc --noEmit, npm test, npm run build, feature branching, merging to main (--no-ff), BACKLOG.md and Jira updates.
+   - Copy-pasteable prompts including tsc --noEmit, npm test, npm run build, feature branching with the commit left on the feature branch (never merged into `main` locally and never pushed; `main` takes it through a pull request, see the pull-request bullet above), BACKLOG.md and Jira updates.
    - User Verification Gates for each block.
    - Final Day-End Build Verification & Pull Requests section (steps A, B, D, E, then F the one push, then C the live checks after the merge), with the step B verify loop marked Git Bash only, step D never moving a ticket or an epic to Done (it only comments, creates tickets and proposes Closed, with a pause for my OK), step F ending with a post-merge list of Done transitions that waits for my OK, and step D's RAID and failure log review (MOM-92) carried over word for word, including this instruction in step E.
    - An updated Open Decisions and Risks table.
 5. Archive the finished plan first: copy the current `docs/plans/NEXT_BUILD_PLAN.md` to `docs/plans/archive/YYYY-MM-DD.md`, using its own metadata date (create the folder if needed). Then save the generated plan to `docs/plans/NEXT_BUILD_PLAN.md` and run `npm run plan:check -- --strict`; fix the plan until it reports no errors and no warnings.
-6. Create a feature branch `feature/MOM-XX-next-build-plan-doc` off an up-to-date `main` (before step 5 writes any file) and commit the archive file and `docs/plans/NEXT_BUILD_PLAN.md` with "docs(MOM-XX): add generated next build plan" (MOM-XX is the active Phase Epic), staging files by name. Do not merge it and do not push; show me `git log origin/main..<branch> --oneline` and wait. It is pushed with the day's other branches at step F.
+6. Create a feature branch `feature/MOM-XX-next-build-plan-doc` off an up-to-date `main` (before step 5 writes any file). The name always ends in `-next-build-plan-doc`: the next day-end finds the start of its window by searching for the merge of that branch. Commit the archive file and `docs/plans/NEXT_BUILD_PLAN.md` with "docs(MOM-XX): add generated next build plan" (MOM-XX is the active Phase Epic), staging files by name. Do not merge it and do not push; show me `git log origin/main..<branch> --oneline` and wait. It is pushed with the day's other branches at step F.
 ```
 
 
@@ -415,15 +423,17 @@ git pull --ff-only
 git branch -d <branch>                              # only -d, for each merged branch; -D is never used
 ```
 
-6. **Jira: Done transitions, only for what has merged.** For each ticket whose pull request merged today (the merge commits on `origin/main` since midnight, and the `(MOM-n):` commit prefixes), list the proposed transition to "Done" with the ticket's acceptance criteria, each marked met or unmet with its evidence (a test, a commit, a production check, a gate item). A ticket with an unmet criterion or a live gate still pending stays open, with a comment saying what remains. List any epic whose children are now all Done or Closed, with those children. Wait for my OK, then make exactly the transitions I approved and comment what shipped. Never move a ticket to Done before its pull request has merged.
+6. **Jira: Done transitions, only for what has merged.** For each ticket whose pull request merged in the window (the merge commits `git log <window>..origin/main --merges` shows, which `/day-end` prints, and the `(MOM-n):` commit prefixes), list the proposed transition to "Done" with the ticket's acceptance criteria, each marked met or unmet with its evidence (a test, a commit, a production check, a gate item). A ticket with an unmet criterion or a live gate still pending stays open, with a comment saying what remains. List any epic whose children are now all Done or Closed, with those children. Wait for my OK, then make exactly the transitions I approved and comment what shipped. Never move a ticket to Done before its pull request has merged.
 
 ## C. Live checks (after the last pull request has merged and Vercel has deployed)
 
 ```bash
 npx vercel ls --prod                                # needs the Vercel CLI (npx works); otherwise check the deployment in the Vercel dashboard. The newest production deployment must reach "Ready"
-curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://momentum-app-eight-chi.vercel.app/    # 307 to /login
-curl -s -o /dev/null -w "%{http_code}\n" https://momentum-app-eight-chi.vercel.app/login               # 200
+curl -s -I https://momentum-app-eight-chi.vercel.app/ | grep -iE "^(HTTP|location)"        # 307, with location: /login
+curl -s -I https://momentum-app-eight-chi.vercel.app/login | grep -iE "^(HTTP|location)"   # 200
 ```
+
+These use no output file and no format string. Git Bash rewrites a path such as `/dev/null` for the Windows `curl`, and `MSYS_NO_PATHCONV=1` then makes `curl` fail with a write error, so `-o /dev/null -w` is not used here.
 
 - [ ] Sign in as the standing smoke-test account and walk the flows you touched today.
 - [ ] Only the standing smoke-test account exists (`users = 1` in step B, until real users exist). If its data is cluttered, delete and recreate it in the Supabase dashboard (Add user, Auto Confirm); never share or store its password.
@@ -443,7 +453,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://momentum-app-eight-chi.vercel.a
 | **MOM-102 waits for the tables** | The privacy notice states what Momentum stores, so it follows MOM-107's merge. It stays a trial prerequisite with MOM-64 and MOM-116. |
 | **MOM-64 needs your accounts and settings** | A CAPTCHA site, its secret in the Supabase dashboard, its public key in Vercel, the reset address in the redirect allow-list and the Auth rate limits are all dashboard work only you can do. Without them, the code is built and dormant, and criterion 2 (throttling or CAPTCHA) stays unmet. The reset email is proven on the local stack only: walking it on production would need a second account. |
 | **MOM-116 is a check, not legal advice** | It quotes each service's own terms with links and dates. You decide what they mean; no minor joins the trial until you have. |
-| **MOM-104 does not edit this plan** | Its block changes the commands, the checks and the spec, and puts the new day-end wording on the ticket. The next day-end's step E carries that wording into the next plan, so the plan and the commands agree once MOM-104 merges. |
+| **MOM-104 edits this plan's preflight and day-end sections only** | Its block changes the commands, the checks and the spec, and (at your direction) the preflight and day-end sections A to F of this plan, so the plan and the commands agree once MOM-104 merges. Step E carries those sections into the next plan. No block prompt is edited. |
 | **Known e2e noise** | "The destination stream errored while writing data" during the wizard specs predates 2026-10-26 (it is in `main`'s CI too) and the tests pass. Blocks report it as known noise until MOM-120 merges; then this row and the standing rule go. |
 | **Backlog edits collide** | On 2026-10-26, MOM-68 and MOM-66 edited neighbouring `BACKLOG.md` lines and their pull requests conflicted. Blocks now add items next to their own ticket's items; step F resolves any remaining conflict by merging `origin/main` into the later branch locally, with your OK before the push. |
 | **Standing smoke-test account** | `smoke-test@momentum-app.test` exists on production. Every live gate signs in as it; its password stays in your password manager. Production must hold exactly one user at day-end step B; no block creates a second one. |

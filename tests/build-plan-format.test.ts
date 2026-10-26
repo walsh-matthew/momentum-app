@@ -157,13 +157,13 @@ describe('every failing fixture fails, names the block, and trips only the rule 
     const source = readFileSync(join(root, 'scripts', 'check-plan-format.ts'), 'utf8');
     const rules = new Set([...source.matchAll(/\badd\(\s*'([a-z-]+)'/g)].map((m) => m[1]));
     expect(rules.size).toBeGreaterThan(15);
-    const covered = new Set([...FAILING.flatMap(([, r]) => r), 'legacy-merge']);
+    const covered = new Set([...FAILING.flatMap(([, r]) => r), 'legacy-merge', 'runbook-missing-day-start', 'runbook-missing-day-end']);
     expect([...rules].filter((r) => !covered.has(r))).toEqual([]);
   });
 
   it('every fixture file is listed here (no orphan fixtures, no missing ones)', () => {
     const files = readdirSync(fixtureDir).filter((f) => f.endsWith('.md')).sort();
-    const listed = ['valid.md', 'warn-legacy-merge.md', ...FAILING.map(([f]) => f)].sort();
+    const listed = ['valid.md', 'warn-legacy-merge.md', 'warn-runbook-no-day-start.md', 'warn-runbook-no-day-end.md', ...FAILING.map(([f]) => f)].sort();
     expect(files).toEqual(listed);
   });
 });
@@ -184,6 +184,61 @@ describe('the pre-pull-request wording is a warning, not an error', () => {
     const strict = run([file, '--strict']);
     expect(strict.code).toBe(1);
     expect(strict.out).toContain('legacy-merge');
+  });
+});
+
+// MOM-104: a runbook starts with the /day-start row and ends with the /day-end row. No command trips on a missing row, so
+// it is a warning (which still fails --strict, the check day-end step E runs on tomorrow's plan), not an error.
+describe('the runbook\'s day rows (/day-start first, /day-end last)', () => {
+  const valid = fixture('valid.md');
+  const rowsOf = (text: string) => checkPlanFormat(text).map((v) => [v.rule, v.severity]);
+
+  it.each([
+    ['warn-runbook-no-day-start.md', 'runbook-missing-day-start'],
+    ['warn-runbook-no-day-end.md', 'runbook-missing-day-end'],
+  ])('%s is flagged as the one warning %s, and nothing else', (file, rule) => {
+    expect(rowsOf(fixture(file))).toEqual([[rule, 'warning']]);
+  });
+
+  it('passes by default and fails with --strict', () => {
+    for (const file of ['warn-runbook-no-day-start.md', 'warn-runbook-no-day-end.md']) {
+      const path = join(fixtureDir, file);
+      expect(run([path]).code, file).toBe(0);
+      const strict = run([path, '--strict']);
+      expect(strict.code, file).toBe(1);
+      expect(strict.out).toContain('runbook-missing-day-');
+    }
+  });
+
+  it('flags a /day-start row that is not first, and a /day-end row that is not last', () => {
+    const startRow = valid.split('\n').find((l) => l.includes('`/day-start`'))!;
+    const endRow = valid.split('\n').find((l) => l.includes('`/day-end`'))!;
+    const startLate = valid.replace(startRow + '\n', '').replace(endRow, startRow + '\n' + endRow);
+    expect(rowsOf(startLate)).toEqual([['runbook-missing-day-start', 'warning']]);
+    const endEarly = valid.replace(endRow, '').replace('| 1 | `/run-block MOM-101`', endRow + '\n| 1 | `/run-block MOM-101`');
+    expect(rowsOf(endEarly)).toEqual([['runbook-missing-day-end', 'warning']]);
+  });
+
+  it('does not count the commands when the runbook only mentions them in prose', () => {
+    const prose = valid.replace('Type these in order, one per block.', 'Type `/day-start` first and `/day-end` last.').replace(/^\| 0 .*\n/m, '').replace(/^\| 3 .*\n/m, '');
+    expect(rowsOf(prose).map(([rule]) => rule).sort()).toEqual(['runbook-missing-day-end', 'runbook-missing-day-start']);
+  });
+
+  it('does not mistake a block row for a day row because its gate text names the day commands', () => {
+    const text = valid.replace('The new screen shows the state and the tests pass.', 'The plan check wants the `/day-start` and `/day-end` rows.');
+    const plan = parsePlan(text);
+    expect(plan.runbook!.entries.map((e) => e.key)).toEqual(['MOM-101', 'MOM-102']);
+    expect(plan.runbook!.dayRows.map((r) => r.command)).toEqual(['/day-start', '/day-end']);
+    expect(checkPlanFormat(text)).toEqual([]);
+  });
+
+  it('reads a list-style runbook\'s day rows', () => {
+    const text = valid.replace(/^\| (?:0|3) .*$/gm, (row) => (row.includes('/day-start') ? '1. `/day-start` — it only reports.' : '4. `/day-end` — the branches pass.')).replace(/^\| 1 /m, '2. ').replace(/^\| 2 /m, '3. ');
+    expect(parsePlan(text).runbook!.dayRows.map((r) => [r.command, r.setting])).toEqual([['/day-start', null], ['/day-end', null]]);
+  });
+
+  it('is satisfied by the current plan, which step E must keep producing', () => {
+    expect(checkPlanFormat(realPlan).filter((v) => v.rule.startsWith('runbook-missing-day'))).toEqual([]);
   });
 });
 
@@ -287,6 +342,19 @@ describe('npm run plan:check', () => {
       expect(r.out).toContain('feature branch named in the prompt: feature/MOM-102-thing-2');
       expect(r.out).toContain('2 items');
       expect(r.out).toContain('- [ ] The first check.');
+    });
+
+    it('ends with the next command in the runbook, for /run-block\'s close-out (MOM-104)', () => {
+      expect(run([valid, '--block', 'MOM-101']).out).toMatch(/next in the runbook: \/run-block MOM-102 \(Sonnet \/ Medium\)$/);
+    });
+
+    it('names /day-end with the runbook row\'s setting after the last block', () => {
+      expect(run([valid, '--block', 'MOM-102']).out).toMatch(/next in the runbook: \/day-end \(Opus \/ High\)$/);
+    });
+
+    it('falls back to /day-end (Opus / High) when the runbook has no /day-end row', () => {
+      const r = run([join(fixtureDir, 'warn-runbook-no-day-end.md'), '--block', 'MOM-102']);
+      expect(r.out).toMatch(/next in the runbook: \/day-end \(Opus \/ High\)$/);
     });
 
     it('accepts the bare number', () => {
