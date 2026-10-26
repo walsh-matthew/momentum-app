@@ -109,6 +109,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
 
       // The back button returns to All channels.
       await page.goBack();
+      // Let the page finish loading before the test ends: closing the page mid-stream makes the dev server log "The
+      // destination stream errored while writing data" (MOM-120).
+      await page.waitForLoadState('networkidle');
       await expect(page).toHaveURL(/\/$/);
       await expect(picker.all).toHaveAttribute('aria-current', 'page');
     });
