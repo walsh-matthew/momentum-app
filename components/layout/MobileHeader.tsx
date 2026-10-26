@@ -1,5 +1,6 @@
 import { Link2 } from 'lucide-react';
 import Link from 'next/link';
+import { SignOutButton } from '@/components/auth/SignOutButton';
 import { BurnoutRiskBadge } from '@/components/velocity/BurnoutRiskBadge';
 import { initialsFrom } from '@/lib/utils/initials';
 import type { BurnoutRisk } from '@/lib/utils/velocity';
@@ -8,14 +9,15 @@ import type { WorkspacePage } from './WorkspaceSidebar';
 interface MobileHeaderProps {
   // The page being shown, which marks its link with aria-current.
   active: WorkspacePage;
-  // The signed-in user's email, for the avatar's initials; null when there is no session.
+  // The signed-in user's email, for the avatar's initials and the signed-in row; null when there is no session.
   userEmail?: string | null;
   // The selected channel's burnout risk, or null when there is none to show.
   burnoutRisk?: BurnoutRisk | null;
 }
 
 // The top bar below 1200px (from 1200px the sidebar replaces it): the logo, the burnout badge, a link to the
-// Connected Apps page and the avatar, which opens Settings. It sticks to the top while the page scrolls.
+// Connected Apps page and the avatar, which opens Settings; under them, who is signed in and a sign-out button. It
+// sticks to the top while the page scrolls.
 export function MobileHeader({ active, userEmail = null, burnoutRisk = null }: MobileHeaderProps) {
   return (
     <header className="mobile-header">
@@ -46,6 +48,14 @@ export function MobileHeader({ active, userEmail = null, burnoutRisk = null }: M
           <span aria-hidden="true">{initialsFrom(userEmail)}</span>
         </Link>
       </div>
+      {userEmail && (
+        <div className="mobile-account">
+          <span className="mobile-account-email" title={userEmail}>
+            Signed in as {userEmail}
+          </span>
+          <SignOutButton compact />
+        </div>
+      )}
     </header>
   );
 }

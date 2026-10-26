@@ -2,7 +2,7 @@
 // (MOM-61). The confirmation link comes from the local Mailpit inbox. No account is made through the auth admin API
 // (it returns 500 here; see BACKLOG.md).
 
-import { PASSWORD, confirmationLinkFor, expect, submitCredentials, test, uniqueEmail } from './fixtures';
+import { PASSWORD, confirmationLinkFor, expect, signUpAndConfirm, submitCredentials, test, uniqueEmail } from './fixtures';
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -50,7 +50,7 @@ test.describe('the account lifecycle', () => {
     await expect(page.getByRole('heading', { name: 'Connected apps' })).toBeVisible();
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-    await expect(page.getByText(`Signed in as ${email}`)).toBeVisible();
+    await expect(page.getByRole('main').getByText(`Signed in as ${email}`)).toBeVisible();
 
     // Sign out from Settings: back to /login, and the guard holds again.
     await page.getByRole('main').getByRole('button', { name: 'Sign out' }).click();
@@ -64,6 +64,24 @@ test.describe('the account lifecycle', () => {
     await submitCredentials(page, email, PASSWORD, 'Sign in');
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+  });
+
+  test('the sidebar and the mobile header show who is signed in (MOM-64)', async ({ page }) => {
+    const email = await signUpAndConfirm(page, 'who');
+
+    // Desktop: the sidebar names the account on the home page and on the other pages.
+    await expect(page.getByRole('complementary', { name: 'Goal channels' }).getByText(email)).toBeVisible();
+    await page.goto('/connections');
+    await expect(page.getByRole('complementary', { name: 'Workspace' }).getByText(email)).toBeVisible();
+
+    // Phone width: the sticky header names the account and signs out.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    // By class, not by role: the header sits inside a <section>, so a browser does not expose it as a banner.
+    const header = page.locator('header.mobile-header');
+    await expect(header.getByText(`Signed in as ${email}`)).toBeVisible();
+    await header.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL(/\/login$/);
   });
 
   test('a wrong password is refused with a message and stays on /login', async ({ page }) => {
