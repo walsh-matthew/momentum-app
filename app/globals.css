@@ -647,7 +647,11 @@ button:disabled {
     height: 14px;
     color: #a9c77c;
   }
-  .builder-chip:hover {
+  .builder-chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .builder-chip:hover:not(:disabled) {
     border-color: rgb(198 243 109 / 35%);
     background: rgb(198 243 109 / 9%);
     color: #eef4e3;

@@ -2,12 +2,19 @@
 // themselves, and by app/page.tsx for the signed-out case. The UI never infers it from an empty list
 // (tests/empty-states.test.tsx covers what each state renders). The builder never completes, reopens or moves
 // a task (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6): "all done" only reports the user's own ticks.
+// MOM-93: a plan that could not be read is its own state, load_failed; the builder never produces it, and a read
+// that succeeds with no goals is still no_goals (tests/home-page.test.tsx covers the page's choice between them).
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildChannelViews, resolveChannel } from '@/lib/utils/channelViews';
-import { ALL_CHANNELS, EMPTY_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS } from '@/types/channelViews';
+import {
+  ALL_CHANNELS,
+  EMPTY_CHANNEL_VIEWS,
+  LOAD_FAILED_CHANNEL_VIEWS,
+  SIGNED_OUT_CHANNEL_VIEWS,
+} from '@/types/channelViews';
 import type { MicroTask } from '@/types/database.types';
 import { taskRow, type TaskRow } from './helpers/fakeSupabase';
 
@@ -114,7 +121,7 @@ describe('the feed state of each view', () => {
     expect(stateOf(buildChannelViews([goal('A')], [reopened], [], TODAY), 'A')).toBe('tasks');
   });
 
-  it('every view carries a state, and the builder never produces signed_out', () => {
+  it('every view carries a state, and the builder never produces signed_out or load_failed', () => {
     const v = buildChannelViews([goal('A'), goal('B')], [done('A', 5), task('B', 5)], [], TODAY);
     for (const view of Object.values(v.byChannel)) expect(['no_tasks', 'all_done', 'tasks']).toContain(view.feedState);
   });
@@ -151,6 +158,30 @@ describe('SIGNED_OUT_CHANNEL_VIEWS', () => {
   });
 });
 
+describe('LOAD_FAILED_CHANNEL_VIEWS', () => {
+  const view = LOAD_FAILED_CHANNEL_VIEWS.byChannel[ALL_CHANNELS];
+
+  it('is a single empty all-channels view in the load_failed state, with nothing of a plan', () => {
+    expect(LOAD_FAILED_CHANNEL_VIEWS.channels).toEqual([]);
+    expect(Object.keys(LOAD_FAILED_CHANNEL_VIEWS.byChannel)).toEqual([ALL_CHANNELS]);
+    expect(view.feedState).toBe('load_failed');
+    expect(view.feed).toEqual({ focus: null, upNext: [], recentlyDone: [] });
+    expect(view.velocity).toBeNull();
+    expect(view.rebalance).toBeNull();
+    expect(view.rebalanceChannelId).toBeNull();
+  });
+
+  it('differs from the no-goals views only in its state, which stays no_goals for a real empty read', () => {
+    expect({ ...view, feedState: 'no_goals' }).toEqual(EMPTY_CHANNEL_VIEWS.byChannel[ALL_CHANNELS]);
+    expect(EMPTY_CHANNEL_VIEWS.byChannel[ALL_CHANNELS].feedState).toBe('no_goals');
+  });
+
+  it('resolves any selection to all channels and can be sent to the browser as plain data', () => {
+    expect(resolveChannel(LOAD_FAILED_CHANNEL_VIEWS, 'anything')).toBe(ALL_CHANNELS);
+    expect(JSON.parse(JSON.stringify(LOAD_FAILED_CHANNEL_VIEWS))).toEqual(LOAD_FAILED_CHANNEL_VIEWS);
+  });
+});
+
 describe('the home page and the empty states (source)', () => {
   const read = (...parts: string[]) => readFileSync(join(process.cwd(), ...parts), 'utf8').replace(/\r\n/g, '\n');
   const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
@@ -168,6 +199,12 @@ describe('the home page and the empty states (source)', () => {
     const branch = page.slice(check, page.indexOf('Promise.all'));
     expect(branch).toContain('SIGNED_OUT_CHANNEL_VIEWS');
     expect(branch).not.toMatch(/getPlanSnapshot|listConnectedApps|loadSnapshot|loadConnectedApps/);
+  });
+
+  it('the page falls back to load_failed when the read fails, and EMPTY_CHANNEL_VIEWS is not a fallback', () => {
+    const page = strip(read('app', 'page.tsx'));
+    expect(page).toContain('LOAD_FAILED_CHANNEL_VIEWS');
+    expect(page).not.toContain('EMPTY_CHANNEL_VIEWS');
   });
 
   it('proxy.ts still sends a signed-out visitor to /login (the signed-out state is only the fallback)', () => {
@@ -197,6 +234,7 @@ describe('the home page and the empty states (source)', () => {
     const feed = strip(raw);
     expect(feed).not.toMatch(/\.length\s*[>=!<]/);
     expect(feed).toContain("feedState === 'signed_out'");
+    expect(feed).toContain("feedState === 'load_failed'");
     expect(feed).toContain("feedState === 'no_goals'");
     expect(feed).toContain("feedState === 'no_tasks'");
     expect(feed).toContain("feedState === 'all_done'");

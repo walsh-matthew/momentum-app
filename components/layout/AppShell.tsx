@@ -50,6 +50,8 @@ export function AppShell({ views, connectedApps, moveChains, progress = [], user
   const channel = views.byChannel[channelId];
   const channelTitle = views.channels.find((c) => c.id === channelId)?.title ?? null;
   const burnoutRisk = channel.velocity?.risk ?? null;
+  // The plan could not be read: the wizard and the rebalance drawer need data that is not there, so their buttons are disabled.
+  const loadFailed = channel.feedState === 'load_failed';
 
   // The address that selects a channel, for the goal cards' links. Built from the render's own search params, so
   // the server and the browser produce the same text.
@@ -74,11 +76,16 @@ export function AppShell({ views, connectedApps, moveChains, progress = [], user
           onNewGoal={() => setWizardOpen(true)}
           progress={progress}
           burnoutRisk={burnoutRisk}
+          actionsDisabled={loadFailed}
         />
         <section className="desktop-workspace" aria-label="Daily workspace">
           <div className="workspace-content">
             <MobileHeader active="dashboard" userEmail={userEmail} burnoutRisk={burnoutRisk} />
-            <GoalBuilderBanner onNewGoal={() => setWizardOpen(true)} onAdjustPace={() => setRebalanceOpen(true)} />
+            <GoalBuilderBanner
+              onNewGoal={() => setWizardOpen(true)}
+              onAdjustPace={() => setRebalanceOpen(true)}
+              actionsDisabled={loadFailed}
+            />
             <MainFeed
               feedState={channel.feedState}
               feed={channel.feed}
