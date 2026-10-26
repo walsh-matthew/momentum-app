@@ -6,7 +6,8 @@
 //   npm run plan:check -- path/to/plan.md       check another file
 //   npm run plan:check -- --strict              warnings fail too (day-end step E runs this on tomorrow's plan)
 //   npm run plan:check -- --block MOM-61        print one block: where it is, its CLI Session Config, its session's
-//                                               prerequisites, its prompt lines and gate; exit 1 on zero or several matches
+//                                               prerequisites, its prompt lines and gate, and the next command in the
+//                                               runbook (for /run-block's close-out); exit 1 on zero or several matches
 //   options: --plan <file>
 //
 // What the contract is (errors fail the check; warnings are printed but pass unless --strict):
@@ -19,6 +20,8 @@
 // - every session that has blocks: a clearly labelled prerequisites note before its first block;
 // - warning: a prompt that still tells the CLI to merge into main locally (`--no-ff`). Since main is protected, work
 //   reaches it only through a pull request (CLAUDE.md), and /run-block overrides that wording.
+// - warning (MOM-104): a runbook whose first row is not `/day-start` or whose last row is not `/day-end`. No command trips
+//   on a missing row, but step E runs --strict, so tomorrow's plan cannot be committed without them.
 // It reads one file and nothing else: it does not look at today's date, at git, or at Jira, so a plan does not fail
 // just because a session is not today's.
 //
@@ -84,12 +87,20 @@ export interface RunbookEntry {
   gateText: string;
 }
 
+// A row of the runbook that is a day command rather than a block: `/day-start` or `/day-end`.
+export interface RunbookDayRow {
+  command: '/day-start' | '/day-end';
+  line: number;
+  // The "Session setting" cell of a table row, e.g. `Opus / High`; null for a list-style row.
+  setting: string | null;
+}
+
 export interface ParsedPlan {
   headerLine: number | null;
   header: { date: string; epic: string; baseCommit: string } | null;
   // A line that starts like the header but does not match, for a precise message.
   malformedHeader: string | null;
-  runbook: { line: number; endLine: number; entries: RunbookEntry[] } | null;
+  runbook: { line: number; endLine: number; entries: RunbookEntry[]; dayRows: RunbookDayRow[] } | null;
   blocks: Block[];
   sessions: Session[];
 }
@@ -118,6 +129,11 @@ const CHECKLIST_ITEM = /^\s*[-*]\s+\[[ xX]\]\s+\S/;
 const PREREQUISITES = /\*\*(?:Your )?prerequisites before this session:?\*\*/i;
 const RUNBOOK_HEADING = /^## Today['’]s runbook\s*$/i;
 const RUN_BLOCK_COMMAND = /\/run-block\s+(MOM-\d+)/;
+// The day commands in a runbook row: a table cell holding only the command, or a list item that starts with it. The prose
+// around the table, and a gate text that mentions them, are not rows.
+const DAY_COMMAND_CELL = /^`?\/(day-start|day-end)`?$/;
+const DAY_COMMAND_LEAD = /^\s*(?:[-*]|\d+[.)])\s+`?\/(day-start|day-end)\b/;
+const ROW_START = /^\s*(?:[-*]\s|\d+[.)]\s)/;
 const HEADER = /^> \*\*Date:\*\* (\d{4}-\d{2}-\d{2}) \| \*\*Active Epic:\*\* (MOM-\d+) \| \*\*Base Commit:\*\* ([0-9a-f]{7,40})\s*$/;
 const COMMIT_WITH_KEY = /\b(feat|fix|test|docs|chore|refactor|perf)\((MOM-\d+)\):/g;
 // The pre-PR wording: "... merge into main with --no-ff". A prompt that says "never merge into main" does not match.
@@ -203,10 +219,21 @@ export function parsePlan(text: string): ParsedPlan {
     const first = headings[runbookAt].index;
     const last = sectionEnd(runbookAt);
     const entries: RunbookEntry[] = [];
+    const dayRows: RunbookDayRow[] = [];
     for (let i = first + 1; i < last; i += 1) {
       if (inFence[i]) continue;
       const m = RUN_BLOCK_COMMAND.exec(lines[i]);
-      if (!m) continue;
+      if (!m) {
+        // A day row has the command as a cell of its own (or leads its list item): a gate text that merely mentions
+        // "/day-start" does not make its row one.
+        const isTable = lines[i].trimStart().startsWith('|');
+        const cells = isTable ? lines[i].split('|').slice(1, -1).map((c) => c.trim()) : [];
+        const at = cells.findIndex((c) => DAY_COMMAND_CELL.test(c));
+        const lead = !isTable && ROW_START.test(lines[i]) ? DAY_COMMAND_LEAD.exec(lines[i]) : null;
+        const name = at >= 0 ? DAY_COMMAND_CELL.exec(cells[at])![1] : lead ? lead[1] : null;
+        if (name) dayRows.push({ command: `/${name}` as RunbookDayRow['command'], line: i + 1, setting: at >= 0 && cells[at + 1] ? cells[at + 1].replace(/`/g, '') : null });
+        continue;
+      }
       let gateText: string;
       if (lines[i].trimStart().startsWith('|')) {
         const cells = lines[i].split('|').slice(1, -1).map((c) => c.trim());
@@ -216,7 +243,7 @@ export function parsePlan(text: string): ParsedPlan {
       }
       entries.push({ key: m[1], line: i + 1, gateText });
     }
-    runbook = { line: first + 1, endLine: last, entries };
+    runbook = { line: first + 1, endLine: last, entries, dayRows };
   }
 
   // Sessions and blocks, in file order.
@@ -440,6 +467,18 @@ export function checkPlanFormat(text: string): Violation[] {
     if (runbookOrder.join(',') !== planOrder.join(',')) {
       add('runbook-order', null, plan.runbook.line, `The runbook order (${runbookOrder.join(', ')}) differs from the order of the blocks in the plan (${planOrder.join(', ')}).`);
     }
+    // A day starts with /day-start and ends with /day-end (MOM-104). No command trips on a missing row, so these are
+    // warnings; day-end step E runs --strict, so tomorrow's plan cannot be committed without them.
+    const firstEntry = entries.length > 0 ? entries[0].line : Infinity;
+    const lastEntry = entries.length > 0 ? entries[entries.length - 1].line : -Infinity;
+    const dayStart = plan.runbook.dayRows.find((r) => r.command === '/day-start');
+    const dayEnd = [...plan.runbook.dayRows].reverse().find((r) => r.command === '/day-end');
+    if (!dayStart || dayStart.line > firstEntry) {
+      add('runbook-missing-day-start', null, dayStart?.line ?? plan.runbook.line, 'The runbook\'s first row must be "/day-start" (Sonnet / Low), before every "/run-block" row.', 'warning');
+    }
+    if (!dayEnd || dayEnd.line < lastEntry) {
+      add('runbook-missing-day-end', null, dayEnd?.line ?? plan.runbook.line, 'The runbook\'s last row must be "/day-end" (Opus / High), after every "/run-block" row.', 'warning');
+    }
   }
 
   return out;
@@ -464,7 +503,7 @@ const HELP = `Usage: npm run plan:check -- [plan.md] [options]
 
   (no arguments)        check ${DEFAULT_PLAN} against the plan format contract
   --strict              warnings fail the check too
-  --block <MOM-n>       print that block (its config, prerequisites, prompt lines, gate); exit 1 on zero or several matches
+  --block <MOM-n>       print that block (its config, prerequisites, prompt lines, gate, next runbook command); exit 1 on zero or several matches
   --plan <file>         the plan to read (default ${DEFAULT_PLAN})
   -h, --help            this text`;
 
@@ -486,8 +525,21 @@ export function describeBlock(block: Block, plan: ParsedPlan): string {
     `  feature branch named in the prompt: ${branch ?? '(none found)'}`,
     `  User Verification Gate (line ${block.gateLine ?? '-'}), ${block.gateItems.length} item${block.gateItems.length === 1 ? '' : 's'}:`,
     ...block.gateItems.map((item) => `    ${item}`),
+    `  next in the runbook: ${describeNext(block, plan)}`,
   ];
   return lines.join('\n');
+}
+
+// What /run-block's close-out names after this block (MOM-104): the next block's command with its model and effort from
+// its own CLI Session Config, or /day-end with the setting on the runbook's /day-end row (Opus / High when it has none).
+export function describeNext(block: Block, plan: ParsedPlan): string {
+  const entries = plan.runbook?.entries ?? [];
+  const at = entries.findIndex((e) => e.key === block.key);
+  if (at < 0) return '(this block is not in the runbook)';
+  const next = entries.slice(at + 1).map((e) => plan.blocks.find((b) => b.key === e.key)).find((b) => b !== undefined);
+  if (next) return `/run-block ${next.key} (${next.model ?? '?'} / ${next.effort ?? '?'})`;
+  const dayEnd = plan.runbook?.dayRows.find((r) => r.command === '/day-end');
+  return `/day-end (${dayEnd?.setting ?? 'Opus / High'})`;
 }
 
 export function main(argv: string[], io: Io): number {
