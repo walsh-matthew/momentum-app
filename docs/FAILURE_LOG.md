@@ -175,6 +175,34 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The day-end tool itself, which reported it to the owner before the push.
 - **Predicted it?** No.
 
+### F-024 · 2026-10-26 · build tool
+- **Asked:** Write the plan block for the password reset (MOM-64), including the address the owner must add to the sign-in provider's redirect allow-list.
+- **What went wrong:** The block told the owner to allow-list the new-password page itself as the destination of the emailed link, "through the existing callback". That page needs a session, and the emailed link arrives before there is one, so the link's code would have been lost on a bounce to the sign-in page. The owner had already added that address; a second one had to be added.
+- **Why:** The block was written without checking which paths the route guard lets through before sign-in, and "through the existing callback" was left unspecified where the allow-list entry had to be exact.
+- **Caught by:** The build agent, reading the route guard before writing any code, and asking the owner for a decision.
+- **Predicted it?** No.
+
+### F-025 · 2026-10-26 · build tool
+- **Asked:** Add browser tests for the new auth screens (MOM-64).
+- **What went wrong:** Five of the new browser checks failed on the first run: two looked for an alert or a landmark in ways that matched more than one element or none, one expected a web address with no trailing fragment, and one old test now matched text that appears twice. The unit tests for the same screens had passed.
+- **Why:** The unit tests run in a simulated page that is lenient about landmark roles and has no router announcer, so they hid how the real browser sees the page. The new tests copied that leniency.
+- **Caught by:** `npm run test:e2e`, before anything was committed. (A related finding, the mobile header not being a landmark in a real browser, is in `BACKLOG.md`.)
+- **Predicted it?** No.
+
+### F-026 · 2026-10-26 · build tool
+- **Asked:** Make the plan check require a `/day-start` row first and a `/day-end` row last in the runbook (MOM-104).
+- **What went wrong:** The first version of the check took any runbook line that mentioned a day command as a day row. One block's row names both commands in its gate text, so the check dropped that block's own row and reported the block as missing from the runbook. The new unit tests had passed.
+- **Why:** The fixtures only had the commands in their own cells, so no test held a row that merely mentions them, though the real plan already did.
+- **Caught by:** `npm run plan:check -- --strict` on the real plan, before anything was committed. A test with that row shape was added.
+- **Predicted it?** No.
+
+### F-027 · 2026-10-26 · build tool
+- **Asked:** Write tomorrow's plan, including the number of passing checks to expect when the day-end re-checks production.
+- **What went wrong:** The plan said to expect 272 passing checks across 11 scripts. Production gave 277, all passing. One script checks a platform-installed object that exists only on production, so five of its checks run there and are skipped on a local build; the expected count had been worked out from the local run.
+- **Why:** The figure was added up from a local result and written as fact for production, although the plan itself warns that local and production databases differ (RAID R-16).
+- **Caught by:** Day-end step B, which compared the totals and read the script's output before accepting the difference.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
