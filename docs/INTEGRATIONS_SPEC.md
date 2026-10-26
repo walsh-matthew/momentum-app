@@ -2,14 +2,16 @@
 
 As of 2026-10-21. Blueprint for third-party service ingestion and normalization in Momentum.
 
+> **2026-10-26: five rules here are superseded by [`docs/DOMAIN_MODEL.md`](DOMAIN_MODEL.md) (MOM-106).** They are: evidence never completes a task (§1), ingest creates to-do tasks (§1, §6), the hard-coded target goal channel per provider (§2, §3), placement in a 13-week plan (§6), and the native iOS sync line (§3 B). Each carries a pointer. The `InboundActivityPayload` contract, the adapter rules and the security rules still hold. The code follows these old rules until MOM-109 reworks ingestion into entries.
+
 ## 1. Executive Purpose & Architectural Strategy
 
-Momentum ingests activity data from heterogeneous external services (REST APIs, OAuth webhooks, client SDKs) to bring what the user has already done into their plan as evidence, without manual entry fatigue. Evidence never completes a task: the user ticks their own tasks and the system never marks one done on their behalf (`NINETY_DAY_PLAN_CONTEXT.md` §3, §5 rule 6).
+Momentum ingests activity data from heterogeneous external services (REST APIs, OAuth webhooks, client SDKs) to bring what the user has already done into their plan as evidence, without manual entry fatigue. Evidence never completes a task: the user ticks their own tasks and the system never marks one done on their behalf (`NINETY_DAY_PLAN_CONTEXT.md` §3, §5 rule 6). *(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §1.3, §1.5: completion mode per target, auto from a synced source is allowed, always visible and undoable.)*
 
 To ensure the product can scale from 2 initial integrations to 20+ without breaking existing services or requiring database schema refactoring, all integrations follow the **Adapter Pattern**:
 1. **Raw Payload Ingestion:** Providers receive raw external JSON via API polling or Webhook routes.
 2. **Adapter Normalization:** Individual provider modules transform external payloads into a unified `InboundActivityPayload` schema.
-3. **Core Ingestion Engine:** `@/lib/services/ingestion.ts` validates the normalized payload, places it in one of the user's goal channels and plan weeks, and creates an unfinished task that carries the activity as evidence (see §6).
+3. **Core Ingestion Engine:** `@/lib/services/ingestion.ts` validates the normalized payload, places it in one of the user's goal channels and plan weeks, and creates an unfinished task that carries the activity as evidence (see §6). *(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §1.6: ingestion creates entries that move targets.)*
 
 ---
 
@@ -23,7 +25,7 @@ All provider adapters must output data adhering to this standardized interface i
   `externalId: string;             // Unique ID from the source provider (e.g. Hevy workout UUID)`
   `provider: ExternalProviderId;   // Source key ('hevy', 'google_calendar', etc.)`
   `timestamp: string;              // ISO-8601 UTC timestamp of activity occurrence`
-  `targetGoalChannel: string;      // Internal Goal Channel key ('physical_fitness', 'career_pivot')`
+  `targetGoalChannel: string;      // Internal Goal Channel key ('physical_fitness', 'career_pivot')`  (superseded routing: the person binds each source to a target, `DOMAIN_MODEL.md` §1.5)
   `activityType: string;           // Provider action type ('strength_workout', 'calendar_block')`
   `title: string;                  // Presentation label (e.g. "Upper Body Strength", "Focus Time")`
   `durationMinutes: number;        // Active duration in minutes`
@@ -43,7 +45,7 @@ All provider adapters must output data adhering to this standardized interface i
 ### A. Hevy Strength Training (REST API)
 * **Auth Method:** the user's own API key in the `api-key` header (a UUID from Hevy's developer settings). It is read from the user's stored credential through the integrations service and passed to the adapter; there is no app-wide Hevy key.
 * **Base Endpoint:** `https://api.hevyapp.com/v1/workouts`
-* **Target Channel:** `physical_fitness`
+* **Target Channel:** `physical_fitness` *(superseded: the person binds the source to a target, `DOMAIN_MODEL.md` §1.5)*
 * **Sync Strategy:** Polling via `/v1/workouts` (newest first, 10 a page at most) and `/v1/workouts/{workoutId}`; `/v1/workouts/events` (changes since a date) is not built yet. Hevy also supports webhooks (below).
 * **Built (MOM-38):** `lib/adapters/hevy.ts` (`listHevyWorkouts`, `getHevyWorkout`, `normalizeHevyWorkout`), checked against Hevy's published API description and a redacted real response (`tests/fixtures/hevy-workouts.redacted.json`).
 
@@ -85,8 +87,8 @@ All provider adapters must output data adhering to this standardized interface i
 
 ### B. Apple Health / Apple Fitness (Client Sync / Webhook)
 * **Auth Method:** Device Local Sync / OAuth Grant Token.
-* **Target Channel:** `physical_fitness`
-* **Sync Strategy:** Native iOS Background App Refresh or client Bridge payload.
+* **Target Channel:** `physical_fitness` *(superseded: the person binds the source to a target, `DOMAIN_MODEL.md` §1.5)*
+* **Sync Strategy:** Native iOS Background App Refresh or client Bridge payload. *(Superseded 2026-10-26: no native app is planned; a missing integration is bridged or falls back to manual entry, `DOMAIN_MODEL.md` §1.5.)*
 
 **Apple Health Mapping Rules:**
 * `externalId` <- `HKWorkout.uuid`
@@ -99,7 +101,7 @@ All provider adapters must output data adhering to this standardized interface i
 
 ### C. Google Calendar / Reminders (OAuth2)
 * **Auth Method:** OAuth2 (`Bearer <access_token>`) with Refresh Token rotation.
-* **Target Channel:** `career_pivot` / `productivity`
+* **Target Channel:** `career_pivot` / `productivity` *(superseded: the person binds the source to a target, `DOMAIN_MODEL.md` §1.5)*
 * **Sync Strategy:** Push Notification Webhook triggers or periodic sync tokens (`/calendar/v3/users/me/calendarList`).
 * **Built (MOM-38):** `lib/adapters/google.ts` (`listGoogleCalendarEvents`, `normalizeGoogleEvent`). It lists the primary calendar (`GET /calendar/v3/calendars/primary/events`, allowed by the `calendar.readonly` scope) with `singleEvents=true`, so each occurrence of a recurring event has its own id. All-day events (a `date`, not a `dateTime`) and cancelled events with no times are counted and set aside, not turned into tasks. There is no recorded real Google response yet; the tests use bodies built from Google's documentation.
 
@@ -158,9 +160,11 @@ The "webhook rejects an unauthenticated call" acceptance criterion belongs to th
 
 `ingestActivities(batch)` turns normalized activity into tasks for the signed-in user.
 
+*(This section describes today's code. Under `DOMAIN_MODEL.md` §1.5 and §1.6, MOM-109 changes it to write entries bound to the target the person chose; idempotency, set-aside reporting and the service-role isolation rules carry over.)*
+
 1. **Contract:** each item is checked against `InboundActivityPayloadSchema` (strict: UTC ISO timestamp, lower-case keys, no extra fields). An invalid item is reported as `invalid` and does not stop the batch.
 2. **Handler per provider:** Hevy activity is always real; a Google Calendar item with `metrics.eventCompleted === false` (not yet elapsed, or cancelled) is set aside as `activity_not_completed`.
-3. **Placement:** `targetGoalChannel` must be one of the user's *active* goal channels. `week_of` is the plan week of the activity's UTC date relative to the channel's `start_date`, and `due_date` is that date. Activity before the channel began, or after plan week 13, is set aside (`before_plan_start`, `after_plan_end`), never squeezed into week 1 or 13.
+3. **Placement:** `targetGoalChannel` must be one of the user's *active* goal channels. `week_of` is the plan week of the activity's UTC date relative to the channel's `start_date`, and `due_date` is that date. Activity before the channel began, or after plan week 13, is set aside (`before_plan_start`, `after_plan_end`), never squeezed into week 1 or 13. *(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §1.1, §1.2: goals have any timeframe, and placement follows the person's own time anchors.)*
 4. **The task:** `task_type` is `event` (a timed, dated item), `minutes` is the rounded duration (at least 1), `status` is `'todo'` and `completed_at` is unset. The normalized activity is kept in `micro_tasks.source_evidence`, with `source_provider` and `source_external_id` (migration 007).
 5. **Idempotent:** a provider and external id make at most one task per user, so webhook retries and overlapping polls create nothing new. Re-ingesting never touches a task the user has since edited or ticked.
 6. **Set aside, not lost:** every skipped, invalid or failed item appears in the returned summary and is logged (provider, id and reason only).

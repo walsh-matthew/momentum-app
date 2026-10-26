@@ -1,5 +1,7 @@
 # PRODUCT STRATEGY & SYSTEM CONTEXT
 
+> **2026-10-26: parts of this strategy are superseded by [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md) (MOM-106).** These are the 90-day cycles and 12 weekly themes, the Daily Completion Score and velocity, automated rebalancing, and pricing tiers counted by goal channel. Each carries a pointer. The dual-purpose mandate and the engineering principles still hold. Pricing will be revisited with the unit-economics check (MOM-115).
+
 ## 1. Project Meta-Goals & Dual-Purpose Mandate
 
 This repository serves a dual-purpose strategy:
@@ -34,8 +36,8 @@ When implementing features, code generator tools must align with these four arch
 
 ### Pillar 1: Dynamic Goal Channels & Roadmaps
 - **Description:** Structured multi-channel goal planning (e.g., *Career Pivot*, *Physical Fitness*, *Personal Brand*).
-- **Core Engine:** Time-bound goal breaking (90-day cycles -> 12 weekly themes -> daily action items).
-- **AI Component:** Auto-breakdown of high-level goals into realistic daily action units based on past completion velocity.
+- **Core Engine:** Time-bound goal breaking (90-day cycles -> 12 weekly themes -> daily action items). *(Superseded: goals have any timeframe, ongoing goals run in blocks, `DOMAIN_MODEL.md` §1.2.)*
+- **AI Component:** Auto-breakdown of high-level goals into realistic daily action units based on past completion velocity. *(Superseded: Claude is a partner at setup and the weekly review and never scores, `DOMAIN_MODEL.md` §2, §4.2 principle 9.)*
 
 ### Pillar 2: Passive Data & Integration Layer
 - **Description:** Multi-source data ingestion to verify task completion without requiring heavy manual input.
@@ -45,9 +47,9 @@ When implementing features, code generator tools must align with these four arch
   - Professional Network: LinkedIn / Content publishing hooks.
 
 ### Pillar 3: Gamification & Velocity Engine
-- **Daily Completion Score:** Standardized score (0 - 100%) based on daily micro-task execution across active goal channels.
+- **Daily Completion Score:** Standardized score (0 - 100%) based on daily micro-task execution across active goal channels. *(Superseded: a computed scoreboard per target, with floor and aspiration, and no blended score, `DOMAIN_MODEL.md` §1.3, §1.7.)*
 - **Momentum Index:** Channel-level indicators (*Ahead of Schedule*, *On Track*, *Needs Focus*).
-- **Adaptive Recalibration:** AI-driven re-balancing when tasks are missed, preserving streaks while preventing check-box burnout.
+- **Adaptive Recalibration:** AI-driven re-balancing when tasks are missed, preserving streaks while preventing check-box burnout. *(Superseded: the weekly review raises one adjustment, and the person decides, `DOMAIN_MODEL.md` §3.)*
 
 ### Pillar 4: Cross-Platform Architecture
 - **Web App (Desktop):** Optimized for high-level roadmap creation, deep analytics, and integration management.
@@ -70,6 +72,7 @@ When writing code, refactoring, or generating features, adhere to the following 
 ## 5. Monetization & Growth Architecture (Future Proofing)
 
 Keep code paths structured to support freemium tier logic:
+*(Superseded 2026-10-26: tiers by goal channel conflict with "as many goals as the person wants", `DOMAIN_MODEL.md` §1.2. The price is revisited with the unit-economics check, aiming for AI cost under 10% of price.)*
 - **Free Tier:** 1 Active Goal Channel, manual task logging, standard dashboard.
 - **Pro Tier ($12–$15/mo):** Unlimited channels, AI dynamic roadmap generator, third-party wearable/calendar API sync.
 - **Executive Tier ($29–$49/mo):** AI Accountability Coach (voice/text daily check-ins & automated adaptive schedule adjustments).

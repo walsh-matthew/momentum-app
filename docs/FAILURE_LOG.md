@@ -126,6 +126,34 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner pasted the terminal output. A follow-up `git branch -f main origin/main` and switch fixed it.
 - **Predicted it?** No.
 
+### F-017 · 2026-10-25 · build tool (project thread)
+- **Asked:** Use the owner's own job-search tracking sheet as evidence while redesigning Momentum's goal model.
+- **What went wrong:** It read a hard-coded cell as a real weekly total and drew a design conclusion from that number.
+- **Why:** It took the number at face value and didn't check whether the cell was calculated from the rows or typed in.
+- **Caught by:** The owner, who pointed at the formula column.
+- **Predicted it?** No.
+
+### F-018 · 2026-10-26 · build tool (project thread) · ★
+- **Asked:** Draw product findings from an unprimed setup walk-through with a household tester.
+- **What went wrong:** It read the tester's reuse of the example answers as anchoring, a sign the examples were steering the tester's answers, and built a design rule on that reading.
+- **Why:** It inferred the tester's state of mind from the answers alone, without asking. The tester later said the examples were what unblocked her.
+- **Caught by:** The owner, who asked the tester. The rule became "offer the choice before examples" (`docs/DOMAIN_MODEL.md` §2.1 rule 4).
+- **Predicted it?** No.
+
+### F-019 · 2026-10-25 to 2026-10-26 · build tool (project thread) · ★
+- **Asked:** Design Momentum's setup conversation and weekly rhythm for any person's life.
+- **What went wrong:** Recurring. It built a standard work schedule into the design again and again: weekends kept for family, check-ins in the evening or at the end of the week, "any three" days, and a reminder nobody asked for. It happened twice in the design work and three more times in one setup walk-through.
+- **Why:** The model falls back on a default office-worker week when nothing says otherwise. Telling it once in conversation did not stop the next slip.
+- **Caught by:** The owner, each time. The fix is hard rules in the setup prompt, checked automatically per turn by the setup eval set (`docs/DOMAIN_MODEL.md` §2.1 rules 2 and 3, §4.2 principle 1; MOM-111).
+- **Predicted it?** No.
+
+### F-020 · 2026-10-26 · build tool (project thread)
+- **Asked:** Plan who opens the docs pull request for the approved goal model.
+- **What went wrong:** It told the owner that a project thread couldn't open the pull request without breaking the branch-naming rule. It hadn't checked the repo's history: project threads had already opened ten pull requests from their own branches.
+- **Why:** It reasoned from the written rule instead of checking what the project actually does.
+- **Caught by:** The owner, who asked why it couldn't handle the pull request as before.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).

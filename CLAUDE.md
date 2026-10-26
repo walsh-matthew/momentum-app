@@ -16,8 +16,9 @@ Momentum is an AI-powered Life Operating System designed around guided Goal Chan
 
 Before writing or changing any domain logic, read these files. They override assumptions and defaults.
 
-- **`docs/NINETY_DAY_PLAN_CONTEXT.md`**: the 90-day plan structure, task anatomy, invariants, schema mapping, and seed data. Read it before MOM-9 (seed data), MOM-11 (wizard prompt chips), MOM-14 (velocity), and MOM-15 (rebalancing). Its invariants (e.g., never cut unfinished work, user owns completion) must be encoded in the code.
-- **`docs/INTEGRATIONS_SPEC.md`**: the integration layer, the `InboundActivityPayload` contract, provider mapping rules, and the Phase 1 vs. Phase 2 scope boundary. All provider adapters must output this contract.
+- **`docs/DOMAIN_MODEL.md`**: the goal model (person facts, goals, targets with levels, habits, milestones and deadline tasks, sources, entries and corrections, the computed scoreboard), guided setup, the layered weekly review, settings and the 12 principles. Approved 2026-10-26 (MOM-106); the build is EPIC 6 (MOM-105). Its principles (e.g., never assume anything about a person's life, the person's word beats any source, Claude never scores) must be encoded in the code. Changes to it get a line in its change log. The design record behind it is `docs/design/2026-10-26-goal-model-design.md`.
+- **`docs/INTEGRATIONS_SPEC.md`**: the integration layer, the `InboundActivityPayload` contract, provider mapping rules, and the Phase 1 vs. Phase 2 scope boundary. All provider adapters must output this contract. Five of its rules are superseded by `DOMAIN_MODEL.md` (see its banner).
+- `docs/NINETY_DAY_PLAN_CONTEXT.md` is frozen as the career case study and old seed data. It is no longer binding; code comments still cite its section numbers until MOM-115 retires the old model. Where it and `DOMAIN_MODEL.md` disagree, `DOMAIN_MODEL.md` wins.
 - If code and these docs disagree, stop and flag it. Do not silently pick one.
 - Known gaps and deferred work go in `BACKLOG.md`. Planned work beyond the MVP goes in `ROADMAP.md`.
 

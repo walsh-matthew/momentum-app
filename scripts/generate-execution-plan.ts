@@ -104,7 +104,7 @@ const DEFAULT_STANDARDS: Standards = {
     'Code committed using `feat(MOM-X)` message format.',
     'Branch merged to `main` and Jira ticket moved to `Done`.',
   ],
-  domainDocs: ['docs/NINETY_DAY_PLAN_CONTEXT.md', 'docs/INTEGRATIONS_SPEC.md'],
+  domainDocs: ['docs/DOMAIN_MODEL.md', 'docs/INTEGRATIONS_SPEC.md'],
   branchPattern: 'feature/MOM-<number>-short-description',
   commitPattern: 'feat(MOM-<number>): concise description of changes',
 };

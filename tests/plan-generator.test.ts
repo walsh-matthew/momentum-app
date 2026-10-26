@@ -126,7 +126,7 @@ describe('parseStandards on the real CLAUDE.md', () => {
   });
 
   it('finds the domain docs it requires reading first, and they exist', () => {
-    expect(standards.domainDocs).toEqual(['docs/NINETY_DAY_PLAN_CONTEXT.md', 'docs/INTEGRATIONS_SPEC.md']);
+    expect(standards.domainDocs).toEqual(['docs/DOMAIN_MODEL.md', 'docs/INTEGRATIONS_SPEC.md']);
     for (const doc of standards.domainDocs) expect(() => readFileSync(join(root, doc))).not.toThrow();
   });
 
@@ -200,7 +200,7 @@ describe('a ticket plan', () => {
 
   it('adds documents named in an item’s source to the ones CLAUDE.md requires', () => {
     const plan = buildTicketPlan('MOM-47', backlog, standards);
-    expect(plan.docs).toEqual(['docs/NINETY_DAY_PLAN_CONTEXT.md', 'docs/INTEGRATIONS_SPEC.md', 'PRODUCT_STRATEGY.md']);
+    expect(plan.docs).toEqual(['docs/DOMAIN_MODEL.md', 'docs/INTEGRATIONS_SPEC.md', 'PRODUCT_STRATEGY.md']);
     expect(plan.prompt).toContain('`PRODUCT_STRATEGY.md`');
   });
 
