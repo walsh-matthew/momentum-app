@@ -1,5 +1,7 @@
 # COMPETITIVE ANALYSIS & MARKET POSITIONING
 
+> **Dated note, 2026-10-26:** this analysis describes the old concept: goal channels, 90-day cycles, a daily completion score and automated rebalancing. The product is now the goal model in [`docs/DOMAIN_MODEL.md`](DOMAIN_MODEL.md): targets with levels, synced or manual sources, a computed scoreboard and a layered weekly review. The competitor list is still useful, but the positioning should be re-checked against the new model before it is reused.
+
 ## 1. Executive Summary
 
 This document analyzes the current market landscape for goal-tracking, habit-building, and dynamic task management applications. It identifies key competitors across various user segments, highlights their pricing structures and functional vulnerabilities, and defines **Momentum's** strategic positioning strategy.

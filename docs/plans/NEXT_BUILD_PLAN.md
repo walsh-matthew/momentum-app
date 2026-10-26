@@ -2,6 +2,8 @@
 
 > **Date:** 2026-10-24 | **Active Epic:** MOM-16 | **Base Commit:** 80b0503
 >
+> **Update 2026-10-26 (MOM-106):** the owner approved the new goal model (`docs/DOMAIN_MODEL.md`, EPIC 6 MOM-105). Only the five safe blocks in this plan still run: MOM-68, MOM-65, MOM-66, MOM-93 and MOM-103. The blocks for MOM-57, MOM-45, MOM-101, MOM-64 and MOM-102 are marked superseded and skipped. Their tickets are closed or folded into the thin slice, and they stay below as a record. Migration 012 (MOM-65) is unchanged; 013 and 014 are no longer reserved. The next `/day-end` step E generates the thin-slice plan from the `BACKLOG.md` section "Goal Model Thin Slice".
+>
 > **Since the 2026-10-23 plan:** every block of that plan merged through pull requests: MOM-18, MOM-19, MOM-76, MOM-77, MOM-61, MOM-62, MOM-67 and MOM-73 are Done; MOM-38's adapters and session-less ingestion merged but the ticket stays open for the webhook routes (now MOM-98); MOM-75 is In Review until a real `/day-end` has completed (this one was the first). `main` is protected (`checks` and `database` must be green). New tickets from the day-end sync: **MOM-98** (webhook endpoints), **MOM-99** (adapter follow-ups), **MOM-100** (CI hardening), **MOM-101** (LLM usage follow-ups), **MOM-102** (privacy approach) and **MOM-103** (Connected Apps status failure); none is scheduled today except MOM-101, MOM-102 and MOM-103. Production verification is now **231 checks across 9 scripts** in `supabase/verify/`; the next free migration number is **012**; `npm test` runs 1752 tests; production holds exactly one user (the standing smoke-test account).
 
 ---
@@ -17,11 +19,11 @@
 | 3 | `/run-block MOM-66` | Sonnet / High | The new grants check passes on the real tables and you saw it fail on a throwaway table made by hand on the local stack only; the decision about `task_rebalance_history` is written down and nothing was granted without your OK. |
 | 4 | `/run-block MOM-93` | Sonnet / Medium | When the plan cannot be read, the home page says so and offers Try again, with no goal wizard prompt; a user with no goals still sees the no-goals state. |
 | 5 | `/run-block MOM-103` | Sonnet / Medium | With connection status unreadable, Connected Apps says so and offers Try again and shows none of the old switch-only cards; the desktop side panel is untouched. |
-| 6 | `/run-block MOM-57` | Sonnet / Low | The new tests cover refusals and success for turning an app on or off, and the mock payloads are checked against the contract; no app code changed unless a test found a bug and you were told. |
-| 7 | `/run-block MOM-45` | Sonnet / High | You chose where the time zone lives before any migration was written; a unit test shows a Los Angeles user still in the old week at 23:30 local while UTC has rolled over; the CLI showed the migration and the dry run and did not push. |
-| 8 | `/run-block MOM-101` | Sonnet / High | You chose the retention period and how the purge is scheduled before the migration was written; Settings shows only your own Claude use for the last 24 hours; a test fails when the fake and the real limit function disagree. |
-| 9 | `/run-block MOM-64` | Sonnet / High | You set up the CAPTCHA and the redirect address before the block built on them; the password reset works end to end on the local stack; the sidebar shows who is signed in; nothing about the standing smoke-test account was changed. |
-| 10 | `/run-block MOM-102` | Sonnet / Medium | The data inventory and the list of what each Claude prompt sends are accurate; you reviewed every `[OWNER TO CONFIRM]` line in the notice; `/privacy` opens without signing in. The delete-my-data criterion is reported as not met. |
+| 6 | `/run-block MOM-57` | Sonnet / Low | **Superseded 2026-10-26, skip this block** (folded into the goal model thin slice). The new tests cover refusals and success for turning an app on or off, and the mock payloads are checked against the contract; no app code changed unless a test found a bug and you were told. |
+| 7 | `/run-block MOM-45` | Sonnet / High | **Superseded 2026-10-26, skip this block** (MOM-45 is Closed). You chose where the time zone lives before any migration was written; a unit test shows a Los Angeles user still in the old week at 23:30 local while UTC has rolled over; the CLI showed the migration and the dry run and did not push. |
+| 8 | `/run-block MOM-101` | Sonnet / High | **Superseded 2026-10-26, skip this block** (folded into the goal model thin slice). You chose the retention period and how the purge is scheduled before the migration was written; Settings shows only your own Claude use for the last 24 hours; a test fails when the fake and the real limit function disagree. |
+| 9 | `/run-block MOM-64` | Sonnet / High | **Superseded 2026-10-26, skip this block** (moved to the goal model thin slice as a trial prerequisite (piece 11, with MOM-102 and MOM-116)). You set up the CAPTCHA and the redirect address before the block built on them; the password reset works end to end on the local stack; the sidebar shows who is signed in; nothing about the standing smoke-test account was changed. |
+| 10 | `/run-block MOM-102` | Sonnet / Medium | **Superseded 2026-10-26, skip this block** (moved to the goal model thin slice as a trial prerequisite (piece 11)). The data inventory and the list of what each Claude prompt sends are accurate; you reviewed every `[OWNER TO CONFIRM]` line in the notice; `/privacy` opens without signing in. The delete-my-data criterion is reported as not met. |
 
 If a block needs another ticket's code, `/run-block` checks that code is already in `origin/main`. If it is only on an unmerged branch, it stops and offers two ways forward: push that branch and merge its pull request first, or stack this block on that branch (only with your OK). No block in this plan needs another block's code, so none should stop for that. The three migrations (012, 013, 014) are the one place the blocks touch: see "Migrations are stacked" in the Standing Rules.
 
@@ -262,6 +264,8 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 
 ## Block 2.3: Add Tests for Integrations (MOM-57)
 
+> **Superseded 2026-10-26 (MOM-106): skip this block.** It is folded into the goal model thin slice: integration tests are written against the new entries flow in MOM-109. The block is kept below as a record.
+
 * **Objective & Scope:** `setConnectedAppActive` has no test (it is only called from the Server Action), and the mock adapter payloads are not asserted against the ingestion contract. The real Hevy and Google adapters are already checked against `InboundActivityPayloadSchema` in `tests/adapters.test.ts`. Add what is missing so both acceptance criteria are met.
 * **Core Invariants to Protect:** *Human-Only Completion*: nothing under test may write `status` or `completed_at`. *Service RLS*: tests use the in-memory Supabase fake; none uses production credentials or a network.
 * **CLI Session Config:** Model: Sonnet | Effort: Low
@@ -298,6 +302,8 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 **Your prerequisites before this session:** Docker Desktop running (the verify scripts and the browser tests use the local stack), and `npm run dev` stopped when the block runs the browser tests. The block stops for your design OK before writing any migration. If you choose to store the zone in the database it adds migration 013, applied at day-end step F.
 
 ## Block 3.1: Roll the Plan Week Over at the User's Local Midnight (MOM-45)
+
+> **Superseded 2026-10-26 (MOM-106): skip this block.** It is MOM-45 is Closed; each person sets their own time zone, week start and day end (`docs/DOMAIN_MODEL.md` §1.1, data model in MOM-107), so migration 013 is not used by this block. The block is kept below as a record.
 
 * **Objective & Scope:** The current plan week comes from the goal's `start_date` and the server's UTC date, so it is off by one around midnight for a user in Pacific time (about 5 pm local for the week boundary to flip early). Store the user's time zone (or an explicit week boundary), compute "today" in it, and use that everywhere a "today" is taken on the server: the week, the due-so-far logic, goal progress, and the rebalance proposal.
 * **Core Invariants to Protect:** *Human-Only Completion*: nothing here writes a task's status. *Service RLS*: a user can set only their own zone, and an invalid zone is refused and never stored; an unknown or missing zone falls back to UTC and says so in a comment. *No-Delete*: the move history and `carried_from_week` markers do not change; only the arithmetic for "today" does.
@@ -339,6 +345,8 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 
 ## Block 4.1: Purge Old Claude Usage Records and Show a Person Their Own Use (MOM-101)
 
+> **Superseded 2026-10-26 (MOM-106): skip this block.** It is folded into the goal model thin slice: every Claude limit is re-baselined to per-feature budgets (MOM-111, MOM-113, MOM-115), so migration 014 is not used by this block. The block is kept below as a record.
+
 * **Objective & Scope:** Nothing deletes old `llm_usage_logs` rows, so a person's pattern of Claude use stays tied to their account indefinitely (RAID R-11). Decide a retention period and run a scheduled purge; add a Settings readout of the signed-in person's own use in the last 24 hours (`listMyLlmUsage()` has no screen); and make a change to `reserve_llm_call()` that is not mirrored in the test fake fail a test. Record the "one lock per reservation" note as accepted unless you find a reason not to.
 * **Core Invariants to Protect:** *Service RLS*: the purge function is SECURITY DEFINER with a pinned `search_path`, executable only by the role that runs the schedule, never by an API role; the readout shows only the signed-in person's own rows and no prompt or answer content (none is stored). *Governance*: the retention period must stay longer than the 24-hour windows the caps are computed from, so a purge can never relax a cap.
 * **CLI Session Config:** Model: Sonnet | Effort: High
@@ -376,6 +384,8 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 
 ## Block 4.2: Password Reset, Sign-Up Abuse Protection and a Signed-In Indicator (MOM-64)
 
+> **Superseded 2026-10-26 (MOM-106): skip this block.** It is moved to the goal model thin slice as a trial prerequisite (piece 11, with MOM-102 and MOM-116); the thin-slice plan schedules it again. The block is kept below as a record.
+
 * **Objective & Scope:** Sign-in is email and password only: a user who forgets their password has no way back, sign-up has no throttling or CAPTCHA, and the sidebar does not show who is signed in (Settings already shows the email; check what the sidebar and mobile header do). Build the password reset (request form on `/login`, emailed link, a page to set a new password), CAPTCHA support on sign-up and sign-in that switches on only when its public site key is configured, and the signed-in indicator. OAuth providers are out of scope.
 * **Core Invariants to Protect:** *Security*: the reset request gives the same answer whether or not the email has an account (no account enumeration); the reset page works only with the recovery session the emailed link creates; no secret in the repo, the browser or a log; the CAPTCHA secret lives only in the Supabase dashboard. *Service RLS*: all Supabase Auth calls go through `lib/services/auth.ts`, never from a component.
 * **CLI Session Config:** Model: Sonnet | Effort: High
@@ -411,6 +421,8 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 ---
 
 ## Block 4.3: Write the Privacy Approach and Notice Before Real Users (MOM-102)
+
+> **Superseded 2026-10-26 (MOM-106): skip this block.** It is moved to the goal model thin slice as a trial prerequisite (piece 11); its scope now also covers a minor tester and household privacy; the thin-slice plan schedules it again. The block is kept below as a record.
 
 * **Objective & Scope:** Health data is a sensitive category, and goal and task text is sent to the Claude API (RAID R-03, R-04). Audit and write down what is stored from Hevy and Google and what each Claude prompt contains, draft a plain-language privacy notice at `/privacy` (readable without signing in and linked from the sign-in and sign-up page), and mark every statement that needs your decision `[OWNER TO CONFIRM]`. The ticket also asks for a way to delete synced activity; that interacts with the No-Delete invariant and needs its own design, so this block writes the design note and a BACKLOG item and reports that criterion as **not met**.
 * **Core Invariants to Protect:** *No-Delete*: do not build any deletion here. *Honesty*: the notice states only what the code does today (for example that provider tokens are stored as plain text protected by the database's disk encryption, not by field-level encryption, and that call counts are kept for the retention period). *Public repo*: the inventory names categories and fields in general terms; no secrets, no keys, no personal data. This is a plain-language draft, not legal advice.

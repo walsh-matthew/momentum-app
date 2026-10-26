@@ -1,5 +1,7 @@
 # 90-Day Plan Context for Momentum
 
+> **Frozen 2026-10-26: superseded as the binding product rules by [`docs/DOMAIN_MODEL.md`](DOMAIN_MODEL.md) (MOM-106).** This doc stays as the career case study and the source of the old seed data. It is not trimmed or renumbered, because code, test and migration comments cite its section numbers. Rules that changed carry a pointer to the new rule. Where this doc and `DOMAIN_MODEL.md` disagree, `DOMAIN_MODEL.md` wins. Code still built on these rules is retired by MOM-115.
+
 As of 2026-10-21. Snapshot, not live. Structure and rules below are stable; the "current position" line in section 2 is the only volatile part.
 
 ## 0. Purpose and how to use this doc
@@ -36,7 +38,7 @@ There is also a non-checklist test: the user can predict where a model will fail
 | Lane | Parallel job-search tracks [career] | 2 | tag on a channel or task |
 | Track | Parallel workstreams: Build, Learn, Certify, Position | 4 | `micro_tasks.task_type` grouping |
 | Phase | A 4-week stage that ends in a gate | 3 | gap: no table (see section 7) |
-| Week | Weekly checklist plus a daily schedule | 13 | gap: needs a week field |
+| Week | Weekly checklist plus a daily schedule | 13 | gap: needs a week field (superseded: any timeframe, `DOMAIN_MODEL.md` §1.2) |
 | Daily task | A timeboxed item, `Label, N min.` | about 5 to 8 per day | `micro_tasks` row |
 | Friday review | 30-minute tick-off and notes | weekly | gap: needs a review record |
 
@@ -69,7 +71,7 @@ Every daily task starts with a bold label and minutes: `Build, 60 min.` Recurrin
 
 **Task markers [core]:** "carried over from week N" and "pulled forward from week N". A task keeps a record of where it came from.
 
-**Completion [core]:** the user ticks their own tasks. The system never marks a task done on their behalf.
+**Completion [core]:** the user ticks their own tasks. The system never marks a task done on their behalf. *(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §1.3 (completion mode per target: auto from source, confirm or manual; auto-completion always visible and undoable).)*
 
 ## 4. The processes
 
@@ -92,18 +94,20 @@ Each is a repeatable loop: a trigger, a saved set of rules, data in durable plac
 
 ## 5. Invariants Momentum must encode
 
-1. **Never cut unfinished work.** Carry it forward to the week where it fits best and rebalance against the goal and original timeline. If the timeline can't hold, say so and let the user decide.
+1. **Never cut unfinished work.** Carry it forward to the week where it fits best and rebalance against the goal and original timeline. If the timeline can't hold, say so and let the user decide. *(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §4.2 principle 11: narrowed to milestone and deadline-task steps; habits never carry over.)*
 2. **Dates are flexible; the real clock is not.** Push items later before cutting. Pull forward anything that shortens the visible gap (a dated resume entry, a volunteer start, contract work).
-3. **Interviews and recruiter calls win.** They take priority over study; certification slips before a build does.
-4. **Hours are not tracked.** Weeks are sized from what was actually finished.
+3. **Interviews and recruiter calls win.** They take priority over study; certification slips before a build does. *(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §4.2 principles 6 and 7: Momentum informs, the person prioritizes.)*
+4. **Hours are not tracked.** Weeks are sized from what was actually finished. *(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §1.3 and §1.8: time is a valid measure, with a start/stop timer as a manual source.)*
 5. **Timebox builds.** Cut features, not the demo or the write-up.
-6. **The user owns completion** (section 3).
+6. **The user owns completion** (section 3). *(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §1.3 and §4.2 principles 3 and 10: the person's word beats any source; auto-completion is visible and undoable.)*
 7. **Public output is human-approved.** Drafts come to the user; the user publishes.
 8. **Claims stay conservative.** Estimates are labeled as estimates; the conservative figure wins when a number falls between options.
 9. **Data discipline.** Only invented or public data in prototypes, demos, and write-ups.
 10. **Interview-style "gate" checks.** A phase is passed on evidence (a number, a demo, a log count), not on feeling ready.
 
 ## 6. The feedback loop [core]
+
+*(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §3: the layered weekly review at the end of each person's own week. The failure log lives in `docs/FAILURE_LOG.md`.)*
 
 Each Friday the user ticks tasks and answers these notes, which feed the next week's build:
 - What made this week heavier or lighter than planned
@@ -160,6 +164,8 @@ One example of carry-over: a `certify` task originally in week 2, now `carried_f
 
 ## 9. Prompt chips and wizard (for MOM-11)
 
+*(Superseded 2026-10-26 by `DOMAIN_MODEL.md` §2: guided setup, one question at a time.)*
+
 Draw chips from the plan's real vocabulary. Suggested chips, grouped:
 - **Goal type:** Career pivot, Get certified, Build a portfolio piece, Prepare for interviews, Grow my network
 - **Constraints:** Hours are flexible, Contract work first, Don't track hours, Keep dates flexible
@@ -169,6 +175,8 @@ Draw chips from the plan's real vocabulary. Suggested chips, grouped:
 Existing chips `+ New Goal Wizard` and `Adjust Weekly Pace` stay. `Adjust Weekly Pace` should use the carry-over language in section 5, rule 1.
 
 ## 10. Notes for MOM-14 and MOM-15
+
+*(Superseded 2026-10-26: velocity and rebalancing are replaced by the computed scoreboard and the weekly review, `DOMAIN_MODEL.md` §1.7 and §3.)*
 
 - **Velocity (MOM-14):** derive it from ticks and carry-over, not logged hours. A suggested "burnout risk" signal is carry-over buildup across consecutive weeks.
 - **Rebalance proposals (MOM-15):** each proposal should name what moves, from which week to which, and why, and flag when the timeline cannot hold. Proposals never delete tasks. The `TaskRebalanceSchema` should have no delete action.
