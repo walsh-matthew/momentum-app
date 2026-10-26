@@ -154,6 +154,20 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner, who asked why it couldn't handle the pull request as before.
 - **Predicted it?** No.
 
+### F-021 · 2026-10-26 · build tool
+- **Asked:** Find out whether a new database check script must follow a convention, and report it (MOM-66).
+- **What went wrong:** It reported that nothing enforces the style of a verify script. A unit test does: every script must build a temporary results table and end with one fixed query. It wrote the new script a different way, and the test failed.
+- **Why:** It searched the tests for the folder path and found only comments. The test that enforces the style reads the folder through a variable, so the search never matched. It treated "found nothing" as "nothing exists".
+- **Caught by:** `npm test`, after the report had already been given to the owner.
+- **Predicted it?** No.
+
+### F-022 · 2026-10-26 · build tool
+- **Asked:** Finish a block that found two new follow-up items, and log them in the backlog (MOM-66).
+- **What went wrong:** It logged both items without a Jira key and reported the block done. The day-end build check expects every open item to have a key, so it failed on that branch. The command that checks this reports success even when items are missing a key, and the day-end tool's own first filter of the output hid the failing line.
+- **Why:** New items are meant to get their keys at day-end, but the build check runs before that step, so any block that logs an item fails it. The checking command only prints the problem; it does not fail.
+- **Caught by:** The day-end tool, on a second, full read of the output before reporting the branch as passed. The fix is tracked in MOM-104.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
