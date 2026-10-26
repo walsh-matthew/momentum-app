@@ -17,7 +17,7 @@ interface PageFrameProps {
 export function PageFrame({ active, title, userEmail, children }: PageFrameProps) {
   return (
     <div className="desktop-shell" data-columns="2">
-      <WorkspaceSidebar ariaLabel="Workspace" active={active} />
+      <WorkspaceSidebar ariaLabel="Workspace" active={active} userEmail={userEmail} />
       <section className="desktop-workspace" aria-label={title}>
         <div className="workspace-content">
           <MobileHeader active={active} userEmail={userEmail} />

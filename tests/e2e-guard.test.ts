@@ -72,9 +72,16 @@ describe('localStackEnvFrom', () => {
     expect(() => localStackEnvFrom({ API_URL: LOCAL.API_URL, MAILPIT_URL: LOCAL.MAILPIT_URL })).toThrow(/keys/);
   });
 
-  it('pins the model key and the other server secrets to empty, so nothing from .env.local reaches the server', () => {
+  it('pins the model key, the other server secrets and the CAPTCHA keys to empty, so nothing from .env.local reaches the server', () => {
     const { serverEnv } = localStackEnvFrom(LOCAL);
-    for (const name of ['ANTHROPIC_API_KEY', 'HEVY_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']) {
+    for (const name of [
+      'ANTHROPIC_API_KEY',
+      'HEVY_API_KEY',
+      'GOOGLE_CLIENT_ID',
+      'GOOGLE_CLIENT_SECRET',
+      'NEXT_PUBLIC_CAPTCHA_SITE_KEY',
+      'NEXT_PUBLIC_CAPTCHA_PROVIDER',
+    ]) {
       expect(Object.hasOwn(serverEnv, name), name).toBe(true);
       expect(serverEnv[name], name).toBe('');
     }
