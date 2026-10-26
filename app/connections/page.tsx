@@ -1,5 +1,6 @@
 import { CircleAlert, CircleCheck } from 'lucide-react';
 import { redirect } from 'next/navigation';
+import { ConnectionStatusError } from '@/components/integrations/ConnectionStatusError';
 import { IntegrationCardList } from '@/components/integrations/IntegrationCardList';
 import { PageFrame } from '@/components/layout/PageFrame';
 import { noticeFor } from '@/lib/integrations/connectNotices';
@@ -15,17 +16,18 @@ interface ConnectionsPageProps {
   searchParams: Promise<{ google?: string | string[] }>;
 }
 
-async function loadConnectedApps(): Promise<ConnectedAppPublic[]> {
+// null when the switches cannot be read. A read that works and finds no rows is [], which is a different thing.
+async function loadConnectedApps(): Promise<ConnectedAppPublic[] | null> {
   try {
     const result = await listConnectedApps();
-    return result.ok ? result.data : [];
+    return result.ok ? result.data : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
 // Connection status for each app: metadata only, never a token or a key. null when it cannot be read, in which case
-// the cards fall back to the plain switches instead of claiming a status they do not know.
+// the page says so with a way to try again, instead of cards that claim a status it does not know.
 async function loadAccounts(): Promise<IntegrationAccount[] | null> {
   try {
     const result = await listIntegrationAccounts();
@@ -66,7 +68,11 @@ export default async function ConnectionsPage({ searchParams }: ConnectionsPageP
         </p>
       )}
       <div className="mt-6 max-w-xl">
-        <IntegrationCardList connectedApps={connectedApps} accounts={accounts ?? undefined} />
+        {connectedApps === null || accounts === null ? (
+          <ConnectionStatusError />
+        ) : (
+          <IntegrationCardList connectedApps={connectedApps} accounts={accounts} />
+        )}
       </div>
     </PageFrame>
   );

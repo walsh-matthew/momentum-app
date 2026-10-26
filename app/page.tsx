@@ -5,7 +5,7 @@ import { getPlanSnapshot, type PlanSnapshot } from '@/lib/services/tasks';
 import { buildChannelViews } from '@/lib/utils/channelViews';
 import { summarizeActiveGoalProgress } from '@/lib/utils/progress';
 import { groupMovesByTask } from '@/lib/utils/rebalance';
-import { EMPTY_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS } from '@/types/channelViews';
+import { LOAD_FAILED_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 
 // Reads the signed-in user's session, so this page renders per request.
@@ -33,8 +33,10 @@ async function loadConnectedApps(): Promise<ConnectedAppPublic[]> {
 }
 
 // The user's goals, tasks and move history, read once and shared by the channel feeds, each channel's
-// velocity and each channel's rebalance proposal. null shows the empty state when the data cannot be read
-// (for example the Supabase env vars are not configured) instead of failing the page.
+// velocity and each channel's rebalance proposal. null means the data could not be read (an error result or a
+// throw, for example the Supabase env vars are not configured); the page then shows the could-not-load state
+// instead of failing. A read that succeeds is never null, even with no goals, so "failed" and "found nothing"
+// stay apart.
 async function loadSnapshot(): Promise<PlanSnapshot | null> {
   try {
     const result = await getPlanSnapshot();
@@ -56,7 +58,7 @@ export default async function HomePage() {
   // selection is sent to the server and the server never trusts one.
   const views = snapshot
     ? buildChannelViews(snapshot.goals, snapshot.tasks, snapshot.history, snapshot.today)
-    : EMPTY_CHANNEL_VIEWS;
+    : LOAD_FAILED_CHANNEL_VIEWS;
   const moveChains = groupMovesByTask(snapshot?.history ?? []);
   // Progress per active goal for the sidebar and the goal cards, counted from the same snapshot (no second
   // read), so it only ever covers this user's own goals and tasks.
