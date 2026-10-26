@@ -1,34 +1,27 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
 import { authenticate } from '@/app/actions/auth';
 import { Button } from '@/components/ui/button';
-import type { AuthFormState } from '@/types/auth';
+import type { AuthFormState, CaptchaConfig } from '@/types/auth';
+import { AuthBrand, FIELD_CLASS, LINK_CLASS } from './AuthCardParts';
+import { CaptchaWidget } from './CaptchaWidget';
 
 interface SignInFormProps {
   initialError?: string | null;
+  // The CAPTCHA to show, or null when no site key is configured (then the form is exactly as it was).
+  captcha?: CaptchaConfig | null;
 }
 
 const INITIAL_STATE: AuthFormState = { error: null, notice: null };
 
-const FIELD_CLASS =
-  'min-h-11 rounded-lg border border-foreground/45 bg-background px-3 text-base font-normal text-foreground placeholder:text-muted';
-
-export function SignInForm({ initialError = null }: SignInFormProps) {
+export function SignInForm({ initialError = null, captcha = null }: SignInFormProps) {
   const [state, formAction, pending] = useActionState(authenticate, { ...INITIAL_STATE, error: initialError });
 
   return (
     <form action={formAction} className="score-card w-full max-w-sm flex-col items-stretch gap-4 p-6">
-      <div className="flex items-center gap-2.5">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <span className="momentum-mark" aria-hidden="true">
-            m
-          </span>
-        </span>
-        <span className="text-[17px] font-semibold tracking-[-0.04em]" aria-hidden="true">
-          momentum
-        </span>
-      </div>
+      <AuthBrand />
       <h1 className="text-lg font-semibold tracking-[-0.03em]">Sign in to Momentum</h1>
       <label className="flex flex-col gap-1 text-sm font-medium">
         Email
@@ -45,6 +38,10 @@ export function SignInForm({ initialError = null }: SignInFormProps) {
           className={FIELD_CLASS}
         />
       </label>
+      <Link href="/login?reset=1" className={`${LINK_CLASS} self-start`}>
+        Forgot password?
+      </Link>
+      {captcha && <CaptchaWidget config={captcha} resetOn={state} />}
       {state.error && (
         <p role="alert" className="text-sm text-danger">
           {state.error}

@@ -92,6 +92,36 @@ describe('getAnthropicApiKey', () => {
   });
 });
 
+describe('getCaptchaConfig', () => {
+  async function loadCaptcha(key: string | undefined, provider?: string) {
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_CAPTCHA_SITE_KEY', key ?? '');
+    vi.stubEnv('NEXT_PUBLIC_CAPTCHA_PROVIDER', provider ?? '');
+    return (await import('@/lib/config/env')).getCaptchaConfig;
+  }
+
+  it('is null with no site key, so nothing changes where CAPTCHA is not switched on', async () => {
+    expect((await loadCaptcha(undefined))()).toBeNull();
+    expect((await loadCaptcha('   '))()).toBeNull();
+    // A provider on its own is not a configuration.
+    expect((await loadCaptcha(undefined, 'hcaptcha'))()).toBeNull();
+  });
+
+  it('defaults the provider to Turnstile', async () => {
+    expect((await loadCaptcha('0x4AAA-site-key'))()).toEqual({ provider: 'turnstile', siteKey: '0x4AAA-site-key' });
+  });
+
+  it('accepts hCaptcha, and trims the values', async () => {
+    expect((await loadCaptcha(' site-key ', ' hcaptcha '))()).toEqual({ provider: 'hcaptcha', siteKey: 'site-key' });
+  });
+
+  it('throws on an unknown provider rather than quietly switching the check off, and never prints the key', async () => {
+    const getCaptchaConfig = await loadCaptcha('secret-looking-site-key', 'recaptcha');
+    expect(() => getCaptchaConfig()).toThrow(/NEXT_PUBLIC_CAPTCHA_PROVIDER/);
+    expect(() => getCaptchaConfig()).not.toThrow(/secret-looking-site-key/);
+  });
+});
+
 describe('getGoogleOAuthEnv', () => {
   it('returns the client id and secret', async () => {
     const env = await loadEnv({ GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' });
