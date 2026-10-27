@@ -1,0 +1,57 @@
+// What the manual-entry page (MOM-110) shows. These are views over the goal model's rows, built by
+// lib/services/entries.ts; the rows themselves are in types/database.types.ts. Nothing here is a score or a total:
+// a step is ticked or not, an entry is removed or not (docs/DOMAIN_MODEL.md §1.6, §1.7).
+
+import type { Measure } from './database.types';
+
+// One step of a milestone that feeds a checklist target. `ticked` comes from the entries and the person's
+// corrections (a tick is an entry, un-ticking hides it), never from the step row's display column.
+export interface LogStep {
+  id: string;
+  title: string;
+  ticked: boolean;
+}
+
+// A milestone or deadline task whose steps feed a checklist target.
+export interface LogItem {
+  id: string;
+  title: string;
+  steps: LogStep[];
+}
+
+// A target the person can log against. Its measure decides the control: count is a tap, quantity is one number,
+// time is a timer, checklist is a tick per step.
+export interface LogTarget {
+  id: string;
+  title: string;
+  goalTitle: string;
+  measure: Measure;
+  // The unit of a quantity target; null for every other measure.
+  unit: string | null;
+  // Checklist targets only: the items feeding it, with their steps. Empty for every other measure.
+  items: LogItem[];
+}
+
+// One manual entry in the recent list. `removed` means a hide correction exists for its record: it is kept, shown
+// as removed, and can be restored.
+export interface LoggedEntry {
+  id: string;
+  targetId: string;
+  targetTitle: string;
+  measure: Measure;
+  unit: string | null;
+  value: number;
+  occurredAt: string;
+  // How it was logged: 'tap', 'number', 'timer' or 'tick'. Null if the evidence does not say.
+  via: string | null;
+  // For a tick: the step's title, as it was when ticked. Null for the other ways to log.
+  detail: string | null;
+  removed: boolean;
+}
+
+export interface LogPanel {
+  // The person's own time zone, or null when it is not set (or not a real zone). Logging refuses without it.
+  timeZone: string | null;
+  targets: LogTarget[];
+  recent: LoggedEntry[];
+}
