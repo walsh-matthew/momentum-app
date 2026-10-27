@@ -4,9 +4,11 @@
 // proposal with a notice. The model is mocked: no network, no key.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROMPTS, fieldList } from '@/lib/config/privacy';
 import { proposeRebalance, requestModelRebalance } from '@/lib/services/tasks';
 import { buildRebalanceProposal, buildModelFacts, checkProposalAgainstTasks, MAX_MODEL_TASKS } from '@/lib/utils/rebalance';
 import { parseRebalanceProposal } from '@/types/rebalance';
+import { fieldPaths } from './helpers/fieldPaths';
 import { resetUsage, rowsFor, usage } from './helpers/fakeLlmUsage';
 import { OTHER_USER, USER, channelRow, db, newId, resetDb, taskRow, type TaskRow } from './helpers/fakeSupabase';
 
@@ -94,16 +96,15 @@ describe('when the user asks Claude', () => {
     expect(sent.tasks).toEqual([{ id: a.id, week: 2, type: 'certify', dueDate: null }]);
   });
 
-  // MOM-102: the approved field list, pinned. Adding a field to what Claude is sent must fail here first.
-  it('sends exactly the approved fields: no minutes and no velocity', async () => {
+  // MOM-102: the field list is the one the privacy notice prints (lib/config/privacy.ts), so adding a field to what
+  // Claude is sent fails here until the config, and with it the notice, says so.
+  it('sends exactly the fields the privacy notice lists: no minutes and no velocity', async () => {
     const a = behind();
     answer(proposalFor([goodMove(a)]));
     await proposeRebalance(asMicroTasks([a]), 4, TODAY, { useModel: true, budget: BUDGET });
 
     const sent = model.request.mock.calls[0][0] as ReturnType<typeof buildModelFacts>;
-    expect(Object.keys(sent).sort()).toEqual(['currentWeek', 'planWeeks', 'tasks', 'today', 'weeks']);
-    expect(Object.keys(sent.tasks[0]).sort()).toEqual(['dueDate', 'id', 'type', 'week']);
-    expect(Object.keys(sent.weeks[0]).sort()).toEqual(['finished', 'unfinished', 'week']);
+    expect(fieldPaths(sent)).toEqual(fieldList(PROMPTS.rebalance.sends));
   });
 
   it('only lists unfinished tasks as movable, and counts the finished ones per week', async () => {

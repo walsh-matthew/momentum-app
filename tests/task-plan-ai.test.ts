@@ -11,7 +11,9 @@ import {
   buildPlanFacts,
   requestWeekOnePlanFromModel,
 } from '@/lib/ai/taskPlan';
+import { PROMPTS, fieldList } from '@/lib/config/privacy';
 import { parseWizardInput, type WizardInput } from '@/lib/goals/taskPlan';
+import { fieldPaths } from './helpers/fieldPaths';
 
 const keyReader = vi.hoisted(() => ({ get: vi.fn(() => 'sk-ant-test-key-do-not-leak') }));
 vi.mock('@/lib/config/env', () => ({ getAnthropicApiKey: keyReader.get }));
@@ -121,10 +123,11 @@ describe('what it sends', () => {
     expect(text).not.toMatch(/user|email|id"|goal_channel|career_pivot/i);
   });
 
-  // MOM-102: the approved field list, pinned. Adding a field to what Claude is sent must fail here first.
+  // MOM-102: the field list is the one the privacy notice prints (lib/config/privacy.ts), so adding a field to what
+  // Claude is sent fails here until the config, and with it the notice, says so.
   it('the facts are exactly the wizard answers, labelled, with nothing else', () => {
     const facts = buildPlanFacts(wizard({ pace: 'lighter', constraints: ['flexible_hours'], reviewPrompts: ['took_longer'] }));
-    expect(Object.keys(facts).sort()).toEqual(['constraints', 'goalType', 'pace', 'reviewQuestions', 'title']);
+    expect(fieldPaths(facts)).toEqual(fieldList(PROMPTS.weekPlan.sends));
     // The goal type is its label alone; constraint and pace keep their keys, which the prompt's rules name.
     expect(typeof facts.goalType).toBe('string');
     expect(Object.keys(facts.constraints[0]).sort()).toEqual(['key', 'label']);

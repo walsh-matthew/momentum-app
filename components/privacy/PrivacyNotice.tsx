@@ -1,17 +1,33 @@
 import Link from 'next/link';
-import { ANTHROPIC_TERMS, DELETION_WITHIN_DAYS, TERMS_CHECKED_ON } from '@/lib/config/privacy';
+import {
+  ANTHROPIC_TERMS,
+  DELETION_WITHIN_DAYS,
+  DEVICE_STORAGE,
+  GOOGLE_TESTING_LINE,
+  GUIDED_SETUP_LINE,
+  NEVER_SENT,
+  NOTICE_CHANGE_LINE,
+  PROMPTS,
+  PROVIDER_NOTICES,
+  SERVICES,
+  STORED_GROUPS,
+  TERMS_CHECKED_ON,
+  joinWords,
+} from '@/lib/config/privacy';
 
-// The public privacy notice (MOM-102), in plain words. Product-level only: it names no tester and says nothing about
-// anyone's age or household. What it states about stored data and Claude prompts is pinned by tests/privacy-notice
-// .test.tsx and tests/rebalance-model.test.ts, tests/task-plan-ai.test.ts, so a change to either has to change this.
+// The public privacy notice (MOM-102), in plain words. Every fact on this page comes from lib/config/privacy.ts, and
+// tests/privacy-sync.test.ts, tests/rebalance-model.test.ts and tests/task-plan-ai.test.ts fail when the code stops
+// matching that file, so the page cannot drift from what Momentum does. It names no tester and says nothing about
+// anyone's age or household.
 
 const LINK_CLASS = 'underline underline-offset-2 hover:text-foreground';
 const SECTION_CLASS = 'flex flex-col gap-2';
 const H2_CLASS = 'text-base font-semibold tracking-[-0.02em]';
+const LIST_CLASS = 'ml-5 list-disc space-y-1';
 
 export function PrivacyNotice() {
   return (
-    <article className="flex flex-col gap-6 text-sm leading-relaxed">
+    <article className="flex flex-col gap-6 text-sm leading-relaxed [overflow-wrap:anywhere]">
       <header className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold tracking-[-0.03em]">Privacy notice</h1>
         <p className="text-muted">
@@ -24,24 +40,10 @@ export function PrivacyNotice() {
         <h2 id="stores" className={H2_CLASS}>
           What Momentum stores
         </h2>
-        <ul className="ml-5 list-disc space-y-1">
-          <li>Your account: your email address and a scrambled form of your password.</li>
-          <li>Facts and settings you give it: the days you work, your priorities and how you want things handled.</li>
-          <li>Your goals and the targets you set under them.</li>
-          <li>Your work items and their steps.</li>
-          <li>
-            Entries and corrections: each record counted toward a target (a workout, a timer, a tap, a tick) and what
-            you said about it, such as hiding it.
-          </li>
-          <li>
-            Closed-period snapshots: a copy of a target as it stood when a period closed, so changing a target later
-            does not re-grade the past.
-          </li>
-          <li>Your plan tasks and your weekly review notes.</li>
-          <li>
-            How many times you have asked Claude for help, and when (a count, with no questions or answers). These
-            counts are kept until your account is deleted.
-          </li>
+        <ul className={LIST_CLASS}>
+          {STORED_GROUPS.map((group) => (
+            <li key={group.id}>{group.words}</li>
+          ))}
         </ul>
       </section>
 
@@ -50,17 +52,13 @@ export function PrivacyNotice() {
           What comes from services you connect
         </h2>
         <p>Only if you connect them. Your own key or sign-in token is kept on the server and is never sent to Claude.</p>
-        <ul className="ml-5 list-disc space-y-1">
-          <li>
-            <strong>Hevy (workouts):</strong> for each workout, its name, when it ended, how long it lasted, the total
-            weight lifted, and the number of sets and exercises. Not exercise names, individual sets, notes or body
-            measurements.
-          </li>
-          <li>
-            <strong>Google Calendar:</strong> for each timed event, only the time block: its id, start, end and
-            whether it was cancelled. Not the title, guests, description or place. While Momentum&apos;s Google access
-            is in the provider&apos;s testing mode, it expires about every week and you will need to connect again.
-          </li>
+        <ul className={LIST_CLASS}>
+          {Object.entries(PROVIDER_NOTICES).map(([id, provider]) => (
+            <li key={id}>
+              <strong>{provider.name}:</strong> for each {provider.record}, {joinWords(provider.stores)}. Not stored:{' '}
+              {provider.leavesOut}.{id === 'google_calendar' ? ` ${GOOGLE_TESTING_LINE}` : ''}
+            </li>
+          ))}
         </ul>
       </section>
 
@@ -69,23 +67,22 @@ export function PrivacyNotice() {
           What is sent to Claude (Anthropic)
         </h2>
         <p>Some features ask Claude, a model made by Anthropic, to write a suggestion. Each one sends only what it needs:</p>
-        <ul className="ml-5 list-disc space-y-1">
-          <li>
-            <strong>Rebalancing a plan:</strong> task ids, their weeks, types and due dates, and how many tasks were
-            finished or left in each week. Not task titles, minutes or scores.
-          </li>
-          <li>
-            <strong>Writing a first-week plan:</strong> what you type or pick in setup, including the title of your
-            goal. Anything you type there goes to Anthropic, so leave out anything you would not want them to receive.
-          </li>
-          <li>Guided setup is a conversation with Claude. What you type during setup is sent to Anthropic.</li>
+        <ul className={LIST_CLASS}>
+          {Object.entries(PROMPTS).map(([id, prompt]) => (
+            <li key={id}>
+              <strong>{prompt.title}:</strong> {joinWords(prompt.sends)}.
+              {prompt.leavesOut ? ` Not ${prompt.leavesOut}.` : ''}
+              {prompt.note ? ` ${prompt.note}` : ''}
+            </li>
+          ))}
+          <li>{GUIDED_SETUP_LINE}</li>
         </ul>
-        <p>Never sent: your email, your passwords or tokens, other people&apos;s data, or workout and calendar details.</p>
+        <p>Never sent: {NEVER_SENT}.</p>
         <p>
           Anthropic&apos;s terms for its API, quoted as checked on {TERMS_CHECKED_ON}. This is not legal advice, and
           terms can change:
         </p>
-        <ul className="ml-5 list-disc space-y-1">
+        <ul className={LIST_CLASS}>
           <li>
             &ldquo;{ANTHROPIC_TERMS.noTraining.quote}&rdquo; (
             <a className={LINK_CLASS} href={ANTHROPIC_TERMS.noTraining.href} rel="noreferrer">
@@ -111,10 +108,27 @@ export function PrivacyNotice() {
           Each account sees only its own data. Nobody signed in to another account can see yours. The person who runs
           Momentum (the operator) can see stored rows only to give support, and only when you ask.
         </p>
-        <p>
-          Momentum runs on Vercel (hosting) and Supabase (database and sign-in email). Both handle your data on
-          Momentum&apos;s behalf.
-        </p>
+        <p>These services handle your data on Momentum&apos;s behalf, besides Anthropic (above):</p>
+        <ul className={LIST_CLASS}>
+          {Object.entries(SERVICES).map(([id, service]) => (
+            <li key={id}>
+              <strong>{service.name}:</strong> {service.does}.
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className={SECTION_CLASS} aria-labelledby="device">
+        <h2 id="device" className={H2_CLASS}>
+          On your device
+        </h2>
+        <p>Momentum keeps these in your browser:</p>
+        <ul className={LIST_CLASS}>
+          {DEVICE_STORAGE.now.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+        <p>{DEVICE_STORAGE.planned}</p>
       </section>
 
       <section className={SECTION_CLASS} aria-labelledby="delete">
@@ -129,6 +143,7 @@ export function PrivacyNotice() {
       </section>
 
       <footer className="flex flex-col gap-2 text-muted">
+        <p>{NOTICE_CHANGE_LINE}</p>
         <p>Last reviewed {TERMS_CHECKED_ON}.</p>
         <Link href="/login" className={LINK_CLASS}>
           Back to sign in
