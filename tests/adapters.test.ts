@@ -300,7 +300,7 @@ describe('Google: a timed event', () => {
       timestamp: '2026-10-19T15:30:00.000Z',
       targetGoalChannel: 'career_pivot',
       activityType: 'calendar_block',
-      title: 'Interview prep',
+      title: 'Calendar event',
       durationMinutes: 90,
       metrics: { eventCompleted: true },
     });
@@ -321,13 +321,12 @@ describe('Google: a timed event', () => {
     expect(outcome.kind === 'activity' && outcome.data.metrics).toEqual({ eventCompleted: false });
   });
 
-  it('falls back to "Calendar event" for a missing or blank title, and trims a long one', () => {
-    for (const summary of [undefined, '', '   ']) {
+  it('never keeps the event\'s own title: every event is called "Calendar event" (MOM-102)', () => {
+    for (const summary of [undefined, '', 'Doctor appointment', 'y'.repeat(900)]) {
       const outcome = normalizeGoogleEvent(timed({ summary }), { now: () => NOW });
       expect(outcome.kind === 'activity' && outcome.data.title).toBe('Calendar event');
+      expect(JSON.stringify(outcome)).not.toContain('Doctor appointment');
     }
-    const long = normalizeGoogleEvent(timed({ summary: 'y'.repeat(900) }), { now: () => NOW });
-    expect(long.kind === 'activity' && long.data.title).toHaveLength(200);
   });
 
   it('uses a channel the caller names', () => {
@@ -388,7 +387,7 @@ describe('Google: the request and the page', () => {
     expect(parsed.searchParams.get('orderBy')).toBe('startTime');
     expect(parsed.searchParams.get('timeMin')).toBe('2026-10-13T00:00:00.000Z');
     expect(parsed.searchParams.get('timeMax')).toBe('2026-10-20T23:59:59.000Z');
-    expect(parsed.searchParams.get('fields')).toBe('nextPageToken,items(id,status,summary,start,end)');
+    expect(parsed.searchParams.get('fields')).toBe('nextPageToken,items(id,status,start,end)');
     expect(headers.authorization).toBe(`Bearer ${TOKEN}`);
     expect(url).not.toContain(TOKEN);
     expect(init.method).toBe('GET');
@@ -402,7 +401,7 @@ describe('Google: the request and the page', () => {
         { id: 'b', start: { date: '2026-10-19' }, end: { date: '2026-10-20' } },
         { id: 'c', status: 'cancelled' },
         { id: 'd' },
-        timed({ id: 'e', summary: 'Second' }),
+        timed({ id: 'e' }),
       ],
       { nextPageToken: 'tok_2' },
     );

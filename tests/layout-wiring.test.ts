@@ -148,4 +148,11 @@ describe('the proxy and the new routes', () => {
     const res = await visit('/login');
     expect(res.headers.get('location')).toBeNull();
   });
+
+  // MOM-102: the privacy notice must load for someone who has no account yet, and for one who has.
+  it.each([false, true])('/privacy is reachable and not redirected (signed in: %s)', async (signedIn) => {
+    auth.user = signedIn ? { id: USER } : null;
+    const res = await visit('/privacy');
+    expect(res.headers.get('location')).toBeNull();
+  });
 });

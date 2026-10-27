@@ -110,8 +110,10 @@ describe('what it sends', () => {
     const text = requestOf(create).messages[0].content;
 
     expect(text).toContain('Zebra quartz title');
-    expect(text).toContain('get_certified');
+    // The goal type goes as its label alone; its key repeats it (MOM-102).
+    expect(text).not.toContain('get_certified');
     expect(text).toContain('Get certified');
+    expect(text).not.toContain('planWeek');
     expect(text).toContain('dont_track_hours');
     expect(text).toContain('lighter');
     expect(text).toContain('What took longer');
@@ -119,10 +121,15 @@ describe('what it sends', () => {
     expect(text).not.toMatch(/user|email|id"|goal_channel|career_pivot/i);
   });
 
+  // MOM-102: the approved field list, pinned. Adding a field to what Claude is sent must fail here first.
   it('the facts are exactly the wizard answers, labelled, with nothing else', () => {
-    expect(Object.keys(buildPlanFacts(wizard())).sort()).toEqual(
-      ['constraints', 'goalType', 'pace', 'planWeek', 'reviewQuestions', 'title'].sort(),
-    );
+    const facts = buildPlanFacts(wizard({ pace: 'lighter', constraints: ['flexible_hours'], reviewPrompts: ['took_longer'] }));
+    expect(Object.keys(facts).sort()).toEqual(['constraints', 'goalType', 'pace', 'reviewQuestions', 'title']);
+    // The goal type is its label alone; constraint and pace keep their keys, which the prompt's rules name.
+    expect(typeof facts.goalType).toBe('string');
+    expect(Object.keys(facts.constraints[0]).sort()).toEqual(['key', 'label']);
+    expect(Object.keys(facts.pace ?? {}).sort()).toEqual(['key', 'label']);
+    expect(Object.keys(facts.reviewQuestions[0]).sort()).toEqual(['key', 'label']);
     expect(buildPlanFacts(wizard({ pace: null, constraints: [], reviewPrompts: [] }))).toMatchObject({
       pace: null,
       constraints: [],
