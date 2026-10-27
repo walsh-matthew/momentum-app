@@ -82,15 +82,16 @@ export interface ModelTaskPlanDeps {
   client?: Pick<Anthropic, 'messages'>;
 }
 
-// The only data the model sees: the wizard's own answers, with the labels the person saw.
+// The only data the model sees: the wizard's own answers, with the labels the person saw. The goal type is its
+// label alone (the key repeats it) and there is no plan week (the system prompt fixes week 1). Constraint and pace
+// keys stay because the rules name them. MOM-102: tests pin these exact fields.
 export function buildPlanFacts(input: WizardInput) {
   return {
     title: input.title,
-    goalType: { key: input.goalType, label: GOAL_TYPE_LABELS[input.goalType] },
+    goalType: GOAL_TYPE_LABELS[input.goalType],
     constraints: input.constraints.map((key) => ({ key, label: CONSTRAINT_LABELS[key] })),
     pace: input.pace === null ? null : { key: input.pace, label: PACE_LABELS[input.pace] },
     reviewQuestions: input.reviewPrompts.map((key) => ({ key, label: REVIEW_PROMPT_LABELS[key] })),
-    planWeek: 1,
   };
 }
 

@@ -55,7 +55,9 @@ begin
   res := res || jsonb_build_object('c', 'A task inserted with no marker records nothing', 'p', v = 2, 'd', format('%s rows for the user', v));
 
   -- -------------------------------------------------------------------------
-  -- Backfill statement (same as migration 004 section 1) on rows that lost their history
+  -- Backfill statement (same as migration 004 section 1) on rows that lost their history.
+  -- Limited to this script's own user (MOM-121): the migration's version has no user filter, and this script is
+  -- also run on production, where it must not add history rows for anyone else's tasks.
   -- -------------------------------------------------------------------------
 
   delete from public.task_rebalance_history where user_id = a;
@@ -64,7 +66,8 @@ begin
   select t.user_id, t.id, coalesce(t.carried_from_week, t.pulled_from_week), t.week_of,
          case when t.carried_from_week is not null then 'carry_over' else 'pull_forward' end, t.created_at
   from public.micro_tasks t
-  where (t.carried_from_week is not null or t.pulled_from_week is not null)
+  where t.user_id = a
+    and (t.carried_from_week is not null or t.pulled_from_week is not null)
     and not exists (select 1 from public.task_rebalance_history h where h.task_id = t.id);
   select count(*) into v from public.task_rebalance_history where user_id = a;
   res := res || jsonb_build_object('c', 'Backfill restores one row per marked task (2 marked)', 'p', v = 2, 'd', format('%s rows', v));
@@ -73,7 +76,8 @@ begin
   select t.user_id, t.id, coalesce(t.carried_from_week, t.pulled_from_week), t.week_of,
          case when t.carried_from_week is not null then 'carry_over' else 'pull_forward' end, t.created_at
   from public.micro_tasks t
-  where (t.carried_from_week is not null or t.pulled_from_week is not null)
+  where t.user_id = a
+    and (t.carried_from_week is not null or t.pulled_from_week is not null)
     and not exists (select 1 from public.task_rebalance_history h where h.task_id = t.id);
   select count(*) into v from public.task_rebalance_history where user_id = a;
   res := res || jsonb_build_object('c', 'Backfill is idempotent (second run adds nothing)', 'p', v = 2, 'd', format('%s rows', v));

@@ -174,3 +174,57 @@ export interface IngestionSummary {
   failed: number;
   results: IngestionItemResult[];
 }
+
+// ---------------------------------------------------------------------------
+// Synced entries (lib/services/syncedEntries.ts, MOM-109)
+// ---------------------------------------------------------------------------
+// What happened to each synced record, per target it was bound to. Safe for client components: they name the
+// record and the outcome, and never echo a payload back.
+
+// Why a well-formed record made no entry. Each is a fixed rule, so the same record always gets the same answer.
+export const SYNC_SKIP_REASONS = [
+  'no_source',
+  'no_bound_target',
+  'measure_not_supported',
+  'unit_not_supported',
+  'no_value_for_measure',
+] as const;
+export type SyncSkipReason = (typeof SYNC_SKIP_REASONS)[number];
+
+// The words a screen can show for each reason (principle 5: say what happened, plainly).
+export const SYNC_SKIP_MESSAGES: Record<SyncSkipReason, string> = {
+  no_source: 'This app is not set up as a source yet, so nothing was counted.',
+  no_bound_target: 'No target uses this app yet, so nothing was counted. Bind it to a target to count it.',
+  measure_not_supported: 'This target counts checklist steps, which a workout cannot tick.',
+  unit_not_supported: "This target's unit is not one a workout can be measured in, so nothing was counted.",
+  no_value_for_measure: 'The workout has nothing to count for this target, so nothing was counted.',
+};
+
+// created: a new entry now holds this record. updated: the source changed the record and the entry followed.
+// unchanged: the entry already matched. skipped: valid but made no entry (see the reason). invalid: failed the
+// payload contract. failed: could not be saved; sync again.
+export const SYNC_OUTCOMES = ['created', 'updated', 'unchanged', 'skipped', 'invalid', 'failed'] as const;
+export type SyncOutcome = (typeof SYNC_OUTCOMES)[number];
+
+export interface SyncedEntryResult {
+  // Position in the submitted batch.
+  index: number;
+  externalId: string | null;
+  // The target the entry is for. Null when the record never reached a target.
+  targetId: string | null;
+  outcome: SyncOutcome;
+  // A SyncSkipReason for skipped; what was wrong with the payload for invalid.
+  reason: string | null;
+  // Plain wording for the person, set for skipped and failed.
+  message: string | null;
+}
+
+export interface SyncedEntrySummary {
+  created: number;
+  updated: number;
+  unchanged: number;
+  skipped: number;
+  invalid: number;
+  failed: number;
+  results: SyncedEntryResult[];
+}

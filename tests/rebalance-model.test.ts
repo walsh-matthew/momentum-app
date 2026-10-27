@@ -4,10 +4,11 @@
 // proposal with a notice. The model is mocked: no network, no key.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROMPTS, fieldList } from '@/lib/config/privacy';
 import { proposeRebalance, requestModelRebalance } from '@/lib/services/tasks';
 import { buildRebalanceProposal, buildModelFacts, checkProposalAgainstTasks, MAX_MODEL_TASKS } from '@/lib/utils/rebalance';
-import { computeVelocity } from '@/lib/utils/velocity';
 import { parseRebalanceProposal } from '@/types/rebalance';
+import { fieldPaths } from './helpers/fieldPaths';
 import { resetUsage, rowsFor, usage } from './helpers/fakeLlmUsage';
 import { OTHER_USER, USER, channelRow, db, newId, resetDb, taskRow, type TaskRow } from './helpers/fakeSupabase';
 
@@ -88,12 +89,22 @@ describe('when the user asks Claude', () => {
   it('tells the model about the plan without any task titles', async () => {
     const a = behind({ title: 'Secret job application notes' });
     answer(proposalFor([goodMove(a)]));
-    await proposeRebalance(asMicroTasks([a]), 4, TODAY, { useModel: true, budget: BUDGET, velocity: { score: 50, trend: 'flat', risk: 'low', pressureStreak: 0 } });
+    await proposeRebalance(asMicroTasks([a]), 4, TODAY, { useModel: true, budget: BUDGET });
 
     const sent = model.request.mock.calls[0][0] as ReturnType<typeof buildModelFacts>;
     expect(JSON.stringify(sent)).not.toContain('Secret job application notes');
-    expect(sent.tasks).toEqual([{ id: a.id, week: 2, type: 'certify', minutes: 30, dueDate: null }]);
-    expect(sent.velocity).toEqual({ score: 50, trend: 'flat', risk: 'low', pressureStreak: 0 });
+    expect(sent.tasks).toEqual([{ id: a.id, week: 2, type: 'certify', dueDate: null }]);
+  });
+
+  // MOM-102: the field list is the one the privacy notice prints (lib/config/privacy.ts), so adding a field to what
+  // Claude is sent fails here until the config, and with it the notice, says so.
+  it('sends exactly the fields the privacy notice lists: no minutes and no velocity', async () => {
+    const a = behind();
+    answer(proposalFor([goodMove(a)]));
+    await proposeRebalance(asMicroTasks([a]), 4, TODAY, { useModel: true, budget: BUDGET });
+
+    const sent = model.request.mock.calls[0][0] as ReturnType<typeof buildModelFacts>;
+    expect(fieldPaths(sent)).toEqual(fieldList(PROMPTS.rebalance.sends));
   });
 
   it('only lists unfinished tasks as movable, and counts the finished ones per week', async () => {
@@ -366,7 +377,6 @@ describe('requestModelRebalance (the "Ask Claude" click, for one goal channel)',
       expect(model.request).toHaveBeenCalledTimes(1);
       expect(sentFacts().tasks.map((t) => t.id)).toEqual([task.id]);
       expect(sentFacts().currentWeek).toBe(4);
-      expect(sentFacts().velocity).not.toBeNull();
     });
 
     it('two goals with different start dates: each request sends only that goal\'s tasks and that goal\'s week', async () => {
@@ -401,20 +411,15 @@ describe('requestModelRebalance (the "Ask Claude" click, for one goal channel)',
       expect(r.ok && r.data.proposal.summary).toMatch(/on track/);
     });
 
-    it('the velocity the model is told is the channel\'s own', async () => {
+    it('the per-week counts the model is told are the channel\'s own, and no velocity is sent', async () => {
       const g = goal();
       const own = [inGoal(g, { week_of: 4, status: 'done', completed_at: '2026-11-03T00:00:00Z' }), inGoal(g, { week_of: 4 })];
       const other = goal();
       setup([...own, inGoal(other, { week_of: 4, status: 'done', completed_at: '2026-11-03T00:00:00Z' })], [g, other]);
       answer(proposalFor([]));
       await ask(g.id);
-      const expected = computeVelocity(own, 4, '2026-11-04', []);
-      expect(sentFacts().velocity).toEqual({
-        score: expected.score,
-        trend: expected.trend,
-        risk: expected.risk,
-        pressureStreak: expected.pressureStreak,
-      });
+      expect(sentFacts().weeks).toEqual([{ week: 4, unfinished: 1, finished: 1 }]);
+      expect(sentFacts()).not.toHaveProperty('velocity');
     });
 
     it('a move that names a task from another goal is rejected, and the user gets the rule-based proposal', async () => {

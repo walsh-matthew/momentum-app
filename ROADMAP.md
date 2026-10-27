@@ -12,6 +12,8 @@ No confirmed bugs yet. Record them here as they are found, with the ticket that 
 
 Approved 2026-10-26. The new goal model in `docs/DOMAIN_MODEL.md` replaces the career-only, checkbox, 13-week model. The plan is to build the thin slice in about 5 build days (MOM-106 to MOM-116, items in `BACKLOG.md`), then run a two-week family trial against the kill criteria (design record §5), then a second round with testers outside the household. The first follow-ons, built during the trial, are the person's own tracker sheet as a source (MOM-117) and a career playbook (MOM-118). Later: out-of-app reminders, stretch levels and ceilings, dated capacity exceptions, more adapters ranked by what testers already use, and household sharing.
 
+- **Minors safeguards.** The family trial is adults only (2026-10-26); an under-18 user waits for the minors-safeguards item in `BACKLOG.md`.
+
 ## 🚀 Phase 1.5 Roadmap
 
 Work after the MVP (Phase 1) that makes Momentum usable beyond a single English-speaking user on a local machine.
