@@ -10,7 +10,8 @@
 // What an event becomes (an InboundActivityPayload), following the spec's mapping rules:
 //   externalId        event.id
 //   timestamp         event.end.dateTime, as UTC
-//   title             event.summary
+//   title             the fixed text 'Calendar event'. The event's own title is never requested or kept (MOM-102):
+//                     the goal model reads the calendar for busy and free time, which needs only the time block.
 //   durationMinutes   event.end minus event.start
 //   metrics.eventCompleted   true when the event's end has passed and it was not cancelled
 // Only the user's primary calendar is read. All-day events (they have a date, not a dateTime) are not timed blocks,
@@ -32,6 +33,8 @@ export const GOOGLE_EVENTS_URL = 'https://www.googleapis.com/calendar/v3/calenda
 // INTEGRATIONS_SPEC.md §3.C: career_pivot / productivity. A caller that knows the user's channel passes it.
 export const GOOGLE_TARGET_CHANNEL = 'career_pivot';
 export const GOOGLE_MAX_RESULTS = 250;
+// What every event is called. The contract needs a title; the person's own event titles are not requested.
+export const CALENDAR_EVENT_TITLE = 'Calendar event';
 const DEFAULT_MAX_RESULTS = 100;
 
 // ---------------------------------------------------------------------------
@@ -46,7 +49,6 @@ const EventTimeSchema = z.looseObject({
 const GoogleEventSchema = z.looseObject({
   id: z.string().trim().min(1).max(200),
   status: z.string().max(40).optional(),
-  summary: z.string().max(2000).optional(),
   start: EventTimeSchema.optional(),
   end: EventTimeSchema.optional(),
 });
@@ -97,7 +99,7 @@ function toActivity(event: GoogleEvent, options: GoogleNormalizeOptions): EventO
       timestamp: end.toISOString(),
       targetGoalChannel: options.targetGoalChannel ?? GOOGLE_TARGET_CHANNEL,
       activityType: 'calendar_block',
-      title: (event.summary ?? '').trim().slice(0, 200) || 'Calendar event',
+      title: CALENDAR_EVENT_TITLE,
       durationMinutes: duration.minutes,
       metrics: { eventCompleted: !cancelled && end.getTime() <= now.getTime() },
     },
@@ -156,8 +158,8 @@ export async function listGoogleCalendarEvents(
     singleEvents: 'true',
     orderBy: 'startTime',
     maxResults: String(Math.min(GOOGLE_MAX_RESULTS, Math.max(1, Math.trunc(options.maxResults ?? DEFAULT_MAX_RESULTS)))),
-    // Only what the mapping reads, so the answer carries no attendees, descriptions or links.
-    fields: 'nextPageToken,items(id,status,summary,start,end)',
+    // Only what the mapping reads, so the answer carries no title, attendees, descriptions or links.
+    fields: 'nextPageToken,items(id,status,start,end)',
   });
   if (options.pageToken) query.set('pageToken', options.pageToken);
 

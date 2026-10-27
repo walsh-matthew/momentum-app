@@ -242,25 +242,20 @@ export function buildRulesView(
 // runaway account from producing a huge prompt.
 export const MAX_MODEL_TASKS = 200;
 
-// What the model is told about the plan. Ids, weeks, types, minutes and dates only: no titles, since
-// the model does not need them to decide what moves, and the titles on screen come from the rows
-// anyway (summarizeProposalTasks). Only unfinished tasks are listed, since only they can move.
+// What the model is told about the plan. Ids, weeks, types and dates only: no titles, since the model does not
+// need them to decide what moves, and the titles on screen come from the rows anyway (summarizeProposalTasks).
+// No minutes (the prompt sizes weeks by what was finished, not by minutes) and no velocity score (no rule uses
+// it). Only unfinished tasks are listed, since only they can move. MOM-102: tests pin these exact fields.
 export interface ModelRebalanceFacts {
   currentWeek: number;
   planWeeks: number;
   today: string;
-  velocity: { score: number | null; trend: string | null; risk: string | null; pressureStreak: number } | null;
   // Every week that has tasks: how many are unfinished and how many the user finished.
   weeks: Array<{ week: number; unfinished: number; finished: number }>;
-  tasks: Array<{ id: string; week: number; type: string; minutes: number; dueDate: string | null }>;
+  tasks: Array<{ id: string; week: number; type: string; dueDate: string | null }>;
 }
 
-export function buildModelFacts(
-  tasks: readonly RebalanceTask[],
-  currentWeek: number,
-  asOf: string,
-  velocity: ModelRebalanceFacts['velocity'] = null,
-): ModelRebalanceFacts {
+export function buildModelFacts(tasks: readonly RebalanceTask[], currentWeek: number, asOf: string): ModelRebalanceFacts {
   const perWeek = new Map<number, { unfinished: number; finished: number }>();
   for (const t of tasks) {
     const counts = perWeek.get(t.week_of) ?? { unfinished: 0, finished: 0 };
@@ -272,11 +267,10 @@ export function buildModelFacts(
     currentWeek,
     planWeeks: PLAN_WEEKS,
     today: asOf,
-    velocity,
     weeks: [...perWeek.entries()].sort((a, b) => a[0] - b[0]).map(([week, c]) => ({ week, ...c })),
     tasks: tasks
       .filter((t) => t.status === 'todo')
-      .map((t) => ({ id: t.id, week: t.week_of, type: t.task_type, minutes: t.minutes, dueDate: t.due_date })),
+      .map((t) => ({ id: t.id, week: t.week_of, type: t.task_type, dueDate: t.due_date })),
   };
 }
 

@@ -11,7 +11,9 @@ import {
   buildPlanFacts,
   requestWeekOnePlanFromModel,
 } from '@/lib/ai/taskPlan';
+import { PROMPTS, fieldList } from '@/lib/config/privacy';
 import { parseWizardInput, type WizardInput } from '@/lib/goals/taskPlan';
+import { fieldPaths } from './helpers/fieldPaths';
 
 const keyReader = vi.hoisted(() => ({ get: vi.fn(() => 'sk-ant-test-key-do-not-leak') }));
 vi.mock('@/lib/config/env', () => ({ getAnthropicApiKey: keyReader.get }));
@@ -110,8 +112,10 @@ describe('what it sends', () => {
     const text = requestOf(create).messages[0].content;
 
     expect(text).toContain('Zebra quartz title');
-    expect(text).toContain('get_certified');
+    // The goal type goes as its label alone; its key repeats it (MOM-102).
+    expect(text).not.toContain('get_certified');
     expect(text).toContain('Get certified');
+    expect(text).not.toContain('planWeek');
     expect(text).toContain('dont_track_hours');
     expect(text).toContain('lighter');
     expect(text).toContain('What took longer');
@@ -119,10 +123,16 @@ describe('what it sends', () => {
     expect(text).not.toMatch(/user|email|id"|goal_channel|career_pivot/i);
   });
 
+  // MOM-102: the field list is the one the privacy notice prints (lib/config/privacy.ts), so adding a field to what
+  // Claude is sent fails here until the config, and with it the notice, says so.
   it('the facts are exactly the wizard answers, labelled, with nothing else', () => {
-    expect(Object.keys(buildPlanFacts(wizard())).sort()).toEqual(
-      ['constraints', 'goalType', 'pace', 'planWeek', 'reviewQuestions', 'title'].sort(),
-    );
+    const facts = buildPlanFacts(wizard({ pace: 'lighter', constraints: ['flexible_hours'], reviewPrompts: ['took_longer'] }));
+    expect(fieldPaths(facts)).toEqual(fieldList(PROMPTS.weekPlan.sends));
+    // The goal type is its label alone; constraint and pace keep their keys, which the prompt's rules name.
+    expect(typeof facts.goalType).toBe('string');
+    expect(Object.keys(facts.constraints[0]).sort()).toEqual(['key', 'label']);
+    expect(Object.keys(facts.pace ?? {}).sort()).toEqual(['key', 'label']);
+    expect(Object.keys(facts.reviewQuestions[0]).sort()).toEqual(['key', 'label']);
     expect(buildPlanFacts(wizard({ pace: null, constraints: [], reviewPrompts: [] }))).toMatchObject({
       pace: null,
       constraints: [],

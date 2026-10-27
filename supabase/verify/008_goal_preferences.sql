@@ -35,11 +35,13 @@ begin
   res := res || jsonb_build_object('c', 'No seeded Career Pivot anywhere is left without a goal type (backfill)', 'p', v = 0, 'd', format('%s rows', v));
 
   -- The backfill statement from migration 008 section 3, on rows made to look pre-migration.
+  -- Limited to this script's own user (MOM-121): the migration's version has no user filter, and this script is
+  -- also run on production, where it must not set the goal type on anyone else's channel.
   update public.goal_channels set goal_type = null where id = a_seed;
   insert into public.goal_channels (user_id, channel_key, title, criteria)
   values (a, 'older_goal', 'Older goal', '[]');
   update public.goal_channels set goal_type = 'career_pivot'
-  where is_default and channel_key = 'career_pivot' and goal_type is null;
+  where user_id = a and is_default and channel_key = 'career_pivot' and goal_type is null;
   select count(*) into v from public.goal_channels where id = a_seed and goal_type = 'career_pivot';
   res := res || jsonb_build_object('c', 'The backfill sets the seeded default', 'p', v = 1, 'd', format('%s rows', v));
   select count(*) into v from public.goal_channels where user_id = a and channel_key = 'older_goal' and goal_type is null and preferences = '{}'::jsonb;

@@ -58,6 +58,13 @@ export function SignInForm({ initialError = null, captcha = null }: SignInFormPr
       <Button type="submit" name="intent" value="signup" variant="outline" disabled={pending}>
         Create account
       </Button>
+      <p className="text-sm text-muted">
+        Momentum is for adults (18 or over). See how it handles your data in the{' '}
+        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          privacy notice
+        </Link>
+        .
+      </p>
     </form>
   );
 }
