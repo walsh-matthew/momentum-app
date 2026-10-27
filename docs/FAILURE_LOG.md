@@ -203,6 +203,106 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** Day-end step B, which compared the totals and read the script's output before accepting the difference.
 - **Predicted it?** No.
 
+### F-028 · 2026-10-26 · build tool
+- **Asked:** Run the type check, tests and build on each of the day's branches in turn (day-end step A, then step D's own checks).
+- **What went wrong:** The type check and the build failed on the step D branch, though its code was fine. The browser tests on the previous branch had started the development server, which left generated route types for two pages that exist only on that branch. The production build regenerates its own copy of those types but not the development server's, so the stale copy failed every later branch.
+- **Why:** The checks treat the build folder as if it belonged to the branch being checked. Generated files outlive a branch switch, and the order of the branches decided whether a check passed.
+- **Caught by:** The type check on the step D branch. Removing the development server's generated folder fixed it; nothing in the repo changed. The branches checked earlier in step A ran before the browser tests and are unaffected.
+- **Predicted it?** No.
+- **Recurring cause:** F-028, F-039 and a stale generated folder cleared during the MOM-111 block (2026-10-27) are one cause: generated route types outlive a branch switch. The fix (clear both generated type folders in `/day-start` and the `/run-block` preflight before the type check and build) is MOM-130.
+
+### F-029 · 2026-10-26 · build tool
+- **Asked:** At the day-end tidy step, switch to `main` without disturbing the owner's uncommitted log edits.
+- **What went wrong:** It told the owner the switch was safe because the log files matched, then the switch aborted. It had compared the logs against the updated remote `main`, but the local `main` being switched to was still the morning's copy, whose logs differed. Nothing was lost; the switch was redone with a backup.
+- **Why:** It checked the branch it expected `main` to become after the update, not the branch git would actually switch to.
+- **Caught by:** Git, which refused the switch and changed nothing.
+- **Predicted it?** Partly.
+
+### F-030 · 2026-10-26 · build tool
+- **Asked:** Advise on the family trial's terms for a minor tester (MOM-116).
+- **What went wrong:** Claude said Momentum works without Claude for a minor tester, missing that guided setup is a Claude conversation.
+- **Why:** It thought of Claude as part of the old features (the week plan and rebalance) and did not check that the new model's setup is itself a Claude conversation.
+- **Caught by:** The owner's question.
+- **Predicted it?** No.
+
+### F-031 · 2026-10-27 · build tool
+- **Asked:** At the start of a build block, check that the local database stack is running, by name only and never printing a value.
+- **What went wrong:** It ran the status command that prints everything, so the local stack's connection details and keys went into the conversation. They are the standard values of a local test stack, not production secrets, and nothing needed rotating.
+- **Why:** It reached for the command that answers "is it running" without thinking about what else the command prints.
+- **Caught by:** The build agent noticed the output when it came back, and said so to the owner.
+- **Predicted it?** No.
+
+### F-032 · 2026-10-27 · build tool
+- **Asked:** Build the phone-first manual entry controls (MOM-110).
+- **What went wrong:** The shared hook behind the controls imported a type from the services folder. Two existing boundary tests failed, because a component may not import from the services at all, even a type.
+- **Why:** It reused the existing result type instead of re-reading the rule that components never reach into the services.
+- **Caught by:** The full unit test run, before anything was committed. The hook now spells the type out itself.
+- **Predicted it?** No.
+
+### F-033 · 2026-10-27 · build tool
+- **Asked:** Write a browser test for manual entry, with a helper that gives a throwaway account its goal and targets.
+- **What went wrong:** The helper ended with the default sign-out, which ends every session the account has, including the browser's. All four browser tests failed at the sign-in page.
+- **Why:** It assumed sign-out ended only the helper's own session. The default is every session, and the helper's was the quieter of the two.
+- **Caught by:** The first browser run: the page snapshot of each failure was the sign-in page. The helper now signs out of its own session only.
+- **Predicted it?** No.
+
+### F-034 · 2026-10-27 · build tool
+- **Asked:** The same browser test: check that nothing is marked Removed after a reload.
+- **What went wrong:** The check failed on a correct page. Matching the word as a substring found it in the joined text of the list, where a Remove button ran straight into the next entry's title ("Distance"). The page was right and the test was wrong.
+- **Why:** It wrote the text match without considering that the list's text has no spaces between items, so a short word can appear across a seam.
+- **Caught by:** The failure itself, then printing the element the match resolved to. The test now asks for the exact word.
+- **Predicted it?** No.
+
+### F-035 · 2026-10-27 · build tool
+- **Asked:** Design the guided setup draft validator (MOM-111).
+- **What went wrong:** At the design stop it described the rule "a target needs the time zone and the day end" as one the validator enforces on every draft. Setup asks those facts at step 10, after the targets at step 7, so enforcing it during the conversation would reject every draft; it can only be enforced when the draft is saved.
+- **Why:** It read "before the first target is saved" as "before the first target is drafted" and did not lay the rule beside the 12-step order.
+- **Caught by:** Writing the first scripted conversation, before any code ran. The validator checks it in the final validation only, and the block's report says so.
+- **Predicted it?** No.
+
+### F-036 · 2026-10-27 · build tool
+- **Asked:** Write the automatic check that Claude never announces a reminder (MOM-111).
+- **What went wrong:** The first version caught "you'll get a reminder" but let "you will get a reminder" through.
+- **Why:** It wrote the pattern for the one phrasing it had in mind instead of listing the plain variants of the same sentence.
+- **Caught by:** The unit test for the check, which tries several phrasings. The pattern now covers both.
+- **Predicted it?** No.
+
+### F-037 · 2026-10-27 · build tool
+- **Asked:** Write the check that Claude skips a question that is already answered (MOM-111).
+- **What went wrong:** It treated any topic already asked as answered for the whole setup, so asking a second goal its shape was flagged as a repeat. Only the person's own facts are asked once; a goal's shape, dates and targets are asked again for each goal.
+- **Why:** It modelled setup as one goal and did not think through a conversation with two.
+- **Caught by:** The eval case with two activities in one idea. The check now applies to the person's own facts only, and the backlog notes that per-goal repeats are not checked.
+- **Predicted it?** No.
+
+### F-038 · 2026-10-27 · build tool
+- **Asked:** Design how Hevy workouts become entries bound to a target (MOM-109).
+- **What went wrong:** The design stop presented a sync that runs with no person signed in and reads each target's measure and unit to work out a value. The service role has no read access to targets, and the owner had just ruled out a migration, so the design as shown could not be built.
+- **Why:** It listed what the service role can read and write while reading the migration, but did not check each step of the mapping against that list before presenting the design.
+- **Caught by:** Writing the test fake from the migration's grant table, before any service code ran against a database. The sync now reads the bindings through the person's own session and writes entries with the service role; a sync with no session at all is logged as follow-up work.
+- **Predicted it?** No.
+
+### F-039 · 2026-10-27 · build tool
+- **Asked:** Run the type check on each of the day's branches in turn (day-end step A), following the plan's note on stale generated files.
+- **What went wrong:** The type check failed on the second branch, in a generated file that still named a page only the first branch has. The plan's note (from F-028) said to clear only the development server's generated folder, but this copy came from the production build, which keeps its own generated types in another folder.
+- **Why:** The workaround written after F-028 named the one folder seen that day instead of every generated folder that can outlive a branch switch.
+- **Caught by:** The type check itself. Clearing the build's generated types fixed it, and from then on both folders were cleared before every switch; the build and the type check after it passed.
+- **Predicted it?** No.
+- **Recurring cause:** F-028, F-039 and a stale generated folder cleared during the MOM-111 block (2026-10-27) are one cause: generated route types outlive a branch switch. The fix (clear both generated type folders in `/day-start` and the `/run-block` preflight before the type check and build) is MOM-130.
+
+### F-040 · 2026-10-27 · build tool
+- **Asked:** Read the whole output of each build check (the rule from F-022).
+- **What went wrong:** On one branch it filtered the build's output down to a few matching lines before reading it.
+- **Why:** It reached for a shorter output on a check that had passed on every earlier branch.
+- **Caught by:** The build agent, straight after; it ran the build again and read the full output, which was clean.
+- **Predicted it?** Partly.
+
+### F-041 · 2026-10-27 · build tool
+- **Asked:** At the start of the day-end, count the unreviewed entries in the risk log (one of the four "nothing to sync" conditions).
+- **What went wrong:** The count printed 0 while four unreviewed entries were waiting. The pattern looks for the mark in the column after the ID, but entries carry it in the status column (or in the text), and it only matches risk rows, not issue rows.
+- **Why:** The pattern was written from an idea of the table's layout, not tested against a row that was really marked unreviewed.
+- **Caught by:** The failure log's count was not zero, so the run continued anyway, and the owner's message named the four entries. The pattern in the day-end command is fixed to match any row type with the mark in any column.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
