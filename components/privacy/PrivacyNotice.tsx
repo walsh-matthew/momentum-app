@@ -128,7 +128,6 @@ export function PrivacyNotice() {
             <li key={line}>{line}</li>
           ))}
         </ul>
-        <p>{DEVICE_STORAGE.planned}</p>
       </section>
 
       <section className={SECTION_CLASS} aria-labelledby="delete">

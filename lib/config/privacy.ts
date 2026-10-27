@@ -219,12 +219,11 @@ export const DEVICE_STORAGE = {
   now: [
     'a cookie that keeps you signed in',
     'which rebalance reminders you have dismissed, kept only until you close the tab',
+    "a running timer's start time, kept in this browser until you stop it",
   ],
-  // Not built yet; the notice says "when", so it stays true.
-  planned: "When timers arrive, a running timer's start time is kept in your browser.",
   // The only source files allowed to use browser storage (localStorage, sessionStorage, indexedDB, document.cookie).
   // A file not listed here that uses it fails tests/privacy-sync.test.ts until it is listed and described above.
-  filesUsingBrowserStorage: ['components/layout/RebalanceNudge.tsx'],
+  filesUsingBrowserStorage: ['components/entries/timerStorage.ts', 'components/layout/RebalanceNudge.tsx'],
 } as const;
 
 // ---------------------------------------------------------------------------

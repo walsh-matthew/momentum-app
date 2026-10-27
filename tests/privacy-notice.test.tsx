@@ -115,12 +115,13 @@ describe('the privacy notice', () => {
     expect(who).toMatch(/details of your browser and network connection/);
   });
 
-  it('says what is kept on the device: the sign-in cookie, and a running timer when timers arrive', () => {
+  it('says what is kept on the device: the sign-in cookie, and a running timer (MOM-110)', () => {
     render(<PrivacyNotice />);
     const device = region('On your device');
     for (const line of DEVICE_STORAGE.now) expect(device).toContain(line);
     expect(device).toContain('a cookie that keeps you signed in');
-    expect(device).toContain("When timers arrive, a running timer's start time is kept in your browser.");
+    expect(device).toContain("a running timer's start time, kept in this browser until you stop it");
+    expect(device).not.toContain('When timers arrive');
   });
 
   it('says how to get all data deleted, within a stated number of days', () => {
