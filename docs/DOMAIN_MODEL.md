@@ -134,8 +134,10 @@ Setup is a short guided conversation that turns a vague idea into the structure 
 6. **Shape and timeframe:** ongoing (first block length), end date, or deadline. Always ask for the exact date; never infer a week. For a deadline, ask as a separate question whether the date can move.
 7. **What counts:** effort and outcome targets, the floor, and an aspiration if they want one. No forced failure-rate guesses.
 8. **Expansion questions:** a few best-practice prompts with examples, to surface unknown unknowns. A playbook, when one exists, supplies these.
-9. **Source for each target:** "Are you already tracking this? Where?" The answer picks synced, their own sheet, or manual (tap, number, timer).
-10. **Planning and capacity:** their week start, their day types and capacity, fixed slots or a flexible quota, and when they want to plan their week. Person facts are asked once, on the first goal only.
+9. **Source for each target:** "Where do you track this now, if anywhere?" The answer picks synced, their own sheet, or manual (tap, number, timer).
+10. **Planning and capacity:** their day end, their week start (only when it is needed, see below), their day types and capacity, fixed slots or a flexible quota, and when they want to plan their week. Person facts are asked once, on the first goal only.
+    - **Day end:** asked once, on the first goal, with no default; Momentum never assumes one (principle 1). The question has to make the difference clear. If the person's day runs past midnight and ends between midnight and 06:00 (say 02:00), that is an early day end: their day runs from that time to the same time the next day, so a late-night entry at 01:00 counts toward the day before. Any other day end (say 21:00) is just the time they check in, and their day still runs from midnight to midnight. Time zone is asked the same way: once, never assumed.
+    - **Week start:** asked only when the first weekly or day-slot target needs it. A person whose goals are all deadline goals is never asked.
 11. **How Momentum talks to me:** asked conversationally, not as a form (section 4).
 12. **Final approval.** Each part has already been played back and approved in its own short chunk (after steps 3, 7, 10 and 11). The final step is a few lines confirming the whole, then save and show the settings page with everything editable. Not everything has to be settled at setup: details can be refined in use and at the weekly review.
 
@@ -232,3 +234,5 @@ Momentum does not edit the person's documents, write resumes, or coach focus and
 | Date | Change | Why | Ticket |
 | --- | --- | --- | --- |
 | 2026-10-26 | File created from the approved design pass (sections 1 to 4). Supersedes the product rules in `NINETY_DAY_PLAN_CONTEXT.md` and five rules in `INTEGRATIONS_SPEC.md`. | Tabletop walk-throughs of fitness, career, two setup runs and a balance week showed the old career-only, checkbox, 13-week model did not fit real goals. See the design record. | MOM-106 |
+| 2026-10-27 | §2.2 step 10 now asks the day end (once, on the first goal, no default), explains the early day end (after midnight, before 06:00, moves the day boundary) versus a check-in time (boundary stays at midnight), and asks the week start only when the first weekly or day-slot target needs it. | The scoreboard engine refuses to compute without a day end and a week start for weekly periods, and setup builds from this section. | MOM-125 |
+| 2026-10-27 | §2.2 step 9 is now one question: "Where do you track this now, if anywhere?" (was "Are you already tracking this? Where?"). | The old wording was two asks, which setup's first hard rule (one single-part question per turn) forbids; MOM-111's first block found it. | MOM-111 |
