@@ -28,7 +28,7 @@ Runs one block of the current plan. Steps, in order:
 5. **Block prerequisites.** Check what this block needs before it starts, by name only and never printing values. Examples: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.local` for MOM-62; a redacted Hevy sample in the repo for MOM-38; Docker and `npx supabase start` for MOM-61 and MOM-67. Read these from the session's "prerequisites" note in the plan.
 6. **Resume.** If the block's feature branch already exists, say so, show `git log main..<branch> --oneline`, and continue from it instead of starting over.
 7. **Run the prompt.** Execute the block's fenced prompt as written. Keep every stop in it (design OKs, `supabase db push`, Jira updates). Before each step, say in one line what it does and why.
-8. **Close out.** Print the block's User Verification Gate. Mark which items can be checked now and which must wait until after the push, and append the deferred ones to `docs/plans/.pending-live-checks.md` (git-ignored, cleared by `/day-end`). End with a five-line "what changed and why" summary.
+8. **Close out.** Print the block's User Verification Gate. Mark which items can be checked now and which must wait until after the push, and append the deferred ones to `docs/plans/.pending-live-checks.md` (git-ignored, cleared by `/day-end`). End with a "what changed and why" summary whose last line is `Privacy impact: none | <what changed in /privacy>` (added 2026-10-27, MOM-124).
 
 ### 2.2 `/day-start`
 
