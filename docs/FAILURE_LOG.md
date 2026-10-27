@@ -310,6 +310,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner, reviewing the draft profile the same day. Both entries were dropped. The lesson went into the profile skill's rules: the owner's word beats any document, and check the direction of a change before calling it a problem.
 - **Predicted it?** No.
 
+### F-043 · 2026-10-27 · build tool (project thread)
+- **Asked:** "Can we update it so merge happens automatically?", right after a reply that mentioned both an open pull request and merging overlapping entries in a monthly review.
+- **What went wrong:** The request was read as "auto-merge the pull request". The owner meant "have the monthly review merge overlapping entries". The pull request was pushed and set up to merge on its own before the owner said what he meant.
+- **Why:** An ambiguous "it" was resolved to the most recent git topic without asking, although the reply before it had just raised the other topic. Any step that changes something outside the conversation is worth one clarifying question first.
+- **Caught by:** The owner, a few minutes later. Pushing the entry was fine with him, so nothing was reverted; the monthly review change was then made as he meant it.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
