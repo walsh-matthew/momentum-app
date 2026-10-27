@@ -2,7 +2,7 @@
 
 As of 2026-10-21. Blueprint for third-party service ingestion and normalization in Momentum.
 
-> **2026-10-26: five rules here are superseded by [`docs/DOMAIN_MODEL.md`](DOMAIN_MODEL.md) (MOM-106).** They are: evidence never completes a task (§1), ingest creates to-do tasks (§1, §6), the hard-coded target goal channel per provider (§2, §3), placement in a 13-week plan (§6), and the native iOS sync line (§3 B). Each carries a pointer. The `InboundActivityPayload` contract, the adapter rules and the security rules still hold. The code follows these old rules until MOM-109 reworks ingestion into entries.
+> **2026-10-26: five rules here are superseded by [`docs/DOMAIN_MODEL.md`](DOMAIN_MODEL.md) (MOM-106).** They are: evidence never completes a task (§1), ingest creates to-do tasks (§1, §6), the hard-coded target goal channel per provider (§2, §3), placement in a 13-week plan (§6), and the native iOS sync line (§3 B). Each carries a pointer. The `InboundActivityPayload` contract, the adapter rules and the security rules still hold. The old ingestion into tasks (§6) still follows them until MOM-115 retires it; MOM-109 added the entries path beside it (§6, "Entries path").
 
 ## 1. Executive Purpose & Architectural Strategy
 
@@ -170,3 +170,14 @@ The "webhook rejects an unauthenticated call" acceptance criterion belongs to th
 6. **Set aside, not lost:** every skipped, invalid or failed item appears in the returned summary and is logged (provider, id and reason only).
 7. **Scope:** `ingestActivities()` runs as the signed-in user through RLS and only inserts.
 8. **No session (MOM-38):** `ingestActivitiesForUser(userId, batch)` in `@/lib/services/ingestionForUser.ts` is for a verified webhook or a sync job. It runs the same core (`runBatch`) with the service-role client, which bypasses RLS, so isolation is the code's job: every query is keyed on the given user id, every insert sets it, and the task table's same-owner foreign key refuses another user's goal channel. The id must be a `VerifiedUserId` (made only by `asVerifiedUserId()`, which checks the shape), and the caller must have resolved it from verified credentials, never from a request body, header or address. The batch is checked before the service-role client is made. `ingestion.ts` itself never imports that client, and a test enforces it.
+
+### Entries path (MOM-109)
+
+`@/lib/services/syncedEntries.ts` turns normalized activity into entries under `DOMAIN_MODEL.md` §1.5 and §1.6. The old path above is left as it is, and nothing calls it today.
+
+1. **Binding, not routing:** the person's `sources` row for the provider and its `target_sources` decide where a record goes. `targetGoalChannel` is never read. A record with no source, or a source with no bound target, makes no entry and returns a fixed reason (`no_source`, `no_bound_target`) with plain wording.
+2. **One entry per bound target:** keyed by target, source and the provider's own record id, so a resync is the same entry (updated if the provider changed the workout, untouched if not). Hevy maps as: a count is 1; time is `durationMinutes`; a quantity is the metric its unit names (lb or lbs: `volumeLbs`, kg: `volumeLbs` converted, sets: `setsCompleted`, minutes: `durationMinutes`); a checklist target takes no workout. A target whose value would be 0 or missing, or whose unit is not one of these, makes no entry and says which rule. `occurred_at` is the activity `timestamp`; `evidence` keeps the activity type, title, duration and metrics.
+3. **Corrections survive a resync:** the sync never reads, writes or deletes `entry_corrections` (the service role has no grant on it), and it deletes no entry. A workout deleted in Hevy keeps its entry.
+4. **Merges are suggested, never silent:** `listMergeSuggestions()` returns one suggestion per group of possible duplicates (`lib/entries/mergeSuggestions.ts`): the same target, one manual and one synced entry, neither hidden, 4 hours apart at most and, for time and quantity, values within 25%. It writes nothing.
+5. **A failing source:** a sync that fails for a reason only the person can fix sets `integration_credentials.status` (`needs_reauth` for a refused key, `error` otherwise) and returns `notice: 'raised'` once; later failures are quiet until the key is saved again or a sync succeeds. Timeouts, network errors, 429 and 5xx change nothing and raise no notice.
+6. **Who runs as whom:** `syncHevyEntries()` reads the bindings through the signed-in person's session (the service role cannot read `targets`) and writes entries with the service-role client, keyed on the verified user id.
