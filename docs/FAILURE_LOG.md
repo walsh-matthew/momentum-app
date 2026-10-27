@@ -303,6 +303,20 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The failure log's count was not zero, so the run continued anyway, and the owner's message named the four entries. The pattern in the day-end command is fixed to match any row type with the mark in any column.
 - **Predicted it?** No.
 
+### F-042 · 2026-10-27 · build tool (project thread) · ★
+- **Asked:** Review a person's career documents (appraisals and several versions of one document) and propose honest entries for a private working profile.
+- **What went wrong:** Changes between versions of the document were called "drift" and listed as a risk, and a non-technical reviewer's description of technical work was treated as more accurate than the owner's own, carefully checked description. Both conclusions were wrong.
+- **Why:** The older documents were treated as the authority over the owner. The review did not check which way each change moved (every one moved toward the evidence, the mark of a deliberate verification pass), and did not ask who wrote the older wording or why it differed.
+- **Caught by:** The owner, reviewing the draft profile the same day. Both entries were dropped. The lesson went into the profile skill's rules: the owner's word beats any document, and check the direction of a change before calling it a problem.
+- **Predicted it?** No.
+
+### F-043 · 2026-10-27 · build tool (project thread)
+- **Asked:** "Can we update it so merge happens automatically?", right after a reply that mentioned both an open pull request and merging overlapping entries in a monthly review.
+- **What went wrong:** The request was read as "auto-merge the pull request". The owner meant "have the monthly review merge overlapping entries". The pull request was pushed and set up to merge on its own before the owner said what he meant.
+- **Why:** An ambiguous "it" was resolved to the most recent git topic without asking, although the reply before it had just raised the other topic. Any step that changes something outside the conversation is worth one clarifying question first.
+- **Caught by:** The owner, a few minutes later. Pushing the entry was fine with him, so nothing was reverted; the monthly review change was then made as he meant it.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
