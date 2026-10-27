@@ -19,9 +19,8 @@ const facts: ModelRebalanceFacts = {
   currentWeek: 4,
   planWeeks: 13,
   today: '2026-11-04',
-  velocity: { score: 40, trend: 'down', risk: 'rising', pressureStreak: 2 },
   weeks: [{ week: 2, unfinished: 3, finished: 4 }],
-  tasks: [{ id: '11111111-1111-4111-8111-111111111111', week: 2, type: 'build', minutes: 60, dueDate: null }],
+  tasks: [{ id: '11111111-1111-4111-8111-111111111111', week: 2, type: 'build', dueDate: null }],
 };
 
 const proposalJson = {

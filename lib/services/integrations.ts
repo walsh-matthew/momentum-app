@@ -3,12 +3,15 @@
 //
 // Phase 1 (MOM-13): the payload contract, mock adapters, and the toggle state in connected_apps.
 // MOM-40: turning normalized activity into tasks lives in @/lib/services/ingestion.ts.
+// MOM-109: turning synced records into entries lives in @/lib/services/syncedEntries.ts; the sync state (one notice for
+// a failing source) is recorded here, with the credentials.
 // MOM-37: provider tokens and API keys (storage, retrieval, refresh) in integration_credentials. The
 // only network request to a third party is the OAuth token refresh in refreshAccessToken().
 // MOM-62: the Google consent flow (redirect, callback and code exchange) is in @/lib/services/googleOAuth.ts; the
 // Hevy key form and the disconnect button call saveApiKey() and disconnectIntegration() from
 // app/actions/integrations.ts.
 
+import type { AdapterFailure } from '@/lib/adapters/shared';
 import { getGoogleOAuthEnv } from '@/lib/config/env';
 import { INTEGRATION_CATALOG, SUPPORTED_PROVIDER_IDS, authTypeOf } from '@/lib/integrations/catalog';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -539,6 +542,87 @@ async function refreshAccessToken(
     return { ok: true, data: { kind: 'bearer', value: current.access_token, expiresAt: current.expires_at } };
   }
   return { ok: false, error: 'Could not refresh that connection. Try again shortly.' };
+}
+
+// ---------------------------------------------------------------------------
+// Sync state (MOM-109, docs/DOMAIN_MODEL.md §1.6): a failing source gets one notice, then stays quiet until fixed
+// ---------------------------------------------------------------------------
+// The state is integration_credentials.status, so no table is needed. A sync that fails for a reason only a person
+// can fix changes the status away from 'connected', and only the call that makes that change reports a notice;
+// while the status stays away from 'connected' every later failure is quiet. The status goes back to 'connected'
+// when the person saves the key again (saveApiKey) or a sync succeeds, and a mention in the weekly review reads it.
+
+// A failure that mends itself (a timeout or network error, 429, 5xx) changes nothing and raises nothing.
+// BACKLOG.md: a long run of these should also raise a notice, later.
+const TRANSIENT_SYNC_FAILURES: readonly AdapterFailure[] = ['unavailable', 'rate_limited'];
+
+export type SyncNotice = 'raised' | 'none';
+
+// Whether the signed-in user has switched syncing on for a provider. False when there is no connected app yet.
+export async function isSyncOn(provider: unknown): Promise<ServiceResult<boolean>> {
+  if (!isSupportedProvider(provider)) return { ok: false, error: 'That app is not available yet.' };
+  const session = await requireSession('Sign in to sync your apps.');
+  if (!session.ok) return session;
+  // RLS limits this to the signed-in user's row.
+  const { data, error } = await session.supabase
+    .from('connected_apps')
+    .select('is_active')
+    .eq('user_id', session.userId)
+    .eq('provider', provider)
+    .maybeSingle();
+  if (error) return { ok: false, error: 'Could not check your connection.' };
+  return { ok: true, data: data?.is_active === true };
+}
+
+// Notes that a sync could not finish. `userId` is one the caller resolved itself. Returns 'raised' only for the one
+// call that moved a working connection to a failing state.
+export async function recordSyncFailure(
+  userId: string,
+  provider: ExternalProviderId,
+  failure: AdapterFailure,
+): Promise<SyncNotice> {
+  if (TRANSIENT_SYNC_FAILURES.includes(failure)) return 'none';
+  const status = failure === 'unauthorized' ? 'needs_reauth' : 'error';
+  const lastError =
+    failure === 'unauthorized' ? 'The provider refused the key.' : 'The provider sent an answer that could not be used.';
+  const admin = createSupabaseAdminClient();
+
+  const { data, error } = await admin
+    .from('integration_credentials')
+    .update({ status, last_error: lastError })
+    .eq('user_id', userId)
+    .eq('provider', provider)
+    .eq('status', 'connected')
+    .select('provider');
+  if (!error && data && data.length > 0) return 'raised';
+
+  // Already failing: no new notice. A refused key is the worse state, so it replaces a plain error quietly.
+  if (status === 'needs_reauth') {
+    await admin
+      .from('integration_credentials')
+      .update({ status, last_error: lastError })
+      .eq('user_id', userId)
+      .eq('provider', provider)
+      .eq('status', 'error');
+  }
+  return 'none';
+}
+
+// Notes that a sync finished: clears a failing state (the failure is fixed) and records when. Best effort: a
+// failure here must not hide the sync's own result.
+export async function recordSyncSuccess(userId: string, provider: ExternalProviderId, now: Date): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  await admin
+    .from('integration_credentials')
+    .update({ status: 'connected', last_error: null })
+    .eq('user_id', userId)
+    .eq('provider', provider)
+    .eq('status', 'error');
+  await admin
+    .from('connected_apps')
+    .update({ last_synced_at: now.toISOString() })
+    .eq('user_id', userId)
+    .eq('provider', provider);
 }
 
 // The real HTTP clients are in @/lib/adapters/hevy.ts and @/lib/adapters/google.ts (MOM-38). They take the credential

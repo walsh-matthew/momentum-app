@@ -1,5 +1,5 @@
 // Service-layer invariants for lib/services/entries.ts (MOM-110), run against the in-memory goal model fake
-// (tests/helpers/fakeGoalModel.ts):
+// (tests/helpers/fakeEntriesModel.ts):
 // - the four ways to log each write one entry the person made, at the server's clock, on their own manual source,
 // - removing is a hide correction and restoring deletes it; un-ticking and re-ticking do the same for a step, and the
 //   entry row is never edited (the owner's decision, 2026-10-26),
@@ -23,10 +23,10 @@ import {
   tickStep,
   untickStep,
 } from '@/lib/services/entries';
-import { ME, OTHER, add, goalRow, gm, itemRow, newId, resetGoalModel, settingsRow, stepRow, targetRow } from './helpers/fakeGoalModel';
+import { ME, OTHER, add, goalRow, gm, itemRow, newId, resetGoalModel, settingsRow, stepRow, targetRow } from './helpers/fakeEntriesModel';
 
 vi.mock('@/lib/supabase/server', async () => {
-  const { createSupabaseServerClient } = await import('./helpers/fakeGoalModel');
+  const { createSupabaseServerClient } = await import('./helpers/fakeEntriesModel');
   return { createSupabaseServerClient };
 });
 

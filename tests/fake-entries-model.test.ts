@@ -1,11 +1,11 @@
-// Keeps tests/helpers/fakeGoalModel.ts honest (MOM-110): every constraint and policy name it enforces really exists in
+// Keeps tests/helpers/fakeEntriesModel.ts honest (MOM-110): every constraint and policy name it enforces really exists in
 // migration 013, and the grants it assumes for the authenticated role are the ones the migration gives. The SQL itself
 // is exercised by supabase/verify/013_goal_model_tables.sql; this only stops the fake drifting from it.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ENFORCED_CONSTRAINTS } from './helpers/fakeGoalModel';
+import { ENFORCED_CONSTRAINTS } from './helpers/fakeEntriesModel';
 
 // Statements only: comments say things like "never edited" and would match.
 const sql = readFileSync(join(process.cwd(), 'supabase', 'migrations', '013_goal_model_tables.sql'), 'utf8').replace(/--.*$/gm, '');

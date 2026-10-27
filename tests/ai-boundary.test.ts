@@ -83,3 +83,37 @@ describe('the week 1 plan module is server-only and is the only other place that
     expect(importers).toEqual(['/lib/services/tasks.ts']);
   });
 });
+
+// MOM-111: the guided setup call is held to the same boundary. Nothing calls it yet; when the setup service lands it
+// is the only file that may.
+describe('the setup module is server-only and is the third place that builds a client', () => {
+  const source = readFileSync(join(root, 'lib', 'ai', 'setup.ts'), 'utf8');
+
+  it("imports 'server-only', so a client import fails the build", () => {
+    expect(source).toContain("import 'server-only';");
+  });
+
+  it('reads the key through the validated env accessor, never process.env directly', () => {
+    expect(source).toContain('getAnthropicApiKey()');
+    expect(source).not.toContain('process.env');
+  });
+
+  it('uses the official SDK and no second one', () => {
+    expect(source).toContain("from '@anthropic-ai/sdk'");
+    expect(source).not.toMatch(/from 'ai'|from '@ai-sdk\//);
+  });
+
+  it('no component imports it', () => {
+    const offenders = clientFiles.filter((file) => readFileSync(file, 'utf8').includes('@/lib/ai/setup'));
+    expect(offenders).toEqual([]);
+  });
+
+  it('only a setup service may import it, and not even a Server Action', () => {
+    const importers = filesUnder(join(root, 'lib'))
+      .concat(filesUnder(join(root, 'app')))
+      .filter((file) => !file.endsWith(join('lib', 'ai', 'setup.ts')))
+      .filter((file) => readFileSync(file, 'utf8').includes('@/lib/ai/setup'))
+      .map((file) => file.replace(root, '').replaceAll('\\', '/'));
+    expect(importers.filter((f) => f !== '/lib/services/setup.ts')).toEqual([]);
+  });
+});

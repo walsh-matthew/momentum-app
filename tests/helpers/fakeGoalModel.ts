@@ -1,411 +1,252 @@
-// In-memory stand-in for the Supabase server client over the goal model tables (migration 013), enough for
-// lib/services/entries.ts (MOM-110). Tests swap it in with vi.mock('@/lib/supabase/server', ...). It is separate from
-// tests/helpers/fakeSupabase.ts, which is built around the old task tables.
+// In-memory stand-ins for the two Supabase clients lib/services/syncedEntries.ts uses (MOM-109), covering the goal
+// model tables of migration 013 that the sync touches: sources, target_sources, targets, entries, entry_corrections.
+// connected_apps and integration_credentials are delegated to ./fakeIntegrations, so one client serves both.
 //
-// It mirrors the database rules the service relies on, so a write Postgres would reject fails here too, with the
-// same code (23505 unique, 23514 check, 23503 foreign key, 42501 permission or row level security):
-// - grants: entries can be selected and inserted and nothing else; entry_corrections, sources and the display
-//   column of a step can be written; person settings, goals, targets and work items are read-only here,
-// - row level security: a signed-in person sees and changes only their own rows (switch off with gm.rls = false to
-//   prove the service filters by user id itself), and an entry can only be inserted through the person's own
-//   manual source (entries_insert_own_manual),
-// - the CHECK, unique and composite foreign key constraints of entries, entry_corrections, sources and steps.
-// ENFORCED_CONSTRAINTS lists every name it enforces; tests/fake-goal-model.test.ts checks each one exists in the SQL.
+// It mirrors what the service depends on, so a write Postgres would refuse fails here too:
+// - who may do what (the grant table in 013's header): the signed-in role reads its own rows and inserts manual
+//   entries and its own corrections; the service role reads sources and target_sources, reads, inserts and updates
+//   entries, and has NO grant on targets or entry_corrections (42501), and no delete anywhere,
+// - row level security for the signed-in role (own rows only; the service role bypasses it, which is why the tests
+//   switch nothing off and prove the service filters by user id itself),
+// - the entries rules: value above zero, a non-blank record id, an object for evidence, one entry per target,
+//   source and record id, and a target and source that belong to the same person (the composite foreign keys).
+// tests/synced-entries.test.ts checks these rules exist in the SQL.
+
+import { createSupabaseAdminClient as createIntegrationsAdminClient, createSupabaseServerClient as createIntegrationsServerClient, idb } from './fakeIntegrations';
 
 type Row = Record<string, unknown>;
+type GoalTable = 'sources' | 'target_sources' | 'targets' | 'entries' | 'entry_corrections';
+type Role = 'session' | 'admin';
+type Op = 'select' | 'insert' | 'update';
 
-export const ME = '11111111-1111-4111-8111-111111111111';
-export const OTHER = '22222222-2222-4222-8222-222222222222';
+const GOAL_TABLES: ReadonlySet<string> = new Set(['sources', 'target_sources', 'targets', 'entries', 'entry_corrections']);
 
-export const newId = () => crypto.randomUUID();
-
-type TableName =
-  | 'person_settings'
-  | 'goals'
-  | 'targets'
-  | 'work_items'
-  | 'work_item_steps'
-  | 'sources'
-  | 'entries'
-  | 'entry_corrections';
-
-// What the authenticated role may do on each table (migration 013, section 7).
-const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'delete'>> = {
-  person_settings: new Set(['select']),
-  goals: new Set(['select']),
-  targets: new Set(['select']),
-  work_items: new Set(['select']),
-  work_item_steps: new Set(['select', 'update']),
-  sources: new Set(['select', 'insert', 'update', 'delete']),
-  entries: new Set(['select', 'insert']),
-  entry_corrections: new Set(['select', 'insert', 'update', 'delete']),
+// Migration 013, section 7.
+const GRANTS: Record<Role, Partial<Record<GoalTable, readonly Op[]>>> = {
+  session: {
+    sources: ['select'],
+    target_sources: ['select'],
+    targets: ['select'],
+    entries: ['select', 'insert'],
+    entry_corrections: ['select', 'insert'],
+  },
+  admin: {
+    sources: ['select'],
+    target_sources: ['select'],
+    entries: ['select', 'insert', 'update'],
+  },
 };
 
-export const ENFORCED_CONSTRAINTS = [
-  'sources_kind_check',
-  'sources_provider_matches_kind',
-  'sources_label_not_blank',
-  'entries_record_id_not_blank',
-  'entries_value_positive',
-  'entries_evidence_is_object',
-  'entries_target_source_record_unique',
-  'entries_target_fk',
-  'entries_source_fk',
-  'entries_work_item_fk',
-  'entries_insert_own_manual',
-  'entry_corrections_action_check',
-  'entry_corrections_record_id_not_blank',
-  'entry_corrections_source_record_unique',
-  'entry_corrections_source_fk',
-  'work_item_steps_completed_together',
-] as const;
-
 export const gm = {
-  tables: {
-    person_settings: [] as Row[],
-    goals: [] as Row[],
-    targets: [] as Row[],
-    work_items: [] as Row[],
-    work_item_steps: [] as Row[],
-    sources: [] as Row[],
-    entries: [] as Row[],
-    entry_corrections: [] as Row[],
-  } satisfies Record<TableName, Row[]>,
-  user: null as { id: string } | null,
-  rls: true,
-  // Every write that reached a table, in order: { table, op }.
-  writes: [] as Array<{ table: TableName; op: 'insert' | 'update' | 'delete' }>,
-  // When set, the next write to this table (any op) fails with this message, like a database error that quotes the row.
-  failNextWrite: null as { table: TableName; message: string } | null,
+  sources: [] as Row[],
+  targetSources: [] as Row[],
+  targets: [] as Row[],
+  entries: [] as Row[],
+  corrections: [] as Row[],
+  // Every write the service role made, to prove what it did and did not touch.
+  adminWrites: [] as Array<{ table: string; op: string }>,
+  // Every table the service role tried to reach, to prove what it never asked for.
+  adminTables: [] as string[],
   clock: 0,
 };
 
-export function resetGoalModel(user: { id: string } | null = null): void {
-  for (const name of Object.keys(gm.tables) as TableName[]) gm.tables[name] = [];
-  gm.user = user;
-  gm.rls = true;
-  gm.writes = [];
-  gm.failNextWrite = null;
+export function resetGm(): void {
+  gm.sources = [];
+  gm.targetSources = [];
+  gm.targets = [];
+  gm.entries = [];
+  gm.corrections = [];
+  gm.adminWrites = [];
+  gm.adminTables = [];
   gm.clock = 0;
 }
 
-// ---------------------------------------------------------------------------
-// Rows
-// ---------------------------------------------------------------------------
+let seq = 0;
+const newId = () => `10000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
+const stamp = () => new Date(Date.UTC(2026, 0, 1, 0, 0, ++gm.clock)).toISOString();
 
-const stamp = () => new Date(Date.UTC(2026, 9, 27, 12, 0, gm.clock++)).toISOString();
+const rowsOf = (table: GoalTable): Row[] =>
+  ({ sources: gm.sources, target_sources: gm.targetSources, targets: gm.targets, entries: gm.entries, entry_corrections: gm.corrections })[table];
 
-export function add(table: TableName, row: Row): Row {
-  const stored = { ...row };
-  gm.tables[table].push(stored);
-  return stored;
-}
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-export const goalRow = (userId: string, over: Row = {}): Row => ({
-  id: newId(),
-  user_id: userId,
-  title: 'Stay fit',
-  state: 'active',
-  ...over,
-});
+type Failure = { message: string; code?: string };
 
-export const targetRow = (userId: string, goalId: unknown, measure: string, over: Row = {}): Row => ({
-  id: newId(),
-  user_id: userId,
-  goal_id: goalId,
-  title: `A ${measure} target`,
-  measure,
-  unit: measure === 'quantity' ? 'km' : null,
-  created_at: stamp(),
-  ...over,
-});
-
-export const itemRow = (userId: string, goalId: unknown, targetId: unknown, over: Row = {}): Row => ({
-  id: newId(),
-  user_id: userId,
-  goal_id: goalId,
-  target_id: targetId,
-  kind: 'milestone',
-  title: 'Prep checklist',
-  sort_order: 0,
-  ...over,
-});
-
-export const stepRow = (userId: string, itemId: unknown, over: Row = {}): Row => ({
-  id: newId(),
-  user_id: userId,
-  work_item_id: itemId,
-  title: 'A step',
-  sort_order: 0,
-  completed_at: null,
-  completed_via: null,
-  ...over,
-});
-
-export const settingsRow = (userId: string, timeZone: string | null): Row => ({ user_id: userId, time_zone: timeZone });
-
-// ---------------------------------------------------------------------------
-// Constraints
-// ---------------------------------------------------------------------------
-
-interface Violation {
-  code: '23505' | '23514' | '23503' | '42501';
-  name: string;
-}
-
-const isBlank = (v: unknown) => typeof v !== 'string' || v.trim().length === 0;
-const isObject = (v: unknown): v is Row => typeof v === 'object' && v !== null && !Array.isArray(v);
-
-const find = (table: TableName, match: (r: Row) => boolean) => gm.tables[table].find(match);
-
-// The composite (id, user_id) foreign keys: the referenced row must be the same person's.
-const owned = (table: TableName, id: unknown, userId: unknown) => find(table, (r) => r.id === id && r.user_id === userId);
-
-function checkViolation(table: TableName, row: Row): Violation | null {
-  if (table === 'sources') {
-    if (row.kind !== 'synced' && row.kind !== 'manual') return { code: '23514', name: 'sources_kind_check' };
-    if ((row.kind === 'synced') !== (row.provider !== null && row.provider !== undefined)) {
-      return { code: '23514', name: 'sources_provider_matches_kind' };
-    }
-    if (isBlank(row.label)) return { code: '23514', name: 'sources_label_not_blank' };
-  }
-  if (table === 'entries') {
-    if (isBlank(row.source_record_id)) return { code: '23514', name: 'entries_record_id_not_blank' };
-    if (typeof row.value !== 'number' || !(row.value > 0)) return { code: '23514', name: 'entries_value_positive' };
-    if (!isObject(row.evidence)) return { code: '23514', name: 'entries_evidence_is_object' };
-  }
-  if (table === 'entry_corrections') {
-    if (row.action !== 'hide' && row.action !== 'count_anyway') return { code: '23514', name: 'entry_corrections_action_check' };
-    if (isBlank(row.source_record_id)) return { code: '23514', name: 'entry_corrections_record_id_not_blank' };
-  }
-  if (table === 'work_item_steps') {
-    if ((row.completed_at === null) !== (row.completed_via === null)) {
-      return { code: '23514', name: 'work_item_steps_completed_together' };
-    }
-  }
-  return null;
-}
-
-function uniqueViolation(table: TableName, row: Row, self: Row | null): Violation | null {
-  const clash = (match: (r: Row) => boolean) => find(table, (r) => r !== self && match(r));
-  if (table === 'entries' && clash((r) => r.target_id === row.target_id && r.source_id === row.source_id && r.source_record_id === row.source_record_id)) {
-    return { code: '23505', name: 'entries_target_source_record_unique' };
-  }
-  if (table === 'entry_corrections' && clash((r) => r.source_id === row.source_id && r.source_record_id === row.source_record_id)) {
-    return { code: '23505', name: 'entry_corrections_source_record_unique' };
-  }
-  return null;
-}
-
-function foreignKeyViolation(table: TableName, row: Row): Violation | null {
-  if (table === 'entries') {
-    if (!owned('targets', row.target_id, row.user_id)) return { code: '23503', name: 'entries_target_fk' };
-    if (!owned('sources', row.source_id, row.user_id)) return { code: '23503', name: 'entries_source_fk' };
-    if (row.work_item_id !== null && row.work_item_id !== undefined && !owned('work_items', row.work_item_id, row.user_id)) {
-      return { code: '23503', name: 'entries_work_item_fk' };
-    }
-  }
-  if (table === 'entry_corrections' && !owned('sources', row.source_id, row.user_id)) {
-    return { code: '23503', name: 'entry_corrections_source_fk' };
-  }
-  return null;
-}
-
-// Row level security's WITH CHECK on insert, for the one policy that is more than "it is yours".
-function insertPolicyViolation(table: TableName, row: Row): Violation | null {
-  if (!gm.user) return { code: '42501', name: `${table} (not signed in)` };
-  if (!gm.rls) return null;
-  if (row.user_id !== gm.user.id) return { code: '42501', name: `${table}_insert_own` };
-  if (table === 'entries') {
-    const source = owned('sources', row.source_id, row.user_id);
-    if (!source || source.kind !== 'manual') return { code: '42501', name: 'entries_insert_own_manual' };
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// The query builder
-// ---------------------------------------------------------------------------
-
-interface DbError {
-  code: string;
-  message: string;
-}
-interface Result {
-  data: unknown;
-  error: DbError | null;
-}
-
-const failure = (code: string, message: string): Result => ({ data: null, error: { code, message } });
-
-class Query implements PromiseLike<Result> {
-  private op: 'select' | 'insert' | 'update' | 'delete' = 'select';
-  private columns: string | undefined;
+class Query {
+  private op: Op = 'select';
+  private payload: Row = {};
+  private cols: string | undefined;
   private filters: Array<(r: Row) => boolean> = [];
-  private orders: Array<{ column: string; ascending: boolean }> = [];
-  private max: number | null = null;
-  private mode: 'many' | 'maybe' | 'one' = 'many';
-  private payload: Row | Row[] | null = null;
   private returning = false;
 
-  constructor(private readonly table: TableName) {}
+  constructor(
+    private readonly table: GoalTable,
+    private readonly role: Role,
+  ) {
+    if (role === 'admin') gm.adminTables.push(table);
+  }
 
-  select(columns?: string) {
-    if (this.op === 'select') this.columns = columns;
-    else {
-      this.returning = true;
-      this.columns = columns;
-    }
+  select(cols?: string) {
+    this.cols = cols;
+    if (this.op !== 'select') this.returning = true;
     return this;
   }
-  insert(payload: Row | Row[]) {
+  insert(row: Row) {
     this.op = 'insert';
-    this.payload = payload;
+    this.payload = row;
     return this;
   }
-  update(payload: Row) {
+  update(patch: Row) {
     this.op = 'update';
-    this.payload = payload;
+    this.payload = patch;
     return this;
   }
-  delete() {
-    this.op = 'delete';
+  delete(): never {
+    throw new Error('delete() is not supported: nothing in the sync can delete');
+  }
+  eq(col: string, val: unknown) {
+    this.filters.push((r) => r[col] === val);
     return this;
   }
-  eq(column: string, value: unknown) {
-    this.filters.push((r) => r[column] === value);
+  in(col: string, vals: unknown[]) {
+    this.filters.push((r) => vals.includes(r[col]));
     return this;
   }
-  in(column: string, values: unknown[]) {
-    this.filters.push((r) => values.includes(r[column]));
-    return this;
-  }
-  order(column: string, options: { ascending?: boolean } = {}) {
-    this.orders.push({ column, ascending: options.ascending ?? true });
-    return this;
-  }
-  limit(count: number) {
-    this.max = count;
-    return this;
-  }
-  maybeSingle() {
-    this.mode = 'maybe';
-    return this;
-  }
-  single() {
-    this.mode = 'one';
+  gte(col: string, val: string) {
+    this.filters.push((r) => String(r[col]) >= val);
     return this;
   }
 
-  then<A = Result, B = never>(
-    onfulfilled?: ((value: Result) => A | PromiseLike<A>) | null,
-    onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
-  ): PromiseLike<A | B> {
-    return Promise.resolve(this.run()).then(onfulfilled, onrejected);
+  private project(r: Row): Row {
+    if (!this.cols || this.cols === '*') return { ...r };
+    return Object.fromEntries(
+      this.cols
+        .split(',')
+        .map((c) => c.trim())
+        .map((c) => [c, r[c]]),
+    );
   }
 
-  private project(row: Row): Row {
-    if (this.columns === undefined || this.columns.trim() === '*') return { ...row };
-    const out: Row = {};
-    for (const column of this.columns.split(',').map((c) => c.trim())) out[column] = row[column];
-    return out;
-  }
-
-  // Rows this person may see: their own under RLS, none when signed out.
   private visible(): Row[] {
-    const rows = gm.tables[this.table];
-    if (!gm.rls) return rows;
-    if (!gm.user) return [];
-    return rows.filter((r) => r.user_id === gm.user?.id);
+    const all = rowsOf(this.table);
+    // The service role bypasses row level security; the signed-in role sees only its own rows.
+    if (this.role === 'admin') return all;
+    return all.filter((r) => idb.user !== null && r.user_id === idb.user.id);
   }
 
-  private matched(): Row[] {
-    return this.visible().filter((r) => this.filters.every((f) => f(r)));
-  }
-
-  private shape(rows: Row[]): Result {
-    const projected = rows.map((r) => this.project(r));
-    if (this.mode === 'many') return { data: projected, error: null };
-    if (projected.length > 1) return failure('PGRST116', 'JSON object requested, multiple (or no) rows returned');
-    if (projected.length === 0) {
-      return this.mode === 'maybe' ? { data: null, error: null } : failure('PGRST116', 'JSON object requested, multiple (or no) rows returned');
+  private run(): { data: Row[] | null; error: Failure | null } {
+    if (!GRANTS[this.role][this.table]?.includes(this.op)) {
+      return { data: null, error: { message: `permission denied for table ${this.table}`, code: '42501' } };
     }
-    return { data: projected[0], error: null };
-  }
-
-  private run(): Result {
-    if (!GRANTS[this.table].has(this.op)) return failure('42501', `permission denied for table ${this.table}`);
+    if (this.role === 'admin' && this.op !== 'select') gm.adminWrites.push({ table: this.table, op: this.op });
 
     if (this.op === 'select') {
-      const rows = this.matched();
-      for (const { column, ascending } of [...this.orders].reverse()) {
-        rows.sort((a, b) => {
-          const x = a[column] as string | number;
-          const y = b[column] as string | number;
-          return (x < y ? -1 : x > y ? 1 : 0) * (ascending ? 1 : -1);
-        });
+      return { data: this.visible().filter((r) => this.filters.every((f) => f(r))).map((r) => this.project(r)), error: null };
+    }
+    if (this.op === 'insert') return this.runInsert();
+
+    const changed: Row[] = [];
+    for (const r of this.visible().filter((row) => this.filters.every((f) => f(row)))) {
+      const next = { ...r, ...this.payload, updated_at: stamp() };
+      const violated = this.violation(next);
+      if (violated) return { data: null, error: { message: `new row violates check constraint "${violated}"`, code: '23514' } };
+      Object.assign(r, next);
+      changed.push(r);
+    }
+    return { data: this.returning ? changed.map((r) => this.project(r)) : [], error: null };
+  }
+
+  private violation(r: Row): string | null {
+    if (this.table !== 'entries') return null;
+    if (typeof r.value !== 'number' || !(r.value > 0)) return 'entries_value_positive';
+    if (typeof r.source_record_id !== 'string' || r.source_record_id.trim() === '') return 'entries_record_id_not_blank';
+    if (!isObject(r.evidence)) return 'entries_evidence_is_object';
+    return null;
+  }
+
+  private runInsert(): { data: Row[] | null; error: Failure | null } {
+    if (this.table === 'entry_corrections') {
+      const row: Row = { id: newId(), created_at: stamp(), updated_at: stamp(), ...this.payload };
+      if (this.role === 'session' && row.user_id !== idb.user?.id) {
+        return { data: null, error: { message: 'new row violates row-level security policy for table "entry_corrections"', code: '42501' } };
       }
-      return this.shape(this.max === null ? rows : rows.slice(0, this.max));
-    }
-
-    if (gm.failNextWrite?.table === this.table) {
-      const { message } = gm.failNextWrite;
-      gm.failNextWrite = null;
-      return failure('XX000', message);
-    }
-
-    if (this.op === 'insert') {
-      const incoming = Array.isArray(this.payload) ? this.payload : [this.payload as Row];
-      const added: Row[] = [];
-      for (const raw of incoming) {
-        const row: Row = { ...raw };
-        row.id ??= newId();
-        row.created_at ??= stamp();
-        row.updated_at ??= row.created_at;
-        if (this.table === 'entries') {
-          row.evidence ??= {};
-          row.work_item_id ??= null;
-        }
-        if (this.table === 'sources') row.provider ??= null;
-        const violation =
-          insertPolicyViolation(this.table, row) ??
-          checkViolation(this.table, row) ??
-          foreignKeyViolation(this.table, row) ??
-          uniqueViolation(this.table, row, null);
-        if (violation) return failure(violation.code, `violates ${violation.name}`);
-        added.push(row);
+      if (gm.corrections.some((c) => c.source_id === row.source_id && c.source_record_id === row.source_record_id)) {
+        return { data: null, error: { message: 'duplicate key value violates unique constraint "entry_corrections_source_record_unique"', code: '23505' } };
       }
-      for (const row of added) gm.tables[this.table].push(row);
-      gm.writes.push(...added.map(() => ({ table: this.table, op: 'insert' as const })));
-      return this.returning ? this.shape(added) : { data: null, error: null };
+      gm.corrections.push(row);
+      return { data: [this.project(row)], error: null };
     }
 
-    const rows = this.matched();
-    if (this.op === 'update') {
-      for (const row of rows) {
-        const next = { ...row, ...(this.payload as Row), updated_at: stamp() };
-        const violation = checkViolation(this.table, next) ?? uniqueViolation(this.table, next, row) ?? foreignKeyViolation(this.table, next);
-        if (violation) return failure(violation.code, `violates ${violation.name}`);
-        Object.assign(row, next);
-        gm.writes.push({ table: this.table, op: 'update' });
-      }
-      return this.returning ? this.shape(rows) : { data: null, error: null };
+    const row: Row = { id: newId(), work_item_id: null, evidence: {}, created_at: stamp(), updated_at: stamp(), ...this.payload };
+    const violated = this.violation(row);
+    if (violated) return { data: null, error: { message: `new row violates check constraint "${violated}"`, code: '23514' } };
+    const source = gm.sources.find((s) => s.id === row.source_id && s.user_id === row.user_id);
+    // A signed-in person writes entries only through their own manual sources (policy entries_insert_own_manual).
+    if (this.role === 'session' && (row.user_id !== idb.user?.id || source?.kind !== 'manual')) {
+      return { data: null, error: { message: 'new row violates row-level security policy for table "entries"', code: '42501' } };
     }
+    if (!gm.targets.some((t) => t.id === row.target_id && t.user_id === row.user_id)) {
+      return { data: null, error: { message: 'violates foreign key constraint "entries_target_fk"', code: '23503' } };
+    }
+    if (!source) return { data: null, error: { message: 'violates foreign key constraint "entries_source_fk"', code: '23503' } };
+    if (gm.entries.some((e) => e.target_id === row.target_id && e.source_id === row.source_id && e.source_record_id === row.source_record_id)) {
+      return { data: null, error: { message: 'duplicate key value violates unique constraint "entries_target_source_record_unique"', code: '23505' } };
+    }
+    gm.entries.push(row);
+    return { data: [this.project(row)], error: null };
+  }
 
-    gm.tables[this.table] = gm.tables[this.table].filter((r) => !rows.includes(r));
-    for (let i = 0; i < rows.length; i++) gm.writes.push({ table: this.table, op: 'delete' });
-    return this.returning ? this.shape(rows) : { data: null, error: null };
+  single() {
+    const { data, error } = this.run();
+    if (error) return Promise.resolve({ data: null, error });
+    return Promise.resolve(data?.[0] ? { data: data[0], error: null } : { data: null, error: { message: 'no row' } });
+  }
+  maybeSingle() {
+    const { data, error } = this.run();
+    return Promise.resolve({ data: data?.[0] ?? null, error });
+  }
+  then<T>(resolve: (v: { data: Row[] | null; error: Failure | null }) => T, reject?: (e: unknown) => T) {
+    return Promise.resolve(this.run()).then(resolve, reject);
   }
 }
 
 export async function createSupabaseServerClient() {
+  const base = await createIntegrationsServerClient();
   return {
-    auth: {
-      getUser: async () =>
-        gm.user
-          ? { data: { user: { id: gm.user.id, email: 'person@example.com' } }, error: null }
-          : { data: { user: null }, error: { message: 'Auth session missing!' } },
-    },
-    from: (table: TableName) => new Query(table),
+    auth: base.auth,
+    from: (table: string) => (GOAL_TABLES.has(table) ? new Query(table as GoalTable, 'session') : base.from(table)),
   };
+}
+
+export function createSupabaseAdminClient() {
+  const base = createIntegrationsAdminClient();
+  return { from: (table: string) => (GOAL_TABLES.has(table) ? new Query(table as GoalTable, 'admin') : base.from(table)) };
+}
+
+// ---------------------------------------------------------------------------
+// Seeding
+// ---------------------------------------------------------------------------
+
+export type Seeded = Row & { id: string; user_id: string };
+
+export function seedSource(userId: string, over: Row = {}): Seeded {
+  const row: Seeded = { id: newId(), user_id: userId, kind: 'synced', provider: 'hevy', label: 'Hevy', created_at: stamp(), updated_at: stamp(), ...over };
+  gm.sources.push(row);
+  return row;
+}
+
+export function seedTarget(userId: string, over: Row = {}): Seeded {
+  const row: Seeded = { id: newId(), user_id: userId, measure: 'count', unit: null, ...over };
+  gm.targets.push(row);
+  return row;
+}
+
+export function bind(userId: string, target: Seeded, source: Seeded): void {
+  gm.targetSources.push({ target_id: target.id, source_id: source.id, user_id: userId, created_at: stamp() });
+}
+
+export function seedEntry(over: Row & { user_id: string }): Seeded {
+  const row: Seeded = { id: newId(), work_item_id: null, evidence: {}, created_at: stamp(), updated_at: stamp(), ...over };
+  gm.entries.push(row);
+  return row;
 }
