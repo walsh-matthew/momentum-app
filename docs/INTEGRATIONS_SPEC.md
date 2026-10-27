@@ -115,7 +115,7 @@ All provider adapters must output data adhering to this standardized interface i
 **Google Calendar Mapping Rules:**
 * `externalId` <- `event.id`
 * `timestamp` <- `event.end.dateTime`
-* `title` <- `event.summary`
+* `title` <- the fixed text `Calendar event` (the event's own title is never requested or kept; MOM-102)
 * `durationMinutes` <- Difference between `event.end` and `event.start`
 * `metrics.eventCompleted` <- `true` if event time has elapsed and wasn't canceled
 

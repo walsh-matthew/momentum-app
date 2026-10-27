@@ -9,8 +9,8 @@ import { getPublicEnv } from '@/lib/config/env';
 import type { Database } from '@/types/database.types';
 
 // Reachable without a session. /auth/callback completes the email-confirmation link, which
-// arrives before the browser holds a session.
-const PUBLIC_PATHS = ['/login', '/auth/callback'];
+// arrives before the browser holds a session. /privacy is the privacy notice, linked from sign-up (MOM-102).
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/privacy'];
 
 const isPublicPath = (pathname: string) =>
   PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));

@@ -78,6 +78,12 @@ describe('SignInForm', () => {
     expect(screen.getByRole('link', { name: 'Forgot password?' }).getAttribute('href')).toBe('/login?reset=1');
   });
 
+  it('links the privacy notice from sign-up and says the service is for adults (MOM-102)', () => {
+    render(<SignInForm />);
+    expect(screen.getByRole('link', { name: 'privacy notice' }).getAttribute('href')).toBe('/privacy');
+    expect(screen.getByText(/for adults \(18 or over\)/)).toBeTruthy();
+  });
+
   it('has no CAPTCHA field when no site key is set', () => {
     const { container } = render(<SignInForm />);
     expect(hiddenToken(container)).toBeNull();

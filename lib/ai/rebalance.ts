@@ -11,8 +11,9 @@
 // - TaskRebalanceSchema rejects anything else, field by field, when the answer comes back;
 // - checkProposalAgainstTasks() rejects moves that do not match the user's tasks.
 //
-// What it sends: task ids, weeks, types, minutes, due dates and velocity. Never titles or anything else
-// the user wrote. The titles shown to the user always come from their own rows.
+// What it sends: task ids, weeks, types and due dates, and per-week finished and unfinished counts. Never
+// titles, minutes, a velocity score or anything else the user wrote. The titles shown to the user always come
+// from their own rows (MOM-102: the field list is pinned by tests).
 
 import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';

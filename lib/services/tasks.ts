@@ -28,9 +28,8 @@ import {
   checkProposalAgainstTasks,
   shiftDateByWeeks,
   summarizeProposalTasks,
-  type ModelRebalanceFacts,
 } from '@/lib/utils/rebalance';
-import { computeVelocity, currentPlanWeek, type VelocitySnapshot } from '@/lib/utils/velocity';
+import { currentPlanWeek } from '@/lib/utils/velocity';
 import {
   TASK_STATUSES,
   type GoalChannel,
@@ -190,7 +189,7 @@ export async function proposeRebalance(
   tasks: readonly MicroTask[],
   currentWeek: number,
   asOf: string,
-  options: { useModel?: boolean; velocity?: ModelRebalanceFacts['velocity']; budget?: { userId: string } } = {},
+  options: { useModel?: boolean; budget?: { userId: string } } = {},
 ): Promise<ServiceResult<RebalanceProposalView>> {
   const fromRules = (notice: string | null): ServiceResult<RebalanceProposalView> => {
     try {
@@ -207,7 +206,7 @@ export async function proposeRebalance(
 
   if (!options.budget) return fromRules(MODEL_FALLBACK_NOTICES.unchecked);
 
-  const facts = buildModelFacts(tasks, currentWeek, asOf, options.velocity ?? null);
+  const facts = buildModelFacts(tasks, currentWeek, asOf);
   const call = await runWithinBudget({
     userId: options.budget.userId,
     feature: 'rebalance',
@@ -264,7 +263,7 @@ export async function requestModelRebalance(
   if (authError || !auth.user) return { ok: false, error: 'Sign in to ask for a suggestion.' };
   if (typeof channelId !== 'string' || !UUID_PATTERN.test(channelId)) return { ok: false, error: NOT_A_CHANNEL };
 
-  const [goals, tasks, history] = await Promise.all([listGoalChannels(), listMicroTasks(), listRebalanceHistory()]);
+  const [goals, tasks] = await Promise.all([listGoalChannels(), listMicroTasks()]);
   if (!goals.ok || !tasks.ok) return { ok: false, error: 'Could not load your plan.' };
   const active = goals.data.filter((g) => g.status === 'active');
   if (active.length === 0) return { ok: false, error: 'Create a goal first.' };
@@ -277,18 +276,10 @@ export async function requestModelRebalance(
   if (week === null) return { ok: false, error: 'Could not work out your plan week.' };
 
   const own = tasks.data.filter((t) => t.goal_channel_id === goal.id);
-  // Velocity is context for the model; if the history is unavailable the plan still loads without it.
-  const snapshot: VelocitySnapshot = computeVelocity(own, week, today, history.ok ? history.data : []);
   return proposeRebalance(own, week, today, {
     useModel: true,
     // The verified session's user: the usage limits and log are keyed on it, never on anything from the request.
     budget: { userId: auth.user.id },
-    velocity: {
-      score: snapshot.score,
-      trend: snapshot.trend,
-      risk: snapshot.risk,
-      pressureStreak: snapshot.pressureStreak,
-    },
   });
 }
 
