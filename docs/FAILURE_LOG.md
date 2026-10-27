@@ -303,6 +303,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The failure log's count was not zero, so the run continued anyway, and the owner's message named the four entries. The pattern in the day-end command is fixed to match any row type with the mark in any column.
 - **Predicted it?** No.
 
+### F-042 · 2026-10-27 · build tool (project thread) · ★
+- **Asked:** Review a person's career documents (appraisals and several versions of one document) and propose honest entries for a private working profile.
+- **What went wrong:** Changes between versions of the document were called "drift" and listed as a risk, and a non-technical reviewer's description of technical work was treated as more accurate than the owner's own, carefully checked description. Both conclusions were wrong.
+- **Why:** The older documents were treated as the authority over the owner. The review did not check which way each change moved (every one moved toward the evidence, the mark of a deliberate verification pass), and did not ask who wrote the older wording or why it differed.
+- **Caught by:** The owner, reviewing the draft profile the same day. Both entries were dropped. The lesson went into the profile skill's rules: the owner's word beats any document, and check the direction of a change before calling it a problem.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
