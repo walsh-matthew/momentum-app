@@ -4,16 +4,18 @@
 //
 // This module only asks and returns what the model said. It does not decide whether the answer can be trusted: the caller
 // (a setup service, in the next block) runs the raw output through AssistantTurnSchema and checkTurn() from lib/setup/,
-// and only then shows the person anything. Nothing here is wired to lib/services/llm.ts yet, so nothing calls it in the
-// app: the per-setup budget, the usage-log feature name and the limits come with the budget block, and a call made before
-// that would be uncounted. Until then the only callers are tests, against a fake client.
+// and only then shows the person anything. The app calls this only through runSetupTurn() in lib/services/llm.ts (MOM-128),
+// which applies the setup limits and the per-setup budget and logs the call; a call made any other way would be uncounted.
 //
 // The reply is plain JSON that the strict schema checks afterwards. It does not use the API's structured-output
 // constraint: the draft schema has unions and bounds that constraint may not accept, and that has not been tried against
 // the real API (no live call has been approved). Whether to move to it is for the live-run block.
 //
-// What it sends: only what the person typed in this setup, and Claude's own earlier turns. No other goals, tasks, ids or
-// email.
+// What it sends: only what the person typed in this setup, Claude's own earlier turns, and the current draft once. No
+// other goals, tasks, ids or email.
+//
+// Since MOM-128 it is called through runSetupTurn() in lib/services/llm.ts, which counts the call, applies the setup limits
+// and the per-setup budget, and logs it under 'setup'. The default model is still this file's SETUP_MODEL.
 
 import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
@@ -22,8 +24,8 @@ import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import type { SetupDraft, Transcript } from '@/types/setup';
 import { readUsage, type ModelUsage } from './usage';
 
-// Claude Opus 5.5, the default model. One constant, so changing it is a one-line decision. The smaller-model trial is a
-// later block's job (design record §6.2 step 3).
+// Claude Opus 5.5, the default model. One constant, so changing it is a one-line decision. The smaller-model trial
+// (design record §6.2 step 3) passes another model in `deps.model` and keeps it only if it passes the same eval set.
 export const SETUP_MODEL = 'claude-opus-5-5';
 
 // Output includes the model's thinking, and the reply carries the whole draft, so leave room.
@@ -40,18 +42,40 @@ export type ModelSetupResult =
 export interface ModelSetupDeps {
   // Swappable in tests so no network call is made.
   client?: Pick<Anthropic, 'messages'>;
+  // The smaller-model trial (design record §6.2 step 3) runs the same eval set on another model. Defaults to SETUP_MODEL.
+  model?: string;
 }
 
 // The first message the API sees is always the person's side; this stands in before they have said anything.
 export const SETUP_BEGIN_MESSAGE = 'Begin setup.';
 
-// The conversation as the API takes it: the person's words as user messages, Claude's earlier turns as assistant messages.
-export function buildSetupMessages(transcript: Transcript): Anthropic.MessageParam[] {
+// What an earlier draft is replaced with in the history (MOM-128). Every reply of Claude's carries the whole draft, so
+// sending each one back made the request grow with the square of the number of turns. Only the newest draft matters: it
+// is the one Claude starts from, and it already holds everything the older ones did.
+export const SETUP_DRAFT_PLACEHOLDER = 'Earlier draft left out. The current draft is at the end of the newest message.';
+
+// The conversation as the API takes it: the person's words as user messages, Claude's earlier turns as assistant messages
+// with their draft replaced by the placeholder, and the current draft once, at the end of the newest message. Everything
+// else in an earlier turn (what it said and asked, its kind, topic and options) is sent unchanged.
+export function buildSetupMessages(transcript: Transcript, draft: SetupDraft): Anthropic.MessageParam[] {
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: SETUP_BEGIN_MESSAGE }];
   for (const m of transcript) {
     messages.push(
-      m.role === 'person' ? { role: 'user', content: m.text } : { role: 'assistant', content: JSON.stringify(m.turn) },
+      m.role === 'person'
+        ? { role: 'user', content: m.text }
+        : { role: 'assistant', content: JSON.stringify({ ...m.turn, draft: SETUP_DRAFT_PLACEHOLDER }) },
     );
+  }
+  const current = `Current draft, to start from:\n${JSON.stringify(draft)}`;
+  const last = messages[messages.length - 1];
+  if (last.role === 'user' && typeof last.content === 'string') {
+    // Two blocks in the one message, so the person's own words stay apart from the draft.
+    last.content = [
+      { type: 'text', text: last.content },
+      { type: 'text', text: current },
+    ];
+  } else {
+    messages.push({ role: 'user', content: current });
   }
   return messages;
 }
@@ -80,11 +104,11 @@ export async function requestSetupTurnFromModel(
   let response: Anthropic.Message;
   try {
     response = await client.messages.create({
-      model: SETUP_MODEL,
+      model: deps.model ?? SETUP_MODEL,
       max_tokens: MAX_OUTPUT_TOKENS,
       output_config: { effort: 'medium' },
       system: SETUP_SYSTEM_PROMPT,
-      messages: buildSetupMessages(input.transcript),
+      messages: buildSetupMessages(input.transcript, input.draft),
     });
   } catch (error) {
     // Most specific first. Log the kind of failure, never the message body or anything about the key.

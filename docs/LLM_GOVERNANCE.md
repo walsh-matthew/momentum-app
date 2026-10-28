@@ -1,6 +1,8 @@
 # Claude calls: limits, caps, usage log, SDK and fallback decision
 
-MOM-73. Covers both places the app calls Claude: the rebalance proposal ("Ask Claude to review", `lib/ai/rebalance.ts`) and the goal wizard's week 1 plan (`lib/ai/taskPlan.ts`). Code: `lib/services/llm.ts`. Database: migration `011_llm_usage_logs.sql`, checked by `supabase/verify/011_llm_usage_logs.sql`.
+MOM-73. Covers the places the app calls Claude: the rebalance proposal ("Ask Claude to review", `lib/ai/rebalance.ts`), the goal wizard's week 1 plan (`lib/ai/taskPlan.ts`) and, since MOM-128, a turn of guided setup (`lib/ai/setup.ts`), which has limits of its own: see [Guided setup](#guided-setup-mom-128). Code: `lib/services/llm.ts`. Database: migration `011_llm_usage_logs.sql` (and `014_setup_budget.sql`, which adds the `setup` feature), checked by `supabase/verify/011_llm_usage_logs.sql` and `014_setup_budget.sql`.
+
+The rest of this page, up to "Guided setup", describes the rebalance and week 1 plan and is unchanged by MOM-128.
 
 ## What was wrong
 
@@ -50,7 +52,7 @@ The text is composed on the server and shown as it is: the wizard prints the mes
 
 ## What is recorded, and who can see it
 
-Table `llm_usage_logs`, one row per call: `user_id`, `feature` (`rebalance` or `week_one_plan`), `model` (a model id, at most 100 characters), `input_tokens`, `output_tokens`, `latency_ms`, `outcome` (`pending`, `ok`, `refused`, `provider_rate_limited`, `unavailable`, `bad_output`, `not_configured`), `created_at`.
+Table `llm_usage_logs`, one row per call: `user_id`, `feature` (`rebalance`, `week_one_plan` or `setup`), `model` (a model id, at most 100 characters), `input_tokens`, `output_tokens`, `latency_ms`, `outcome` (`pending`, `ok`, `refused`, `provider_rate_limited`, `unavailable`, `bad_output`, `not_configured`), `created_at`.
 
 **No prompt and no answer, anywhere.** The table has no column that could carry either (no json, bytea, array or long-text column), the service passes only the fields above, and the tests read both the rows and the source to check it. The only text columns hold a fixed word or a model id.
 
@@ -99,9 +101,63 @@ Revisit when the log shows refusals are common enough to matter, and then test i
 - **The service-role client, in one module**: only server code may reserve calls. `lib/services/llm.ts` is the only place on the Claude path that holds it; `tasks.ts` does not, and a test checks that.
 - **Fail closed**: see above.
 
+## Guided setup (MOM-128)
+
+Why setup has its own limits: a real setup is one conversation of about 20 to 25 Claude turns, a few seconds apart. The limits above (20 calls a day, 20 seconds apart) would stop it partway, so a tester could be cut off in the middle (RAID R-22). Design record `docs/design/2026-10-26-goal-model-design.md` §6.2 decided the shape; this is how it is built. Code: `runSetupTurn()` in `lib/services/llm.ts`. It is the only caller of `lib/ai/setup.ts`, and a test checks that.
+
+| Rule | What it does | Where |
+|---|---|---|
+| **Per-person limits: log-only** | The person's daily count and the spacing between calls are set so high (and so low) that the database never refuses on them. Every call is still recorded as `setup`, so the log shows where production limits belong. | `SETUP_LIMITS` |
+| **One hard shared cap** | Everyone's calls together, across every feature, still stop at the shared cap (200 in any 24 hours today). It is the spend backstop if sign-up is abused. | `SETUP_LIMITS.overallDailyCap` is `LLM_LIMITS.overallDailyCap` |
+| **A per-setup budget** | One setup (first turn to save or abandon) may use at most 40 Claude turns and 1,000,000 tokens (input plus output). When a setup has used it, the next call is not made and nothing is reserved. | `SETUP_BUDGET` |
+| **Fall back to the quick path** | When the budget is used up, the shared cap is reached or the limits cannot be checked, setup stops using Claude and offers the quick path: it plays back what the person has said so far (written by code from the validated draft), offers sensible defaults they can see and change, and saves nothing until they approve. | `SETUP_QUICK_PATH_MESSAGES` |
+
+**The budget numbers are placeholders.** 40 turns and 1,000,000 tokens are starting values, not measurements. They are to be replaced by the 90th percentile of live eval runs plus a margin the owner approves (design record §6.2 step 2). No live run has set them yet; the results of any run go on the Jira ticket, not in the repo.
+
+**Two requests in the same second** are not a reason to leave the conversation: the second gets "Please wait a few seconds before asking again." and the person asks again. That is the only per-person spacing left (1 second, the smallest the database function accepts).
+
+**What counts as a turn and the tokens.** A turn is one of Claude's replies in the transcript the caller passes in. The tokens spent so far come back from every call (`spentTokens`) for the caller to hand in again. A token count that is not a whole, non-negative number is treated as used up.
+
+**Who carries the budget.** The conversation, not the server: a setup is stored nowhere until the person approves it, so the budget is carried by the client. A modified client could reset it. That is acceptable because the budget is a cost and fairness control for honest testers; the hard shared cap is the real backstop and cannot be reset from the client. If setups ever need a server-side budget, they need a setup id on the usage log (a migration).
+
+**What is sent each turn** (cost, and the privacy notice): the fixed setup prompt, the person's messages, Claude's earlier turns *without their drafts* (each is replaced by a short note) and the current draft once, at the end of the newest message. Before MOM-128 every earlier turn carried its whole draft, so the request grew with the square of the number of turns. Nothing else is sent: no other goals, tasks, ids or email.
+
+**The shared cap and the old features.** Every row counts toward a person's daily count whatever its feature, so a person who has done a 25-turn setup has also used up that day's 20 rebalance and week 1 plan calls. Left as it is on purpose: those two features are retired by MOM-115. Noted in `BACKLOG.md`.
+
+### Reading the log-only limits
+
+Setup rows are ordinary rows in `llm_usage_logs` with `feature = 'setup'`. This shows, for each person, how many setup calls fell past the old daily cap and how many came closer together than the old spacing. Run it in the SQL editor:
+
+```sql
+with calls as (
+  select user_id,
+         count(*) over (partition by user_id order by created_at
+                        range between interval '24 hours' preceding and current row) as in_last_24h,
+         created_at - lag(created_at) over (partition by user_id order by created_at) as since_previous
+  from public.llm_usage_logs
+  where feature = 'setup'
+)
+select user_id,
+       count(*) as setup_calls,
+       count(*) filter (where in_last_24h > 20) as calls_past_the_old_daily_cap,
+       count(*) filter (where since_previous < interval '20 seconds') as calls_closer_than_the_old_spacing
+from calls
+group by user_id;
+```
+
+The log has no setup id, so it cannot tell two setups by the same person apart; the per-setup budget is measured in the live eval runs, not here. Cost per day and model: `select * from public.llm_usage_daily where feature = 'setup' order by day desc;`.
+
+### Prices used for the estimates
+
+From the Claude API price table cached 2026-10-06 (check it is current): `claude-opus-5-5` $4 input and $20 output per million tokens; `claude-sonnet-5-5` $2 and $10; `claude-haiku-5-5` $0.10 and $0.50 (for prompts up to 100K tokens). `SETUP_MODEL` is `claude-opus-5-5`. The smaller-model trial (`model` argument of `runSetupTurn`) runs the same eval set on a cheaper model and keeps it only if it passes the same rule checks.
+
+### Running the live eval (owner's OK first)
+
+`npm run eval:setup:pilot` runs one full scripted case against the real model through `runSetupTurn()`, which makes real, paid calls. It is not part of `npm test` or CI. It will not run unless the Supabase address it uses is `127.0.0.1` or `localhost`: it ignores every Supabase value in `.env.local` (which points at production), takes the local stack's own address and keys from `npx supabase start`, and reads only the Anthropic key from `.env.local`. It stops by itself past an estimated $6. `tests/setup-live.test.ts` proves the refusal.
+
 ## Changing a limit
 
-Edit `LLM_LIMITS` in `lib/services/llm.ts`. Nothing in the database holds the numbers; the function takes them as arguments. The 24 hour window is fixed in the SQL function (a new migration is needed to change it). The user-facing wording reads the numbers, so the cap in the message follows the constant.
+Edit `LLM_LIMITS` in `lib/services/llm.ts` (rebalance and week 1 plan) or `SETUP_LIMITS` and `SETUP_BUDGET` (guided setup). Nothing in the database holds the numbers; the function takes them as arguments. The 24 hour window is fixed in the SQL function (a new migration is needed to change it). The user-facing wording reads the numbers, so the cap in the message follows the constant.
 
 ## Known gaps (also in BACKLOG.md)
 
@@ -117,3 +173,6 @@ Edit `LLM_LIMITS` in `lib/services/llm.ts`. Nothing in the database holds the nu
 - A one-off run with eight genuinely parallel database sessions: eight calls from one user gave exactly one reservation; eight users racing a cap of "current plus three" gave exactly three.
 - `tests/llm-governance.test.ts`: the limit across simulated instances and cold starts (including five instances asking at once), each limit at both call sites with the exact message, fail-closed, content-free rows, and source-level guards (no way to write `status` or `completed_at`, no unmetered call to either model function).
 - `tests/migrations.test.ts`: the SQL still says what the fake and the service assume.
+- `supabase/verify/014_setup_budget.sql` (MOM-128): `setup` is accepted and logged, anything else is still refused, and the goals checks that migration 014 changed (checked by removing each and seeing the script fail).
+- `tests/setup-budget.test.ts` (MOM-128): a scripted 25-turn setup is not cut off by the per-person limits (and the same 25 turns are cut off by the old ones), the shared cap still stops calls, going over the budget falls back to the quick path, setup calls are logged as `setup`, and the old features keep their limits.
+- `tests/setup-live.test.ts` (MOM-128): a live eval run refuses unless its Supabase address is local, whatever `.env.local` says.

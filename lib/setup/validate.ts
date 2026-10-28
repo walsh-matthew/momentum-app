@@ -148,9 +148,16 @@ function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
   if (goal.state === 'active' && goal.returnWhen) at('returnWhen', 'Only a parked goal has a way back.');
   if (goal.state === 'parked' && !goal.returnWhen && final) at('returnWhen', 'A parked goal needs a way back: a date, a season or condition, or "only when I ask".');
   if (final) {
-    if (!goal.startDate) at('startDate', 'The start date is missing. Propose today and let the person confirm it.');
-    if (!goal.shape) at('shape', 'Ask whether the goal is ongoing, has an end date, or is a project.');
-    if (goal.state === 'active' && goal.targets.length === 0) at('targets', 'An active goal needs at least one target.');
+    // A parked goal is set aside, not planned: it may have neither (migration 014, MOM-128). Any other goal needs both,
+    // as the database requires (goals_shape_start_required).
+    if (goal.state === 'active') {
+      if (!goal.startDate) at('startDate', 'The start date is missing. Propose today and let the person confirm it.');
+      if (!goal.shape) at('shape', 'Ask whether the goal is ongoing, has an end date, or is a project.');
+      if (goal.targets.length === 0) at('targets', 'An active goal needs at least one target.');
+    }
+    // With no shape there is no end date and no first block (the database says the same).
+    if (goal.shape === null && goal.endDate) at('endDate', 'A goal with no shape has no end date. Ask its shape first.');
+    if (goal.shape === null && goal.blockWeeks !== null) at('blockWeeks', 'A goal with no shape has no first-block length. Ask its shape first.');
   }
 
   const targetKeys = new Set<string>();

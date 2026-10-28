@@ -60,7 +60,7 @@ export type CredentialStatus = (typeof CREDENTIAL_STATUSES)[number];
 
 // The two places the app calls Claude, and how a call can end. Match llm_usage_logs.feature and .outcome
 // (migration 011). 'pending' is a call that has been reserved but not yet recorded as finished.
-export const LLM_FEATURES = ['rebalance', 'week_one_plan'] as const;
+export const LLM_FEATURES = ['rebalance', 'week_one_plan', 'setup'] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
 export const LLM_OUTCOMES = ['pending', 'ok', 'refused', 'provider_rate_limited', 'unavailable', 'bad_output', 'not_configured'] as const;
 export type LlmOutcome = (typeof LLM_OUTCOMES)[number];
@@ -256,8 +256,9 @@ export type GoalRow = {
   user_id: string;
   title: string;
   why: string | null;
-  start_date: string;
-  shape: GoalShape;
+  // Null only for a parked goal (migration 014, MOM-128): any other goal has both.
+  start_date: string | null;
+  shape: GoalShape | null;
   end_date: string | null;
   block_weeks: number | null;
   state: GoalState;
@@ -863,9 +864,11 @@ export type Database = {
           user_id: string;
           title: string;
           why?: string | null;
-          // Required, no database default: the person's own date (setup proposes today visibly).
-          start_date: string;
-          shape: GoalShape;
+          // No database default: the person's own date (setup proposes today visibly). The database requires both of
+          // these unless the goal is parked (goals_shape_start_required, migration 014), so leaving one out for any
+          // other goal is refused there, not here.
+          start_date?: string | null;
+          shape?: GoalShape | null;
           end_date?: string | null;
           block_weeks?: number | null;
           state?: GoalState;
@@ -882,8 +885,8 @@ export type Database = {
           user_id?: string;
           title?: string;
           why?: string | null;
-          start_date?: string;
-          shape?: GoalShape;
+          start_date?: string | null;
+          shape?: GoalShape | null;
           end_date?: string | null;
           block_weeks?: number | null;
           state?: GoalState;

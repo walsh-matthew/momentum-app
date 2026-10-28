@@ -53,7 +53,14 @@ export interface EvalReport {
 
 const MAX_TURNS = 60;
 
-export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn): Promise<EvalReport> {
+export interface RunSetupEvalOptions {
+  // Who answers each of the model's turns. By default the case's scripted lines, in order, which fit a scripted model whose
+  // questions come in a fixed order. A live model asks in its own order, so the live run answers by what the question is
+  // about instead (lib/ai/setupLive.ts). Return null when the person has nothing more to say.
+  reply?: (turn: AssistantTurn, index: number) => PersonLine | null;
+}
+
+export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, options: RunSetupEvalOptions = {}): Promise<EvalReport> {
   const transcript: Transcript = [];
   let draft = emptyDraft();
   const turns: TurnReport[] = [];
@@ -88,7 +95,7 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn): Promi
       report.finalIssues = validateDraft(draft, transcript, 'final').issues;
       break;
     }
-    const line = c.person[personAt++];
+    const line = options.reply ? options.reply(turn, index) : c.person[personAt++];
     if (!line) {
       report.ranOutOfPerson = true;
       break;
