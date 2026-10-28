@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadEnvConfig } from '@next/env';
 import { afterEach, describe, expect, it } from 'vitest';
-import { assertLocalUrl, assertNoModelKey, localStackEnvFrom, parseEnvLines } from './e2e/support/localStack';
+import { FAKE_MODEL_PORT, assertLocalUrl, assertNoModelKey, fakeModelEnv, localStackEnvFrom, parseEnvLines } from './e2e/support/localStack';
 
 const LOCAL = {
   API_URL: 'http://127.0.0.1:54321',
@@ -140,5 +140,26 @@ describe('Next.js keeps a variable that is already set, even to an empty string'
     process.env.ANTHROPIC_API_KEY = '';
     const { getAnthropicApiKey } = await import('@/lib/config/env');
     expect(() => getAnthropicApiKey()).toThrow(/ANTHROPIC_API_KEY/);
+  });
+});
+
+// MOM-111: the guided setup spec gives the dev server a dummy key and points the SDK at a fake model on this machine.
+describe('fakeModelEnv', () => {
+  it('points the model at a loopback address with a dummy key, never at the real API', () => {
+    const env = fakeModelEnv();
+    expect(env.ANTHROPIC_BASE_URL).toBe(`http://127.0.0.1:${FAKE_MODEL_PORT}`);
+    expect(() => assertLocalUrl(env.ANTHROPIC_BASE_URL, 'ANTHROPIC_BASE_URL')).not.toThrow();
+    expect(env.ANTHROPIC_API_KEY).not.toMatch(/^sk-ant-/);
+    expect(JSON.stringify(env)).not.toContain('anthropic.com');
+  });
+
+  it.each([0, 80, 70000, 3199.5, Number.NaN])('refuses port %s', (port) => {
+    expect(() => fakeModelEnv(port)).toThrow(/port/);
+  });
+
+  it('leaves the pinned-empty environment of every other secret alone', () => {
+    const { serverEnv } = localStackEnvFrom(LOCAL);
+    expect(serverEnv.ANTHROPIC_API_KEY).toBe('');
+    expect(Object.hasOwn(serverEnv, 'ANTHROPIC_BASE_URL')).toBe(false);
   });
 });

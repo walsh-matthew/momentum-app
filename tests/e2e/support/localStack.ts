@@ -98,3 +98,19 @@ export function assertNoModelKey(env: Record<string, string | undefined>): void 
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// The fake model for the guided setup spec (MOM-111)
+// ---------------------------------------------------------------------------
+
+// The port of the fake Anthropic server the runner starts (tests/e2e/support/fakeAnthropic.ts).
+export const FAKE_MODEL_PORT = 3199;
+
+// What the dev server is given instead of an empty model key: a dummy key and the address of the fake model, on this machine.
+// The SDK sends every request to ANTHROPIC_BASE_URL, so nothing can reach the real API (the key is not a real one either),
+// and the fake answers 401 to everything that is not a setup turn, so the other specs still see "not configured".
+// Configured here and in playwright.config.ts only: no switch exists in the app's own code.
+export function fakeModelEnv(port: number = FAKE_MODEL_PORT): { ANTHROPIC_API_KEY: string; ANTHROPIC_BASE_URL: string } {
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('The fake model needs a port between 1024 and 65535.');
+  return { ANTHROPIC_API_KEY: 'e2e-fake-key-not-a-secret', ANTHROPIC_BASE_URL: assertLocalUrl(`http://127.0.0.1:${port}`, 'ANTHROPIC_BASE_URL') };
+}

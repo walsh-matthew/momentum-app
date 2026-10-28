@@ -7,10 +7,13 @@
 // - principle 1 and rule 8: every number, date, clock time, weekday and yes/no answer in the draft points at something
 //   the person said or accepted, and no free text carries a day or time word nobody said;
 // - the deadline rule: a deadline task says whether its date can move, in both modes;
+// - the rules the save needs (MOM-111): a synced source is an app Momentum can connect, and a work item with steps feeds a
+//   checklist target (manual entry ticks a step through the item's target);
 // - the ordering rule (MOM-107, MOM-125): a saved target needs the time zone and the day end, and the week start when a
 //   weekly or day-slot target needs it. Setup collects them at step 10, after the targets, so only 'final' asks.
 // Issues are written for the person-facing reader of the log, not as error codes. Pure.
 
+import { SUPPORTED_PROVIDER_IDS } from '@/lib/integrations/catalog';
 import {
   SETUP_CHUNKS,
   SetupDraftSchema,
@@ -172,6 +175,12 @@ function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
     if (t.period.kind === 'day_slots' && new Set(t.period.weekdays).size !== t.period.weekdays.length) {
       tat('period', 'Each named day appears once.');
     }
+    for (const source of t.sources) {
+      // Only an app Momentum can connect can be named as a source; anything else is manual for now.
+      if (source.kind === 'synced' && !SUPPORTED_PROVIDER_IDS.includes(source.provider)) {
+        tat('sources', `"${source.provider}" cannot be connected yet. Offer manual for now.`);
+      }
+    }
     if (final) {
       if (t.role === 'effort' && t.floor === null) tat('floor', 'An effort target needs a floor, the number the person named.');
       if (t.sources.length === 0) tat('sources', 'Ask where this is tracked (step 9).');
@@ -185,6 +194,12 @@ function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
     itemKeys.add(i.key);
     const target = i.targetKey === null ? null : goal.targets.find((t) => t.key === i.targetKey);
     if (i.targetKey !== null && !target) iat('targetKey', 'The target this item feeds is not in this goal.');
+    // A step is ticked against a checklist target, so an item with steps has to feed one (MOM-110: manual entry finds the
+    // target through the item).
+    if (i.steps.length > 0) {
+      if (target && target.measure !== 'checklist') iat('targetKey', 'An item with steps feeds a checklist target.');
+      if (i.targetKey === null && final) iat('targetKey', 'An item with steps must feed a checklist target, so its steps can be ticked.');
+    }
     if (i.kind === 'habit') {
       if (i.targetKey === null) iat('targetKey', 'A habit feeds a target.');
       if (target && target.period.kind === 'deadline') iat('targetKey', 'A habit feeds a repeating target, not a deadline.');

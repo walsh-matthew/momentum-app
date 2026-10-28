@@ -254,6 +254,8 @@ export interface RunSetupTurnArgs {
   draft: SetupDraft;
   // Input plus output tokens used by this setup's earlier calls; 0 for the first.
   spentTokens: number;
+  // The date on the person's device, YYYY-MM-DD, offered to Claude as a suggestion for a start date (MOM-111).
+  today?: string;
   // The smaller-model trial runs the same path on another model.
   model?: string;
   // Tests and the eval runner only. The app uses the constants above.
@@ -288,7 +290,7 @@ export async function runSetupTurn(args: RunSetupTurnArgs, deps: RunSetupTurnDep
       feature: 'setup',
       model,
       limits: args.limits ?? SETUP_LIMITS,
-      call: () => requestTurn({ transcript: args.transcript, draft: args.draft }, { ...deps.modelDeps, model }),
+      call: () => requestTurn({ transcript: args.transcript, draft: args.draft, today: args.today }, { ...deps.modelDeps, model }),
       report: reportModelResult,
     },
     deps,

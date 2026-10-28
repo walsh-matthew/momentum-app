@@ -84,8 +84,8 @@ describe('the week 1 plan module is server-only and is the only other place that
   });
 });
 
-// MOM-111: the guided setup call is held to the same boundary. Nothing calls it yet; when the setup service lands it
-// is the only file that may.
+// MOM-111: the guided setup call is held to the same boundary. Only the Claude budget service (lib/services/llm.ts)
+// calls it; the setup service (lib/services/setup.ts) reaches it through that.
 describe('the setup module is server-only and is the third place that builds a client', () => {
   const source = readFileSync(join(root, 'lib', 'ai', 'setup.ts'), 'utf8');
 

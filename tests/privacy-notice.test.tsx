@@ -69,7 +69,7 @@ describe('the privacy notice', () => {
     expect(connected).toContain('in place of its real title');
   });
 
-  it('says what each Claude feature is sent, that guided setup is still to come, and what is never sent', () => {
+  it('says what each Claude feature is sent, what guided setup sends, and what is never sent', () => {
     render(<PrivacyNotice />);
     const claude = region('What is sent to Claude (Anthropic)');
     for (const prompt of Object.values(PROMPTS)) {
@@ -80,8 +80,10 @@ describe('the privacy notice', () => {
     }
     expect(claude).toContain('Not task titles, minutes or scores');
     expect(claude).toContain(GUIDED_SETUP_LINE);
-    expect(claude).toMatch(/When guided setup arrives, it is a conversation with Claude, and what you type is sent to Anthropic\./);
-    expect(claude).not.toMatch(/Guided setup is a conversation/);
+    // Guided setup is reachable (MOM-111), so the notice no longer says it is still to come, and it names what is sent.
+    expect(claude).toMatch(/Guided setup is a conversation with Claude\./);
+    expect(claude).toContain("today's date on your device (as a suggested start date)");
+    expect(claude).not.toMatch(/When guided setup arrives/);
     expect(claude).toContain(`Never sent: ${NEVER_SENT}`);
   });
 
@@ -121,6 +123,7 @@ describe('the privacy notice', () => {
     for (const line of DEVICE_STORAGE.now) expect(device).toContain(line);
     expect(device).toContain('a cookie that keeps you signed in');
     expect(device).toContain("a running timer's start time, kept in this browser until you stop it");
+    expect(device).toContain('a setup conversation in progress, kept in this browser tab until you save it or close the tab');
     expect(device).not.toContain('When timers arrive');
   });
 

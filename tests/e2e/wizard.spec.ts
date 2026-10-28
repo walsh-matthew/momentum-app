@@ -3,9 +3,10 @@
 // 20 second wait message, the starter plan, Create, and the goal showing with unticked tasks, surviving a reload and
 // the back button. It runs at both widths: at 1280px the goal is in the sidebar, at 390px it is a goal card.
 //
-// The dev server is started with ANTHROPIC_API_KEY pinned empty (playwright.config.ts), so Generate always fails
-// with the same fixed wording. If it does not, this spec stops: a different message would mean a model key is
-// reachable and a paid request may have been made.
+// The dev server is started with a dummy ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL pointing at the fake model on this
+// machine (playwright.config.ts, MOM-111). The fake answers 401 to anything that is not a guided setup turn, which the
+// app reports as "not configured", so Generate always fails with the same fixed wording. If it does not, this spec
+// stops: a different message would mean a real model is reachable and a paid request may have been made.
 
 import type { Page } from '@playwright/test';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';

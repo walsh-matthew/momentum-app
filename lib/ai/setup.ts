@@ -11,8 +11,8 @@
 // constraint: the draft schema has unions and bounds that constraint may not accept, and that has not been tried against
 // the real API (no live call has been approved). Whether to move to it is for the live-run block.
 //
-// What it sends: only what the person typed in this setup, Claude's own earlier turns, and the current draft once. No
-// other goals, tasks, ids or email.
+// What it sends: only what the person typed in this setup, Claude's own earlier turns, the current draft once, and the
+// date on their device as a suggested start date. No other goals, tasks, ids or email.
 //
 // Since MOM-128 it is called through runSetupTurn() in lib/services/llm.ts, which counts the call, applies the setup limits
 // and the per-setup budget, and logs it under 'setup'. The default model is still this file's SETUP_MODEL.
@@ -57,7 +57,11 @@ export const SETUP_DRAFT_PLACEHOLDER = 'Earlier draft left out. The current draf
 // The conversation as the API takes it: the person's words as user messages, Claude's earlier turns as assistant messages
 // with their draft replaced by the placeholder, and the current draft once, at the end of the newest message. Everything
 // else in an earlier turn (what it said and asked, its kind, topic and options) is sent unchanged.
-export function buildSetupMessages(transcript: Transcript, draft: SetupDraft): Anthropic.MessageParam[] {
+//
+// `today` is the date on the person's own device, sent by the browser as a SUGGESTION for a goal's start date (the server
+// does not know their time zone before setup has asked it). It is one extra line after the draft, labelled as a
+// suggestion, and is left out when the browser did not send one (MOM-111).
+export function buildSetupMessages(transcript: Transcript, draft: SetupDraft, today?: string): Anthropic.MessageParam[] {
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: SETUP_BEGIN_MESSAGE }];
   for (const m of transcript) {
     messages.push(
@@ -66,7 +70,8 @@ export function buildSetupMessages(transcript: Transcript, draft: SetupDraft): A
         : { role: 'assistant', content: JSON.stringify({ ...m.turn, draft: SETUP_DRAFT_PLACEHOLDER }) },
     );
   }
-  const current = `Current draft, to start from:\n${JSON.stringify(draft)}`;
+  const suggestion = today ? `\nSuggested start date (today's date on the person's device, a suggestion only): ${today}` : '';
+  const current = `Current draft, to start from:\n${JSON.stringify(draft)}${suggestion}`;
   const last = messages[messages.length - 1];
   if (last.role === 'user' && typeof last.content === 'string') {
     // Two blocks in the one message, so the person's own words stay apart from the draft.
@@ -90,7 +95,7 @@ function extractJson(text: string): unknown {
 
 // Asks Claude for the next turn. Returns the model's raw JSON, parsed but otherwise untouched.
 export async function requestSetupTurnFromModel(
-  input: { transcript: Transcript; draft: SetupDraft },
+  input: { transcript: Transcript; draft: SetupDraft; today?: string },
   deps: ModelSetupDeps = {},
 ): Promise<ModelSetupResult> {
   let client: Pick<Anthropic, 'messages'>;
@@ -108,7 +113,7 @@ export async function requestSetupTurnFromModel(
       max_tokens: MAX_OUTPUT_TOKENS,
       output_config: { effort: 'medium' },
       system: SETUP_SYSTEM_PROMPT,
-      messages: buildSetupMessages(input.transcript, input.draft),
+      messages: buildSetupMessages(input.transcript, input.draft, input.today),
     });
   } catch (error) {
     // Most specific first. Log the kind of failure, never the message body or anything about the key.
