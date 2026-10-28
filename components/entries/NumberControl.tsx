@@ -2,11 +2,15 @@
 
 import { useState, type FormEvent } from 'react';
 import { logNumberEntry } from '@/app/actions/entries';
-import type { LogTarget } from '@/types/entries';
+import type { LogDay, LogTarget } from '@/types/entries';
+import { DayPicker } from './DayPicker';
+import { EntryFeedback } from './EntryFeedback';
 import { useEntryAction } from './useEntryAction';
 
 interface NumberControlProps {
   target: LogTarget;
+  // The days the person can log on, or null/absent when they cannot choose one yet.
+  days?: LogDay[] | null;
 }
 
 // The amount as the person typed it. A comma is accepted as the decimal mark; anything else that is not a plain
@@ -18,11 +22,12 @@ function parseAmount(text: string): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-// A quantity target: one number. This is the only control that opens the number pad (inputMode decimal); the
-// amount is the entry's value as typed.
-export function NumberControl({ target }: NumberControlProps) {
-  const { pending, error, run, setError } = useEntryAction();
+// A quantity target: one number. With typed minutes, the only controls that open the number pad (inputMode decimal);
+// the amount is the entry's value as typed, now or on a day the person chooses.
+export function NumberControl({ target, days = null }: NumberControlProps) {
+  const { pending, error, notice, run, setError } = useEntryAction();
   const [text, setText] = useState('');
+  const [day, setDay] = useState<string | null>(null);
   const unit = target.unit ?? '';
 
   const onSubmit = (event: FormEvent) => {
@@ -33,13 +38,17 @@ export function NumberControl({ target }: NumberControlProps) {
       return;
     }
     run(
-      () => logNumberEntry(target.id, amount),
-      () => setText(''),
+      () => (day === null ? logNumberEntry(target.id, amount) : logNumberEntry(target.id, amount, day)),
+      () => {
+        setText('');
+        setDay(null);
+      },
     );
   };
 
   return (
     <form onSubmit={onSubmit} noValidate>
+      {days && <DayPicker days={days} value={day} onChange={setDay} disabled={pending} name={target.title} />}
       <div className="flex gap-3">
         <input
           type="text"
@@ -60,11 +69,7 @@ export function NumberControl({ target }: NumberControlProps) {
           {pending ? 'Saving…' : 'Log it'}
         </button>
       </div>
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {error}
-        </p>
-      )}
+      <EntryFeedback error={error} notice={notice} />
     </form>
   );
 }

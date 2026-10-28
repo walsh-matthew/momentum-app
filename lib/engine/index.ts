@@ -10,6 +10,6 @@ export { evaluateTarget, evaluatePeriod, specProblem } from './evaluate';
 export { forecastDeadline } from './forecast';
 export { detectPatterns, patternSettings } from './patterns';
 export { computeScoreboard } from './scoreboard';
-export { addDays, assertAnchors, canGrade, localDay, weekRange } from './time';
+export { addDays, assertAnchors, assertDate, canGrade, localDay, localNoon, weekRange } from './time';
 export { biggestCrossings, crossingKey, entriesPerDay, floorsMet } from './week';
 export type { DayCount, FloorTally } from './week';

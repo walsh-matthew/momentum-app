@@ -2,7 +2,7 @@
 
 import { removeLoggedEntry, restoreLoggedEntry } from '@/app/actions/entries';
 import type { LoggedEntry } from '@/types/entries';
-import { describeEntry, formatEntryTime } from './format';
+import { describeEntry, formatChosenDay, formatEntryTime } from './format';
 import { useEntryAction } from './useEntryAction';
 
 interface EntryListProps {
@@ -16,10 +16,11 @@ interface EntryRowProps {
   timeZone: string | null;
 }
 
-// One entry. Remove hides it and keeps it here, struck through, with a way back: nothing is deleted.
+// One entry. Remove hides it and keeps it here, struck through, with a way back: nothing is deleted. An entry on a
+// day the person chose shows the day only, and one that falls before its goal's start says it is not counted.
 function EntryRow({ entry, timeZone }: EntryRowProps) {
   const { pending, error, run } = useEntryAction();
-  const when = formatEntryTime(entry.occurredAt, timeZone);
+  const when = entry.chosenDay ? `${formatChosenDay(entry.chosenDay)} · the day you chose` : formatEntryTime(entry.occurredAt, timeZone);
 
   return (
     <li className="rounded-2xl border border-border bg-secondary p-4">
@@ -29,6 +30,7 @@ function EntryRow({ entry, timeZone }: EntryRowProps) {
             {entry.targetTitle}: {describeEntry(entry)}
           </p>
           {when && <p className="text-sm text-muted">{when}</p>}
+          {entry.beforeStart && <p className="text-sm font-medium">Before the goal&apos;s start, not counted</p>}
         </div>
         {entry.removed && <span className="chip">Removed</span>}
         <button

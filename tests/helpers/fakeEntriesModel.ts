@@ -112,6 +112,8 @@ export const goalRow = (userId: string, over: Row = {}): Row => ({
   user_id: userId,
   title: 'Stay fit',
   state: 'active',
+  // Before every date the tests log on, so nothing is "before the start" unless a test moves it.
+  start_date: '2026-10-01',
   ...over,
 });
 
@@ -148,7 +150,13 @@ export const stepRow = (userId: string, itemId: unknown, over: Row = {}): Row =>
   ...over,
 });
 
-export const settingsRow = (userId: string, timeZone: string | null): Row => ({ user_id: userId, time_zone: timeZone });
+// `dayEnd` is the column's own text ("22:00:00"); null is a person who has not set one. An evening day end leaves the
+// day boundary at midnight; "02:00:00" moves it to 02:00.
+export const settingsRow = (userId: string, timeZone: string | null, dayEnd: string | null = '22:00:00'): Row => ({
+  user_id: userId,
+  time_zone: timeZone,
+  day_end: dayEnd,
+});
 
 // ---------------------------------------------------------------------------
 // Constraints
