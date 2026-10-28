@@ -133,3 +133,19 @@ export function getAnthropicApiKey(): string {
   ).ANTHROPIC_API_KEY;
   return anthropicApiKey;
 }
+
+// What decides whether the browser tests' stand-in for Hevy may be used (lib/services/hevySyncDeps.ts, MOM-129).
+// Raw values, not validated: the guard treats anything but the exact expected value as "no". Not secrets.
+export interface FakeHevyEnv {
+  E2E_FAKE_HEVY: string | undefined;
+  NODE_ENV: string | undefined;
+  NEXT_PUBLIC_SUPABASE_URL: string | undefined;
+}
+
+export function getFakeHevyEnv(): FakeHevyEnv {
+  return {
+    E2E_FAKE_HEVY: process.env.E2E_FAKE_HEVY,
+    NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  };
+}

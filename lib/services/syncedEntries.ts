@@ -24,6 +24,7 @@
 
 import { listHevyWorkouts } from '@/lib/adapters/hevy';
 import type { AdapterDeps, AdapterFailure } from '@/lib/adapters/shared';
+import { HEVY_SYNC_MESSAGES, describeHevySync } from '@/lib/integrations/hevySyncView';
 import { suggestMerges, type MergeCandidate, type MergeSuggestion } from '@/lib/entries/mergeSuggestions';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -32,12 +33,14 @@ import type { Database, EntryRow, Measure } from '@/types/database.types';
 import {
   SYNC_SKIP_MESSAGES,
   type SyncedEntryResult,
+  type HevySyncView,
   type SyncedEntrySummary,
   type SyncOutcome,
   type SyncSkipReason,
 } from '@/types/integrations';
 import { InboundActivityPayloadSchema, MAX_ACTIVITIES_PER_BATCH } from './ingestion';
 import { getAccessToken, isSyncOn, recordSyncFailure, recordSyncSuccess, type InboundActivityPayload, type SyncNotice } from './integrations';
+import { runExclusive } from './personLock';
 import type { ServiceResult } from './result';
 
 type Db = SupabaseClient<Database>;
@@ -391,6 +394,20 @@ export async function syncHevyEntries(deps: HevySyncDeps = {}): Promise<ServiceR
   }
   await recordSyncSuccess(userId, 'hevy', (deps.now ?? (() => new Date()))());
   return { ok: true, data: { status: 'synced', entries, failure: null, notice: 'none' } };
+}
+
+// The "Sync now" button's service (MOM-129): one sync at a time per person (services/personLock.ts), returned as
+// plain words for the card.
+export async function runHevySync(deps: HevySyncDeps = {}): Promise<ServiceResult<HevySyncView>> {
+  const supabase = await createSupabaseServerClient();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) return { ok: false, error: 'Sign in to sync your workouts.' };
+
+  const done = await runExclusive(auth.user.id, async (): Promise<ServiceResult<HevySyncView>> => {
+    const result = await syncHevyEntries(deps);
+    return result.ok ? { ok: true, data: describeHevySync(result.data) } : result;
+  });
+  return done ?? { ok: true, data: { kind: 'busy', message: HEVY_SYNC_MESSAGES.busy, added: 0, updated: 0 } };
 }
 
 // ---------------------------------------------------------------------------

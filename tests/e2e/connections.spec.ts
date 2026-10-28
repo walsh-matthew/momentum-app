@@ -5,9 +5,36 @@
 
 import type { Page } from '@playwright/test';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
+import { countEntries, seedHevyBinding } from './support/hevySeed';
 
 const KEY = 'e2e-hevy-key-0123456789abcdef';
+// The test server answers Hevy from a canned stand-in chosen by the key (lib/testing/fakeHevyFetch.ts, MOM-129).
+const OK_KEY = 'e2e-hevy-ok-0123456789abcdef';
+const REFUSED_KEY = 'e2e-hevy-refused-0123456789';
+const SLOW_KEY = 'e2e-hevy-slow-0123456789abcd';
 const card = (page: Page, name: string) => page.getByRole('heading', { name, level: 3 }).locator('xpath=ancestor::li[1]');
+
+// Signs up, connects Hevy with `key`, and returns the card. `bound` gives the person a target that counts Hevy.
+async function connectedHevy(page: Page, label: string, key: string, bound: boolean) {
+  const email = await signUpAndConfirm(page, label);
+  await seedHevyBinding(email, bound);
+  await page.goto('/connections');
+  await page.waitForLoadState('networkidle');
+  const hevy = card(page, 'Hevy');
+  await hevy.getByLabel('Hevy API key').fill(key);
+  await hevy.getByRole('button', { name: 'Connect Hevy' }).click();
+  await expect(hevy.getByText('Connected', { exact: true })).toBeVisible();
+  return { email, hevy };
+}
+
+// Fails the spec at the end if the app answered anything with a server error.
+function watchForServerErrors(page: Page): () => string[] {
+  const errors: string[] = [];
+  page.on('response', (response) => {
+    if (response.status() >= 500) errors.push(`${response.status()} ${new URL(response.url()).pathname}`);
+  });
+  return () => errors;
+}
 
 for (const [name, width] of Object.entries(WIDTHS)) {
   test.describe(`at ${width}px (${name})`, () => {
@@ -42,6 +69,60 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await card(page, 'Hevy').getByRole('button', { name: 'Disconnect Hevy' }).click();
       await expect(card(page, 'Hevy').getByText('Not connected')).toBeVisible();
       await expect(card(page, 'Hevy').getByLabel('Hevy API key')).toBeVisible();
+    });
+
+    test('Sync now: the first tap adds entries, the second adds none, and the card fits the screen', async ({ page }) => {
+      const serverErrors = watchForServerErrors(page);
+      const { email, hevy } = await connectedHevy(page, `sync-${width}`, OK_KEY, true);
+      const sync = hevy.getByRole('button', { name: 'Sync now' });
+      expect((await sync.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+      await expect(hevy.getByRole('status')).toHaveCount(0);
+
+      await sync.click();
+      await expect(hevy.getByRole('status')).toHaveText('Added 2 entries.');
+      expect(await countEntries(email)).toBe(2);
+
+      await hevy.getByRole('button', { name: 'Sync now' }).click();
+      await expect(hevy.getByRole('status')).toHaveText('Up to date. Nothing new from Hevy.');
+      expect(await countEntries(email)).toBe(2);
+
+      // The card and its button stay inside the screen (the page's own signed-in header is wider than a phone at 390px
+      // today, which is not this card's doing: it is in the ticket's notes).
+      for (const box of [await hevy.boundingBox(), await hevy.getByRole('button', { name: 'Sync now' }).boundingBox()]) {
+        expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
+      }
+      expect(serverErrors()).toEqual([]);
+    });
+
+    test('Sync now with no target bound to Hevy says so and writes nothing', async ({ page }) => {
+      const serverErrors = watchForServerErrors(page);
+      const { email, hevy } = await connectedHevy(page, `sync-unbound-${width}`, OK_KEY, false);
+      await hevy.getByRole('button', { name: 'Sync now' }).click();
+      await expect(hevy.getByRole('status')).toHaveText('No target uses Hevy yet, so nothing was counted.');
+      expect(await countEntries(email)).toBe(0);
+      expect(serverErrors()).toEqual([]);
+    });
+
+    test('Sync now with a refused key shows the one notice and the card asks to reconnect', async ({ page }) => {
+      const serverErrors = watchForServerErrors(page);
+      const { email } = await connectedHevy(page, `sync-refused-${width}`, REFUSED_KEY, true);
+      await card(page, 'Hevy').getByRole('button', { name: 'Sync now' }).click();
+      await expect(card(page, 'Hevy').getByText('Needs reconnect')).toBeVisible();
+      await expect(card(page, 'Hevy').getByText(/The provider refused the key\./)).toBeVisible();
+      await expect(card(page, 'Hevy').getByRole('button', { name: 'Sync now' })).toHaveCount(0);
+      expect(await countEntries(email)).toBe(0);
+      expect(serverErrors()).toEqual([]);
+    });
+
+    test('Sync now when Hevy does not answer says to try again, changes nothing, and stays connected', async ({ page }) => {
+      const serverErrors = watchForServerErrors(page);
+      const { email, hevy } = await connectedHevy(page, `sync-slow-${width}`, SLOW_KEY, true);
+      await hevy.getByRole('button', { name: 'Sync now' }).click();
+      await expect(hevy.getByRole('alert')).toHaveText("Hevy didn't answer. Nothing was changed. Try again.");
+      await expect(hevy.getByText('Connected', { exact: true })).toBeVisible();
+      await expect(hevy.getByRole('button', { name: 'Sync now' })).toBeEnabled();
+      expect(await countEntries(email)).toBe(0);
+      expect(serverErrors()).toEqual([]);
     });
 
     test('Hevy: a bad key shows a message and is not echoed', async ({ page }) => {

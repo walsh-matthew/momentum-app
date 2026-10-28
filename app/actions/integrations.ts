@@ -2,9 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { disconnectIntegration, saveApiKey, setConnectedAppActive } from '@/lib/services/integrations';
+import { hevySyncDeps } from '@/lib/services/hevySyncDeps';
 import type { ServiceResult } from '@/lib/services/result';
+import { runHevySync } from '@/lib/services/syncedEntries';
 import type { ConnectedAppPublic } from '@/types/database.types';
-import type { ConnectFormState, IntegrationAccount } from '@/types/integrations';
+import type { ConnectFormState, HevySyncView, IntegrationAccount } from '@/types/integrations';
 
 // Server Actions are reachable by direct POST, so this takes `unknown` and the service validates
 // and authenticates (via the session cookie).
@@ -36,6 +38,19 @@ export async function saveHevyApiKey(_previous: ConnectFormState, formData: Form
 export async function disconnectApp(provider: unknown): Promise<ServiceResult<IntegrationAccount>> {
   const result = await disconnectIntegration(provider);
   if (result.ok) {
+    revalidatePath('/connections');
+    revalidatePath('/');
+  }
+  return result;
+}
+
+// The "Sync now" button on the Hevy card (MOM-129). Takes nothing: it syncs the signed-in person's own Hevy, on their
+// own session, and answers in words for the card (never a key, a raw result or anything Hevy wrote). The service
+// allows one sync at a time per person.
+export async function syncHevyNow(): Promise<ServiceResult<HevySyncView>> {
+  const result = await runHevySync(await hevySyncDeps());
+  if (result.ok) {
+    // A refused key changes the card's status, and new entries change Home.
     revalidatePath('/connections');
     revalidatePath('/');
   }

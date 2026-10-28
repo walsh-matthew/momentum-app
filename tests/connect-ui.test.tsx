@@ -13,11 +13,12 @@ import type { ConnectionStatus, IntegrationAccount } from '@/types/integrations'
 // The default of 1 second is too tight when the whole suite runs in parallel.
 configure({ asyncUtilTimeout: 5000 });
 
-const actions = vi.hoisted(() => ({ saveHevy: vi.fn(), disconnect: vi.fn(), toggle: vi.fn() }));
+const actions = vi.hoisted(() => ({ saveHevy: vi.fn(), disconnect: vi.fn(), toggle: vi.fn(), sync: vi.fn() }));
 vi.mock('@/app/actions/integrations', () => ({
   saveHevyApiKey: actions.saveHevy,
   disconnectApp: actions.disconnect,
   toggleConnectedApp: actions.toggle,
+  syncHevyNow: actions.sync,
 }));
 
 const KEY = 'hevy-key-0123456789abcdef-do-not-echo';
