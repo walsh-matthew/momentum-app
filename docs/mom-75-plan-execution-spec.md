@@ -47,7 +47,7 @@ Runs the plan's day-end sections in this order, stopping on the first failure:
 1. **A. Build and repository checks:** `tsc --noEmit`, `npm test`, `npm run build`, `npm run plan`.
 2. **B. Production DB verification,** only if a migration was applied today: `supabase migration list`, then every script in `supabase/verify/`; every row must be `passed = true`.
 3. **D. Backlog and Jira sync,** including closing any epic (MOM-4 to MOM-7 included) whose children are all Done or Closed.
-   Step D ends with the RAID and failure log review (MOM-92): list the day's `unreviewed` entries in `docs/RAID_LOG.md` and `docs/FAILURE_LOG.md`, wait for the owner's plain-language reply (including "predicted it? yes / no / partly" for each failure), and commit only approved entries. The owner never edits the files or runs a command for this.
+   Step D ends with the lighter log step (MOM-92, lighter rule MOM-133): list the day's `unreviewed` entries in `docs/FAILURE_LOG.md` (no per-entry "predicted it?"), wait for the owner's plain-language reply, and commit only approved entries. `docs/RAID_LOG.md` is frozen and takes no new rows; a new risk becomes a Jira ticket with the `risk` label instead, with a weekly top-5 review (first day-end of the week) and a monthly pattern review of the failure log (first day-end of the month, recorded as a Jira comment on MOM-92). The owner never edits the files or runs a command for this.
 4. **E. Next plan:** move the finished plan to `docs/plans/archive/YYYY-MM-DD.md`, generate tomorrow's plan, and run the format check on it.
 5. **One push:** show `git log origin/main..main --oneline` and wait for explicit approval before `git push origin main`.
 6. **C. Live checks** after the push: Vercel deployment Ready, `/` returns 307 to `/login`, `/login` returns 200.
@@ -96,7 +96,7 @@ Add an allowlist in `.claude/settings.json` for read-only commands (`git status`
 - [ ] `/run-block` halts on a model mismatch with the block's `CLI Session Config` and asks the user to confirm effort before running the prompt.
 - [ ] The plan format test runs in `npm test`, passes on the current plan, and fails on a plan missing a block key, config line, prompt or gate.
 - [ ] `/day-end` archives the finished plan, generates the next one, and stops only at the plan's approval gates and before the single push.
-- [ ] `/day-end` drafts the day's failure-log and RAID entries, lists them for a plain-language reply, and commits the approved entries; nothing is committed unreviewed (MOM-92).
+- [ ] `/day-end` drafts the day's failure-log entries, lists them for a plain-language reply, and commits the approved entries; nothing is committed unreviewed (MOM-92, lighter rule MOM-133). New risks go to Jira with the `risk` label instead of a RAID_LOG.md row.
 - [ ] No command runs a production change (`supabase db push`, `git push`, `vercel env`) without the user's explicit approval.
 
 ## 8. Notes for whoever builds it

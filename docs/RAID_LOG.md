@@ -1,12 +1,14 @@
-# Momentum RAID Log
+# Momentum RAID Log (frozen)
+
+**Frozen 2026-10-29 (MOM-133).** This log takes no new rows. Its existing rows stay below as history — none have been changed or deleted. A new risk, assumption, issue or dependency now becomes a Jira ticket carrying the `risk` label. The weekly top 5 is this JQL, reviewed once a week at the first day-end of the week: `project = MOM AND labels = risk AND status NOT IN (Done, Closed) ORDER BY priority DESC, updated DESC` (also held as a saved Jira filter where the tooling supports it). See CLAUDE.md, "RAID and Failure Logs (MOM-92, lighter rule MOM-133)".
 
 Risks, assumptions, issues and dependencies for Momentum, each with an owner, a trigger and a response. The **NIST** column maps each row to a NIST AI Risk Management Framework function (Govern, Map, Measure, Manage), so a formal risk register can be built from this log later.
 
-**How this log is kept**
+**How this log was kept, before the freeze**
 
-- The build agent (Claude Code, or a project thread) drafts new rows when work turns one up, marked `unreviewed`. The owner approves, edits or drops them in plain language at day-end; see the day-end step in `docs/plans/NEXT_BUILD_PLAN.md`. Nothing is committed unreviewed.
+- The build agent (Claude Code, or a project thread) drafted new rows when work turned one up, marked `unreviewed`. The owner approved, edited or dropped them in plain language at day-end.
 - **This repository is public.** Rows describe a category of risk, not its location: no table, column, function, endpoint, environment-variable or key names, no exploit steps, no personal data, and no names (owners are roles). Specifics live in Jira.
-- A response that needs build work gets a `BACKLOG.md` item and a Jira key, and the row points to that key. This log does not track work on its own.
+- A response that needed build work got a `BACKLOG.md` item and a Jira key, and the row pointed to that key. This log did not track work on its own.
 - Owner roles: **Owner** (the product owner, who makes the call) and **Build agent** (Claude, which drafts and implements).
 - Status: `open`, `mitigated` (controls in place, still watched), `closed`.
 
