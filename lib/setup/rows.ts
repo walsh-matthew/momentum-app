@@ -1,10 +1,12 @@
 // Turns a final, approved draft into the rows of migration 013 (docs/DOMAIN_MODEL.md §2.3). It runs validateDraft(...,
-// 'final') first, so nothing the draft cannot save ever becomes a row, and the save step (a later block) uses this
-// same function. The rows carry the draft's keys where a database id will be: the save step creates the ids, then
-// fills goal_id, target_id and work_item_id from the keys. The person's id is added there too. Pure: no database call.
+// 'final') first, so nothing the draft cannot save ever becomes a row, and the save service (lib/services/setup.ts) uses
+// this same function. The rows carry the draft's keys where a database id will be: save_guided_setup() (migration 015)
+// creates the ids and fills goal_id, target_id and work_item_id from the keys, and takes the person's id from the
+// session. toSavePayload() is the shape that function reads. Pure: no database call.
 
 import type { TablesInsert } from '@/types/database.types';
 import type { SetupDraft, Transcript } from '@/types/setup';
+import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
 import { validateDraft, type DraftIssue } from './validate';
 
 type Without<T, K extends string> = Omit<T, K | 'user_id' | 'created_at' | 'updated_at'>;
@@ -32,6 +34,20 @@ export interface SetupRows {
 }
 
 export type DraftRowsResult = { ok: true; rows: SetupRows } | { ok: false; issues: DraftIssue[] };
+
+// What save_guided_setup() takes (migration 015). Nested, with the keys kept, because the function creates the ids and
+// resolves a work item's target by key. There is no user id anywhere in it: the function takes the owner from the session.
+export type SavePayloadSource = { kind: 'manual' } | { kind: 'synced'; provider: string; label: string };
+export interface SavePayload {
+  person: PersonSettingsRow;
+  day_types: DayTypeRow[];
+  priorities: PriorityRow[];
+  goals: (GoalRow & {
+    key: string;
+    targets: (TargetRow & { key: string; sources: SavePayloadSource[] })[];
+    items: (WorkItemRow & { key: string; target_key: string | null; steps: StepRow[] })[];
+  })[];
+}
 
 const asTime = (hhmm: string | null): string | null => (hhmm === null ? null : `${hhmm}:00`);
 
@@ -128,4 +144,41 @@ export function draftToRows(draft: SetupDraft, transcript: Transcript): DraftRow
     });
   }
   return { ok: true, rows };
+}
+
+// The name a synced source is saved under: the catalog's name for the app, else the provider id.
+const providerLabel = (provider: string): string => INTEGRATION_CATALOG.find((e) => e.provider === provider)?.name ?? provider;
+
+// The rows of a validated draft as the one payload the save function takes. Pure.
+export function toSavePayload(rows: SetupRows): SavePayload {
+  return {
+    person: rows.personSettings,
+    day_types: rows.dayTypes,
+    priorities: rows.priorities,
+    goals: rows.goals.map(({ key, row }) => ({
+      key,
+      ...row,
+      targets: rows.targets
+        .filter((t) => t.goalKey === key)
+        .map((t) => ({
+          key: t.key,
+          ...t.row,
+          sources: rows.targetSources
+            .filter((s) => s.goalKey === key && s.targetKey === t.key)
+            .map((s): SavePayloadSource =>
+              s.source.kind === 'manual'
+                ? { kind: 'manual' }
+                : { kind: 'synced', provider: s.source.provider, label: providerLabel(s.source.provider) },
+            ),
+        })),
+      items: rows.workItems
+        .filter((i) => i.goalKey === key)
+        .map((i) => ({
+          key: i.key,
+          target_key: i.targetKey,
+          ...i.row,
+          steps: rows.steps.filter((s) => s.goalKey === key && s.itemKey === i.key).map((s) => s.row),
+        })),
+    })),
+  };
 }

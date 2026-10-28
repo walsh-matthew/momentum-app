@@ -704,6 +704,83 @@ describe('the setup budget migration (014, MOM-128)', () => {
   });
 });
 
+describe('migration 015 saves an approved guided setup in one transaction (MOM-111)', () => {
+  const sql = sqlOf('015');
+  const fn = /create or replace function public\.save_guided_setup[\s\S]*?\n\$\$;/i.exec(sql)?.[0] ?? '';
+
+  it('finds the function', () => {
+    expect(fn.length).toBeGreaterThan(500);
+  });
+
+  it('is SECURITY INVOKER with an empty search_path, so row level security applies as for a direct insert', () => {
+    expect(fn).toMatch(/security invoker/i);
+    expect(fn).not.toMatch(/security definer/i);
+    expect(fn).toMatch(/set search_path = ''/i);
+  });
+
+  it('takes the owner from auth.uid() and has no user id argument anywhere', () => {
+    expect(fn).toMatch(/v_uid\s+uuid := auth\.uid\(\)/);
+    expect(fn).toMatch(/create or replace function public\.save_guided_setup\(p_payload jsonb\)/i);
+    expect(fn).not.toMatch(/p_user|->>?\s*'user_id'/i);
+    expect(fn).toMatch(/Sign in to save your setup\./);
+  });
+
+  it('refuses a second setup (first setup only) with its own SQLSTATE, before it writes anything', () => {
+    expect(fn).toMatch(/errcode = 'MS001'/);
+    expect(fn.indexOf("errcode = 'MS001'")).toBeLessThan(fn.indexOf('insert into public.person_settings'));
+    expect(fn).toMatch(/exists \(select 1 from public\.goals where user_id = v_uid\)/);
+  });
+
+  it('writes all nine kinds of rows, in an order each foreign key allows', () => {
+    const at = (table: string) => fn.indexOf(`insert into public.${table}`);
+    const tables = [
+      'person_settings',
+      'person_day_types',
+      'person_priorities',
+      'goals',
+      'targets',
+      'sources',
+      'target_sources',
+      'work_items',
+      'work_item_steps',
+    ];
+    for (const t of tables) expect(at(t), t).toBeGreaterThan(-1);
+    // Settings, day types, priorities, goals, targets; items only after the targets they feed; steps after their item.
+    expect(at('person_settings')).toBeLessThan(at('person_day_types'));
+    expect(at('person_day_types')).toBeLessThan(at('person_priorities'));
+    expect(at('person_priorities')).toBeLessThan(at('goals'));
+    expect(at('goals')).toBeLessThan(at('targets'));
+    expect(at('targets')).toBeLessThan(at('work_items'));
+    expect(at('work_items')).toBeLessThan(at('work_item_steps'));
+  });
+
+  it('refuses any payload key it does not read, rather than ignoring it', () => {
+    expect(fn).toMatch(/p_payload - 'person' - 'day_types' - 'priorities' - 'goals'/);
+  });
+
+  it('is executable by signed-in users only', () => {
+    expect(sql).toMatch(/revoke execute on function public\.save_guided_setup\(jsonb\) from public, anon, authenticated, service_role/i);
+    expect(sql).toMatch(/grant execute on function public\.save_guided_setup\(jsonb\) to authenticated/i);
+    // One grant, and it is to authenticated: nothing is granted to anon, public or the service role.
+    expect(sql.match(/grant execute/gi) ?? []).toHaveLength(1);
+  });
+
+  it('adds no table, column, policy or table grant, and changes no earlier object', () => {
+    expect(sql).not.toMatch(/create table|alter table|create policy|drop |create index/i);
+    expect(sql).not.toMatch(/grant (select|insert|update|delete)/i);
+  });
+
+  it('is checked by a verify script that proves a failed save keeps nothing, and that it is first setup only', () => {
+    const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '015_save_guided_setup.sql'), 'utf8');
+    expect(verify).toMatch(/Nothing of the failed setup was kept in any of the nine tables/);
+    expect(verify).toMatch(/A second setup by the same person is refused/);
+    expect(verify).toMatch(/The service role cannot call it/);
+    expect(verify).toMatch(/A signed-out client cannot call it/);
+    expect(verify).toMatch(/A setup with only a parked goal and no person facts saves/);
+  });
+});
+
+
 describe('the grants allow-list covers the goal model tables (supabase/verify/900_table_grants.sql)', () => {
   const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8').replace(/--.*$/gm, '');
   const entry = (table: string, role: string) => new RegExp(`\\('${table}',\\s+'${role}',\\s+'([A-Z,]*)'\\)`).exec(allow)?.[1];

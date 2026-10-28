@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { assertNoModelKey, readLocalStackEnv } from './tests/e2e/support/localStack';
+import { FAKE_MODEL_PORT, assertNoModelKey, fakeModelEnv, readLocalStackEnv } from './tests/e2e/support/localStack';
 
 // Browser specs (MOM-61): `npm run test:e2e`. They run against the LOCAL Supabase stack only (`npx supabase start`),
 // with a Next.js dev server this config starts on its own port. Keep `npm test` (Vitest) independent of all this.
@@ -17,6 +17,8 @@ const BASE_URL = `http://localhost:${PORT}`;
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: '**/*.spec.ts',
+  // Starts the fake model the guided setup spec talks to (MOM-111) and empties the local Claude usage log.
+  globalSetup: './tests/e2e/support/globalSetup.ts',
   // One worker: the specs share one dev server and one local stack, and the plan cooldown is per user per server.
   workers: 1,
   fullyParallel: false,
@@ -36,6 +38,8 @@ export default defineConfig({
     // Never adopt a server that is already there: it might point at another project.
     reuseExistingServer: false,
     timeout: 180_000,
-    env: stack.serverEnv,
+    // The model key stays a dummy and the SDK is pointed at the fake model on this machine (MOM-111), so no spec can make a
+    // paid request. The fake answers 401 to anything that is not a setup turn, so the other specs still see "not configured".
+    env: { ...stack.serverEnv, ...fakeModelEnv(FAKE_MODEL_PORT) },
   },
 });

@@ -186,7 +186,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
       break;
   }
 
-  s.add({ topic: 'source', question: 'Where do you already track this, if anywhere?', reply: 'No, I will log it myself.' });
+  s.add({ topic: 'source', question: 'Where do you track this now, if anywhere?', reply: 'No, I will log it myself.' });
   s.add({
     topic: 'time_zone',
     edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]),
@@ -336,7 +336,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
     reply: o.floorReply,
   });
   s.playback('targets', 'Yes.', { edit: (m) => (targetOf(m, 'g1', 't1').floor = o.floor), said: ['goals.g1.targets.t1.floor'] });
-  s.add({ topic: 'source', question: 'Where do you already track this, if anywhere?', reply: 'I will log it by hand.' });
+  s.add({ topic: 'source', question: 'Where do you track this now, if anywhere?', reply: 'I will log it by hand.' });
   s.add({
     topic: 'time_zone',
     edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]),
@@ -433,7 +433,7 @@ const FIXTURES: ScriptedCase[] = [
         question: 'How many runs would be a good minimum each week?',
         reply: { say: 'A few, I guess.', fits: false },
       });
-      s.add({ topic: 'source', question: 'Where do you already track this, if anywhere?' });
+      s.add({ topic: 'source', question: 'Where do you track this now, if anywhere?' });
     },
     1,
   ),
@@ -451,7 +451,7 @@ const FIXTURES: ScriptedCase[] = [
     'adds up a number the person never said',
     (s) => {
       s.add({ topic: 'floor', question: 'How many runs would be a good minimum each week?', reply: 'I can do two a week.' });
-      s.add({ topic: 'source', say: 'That makes 8 runs a month.', question: 'Where do you already track this, if anywhere?' });
+      s.add({ topic: 'source', say: 'That makes 8 runs a month.', question: 'Where do you track this now, if anywhere?' });
     },
     1,
   ),

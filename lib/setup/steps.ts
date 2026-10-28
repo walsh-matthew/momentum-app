@@ -62,7 +62,7 @@ export const SETUP_STEPS: readonly SetupStep[] = [
     id: 'shape_and_timeframe',
     title: 'Shape and timeframe',
     summary:
-      'Ask whether the goal is ongoing (and the length of a first block), has an end date, or has a deadline. Always ask for the exact date; never infer a week or work a date out from words like "the week before". For a deadline, ask as a separate question, in its own turn, whether the date can move. Propose today as the start date visibly and let them confirm it.',
+      'Ask whether the goal is ongoing (and the length of a first block), has an end date, or has a deadline. Always ask for the exact date; never infer a week or work a date out from words like "the week before". For a deadline, ask as a separate question, in its own turn, whether the date can move. For the start date, show the date given as "Suggested start date" at the end of the newest message, in a proposal they can accept or change, and say they can give an earlier date if they already started. An earlier date must be an exact date they give; never work one out from words like "last week". Use a start date only after they accept the suggestion or give their own. If no suggested date was given, ask what day it starts.',
     topics: ['shape', 'start_date', 'end_date', 'block_length', 'deadline_date', 'date_can_move'],
     playbackAfter: null,
   },
@@ -88,7 +88,7 @@ export const SETUP_STEPS: readonly SetupStep[] = [
     id: 'sources',
     title: 'Source for each target',
     summary:
-      'Ask where they already track this, if anywhere, as one question (the doc\'s "Are you already tracking this? Where?" is two asks, which rule 1 forbids). The answer picks a synced app, their own sheet, or manual (a tap, a number, a timer).',
+      'Ask "Where do you track this now, if anywhere?" as one question. The answer picks a synced app (Hevy or Google Calendar) or manual (a tap, a number, a timer). Another app or their own sheet cannot be connected yet: say so in one line and offer manual for now.',
     topics: ['source'],
     playbackAfter: null,
   },

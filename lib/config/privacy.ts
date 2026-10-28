@@ -138,9 +138,12 @@ export const PROMPTS = {
 
 export const NEVER_SENT = "your email, your passwords or tokens, other people's data, or workout and calendar details";
 
-// Guided setup (MOM-111) is not built. This line is true today and is what the notice says until it ships.
+// Guided setup (MOM-111) is a conversation with Claude. Each question sends what the code in lib/ai/setup.ts sends: the
+// person's own words so far, Claude's earlier replies, the draft as it stands, and today's date on their device as a
+// suggested start date. Block 3 of MOM-111 replaces this line with a field-by-field PROMPTS entry that a test pins
+// (BACKLOG.md, MOM-102); until then the line says it in one sentence and must stay true.
 export const GUIDED_SETUP_LINE =
-  'When guided setup arrives, it is a conversation with Claude, and what you type is sent to Anthropic.';
+  "Guided setup is a conversation with Claude. With each question, what you have typed in the setup so far, Claude's earlier replies, the setup as drafted so far and today's date on your device (as a suggested start date) are sent to Anthropic.";
 
 // ---------------------------------------------------------------------------
 // What is kept from each connected service: the fields of the activity the adapter produces
@@ -220,10 +223,11 @@ export const DEVICE_STORAGE = {
     'a cookie that keeps you signed in',
     'which rebalance reminders you have dismissed, kept only until you close the tab',
     "a running timer's start time, kept in this browser until you stop it",
+    'a setup conversation in progress, kept in this browser tab until you save it or close the tab',
   ],
   // The only source files allowed to use browser storage (localStorage, sessionStorage, indexedDB, document.cookie).
   // A file not listed here that uses it fails tests/privacy-sync.test.ts until it is listed and described above.
-  filesUsingBrowserStorage: ['components/entries/timerStorage.ts', 'components/layout/RebalanceNudge.tsx'],
+  filesUsingBrowserStorage: ['components/entries/timerStorage.ts', 'components/layout/RebalanceNudge.tsx', 'components/setup/setupStorage.ts'],
 } as const;
 
 // ---------------------------------------------------------------------------

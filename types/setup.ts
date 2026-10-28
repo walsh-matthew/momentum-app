@@ -286,3 +286,39 @@ export type AssistantTurn = z.infer<typeof AssistantTurnSchema>;
 // What has been said so far. A person's message is their own words; an assistant message is Claude's turn.
 export type TranscriptMessage = { role: 'person'; text: string } | { role: 'assistant'; turn: AssistantTurn };
 export type Transcript = TranscriptMessage[];
+
+// ---------------------------------------------------------------------------
+// The conversation as it travels between the browser and the server (MOM-111)
+// ---------------------------------------------------------------------------
+
+// Nothing about a setup is stored on our side before the person approves it (the owner's 2026-10-27 decision), so the
+// browser holds the whole conversation and sends it with each turn. A Server Action is reachable by direct POST, so the
+// server treats it as untrusted input: these bounds keep a forged one from making a request (and its cost) larger than a
+// real setup can be. 40 assistant turns is the setup budget (lib/services/llm.ts); a person message is at most this long.
+export const MAX_PERSON_CHARS = 2000;
+export const MAX_TRANSCRIPT_MESSAGES = 82;
+export const MAX_SPENT_TOKENS = 100_000_000;
+
+export const TranscriptMessageSchema = z.discriminatedUnion('role', [
+  z.strictObject({ role: z.literal('person'), text: z.string().trim().min(1).max(MAX_PERSON_CHARS) }),
+  z.strictObject({ role: z.literal('assistant'), turn: AssistantTurnSchema }),
+]);
+
+// Assistant first, then strictly taking turns: the same shape the provenance indexes in a draft assume.
+export const TranscriptSchema = z
+  .array(TranscriptMessageSchema)
+  .max(MAX_TRANSCRIPT_MESSAGES)
+  .refine((t) => t.every((m, i) => m.role === (i % 2 === 0 ? 'assistant' : 'person')), 'The conversation alternates, Claude first.');
+
+export const SetupSessionSchema = z.strictObject({
+  transcript: TranscriptSchema,
+  draft: SetupDraftSchema,
+  // Input plus output tokens used so far by this setup's Claude calls (the setup budget counts them).
+  spentTokens: z.number().int().min(0).max(MAX_SPENT_TOKENS),
+});
+
+// Everything a setup is, between turns. Held in the browser tab until the person saves it or closes the tab.
+export type SetupSession = z.infer<typeof SetupSessionSchema>;
+
+// The date on the person's device, which the browser sends as a suggestion for a start date.
+export const SuggestedDateSchema = DateString;

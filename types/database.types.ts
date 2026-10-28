@@ -1278,7 +1278,7 @@ export type Database = {
     // handle_new_user and the other trigger functions are not executable by anon, authenticated or service_role
     // (migrations 002, 004 and 012), and seed_career_pivot is not executable by anon or authenticated (server code
     // with the service role key can still run it, for dev seeding), so none of them is exposed. A signed-in user
-    // can call apply_task_move and create_goal_with_week_one_plan, and nothing else.
+    // can call apply_task_move, create_goal_with_week_one_plan and (since migration 015) save_guided_setup, and nothing else.
     Functions: {
       // Creates a wizard goal and its week 1 tasks in one transaction (migration 009). The owner is
       // auth.uid(); there is no user id, status or completed_at argument, every task is 'todo' in week 1, and
@@ -1319,6 +1319,14 @@ export type Database = {
           p_user_daily_cap: number;
           p_overall_daily_cap: number;
         };
+        Returns: unknown;
+      };
+      // Saves an approved guided setup in one transaction (migration 015, MOM-111): the person's settings, day types,
+      // priorities, goals, targets, work items, steps and bindings, or nothing. The owner is auth.uid() and the payload
+      // has no user id. First setup only: it refuses (SQLSTATE MS001) when the person already has a goal. The payload is
+      // built by toSavePayload() in lib/setup/rows.ts. Returns { goals, targets, work_items, steps, bindings }.
+      save_guided_setup: {
+        Args: { p_payload: Json };
         Returns: unknown;
       };
     };
