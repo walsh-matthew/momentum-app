@@ -18,6 +18,7 @@ import {
   toScoreboardTarget,
   toSnapshot,
   toSpec,
+  type ActiveGoalRead,
   type CorrectionRead,
   type EntryRead,
   type GoalRead,
@@ -47,8 +48,9 @@ const goal = (id: string, over: Partial<GoalRead> = {}): GoalRead => ({
   created_at: stamp(),
   ...over,
 });
+const activeGoal = (id: string, over: Partial<ActiveGoalRead> = {}): ActiveGoalRead => ({ ...goal(id), shape: 'ongoing', start_date: '2026-10-05', ...over });
 
-const target = (id: string, goalId: string, over: Partial<TargetRead> = {}): TargetRead => ({
+const target =(id: string, goalId: string, over: Partial<TargetRead> = {}): TargetRead => ({
   id,
   goal_id: goalId,
   title: id,
@@ -189,10 +191,10 @@ describe('target rows become engine targets, one kind at a time', () => {
   });
 
   it('a target counts from its goal’s start date, and its block ends on the goal’s stored end date, never a computed one', () => {
-    const ongoing = toScoreboardTarget(target('t', 'g'), goal('g', { start_date: '2026-10-05', end_date: null }), []);
+    const ongoing = toScoreboardTarget(target('t', 'g'), activeGoal('g', { start_date: '2026-10-05', end_date: null }), []);
     expect(ongoing.startsOn).toBe('2026-10-05');
     expect(ongoing.blockEndsOn).toBeNull();
-    const finite = toScoreboardTarget(target('t', 'g'), goal('g', { shape: 'finite', start_date: '2026-10-05', end_date: '2026-12-13' }), []);
+    const finite = toScoreboardTarget(target('t', 'g'), activeGoal('g', { shape: 'finite', start_date: '2026-10-05', end_date: '2026-12-13' }), []);
     expect(finite.blockEndsOn).toBe('2026-12-13');
     expect(finite.versions).toHaveLength(1);
     expect(finite.versions[0].effectiveFrom).toBe('2026-10-05');
@@ -541,6 +543,8 @@ describe('what is shown when there is nothing to grade', () => {
   it('no goals, or only a parked one, is no_goals', () => {
     expect(buildHomeScoreboard(rows(), NOW)).toEqual({ state: 'no_goals' });
     expect(buildHomeScoreboard(rows({ goals: [goal('g', { state: 'parked' })] }), NOW)).toEqual({ state: 'no_goals' });
+    // A parked goal may have no shape or start yet (migration 014); it is left off home, not graded.
+    expect(buildHomeScoreboard(rows({ goals: [goal('g', { state: 'parked', shape: null, start_date: null })] }), NOW)).toEqual({ state: 'no_goals' });
   });
 
   it('a goal with no targets and no milestones still has its card, and no hero', () => {

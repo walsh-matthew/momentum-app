@@ -336,7 +336,10 @@ describe('LLM usage logs and limits (migration 011, MOM-73)', () => {
   const reserve = sql.slice(sql.indexOf('create function public.reserve_llm_call'));
 
   it('the feature and outcome lists match types/database.types.ts', () => {
-    expect(inList(sql, 'llm_usage_logs_feature_check')).toEqual([...LLM_FEATURES]);
+    // 011 defined the feature list; 014 (MOM-128) replaced it with one that adds 'setup', so the types follow 014.
+    expect(inList(sql, 'llm_usage_logs_feature_check')).toEqual(['rebalance', 'week_one_plan']);
+    expect(inList(sqlOf('014'), 'llm_usage_logs_feature_check')).toEqual([...LLM_FEATURES]);
+    expect(LLM_FEATURES).toEqual(['rebalance', 'week_one_plan', 'setup']);
     expect(inList(sql, 'llm_usage_logs_outcome_check')).toEqual([...LLM_OUTCOMES]);
   });
 
@@ -652,6 +655,52 @@ describe('the goal model tables (migration 013, MOM-107)', () => {
         expect(sql, name).toMatch(new RegExp(`constraint ${name}\\b`));
       }
     });
+  });
+});
+
+describe('the setup budget migration (014, MOM-128)', () => {
+  const sql = sqlOf('014');
+  const flat = sql.replace(/\s+/g, ' ');
+
+  it('makes a goal\'s shape and start date optional, and keeps both required for any goal that is not parked', () => {
+    expect(flat).toMatch(/alter table public\.goals alter column start_date drop not null;/);
+    expect(flat).toMatch(/alter table public\.goals alter column shape drop not null;/);
+    expect(flat).toMatch(
+      /add constraint goals_shape_start_required check \(state = 'parked' or \(shape is not null and start_date is not null\)\)/,
+    );
+  });
+
+  it('restates the two checks that would pass on NULL, with an explicit branch for "no shape"', () => {
+    expect(flat).toMatch(/drop constraint goals_end_date_matches_shape;/);
+    expect(flat).toMatch(/\(shape is null and end_date is null\) or \(shape is not null and \(/);
+    expect(flat).toMatch(/drop constraint goals_block_weeks_check;/);
+    expect(flat).toMatch(/block_weeks is null or \(shape is not null and shape = 'ongoing' and block_weeks >= 1\)/);
+  });
+
+  it('adds \'setup\' to the usage log\'s feature check and keeps the two it had', () => {
+    expect(inList(sql, 'llm_usage_logs_feature_check')).toEqual(['rebalance', 'week_one_plan', 'setup']);
+  });
+
+  it('adds no table, grant, policy or function, and writes no data', () => {
+    expect(sql).not.toMatch(/\b(create|grant|revoke)\b/i);
+    expect(sql).not.toMatch(/\b(insert|update|delete)\b/i);
+  });
+
+  it('leaves 011 and 013 as they were: the original columns and checks are still written there', () => {
+    expect(sqlOf('013')).toMatch(/^\s{2}start_date\s+date not null,/m);
+    expect(sqlOf('013')).toMatch(/^\s{2}shape\s+text not null,/m);
+    expect(inList(sqlOf('011'), 'llm_usage_logs_feature_check')).toEqual(['rebalance', 'week_one_plan']);
+  });
+
+  it('is checked by a verify script that includes the checks that would pass on NULL', () => {
+    const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '014_setup_budget.sql'), 'utf8');
+    expect(verify).toMatch(/An active goal without a shape is rejected/);
+    expect(verify).toMatch(/A goal with no shape cannot have an end date/);
+    expect(verify).toMatch(/A goal with no shape cannot have a first-block length/);
+    expect(verify).toMatch(/A setup call can be reserved and is logged under ''setup''/);
+    // 013's script expects the check, not the not-null rule, for an active goal with no start date.
+    const verify013 = readFileSync(join(process.cwd(), 'supabase', 'verify', '013_goal_model_tables.sql'), 'utf8');
+    expect(verify013).toMatch(/An active goal has no start date unless the person gives one'.*= '23514'\);/);
   });
 });
 

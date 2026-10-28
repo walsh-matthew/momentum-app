@@ -108,12 +108,14 @@ describe('the setup module is server-only and is the third place that builds a c
     expect(offenders).toEqual([]);
   });
 
-  it('only a setup service may import it, and not even a Server Action', () => {
+  it('only the Claude budget service (MOM-128) and a setup service may import it, and not even a Server Action', () => {
     const importers = filesUnder(join(root, 'lib'))
       .concat(filesUnder(join(root, 'app')))
       .filter((file) => !file.endsWith(join('lib', 'ai', 'setup.ts')))
       .filter((file) => readFileSync(file, 'utf8').includes('@/lib/ai/setup'))
       .map((file) => file.replace(root, '').replaceAll('\\', '/'));
-    expect(importers.filter((f) => f !== '/lib/services/setup.ts')).toEqual([]);
+    expect(importers.filter((f) => f !== '/lib/services/setup.ts' && f !== '/lib/services/llm.ts')).toEqual([]);
+    // The call is counted and limited because it goes through lib/services/llm.ts.
+    expect(importers).toContain('/lib/services/llm.ts');
   });
 });

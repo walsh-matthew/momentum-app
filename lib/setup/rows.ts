@@ -3,7 +3,7 @@
 // same function. The rows carry the draft's keys where a database id will be: the save step creates the ids, then
 // fills goal_id, target_id and work_item_id from the keys. The person's id is added there too. Pure: no database call.
 
-import type { GoalShape, TablesInsert } from '@/types/database.types';
+import type { TablesInsert } from '@/types/database.types';
 import type { SetupDraft, Transcript } from '@/types/setup';
 import { validateDraft, type DraftIssue } from './validate';
 
@@ -75,9 +75,9 @@ export function draftToRows(draft: SetupDraft, transcript: Transcript): DraftRow
       row: {
         title: g.title,
         why: g.why,
-        // Final validation guarantees these two.
-        start_date: g.startDate as string,
-        shape: g.shape as GoalShape,
+        // Final validation guarantees both for an active goal; a parked goal may have neither (migration 014).
+        start_date: g.startDate,
+        shape: g.shape,
         end_date: g.endDate,
         block_weeks: g.blockWeeks,
         state: g.state,

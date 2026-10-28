@@ -161,7 +161,8 @@ async function startDateNotice(supabase: Client, userId: string, goalId: string,
     console.error('[manual-entry] could not check the goal start date', { code: error.code });
     return undefined;
   }
-  if (!data || day >= data.start_date) return undefined;
+  // A parked goal may have no start yet (migration 014), and then nothing is before it.
+  if (!data || data.start_date === null || day >= data.start_date) return undefined;
   return `Saved. It's before this goal's start date (${shortDate(data.start_date)}), so it won't count unless you move the start date earlier.`;
 }
 
@@ -735,7 +736,7 @@ export async function getLogPanel(deps: { now?: () => number } = {}): Promise<Se
       via: textOf(row.evidence.via),
       detail: textOf(row.evidence.step),
       chosenDay,
-      beforeStart: day !== null && start !== undefined && day < start,
+      beforeStart: day !== null && start !== undefined && start !== null && day < start,
       removed: hidden.has(row.source_record_id),
     };
   });

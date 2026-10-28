@@ -105,15 +105,24 @@ const isRealDate = (s: string): boolean => {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 };
 
-const Key = z.string().regex(/^[a-z][a-z0-9_]{0,31}$/, 'A key is lowercase letters, digits and underscores.');
+// The describe() texts below are read by lib/setup/schemaText.ts, which writes the exact shape of a draft into the setup
+// prompt from these same schemas (MOM-128). They carry what the type alone cannot say; keep them free of colons.
+const Key = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{0,31}$/, 'A key is lowercase letters, digits and underscores.')
+  .describe('name made of a lowercase letter then lowercase letters, digits or underscores, at most 32 characters, unique within its list');
 const Text = z.string().trim().min(1).max(300);
 const DateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine(isRealDate, 'That is not a real date.');
-const ClockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'A time is HH:MM, 24 hour.');
+  .refine(isRealDate, 'That is not a real date.')
+  .describe('date written YYYY-MM-DD');
+const ClockTime = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'A time is HH:MM, 24 hour.')
+  .describe('clock time written HH:MM on a 24 hour clock');
 // 1 to 7, Monday is 1 (as in person_settings.week_start and targets.slot_weekdays).
-const Weekday = z.number().int().min(1).max(7);
+const Weekday = z.number().int().min(1).max(7).describe('weekday number from 1 to 7 where Monday is 1 and Sunday is 7');
 const Positive = z.number().positive().max(1_000_000);
 
 export const PersonSchema = z.strictObject({

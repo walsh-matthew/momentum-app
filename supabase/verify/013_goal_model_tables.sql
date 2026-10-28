@@ -227,7 +227,9 @@ begin
   res := res || pg_temp.mom107_c('An ongoing goal has no end date', pg_temp.mom107_state(format($q$insert into public.goals (user_id, title, start_date, shape, end_date) values (%L, 'g', date '2026-01-05', 'ongoing', date '2026-06-01')$q$, a)) = '23514');
   res := res || pg_temp.mom107_c('A project may have no deadline', pg_temp.mom107_state(format($q$insert into public.goals (user_id, title, start_date, shape) values (%L, 'g', date '2026-01-05', 'project')$q$, a)) = 'ok');
   res := res || pg_temp.mom107_c('A goal cannot end before it starts', pg_temp.mom107_state(format($q$insert into public.goals (user_id, title, start_date, shape, end_date) values (%L, 'g', date '2026-01-05', 'finite', date '2026-01-05')$q$, a)) = '23514');
-  res := res || pg_temp.mom107_c('A goal has no start date unless the person gives one', pg_temp.mom107_state(format($q$insert into public.goals (user_id, title, shape) values (%L, 'g', 'ongoing')$q$, a)) = '23502');
+  -- Migration 014 (MOM-128) made the column nullable for a parked goal, so an active goal without one now fails the
+  -- goals_shape_start_required check (23514), not the not-null rule (23502).
+  res := res || pg_temp.mom107_c('An active goal has no start date unless the person gives one', pg_temp.mom107_state(format($q$insert into public.goals (user_id, title, shape) values (%L, 'g', 'ongoing')$q$, a)) = '23514');
   res := res || pg_temp.mom107_c('A first block length belongs to an ongoing goal only', pg_temp.mom107_state(format($q$insert into public.goals (user_id, title, start_date, shape, end_date, block_weeks) values (%L, 'g', date '2026-01-05', 'finite', date '2026-06-01', 10)$q$, a)) = '23514');
   res := res || pg_temp.mom107_c('An ongoing goal can have a first block length', pg_temp.mom107_state(format($q$insert into public.goals (user_id, title, start_date, shape, block_weeks) values (%L, 'g', date '2026-01-05', 'ongoing', 10)$q$, a)) = 'ok');
   res := res || pg_temp.mom107_c('An unknown shape is rejected', pg_temp.mom107_state(format($q$insert into public.goals (user_id, title, start_date, shape) values (%L, 'g', date '2026-01-05', 'forever')$q$, a)) = '23514');

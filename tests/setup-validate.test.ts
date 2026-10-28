@@ -241,6 +241,73 @@ describe('the rules of migration 013 that a draft can break', () => {
   });
 });
 
+describe('a parked goal needs no shape or start date (migration 014, MOM-128)', () => {
+  it('passes the final validation with neither, with the shape only, or with the start date only', async () => {
+    const { draft, transcript } = await finished('run-h-two-activities');
+    const g2 = goalOf(draft.model, 'g2');
+    const { shape, startDate } = g2;
+    // The eval fixture still asks a parked goal for both (BACKLOG), so it has them to take away.
+    expect(g2.state).toBe('parked');
+    expect(shape).not.toBeNull();
+    expect(startDate).not.toBeNull();
+    for (const [s, d] of [[null, null], [shape, null], [null, startDate]] as const) {
+      g2.shape = s;
+      g2.startDate = d;
+      expect(issuesOf(draft, transcript)).toEqual([]);
+    }
+  });
+
+  it('maps a parked goal with neither onto a row with a null shape and start date, and an active goal still has both', async () => {
+    const { draft, transcript } = await finished('run-h-two-activities');
+    const g2 = goalOf(draft.model, 'g2');
+    g2.shape = null;
+    g2.startDate = null;
+    const result = draftToRows(draft, transcript);
+    if (!result.ok) throw new Error(JSON.stringify(result.issues));
+    expect(result.rows.goals[1].row).toMatchObject({ state: 'parked', shape: null, start_date: null, return_kind: 'condition', return_note: 'in the spring' });
+    expect(result.rows.goals[0].row.shape).not.toBeNull();
+    expect(result.rows.goals[0].row.start_date).not.toBeNull();
+  });
+
+  it('still needs both for an active goal, and refuses to save without them', async () => {
+    const { draft, transcript } = await finished('run-h-two-activities');
+    const g1 = goalOf(draft.model, 'g1');
+    const { shape, startDate } = g1;
+    g1.startDate = null;
+    expect(paths(draft, transcript)).toContain('goals.g1.startDate');
+    expect(draftToRows(draft, transcript).ok).toBe(false);
+    g1.startDate = startDate;
+    g1.shape = null;
+    g1.blockWeeks = null;
+    expect(paths(draft, transcript)).toContain('goals.g1.shape');
+    const refused = draftToRows(draft, transcript);
+    expect(refused.ok).toBe(false);
+    g1.shape = shape;
+  });
+
+  it('gives a goal with no shape no end date and no first block, as the database does', async () => {
+    const { draft, transcript } = await finished('run-h-two-activities');
+    const g2 = goalOf(draft.model, 'g2');
+    g2.shape = null;
+    g2.endDate = '2027-01-01';
+    expect(paths(draft, transcript)).toContain('goals.g2.endDate');
+    g2.endDate = null;
+    g2.blockWeeks = 10;
+    expect(paths(draft, transcript)).toContain('goals.g2.blockWeeks');
+  });
+
+  it('does not ask an active goal for them while setup is still in progress', async () => {
+    const { draft, transcript } = await finished('run-h-two-activities');
+    const g1 = goalOf(draft.model, 'g1');
+    g1.shape = null;
+    g1.startDate = null;
+    g1.blockWeeks = null;
+    const found = paths(draft, transcript, 'progress');
+    expect(found).not.toContain('goals.g1.shape');
+    expect(found).not.toContain('goals.g1.startDate');
+  });
+});
+
 describe('the shape of a draft', () => {
   it('rejects a key the model does not have, such as a score', async () => {
     const { draft, transcript } = await finished('run-a-deadline-only');

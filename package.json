@@ -32,6 +32,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "eval:setup:pilot": "vitest run --config vitest.live.config.mts",
     "plan": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-execution-plan.ts",
     "plan:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-plan-format.ts",
     "verify:sql": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/run-sql-verify.ts"

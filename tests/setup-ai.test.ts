@@ -3,7 +3,13 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SETUP_BEGIN_MESSAGE, SETUP_MODEL, buildSetupMessages, requestSetupTurnFromModel } from '@/lib/ai/setup';
+import {
+  SETUP_BEGIN_MESSAGE,
+  SETUP_DRAFT_PLACEHOLDER,
+  SETUP_MODEL,
+  buildSetupMessages,
+  requestSetupTurnFromModel,
+} from '@/lib/ai/setup';
 import { emptyDraft } from '@/lib/setup/draft';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import { HARD_RULES, SETUP_STEPS } from '@/lib/setup/steps';
@@ -88,12 +94,32 @@ describe('what it sends', () => {
   });
 
   it('starts with the person\'s side, then alternates the conversation so far', () => {
-    const messages = buildSetupMessages(transcript);
+    const messages = buildSetupMessages(transcript, emptyDraft());
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
     expect(messages[0].content).toBe(SETUP_BEGIN_MESSAGE);
-    expect(JSON.parse(messages[1].content as string)).toEqual(JSON.parse(JSON.stringify(turn)));
-    expect(messages[2].content).toBe('Zebra quartz goal.');
-    expect(buildSetupMessages([])).toEqual([{ role: 'user', content: SETUP_BEGIN_MESSAGE }]);
+    // The earlier turn is sent whole except for its draft.
+    expect(JSON.parse(messages[1].content as string)).toEqual({ ...JSON.parse(JSON.stringify(turn)), draft: SETUP_DRAFT_PLACEHOLDER });
+    // The person's own words stay in a block of their own, ahead of the current draft.
+    expect(messages[2].content).toEqual([
+      { type: 'text', text: 'Zebra quartz goal.' },
+      { type: 'text', text: `Current draft, to start from:\n${JSON.stringify(emptyDraft())}` },
+    ]);
+    // Before anything has been said there is only the opening message, and the (empty) draft after it.
+    expect(buildSetupMessages([], emptyDraft())).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: SETUP_BEGIN_MESSAGE },
+          { type: 'text', text: `Current draft, to start from:\n${JSON.stringify(emptyDraft())}` },
+        ],
+      },
+    ]);
+  });
+
+  it('puts a draft after a transcript that ends on Claude\'s turn in a message of its own', () => {
+    const messages = buildSetupMessages([{ role: 'assistant', turn }], emptyDraft());
+    expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+    expect(messages[2].content).toMatch(/^Current draft, to start from:/);
   });
 
   it('sends only the conversation: no email, account or id', async () => {
@@ -102,6 +128,69 @@ describe('what it sends', () => {
     const sent = JSON.stringify(requestOf(create).messages);
     expect(sent).toContain('Zebra quartz goal.');
     expect(sent).not.toMatch(/@|user_id|userId|email/i);
+  });
+
+  it('asks another model when told to, for the smaller-model trial', async () => {
+    const { client, create } = clientReturning();
+    await requestSetupTurnFromModel(input, { client, model: 'claude-sonnet-5-5' });
+    expect(requestOf(create).model).toBe('claude-sonnet-5-5');
+  });
+});
+
+describe('the draft is sent once (MOM-128)', () => {
+  // Each turn of Claude's carries a different draft, marked by the title of its one goal.
+  const draftTitled = (title: string) => {
+    const d = emptyDraft();
+    d.model.goals.push({
+      key: 'g1', title, why: null, startDate: null, shape: null, endDate: null, blockWeeks: null, state: 'active',
+      returnWhen: null, completionMode: null, tone: null, targets: [], items: [],
+    });
+    return d;
+  };
+  const longTranscript = (turns: number): Transcript =>
+    Array.from({ length: turns }, (_, i) => [
+      { role: 'assistant' as const, turn: { ...turn, say: `say ${i}`, draft: draftTitled(`OldDraft${i}`) } },
+      { role: 'person' as const, text: `reply ${i}` },
+    ]).flat();
+  const sizeOf = (turns: number) => JSON.stringify(buildSetupMessages(longTranscript(turns), draftTitled('CurrentDraft'))).length;
+
+  it('replaces every earlier draft by the placeholder and sends the current one exactly once', () => {
+    const sent = JSON.stringify(buildSetupMessages(longTranscript(12), draftTitled('CurrentDraft')));
+    expect(sent).not.toContain('OldDraft');
+    expect(sent.match(/CurrentDraft/g)).toHaveLength(1);
+    expect(sent.match(new RegExp(SETUP_DRAFT_PLACEHOLDER, 'g'))).toHaveLength(12);
+  });
+
+  it('keeps everything else about an earlier turn, so the conversation still reads the same', () => {
+    const messages = buildSetupMessages(longTranscript(3), draftTitled('CurrentDraft'));
+    const assistant = messages.filter((m) => m.role === 'assistant').map((m) => JSON.parse(m.content as string));
+    expect(assistant.map((a) => a.say)).toEqual(['say 0', 'say 1', 'say 2']);
+    for (const a of assistant) {
+      expect(a).toMatchObject({ kind: 'question', topic: 'idea', question: 'What would you like to work on?', draft: SETUP_DRAFT_PLACEHOLDER });
+    }
+    expect(messages.filter((m) => m.role === 'user').length).toBeGreaterThan(3);
+  });
+
+  it('grows by the same amount each turn, not by more each time', () => {
+    const [a, b, c, d] = [sizeOf(5), sizeOf(10), sizeOf(20), sizeOf(40)];
+    const perTurn = (b - a) / 5;
+    expect((c - b) / 10).toBeCloseTo(perTurn, -1);
+    expect((d - c) / 20).toBeCloseTo(perTurn, -1);
+  });
+
+  it('is smaller than sending every draft whole, by more the longer the setup goes', () => {
+    const whole = (turns: number) => JSON.stringify(longTranscript(turns).map((m) => (m.role === 'person' ? m.text : m.turn))).length;
+    const saved = (turns: number) => whole(turns) - (sizeOf(turns) - JSON.stringify(draftTitled('CurrentDraft')).length);
+    expect(saved(20)).toBeGreaterThan(saved(10));
+    expect(saved(10)).toBeGreaterThan(0);
+  });
+
+  it('is what the API receives', async () => {
+    const { client, create } = clientReturning();
+    await requestSetupTurnFromModel({ transcript: longTranscript(4), draft: draftTitled('CurrentDraft') }, { client });
+    const sent = JSON.stringify(requestOf(create).messages);
+    expect(sent).not.toContain('OldDraft');
+    expect(sent.match(/CurrentDraft/g)).toHaveLength(1);
   });
 });
 
@@ -133,6 +222,17 @@ describe('the prompt', () => {
   it('says Claude writes no playback and does no math', () => {
     expect(SETUP_SYSTEM_PROMPT).toMatch(/written by code from the validated draft, not by you/);
     expect(SETUP_SYSTEM_PROMPT).toMatch(/Do no math and set no score/);
+  });
+
+  it('explains the placeholder and the current draft, and how positions are counted (MOM-128)', () => {
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/earlier replies appear in this conversation with "draft" replaced by a short note/);
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/newest message ends with "Current draft"/);
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/reply with the whole updated draft as an object in "draft", never with that note/);
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/Positions count from 0 with your own first reply/);
+    // The words the prompt promises are the words the code sends.
+    expect(buildSetupMessages([], emptyDraft()).at(-1)?.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ text: expect.stringMatching(/^Current draft/) })]),
+    );
   });
 
   it('has no example clock time, weekday or personal detail of its own', () => {
