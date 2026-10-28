@@ -22,6 +22,12 @@ export interface TimeAnchors {
   weekStartsOn: Weekday | null;
 }
 
+// The answer to "can a target with this period be graded with these anchors?" (canGrade). When it cannot, which
+// anchor stops it and whether it is missing or not a usable value, with the same words assertAnchors throws.
+export type GradeCheck =
+  | { ok: true }
+  | { ok: false; anchor: 'time_zone' | 'day_end' | 'week_start'; reason: 'not_set' | 'invalid'; message: string };
+
 export type Measure = 'count' | 'quantity' | 'time' | 'checklist';
 export type TargetRole = 'effort' | 'outcome';
 // habit: a shortfall never rolls into the next period. cumulative: a shortfall stays owed until the deadline,
@@ -134,6 +140,8 @@ export interface TargetResult {
   // counted / floor, not capped; null without a floor.
   fractionOfFloor: number | null;
   remainingToFloor: number | null;
+  // What is left to the aspiration: null without one, 0 once it is reached.
+  remainingToAspiration: number | null;
   // Null when the target has no levels (an outcome target the person did not give a number).
   level: Level | null;
   // What a cumulative target still owes until its deadline; always 0 for a habit and after the deadline.
