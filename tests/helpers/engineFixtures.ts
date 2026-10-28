@@ -83,6 +83,7 @@ export const periodResult = (level: Level | null, over: Partial<TargetResult> = 
   aspiration: level === null ? null : 5,
   fractionOfFloor: null,
   remainingToFloor: null,
+  remainingToAspiration: null,
   level,
   owed: 0,
   slots: null,

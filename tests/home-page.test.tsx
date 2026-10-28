@@ -10,21 +10,26 @@ const services = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   listConnectedApps: vi.fn(),
   getPlanSnapshot: vi.fn(),
+  getHomeScoreboard: vi.fn(),
 }));
 vi.mock('@/lib/services/auth', () => ({ getCurrentUser: services.getCurrentUser }));
 vi.mock('@/lib/services/integrations', () => ({ listConnectedApps: services.listConnectedApps }));
 vi.mock('@/lib/services/tasks', () => ({ getPlanSnapshot: services.getPlanSnapshot }));
+vi.mock('@/lib/services/scoreboard', () => ({ getHomeScoreboard: services.getHomeScoreboard }));
 // The page imports the shell, which pulls in client code that is not under test here.
 vi.mock('@/components/layout/AppShell', () => ({ AppShell: () => null }));
 
 import HomePage from '@/app/page';
 
 interface ShellElement {
-  props: { views: ChannelViews; connectedApps: unknown[] };
+  props: { views: ChannelViews; connectedApps: unknown[]; home?: unknown };
+}
+async function propsOfPage() {
+  const element = (await HomePage()) as unknown as ShellElement;
+  return element.props;
 }
 async function viewsOfPage() {
-  const element = (await HomePage()) as unknown as ShellElement;
-  return element.props.views;
+  return (await propsOfPage()).views;
 }
 const stateOf = (views: ChannelViews) => views.byChannel[ALL_CHANNELS].feedState;
 
@@ -32,6 +37,7 @@ beforeEach(() => {
   Object.values(services).forEach((fn) => fn.mockReset());
   services.getCurrentUser.mockResolvedValue({ ok: true, data: { id: 'u', email: 'a@example.com' } });
   services.listConnectedApps.mockResolvedValue({ ok: true, data: [] });
+  services.getHomeScoreboard.mockResolvedValue({ ok: true, data: { state: 'no_goals' } });
 });
 
 describe('the home page chooses between could-not-load and no-goals', () => {
@@ -67,5 +73,42 @@ describe('the home page chooses between could-not-load and no-goals', () => {
     services.getCurrentUser.mockResolvedValue({ ok: false, error: 'no session' });
     expect(stateOf(await viewsOfPage())).toBe('signed_out');
     expect(services.getPlanSnapshot).not.toHaveBeenCalled();
+  });
+});
+
+// The goal model's scoreboard (MOM-112) is read on its own: neither read can make the other look failed.
+describe('the home page passes the goal model scoreboard to the shell', () => {
+  const planWithNoGoals = { ok: true, data: { goals: [], tasks: [], history: [], today: '2026-10-26' } };
+
+  it('passes what the service read, and a read with no goals is no_goals, not null', async () => {
+    services.getPlanSnapshot.mockResolvedValue(planWithNoGoals);
+    expect((await propsOfPage()).home).toEqual({ state: 'no_goals' });
+  });
+
+  it('an error result or a thrown error is null (could not load), and the plan below is untouched', async () => {
+    services.getPlanSnapshot.mockResolvedValue(planWithNoGoals);
+    services.getHomeScoreboard.mockResolvedValue({ ok: false, error: 'boom' });
+    let props = await propsOfPage();
+    expect(props.home).toBeNull();
+    expect(stateOf(props.views)).toBe('no_goals');
+
+    services.getHomeScoreboard.mockRejectedValue(new Error('unreachable'));
+    props = await propsOfPage();
+    expect(props.home).toBeNull();
+    expect(stateOf(props.views)).toBe('no_goals');
+  });
+
+  it('a failed plan read does not make the scoreboard look failed', async () => {
+    services.getPlanSnapshot.mockResolvedValue({ ok: false, error: 'boom' });
+    const props = await propsOfPage();
+    expect(stateOf(props.views)).toBe('load_failed');
+    expect(props.home).toEqual({ state: 'no_goals' });
+  });
+
+  it('with no session the scoreboard is not read and none is passed', async () => {
+    services.getCurrentUser.mockResolvedValue({ ok: false, error: 'no session' });
+    const props = await propsOfPage();
+    expect(props.home).toBeUndefined();
+    expect(services.getHomeScoreboard).not.toHaveBeenCalled();
   });
 });
