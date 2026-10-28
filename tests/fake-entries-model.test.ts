@@ -24,6 +24,7 @@ describe('the goal model fake matches migration 013', () => {
     ['goals', 'select, insert, update'],
     ['targets', 'select, insert, update'],
     ['work_items', 'select, insert, update, delete'],
+    ['period_snapshots', 'select, insert'],
   ])('%s grants the authenticated role at least what the fake allows the service', (table, grant) => {
     expect(sql).toContain(`grant ${grant} on table public.${table} to authenticated;`);
   });

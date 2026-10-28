@@ -1,12 +1,14 @@
 import { AppShell } from '@/components/layout/AppShell';
 import { getCurrentUser, type SessionUser } from '@/lib/services/auth';
 import { listConnectedApps } from '@/lib/services/integrations';
+import { getHomeScoreboard } from '@/lib/services/scoreboard';
 import { getPlanSnapshot, type PlanSnapshot } from '@/lib/services/tasks';
 import { buildChannelViews } from '@/lib/utils/channelViews';
 import { summarizeActiveGoalProgress } from '@/lib/utils/progress';
 import { groupMovesByTask } from '@/lib/utils/rebalance';
 import { LOAD_FAILED_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
+import type { HomeScoreboard } from '@/types/home';
 
 // Reads the signed-in user's session, so this page renders per request.
 export const dynamic = 'force-dynamic';
@@ -46,13 +48,25 @@ async function loadSnapshot(): Promise<PlanSnapshot | null> {
   }
 }
 
+// The goal model's scoreboard (MOM-112), read on its own so a failure here never makes the plan below look failed, and
+// the other way round. null means it could not be read (an error result or a throw); a read that succeeds is never
+// null, even for a person with no goals.
+async function loadHome(): Promise<HomeScoreboard | null> {
+  try {
+    const result = await getHomeScoreboard();
+    return result.ok ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function HomePage() {
   // Asked first, so a signed-out render reads nothing.
   const user = await sessionUser();
   if (user === null) {
     return <AppShell views={SIGNED_OUT_CHANNEL_VIEWS} connectedApps={[]} moveChains={{}} />;
   }
-  const [snapshot, connectedApps] = await Promise.all([loadSnapshot(), loadConnectedApps()]);
+  const [snapshot, connectedApps, home] = await Promise.all([loadSnapshot(), loadConnectedApps(), loadHome()]);
   // One view per active goal plus "all channels": its feed, velocity and rule-based rebalance proposal, each
   // from that goal's own tasks and start date. The sidebar switches between them in the browser, so no
   // selection is sent to the server and the server never trusts one.
@@ -70,6 +84,7 @@ export default async function HomePage() {
       moveChains={moveChains}
       progress={progress}
       userEmail={user.email}
+      home={home}
     />
   );
 }

@@ -365,6 +365,293 @@ button:disabled {
   background: var(--lime);
 }
 
+/* ---- Home scoreboard (MOM-112) --------------------------------------------------------------------------
+   The week's hero and each goal's scoreboard, drawn from the approved mock-up. The hero reuses the score card's
+   surface and ring; the cards reuse the goal card's. A level is always said in words, so colour only reinforces it. */
+
+.chip-dashed {
+  border-style: dashed;
+}
+.home-scoreboard {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0 22px;
+}
+.home-notice {
+  margin: 16px 0 22px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 16px;
+  background: var(--surface-soft);
+  padding: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.home-notice p {
+  color: inherit;
+}
+.home-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse at 85% 60%, rgb(192 235 117 / 10%), transparent 48%),
+    linear-gradient(130deg, #1d2421, #171c1b 70%);
+  padding: 16px;
+  box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+}
+.home-hero-list {
+  align-items: stretch;
+}
+.home-ring {
+  position: relative;
+  width: 116px;
+  height: 116px;
+  flex: 0 0 116px;
+}
+.home-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.home-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+.home-ring-track {
+  stroke: rgb(255 255 255 / 8%);
+}
+.home-ring-progress {
+  stroke: var(--lime);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgb(198 243 109 / 24%));
+}
+.home-hero[data-celebration='bold'] .home-ring-progress {
+  filter: drop-shadow(0 0 9px rgb(198 243 109 / 55%));
+}
+.home-ring-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.home-ring-centre b {
+  font-size: 21px;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.home-ring-centre small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.home-hero-title {
+  margin-top: 5px;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.home-hero-title[data-celebration='accent'],
+.home-hero-title[data-celebration='bold'] {
+  color: var(--lime);
+}
+.home-hero-title[data-celebration='bold'] {
+  text-shadow: 0 0 18px rgb(198 243 109 / 30%);
+}
+.home-hero-sub {
+  margin-top: 4px;
+  color: #b9c2bb;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.home-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 68px;
+  margin-top: 12px;
+}
+.home-bar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  height: 100%;
+}
+.home-bar i {
+  display: block;
+  width: 100%;
+  max-width: 18px;
+  border-radius: 4px;
+  background: var(--lime);
+}
+.home-bar[data-empty='true'] i {
+  background: rgb(255 255 255 / 14%);
+}
+.home-bar-value {
+  height: 12px;
+  color: #dce4d9;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.home-bar-day {
+  color: var(--muted);
+  font-size: 10px;
+}
+.home-bar[data-today='true'] .home-bar-day {
+  border-bottom: 2px solid var(--lime);
+  color: var(--foreground);
+  font-weight: 700;
+}
+.home-bars-caption {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.home-goal {
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 20px;
+  background: var(--surface-soft);
+  padding: 14px;
+}
+.home-goal > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.home-goal h3 {
+  font-size: 16px;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+.home-target {
+  margin-top: 10px;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  padding: 12px 0 4px;
+}
+.home-target-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.home-target h4 {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.home-count {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.home-count span {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: 0;
+}
+.home-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.home-next {
+  margin-top: 6px;
+  color: #d3e3bb;
+  font-size: 12px;
+}
+.home-track {
+  position: relative;
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 9%);
+}
+.home-track > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: inherit;
+  background: var(--lime);
+}
+.home-track[data-graded='false'] > span {
+  background: repeating-linear-gradient(45deg, #8a9a86 0 4px, #6d7c6a 4px 8px);
+}
+.home-tick {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 14px;
+  border-radius: 1px;
+  background: #e8efe3;
+  text-decoration: none;
+}
+.home-tick-aspiration {
+  background: var(--streak);
+}
+.home-pattern {
+  margin-top: 8px;
+  border-radius: 9px;
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.home-pattern[data-tone='good'] {
+  background: rgb(198 243 109 / 7%);
+  color: #d3e3bb;
+}
+.home-pattern[data-tone='nudge'] {
+  background: rgb(244 194 126 / 8%);
+  color: var(--streak);
+}
+.home-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-steps li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.home-steps li i {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 1.5px solid rgb(255 255 255 / 30%);
+  border-radius: 5px;
+}
+.home-steps li[data-done='true'] {
+  color: var(--foreground);
+}
+.home-steps li[data-done='true'] i {
+  border-color: var(--lime);
+  background: var(--lime);
+}
+
 /* ---- Connected app row and toggle ----------------------------------------------------------------------- */
 
 .connected-app-row {

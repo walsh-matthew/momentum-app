@@ -1,7 +1,7 @@
 // The person's days and weeks (docs/DOMAIN_MODEL.md §1.1, §4.2 principle 1). "Today" and the anchors are inputs:
 // nothing here reads a clock or fills in a time zone, a week start or a day end.
 
-import type { LocalDate, PeriodKind, TimeAnchors, Weekday } from '@/types/scoreboard';
+import type { GradeCheck, LocalDate, PeriodKind, TimeAnchors, Weekday } from '@/types/scoreboard';
 import { EARLY_DAY_END_LIMIT } from './constants';
 
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -40,32 +40,55 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
+type AnchorProblem = Extract<GradeCheck, { ok: false }>;
+const problem = (anchor: AnchorProblem['anchor'], reason: AnchorProblem['reason'], message: string): AnchorProblem => ({
+  ok: false,
+  anchor,
+  reason,
+  message,
+});
+
 // The anchors every day needs: the time zone and the day end.
-export function assertDayAnchors(anchors: TimeAnchors): void {
+function dayAnchorProblem(anchors: TimeAnchors): AnchorProblem | null {
   if (anchors.timeZone === null || anchors.timeZone === '') {
-    throw new Error('The time zone is not set. Ask the person in setup; the engine assumes none.');
+    return problem('time_zone', 'not_set', 'The time zone is not set. Ask the person in setup; the engine assumes none.');
   }
   try {
     formatterFor(anchors.timeZone);
   } catch {
-    throw new Error(`"${anchors.timeZone}" is not a time zone.`);
+    return problem('time_zone', 'invalid', `"${anchors.timeZone}" is not a time zone.`);
   }
   const end = anchors.dayEndMinutes;
-  if (end === null) throw new Error('The day end is not set. Ask the person in setup; the engine assumes none.');
+  if (end === null) return problem('day_end', 'not_set', 'The day end is not set. Ask the person in setup; the engine assumes none.');
   if (!Number.isInteger(end) || end < 0 || end > 1439) {
-    throw new Error('The day end must be a whole number of minutes after midnight, from 0 to 1439.');
+    return problem('day_end', 'invalid', 'The day end must be a whole number of minutes after midnight, from 0 to 1439.');
   }
+  return null;
 }
 
-// A deadline target needs no week start, so only a weekly or day-slot period asks for one.
-export function assertAnchors(anchors: TimeAnchors, period: PeriodKind): void {
-  assertDayAnchors(anchors);
-  if (period === 'deadline') return;
+// Whether a target with this period can be graded with these anchors, and if not which anchor stops it. A caller asks
+// this before it grades, so a missing anchor is a state to show, not an error to catch. A deadline target needs no
+// week start, so only a weekly or day-slot period asks for one.
+export function canGrade(anchors: TimeAnchors, period: PeriodKind): GradeCheck {
+  const day = dayAnchorProblem(anchors);
+  if (day) return day;
+  if (period === 'deadline') return { ok: true };
   const start = anchors.weekStartsOn;
-  if (start === null) throw new Error('The week start is not set. Ask the person; the engine assumes none.');
+  if (start === null) return problem('week_start', 'not_set', 'The week start is not set. Ask the person; the engine assumes none.');
   if (!Number.isInteger(start) || start < 0 || start > 6) {
-    throw new Error('The week start must be a weekday from 0 (Sunday) to 6 (Saturday).');
+    return problem('week_start', 'invalid', 'The week start must be a weekday from 0 (Sunday) to 6 (Saturday).');
   }
+  return { ok: true };
+}
+
+export function assertDayAnchors(anchors: TimeAnchors): void {
+  const found = dayAnchorProblem(anchors);
+  if (found) throw new Error(found.message);
+}
+
+export function assertAnchors(anchors: TimeAnchors, period: PeriodKind): void {
+  const check = canGrade(anchors, period);
+  if (!check.ok) throw new Error(check.message);
 }
 
 // An early day end (after midnight, before 06:00) moves the boundary: day D runs from D at that time to D+1

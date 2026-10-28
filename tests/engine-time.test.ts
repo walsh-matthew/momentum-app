@@ -2,8 +2,56 @@
 // week start or day end, and each target asks only for the anchors its period needs.
 
 import { describe, expect, it } from 'vitest';
-import { addDays, assertAnchors, localDay, localNoon, weekRange } from '@/lib/engine';
+import { addDays, assertAnchors, canGrade, localDay, localNoon, weekRange } from '@/lib/engine';
 import { anchors } from './helpers/engineFixtures';
+
+describe('canGrade: asked before grading, so a missing anchor is a state and not an error (MOM-112)', () => {
+  it('is ok when every anchor the period needs is set', () => {
+    expect(canGrade(anchors(), 'weekly')).toEqual({ ok: true });
+    expect(canGrade(anchors(), 'day_slots')).toEqual({ ok: true });
+    expect(canGrade(anchors(), 'deadline')).toEqual({ ok: true });
+  });
+
+  it('says which anchor is not set, and never throws', () => {
+    expect(canGrade(anchors({ timeZone: null }), 'weekly')).toMatchObject({ ok: false, anchor: 'time_zone', reason: 'not_set' });
+    expect(canGrade(anchors({ timeZone: '' }), 'deadline')).toMatchObject({ ok: false, anchor: 'time_zone', reason: 'not_set' });
+    expect(canGrade(anchors({ dayEndMinutes: null }), 'weekly')).toMatchObject({ ok: false, anchor: 'day_end', reason: 'not_set' });
+    expect(canGrade(anchors({ weekStartsOn: null }), 'weekly')).toMatchObject({ ok: false, anchor: 'week_start', reason: 'not_set' });
+    expect(canGrade(anchors({ weekStartsOn: null }), 'day_slots')).toMatchObject({ ok: false, anchor: 'week_start', reason: 'not_set' });
+  });
+
+  it('says an anchor that is set but not usable is invalid', () => {
+    expect(canGrade(anchors({ timeZone: 'Mars/Phobos' }), 'weekly')).toMatchObject({ ok: false, anchor: 'time_zone', reason: 'invalid' });
+    expect(canGrade(anchors({ dayEndMinutes: 1440 }), 'weekly')).toMatchObject({ ok: false, anchor: 'day_end', reason: 'invalid' });
+    expect(canGrade(anchors({ weekStartsOn: 7 as 0 }), 'weekly')).toMatchObject({ ok: false, anchor: 'week_start', reason: 'invalid' });
+  });
+
+  it('asks a deadline period for no week start: a person with only deadline goals is never asked for one', () => {
+    expect(canGrade(anchors({ weekStartsOn: null }), 'deadline')).toEqual({ ok: true });
+    expect(canGrade(anchors({ weekStartsOn: null, dayEndMinutes: null }), 'deadline')).toMatchObject({ ok: false, anchor: 'day_end' });
+  });
+
+  it('reports the time zone before the day end before the week start', () => {
+    expect(canGrade(anchors({ timeZone: null, dayEndMinutes: null, weekStartsOn: null }), 'weekly')).toMatchObject({ anchor: 'time_zone' });
+    expect(canGrade(anchors({ dayEndMinutes: null, weekStartsOn: null }), 'weekly')).toMatchObject({ anchor: 'day_end' });
+  });
+
+  it('gives the same words as assertAnchors throws, so there is one set of rules', () => {
+    const cases: [Parameters<typeof anchors>[0], 'weekly' | 'deadline'][] = [
+      [{ timeZone: null }, 'weekly'],
+      [{ timeZone: 'Mars/Phobos' }, 'weekly'],
+      [{ dayEndMinutes: null }, 'weekly'],
+      [{ dayEndMinutes: 90.5 }, 'weekly'],
+      [{ weekStartsOn: null }, 'weekly'],
+      [{ weekStartsOn: 7 as 0 }, 'weekly'],
+    ];
+    for (const [over, period] of cases) {
+      const check = canGrade(anchors(over), period);
+      expect(check.ok).toBe(false);
+      if (!check.ok) expect(() => assertAnchors(anchors(over), period)).toThrow(check.message);
+    }
+  });
+});
 
 describe('assertAnchors: nothing is assumed', () => {
   it('needs a time zone', () => {

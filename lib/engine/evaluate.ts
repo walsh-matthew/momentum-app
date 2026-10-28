@@ -22,29 +22,30 @@ export interface PeriodEvaluation {
   tally: Tally;
 }
 
+// Why a spec contradicts the domain model, or null when the rest of the engine can rely on it. A caller asks this
+// before it grades, for the cases the database does not stop (a habit with a deadline period, a checklist with no
+// steps yet), so a target set up wrongly is shown as not counted and never takes the page down.
+export function specProblem(spec: TargetSpec): string | null {
+  const { levels, period } = spec;
+  if (spec.role === 'effort' && levels === null) return 'An effort target needs a floor.';
+  if (levels !== null) {
+    if (!(levels.floor > 0)) return 'A floor must be more than 0.';
+    if (levels.aspiration !== null && levels.aspiration < levels.floor) return 'An aspiration cannot be below the floor.';
+  }
+  if (spec.qualifyingThreshold !== null && !(spec.qualifyingThreshold >= 0)) return 'A qualifying threshold cannot be negative.';
+  if (spec.carryOver === 'cumulative' && period.kind !== 'deadline') {
+    return 'A cumulative target is owed until a deadline, so it needs a deadline period.';
+  }
+  if (spec.carryOver === 'habit' && period.kind === 'deadline') return 'A habit repeats in periods; a deadline period is cumulative.';
+  if (spec.measure === 'checklist' && (spec.stepIds === null || spec.stepIds.length === 0)) return 'A checklist target needs its steps.';
+  if (period.kind === 'day_slots' && period.days.length === 0) return 'Day slots need at least one day.';
+  return null;
+}
+
 // A spec the rest of the engine can rely on. Throws on one that contradicts the domain model.
 export function assertSpec(spec: TargetSpec): void {
-  const { levels, period } = spec;
-  if (spec.role === 'effort' && levels === null) throw new Error('An effort target needs a floor.');
-  if (levels !== null) {
-    if (!(levels.floor > 0)) throw new Error('A floor must be more than 0.');
-    if (levels.aspiration !== null && levels.aspiration < levels.floor) {
-      throw new Error('An aspiration cannot be below the floor.');
-    }
-  }
-  if (spec.qualifyingThreshold !== null && !(spec.qualifyingThreshold >= 0)) {
-    throw new Error('A qualifying threshold cannot be negative.');
-  }
-  if (spec.carryOver === 'cumulative' && period.kind !== 'deadline') {
-    throw new Error('A cumulative target is owed until a deadline, so it needs a deadline period.');
-  }
-  if (spec.carryOver === 'habit' && period.kind === 'deadline') {
-    throw new Error('A habit repeats in periods; a deadline period is cumulative.');
-  }
-  if (spec.measure === 'checklist' && (spec.stepIds === null || spec.stepIds.length === 0)) {
-    throw new Error('A checklist target needs its steps.');
-  }
-  if (period.kind === 'day_slots' && period.days.length === 0) throw new Error('Day slots need at least one day.');
+  const problem = specProblem(spec);
+  if (problem !== null) throw new Error(problem);
 }
 
 // The days of a period, both ends inclusive. A repeating period is one of the person's weeks; a deadline
@@ -103,6 +104,7 @@ export function evaluatePeriod(input: EvaluateInput): PeriodEvaluation {
   const counted = tally.total;
   const startedPartway = spec.period.kind !== 'deadline' && range.start < target.startsOn;
   const remainingToFloor = levels ? Math.max(0, levels.floor - counted) : null;
+  const remainingToAspiration = levels && levels.aspiration !== null ? Math.max(0, levels.aspiration - counted) : null;
 
   let level: TargetResult['level'] = null;
   if (levels) {
@@ -127,6 +129,7 @@ export function evaluatePeriod(input: EvaluateInput): PeriodEvaluation {
     aspiration: levels ? levels.aspiration : null,
     fractionOfFloor: levels ? counted / levels.floor : null,
     remainingToFloor,
+    remainingToAspiration,
     level,
     // A habit never carries a shortfall forward; a cumulative target owes it until its deadline (§1.3, §1.4).
     owed: spec.carryOver === 'cumulative' && !closed && remainingToFloor !== null ? remainingToFloor : 0,

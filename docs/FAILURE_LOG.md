@@ -317,6 +317,111 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner, a few minutes later. Pushing the entry was fine with him, so nothing was reverted; the monthly review change was then made as he meant it.
 - **Predicted it?** No.
 
+### F-044 · 2026-10-28 · build tool
+- **Asked:** At the design stop for the setup budget block, say roughly what a live eval run of guided setup would cost per setup, on each model.
+- **What went wrong:** The estimate was about $3.2 per setup on the default model and said the request grew with the square of the turns because every earlier reply repeated the whole draft. The size of the history growth was right in kind but about five times too big in cost: measured on the repo's own eval cases the drafts are around 400 tokens, not the 3,000 the estimate assumed, and the fixed prompt, not the drafts, is the biggest part of the input.
+- **Why:** A draft size was picked instead of measured, although the eval cases that show real draft sizes were in the repo and cheap to read. The estimate was labelled an estimate, but it was built on an input that could have been checked in one step.
+- **Caught by:** The owner asked for a re-estimate after the history change; measuring the eval cases for it showed the assumption was wrong.
+- **Predicted it?** No.
+
+### F-045 · 2026-10-28 · build tool
+- **Asked:** Build the safety rails for a live setup eval run (MOM-128).
+- **What went wrong:** The helpers were put in the pure setup logic folder, and one of them named the secret variable it sets. A boundary test that keeps that folder free of secrets, environment access and network calls failed.
+- **Why:** The file was placed by topic (it is about setup) instead of by the folder's rule, and the test list that states the rule was not read before choosing the folder.
+- **Caught by:** The unit test run, the same hour. The helpers moved to the folder for the model-calling code, where naming the variable is allowed.
+- **Predicted it?** No.
+
+### F-046 · 2026-10-28 · build tool · ★
+- **Asked:** Wire the guided setup Claude call so the draft it returns can be checked and saved (MOM-111 block 1, MOM-128).
+- **What went wrong:** The prompt described the draft only in prose, and the strict schema that checks every reply was never shown to the model. On the first real call the model made up its own field names for a goal and the reply was rejected on the second turn. The eval set had passed all along because it ran against a scripted stand-in that already knew the schema.
+- **Why:** The checks and the prompt were written separately, from the same description, and tested against each other only through a fake model. A fake model cannot show that the real one was told what the checks expect. The BACKLOG noted that the schema had not been tried against the real API; nothing made that a blocker before the first live call.
+- **Caught by:** The first paid run, two turns in (about 3 cents). The fix writes the prompt's field names and allowed values from the same schema the validator uses, with a test that fails if the two disagree; the next run had no schema failures in 40 replies.
+- **Predicted it?** No.
+
+### F-047 · 2026-10-28 · build tool
+- **Asked:** Before running the setup screen block, check the prerequisites by name only and never print a value (the run-block command's rule).
+- **What went wrong:** To see whether the local stack was up I ran the Supabase status command and showed its first lines. They included the local stack's keys in plain text. They are the CLI's fixed demo values for a local stack, not secrets of this project, but the command was run without filtering the output, against the rule that values are never printed.
+- **Why:** The command was chosen for the information it gives, not for what it prints, and the output was cut to its first lines instead of being reduced to the one fact needed (running or not).
+- **Caught by:** The build agent noticed the output right away and said so in the same message; nothing was copied anywhere.
+- **Predicted it?** No.
+
+### F-048 · 2026-10-28 · build tool
+- **Asked:** Test that a work item with steps is saved under a checklist target (MOM-111 save).
+- **What went wrong:** The test took the first full conversation in the eval set and added a weekly checklist target to it. That conversation is a deadline-only person who is never asked for a week start, so the save was correctly refused ("which day your week starts") and the test failed. A second test file made the same mistake in a different form: its table of cases was built before the fixture it used had loaded.
+- **Why:** The fixture was assumed to suit the test without reading what it contained, and the second file was run only after it was written, not read for load order.
+- **Caught by:** The unit test run, minutes after writing them. Both were fixed in the test (pick a case with a week start; load the fixture before the table is built); the code under test was right.
+- **Predicted it?** No.
+
+### F-049 · 2026-10-28 · build tool
+- **Asked:** At the start of the Hevy "Sync now" block, check the local stack and prerequisites by name only, and never print a value (the run-block command's rule).
+- **What went wrong:** The same slip as F-047, again: to see whether the local stack was running I ran the Supabase status command with no filter, and its output showed the local stack's keys in plain text. They are the CLI's fixed demo values, not secrets of this project, but the rule is that values are never printed.
+- **Why:** The command was chosen for what it reports, and its output was not reduced to the one fact needed (running or not). F-047 was already written down earlier the same day, and it did not change the habit.
+- **Caught by:** The build agent noticed it in the output and said so in the same message; nothing was copied anywhere.
+- **Predicted it?** No.
+
+### F-050 · 2026-10-28 · build tool
+- **Asked:** Add tests for the Hevy "Sync now" block (MOM-129): the action, the card's button states, and the browser run.
+- **What went wrong:** Three of the new checks failed on their first run, all from the tests and not the code. (1) A test that the Hevy adapter "has no Supabase in it" matched the adapter's own comments, so it failed on a correct file. (2) The one-sync-at-a-time lock was first written inside the sync service with a set that removes entries, and an existing test that forbids any delete in that file failed. (3) A loop in the button test clicked again before the button had returned from "Syncing", and passed alone but failed in the full run. A fourth, the 390px sideways-scroll check, failed on a header that was already too wide before this change.
+- **Why:** Each test was written from what it should mean without first looking at what the file actually contained (comments, an existing guard test, how long React takes to settle, what the page looked like before).
+- **Caught by:** The unit and browser runs within minutes of writing. The lock moved to its own small module, the adapter check was replaced by a plain "no diff" check, the loop waits for the button, and the width check was narrowed to the card. The code under test was right in every case.
+- **Predicted it?** No.
+
+### F-051 · 2026-10-28 · build tool
+- **Asked:** At the start of the home scoreboard block (MOM-112), check whether the local stack was running before the browser tests, and never print a value (the run-block command's rule).
+- **What went wrong:** The same slip as F-047 and F-049, a third time in one day: I ran the Supabase status command with no filter, and its output showed the local stack's keys in plain text. They are the CLI's fixed demo values, not secrets of this project, but the rule is that values are never printed.
+- **Why:** Writing the failure down did not change what I do. The entries are notes for the owner to review, not something I read at the moment I choose a command, so the habit (run it and show the output) came back each time. The check that is wanted is one fact (running or not), and the filtered command was not the default.
+- **Caught by:** I noticed the output right away and said so in the same message; nothing was copied anywhere. Fix for the rest of this block: check with a command that prints only whether the stack is up.
+- **Predicted it?** No.
+
+### F-052 · 2026-10-28 · build tool
+- **Asked:** Draw the scoreboard mock-up from engine output on scripted data for the owner to review, then design the service that maps the database's rows onto the engine (MOM-112).
+- **What went wrong:** Three things I showed or said did not hold against the real tables. (1) The mock-up showed a "Tight" deadline verdict, but the engine needs the days the person has set aside, and nothing stores or derives them yet, so no real row can produce one. (2) It drew which named days of a day-slot target were filled by assuming the first ones, when the engine only returns how many. (3) The design stop said a step's crossing would come from a separate engine call for steps with no target; an entry always belongs to a target, so such a step can never be ticked, and the crossing already comes from its checklist target. The owner approved the design with (3) in it.
+- **Why:** The scripted data was richer than any real person's rows, and the mock-up and design were built from the engine's inputs and not from what the tables can hold. (1) and (2) were noticed while reading the tables for the design and said at the design stop; (3) I wrote from the engine's function names without checking the table rule that makes it unreachable.
+- **Caught by:** (1) and (2) while reading the tables for the design, and told to the owner before the build. (3) while writing the test for a step crossing: no entry could be made for such a step. The unreachable path was removed before the commit, and the owner is told in the close-out.
+- **Predicted it?** No.
+
+### F-053 · 2026-10-28 · build tool
+- **Asked:** Make home follow the person's celebration setting, and use the default when they have not chosen one (MOM-112).
+- **What went wrong:** I set the default to medium and stated it as fact in the design notes and the close-out. The domain model's settings table says the default is low-key. The tone default I set (middle) was right.
+- **Why:** The block's list of what to read named the goal, week and scoreboard sections and the principles, not the settings table, and I filled the one default I did not look up from a guess instead of opening the table. The domain docs are the binding source, so a value a doc states is read, not chosen.
+- **Caught by:** The owner, after the close-out. The default is now low-key, with a test that writes the literal value out for a null setting so a change to the defaults file cannot quietly change what null means.
+- **Predicted it?** No.
+
+### F-054 · 2026-10-28 · build tool
+- **Asked:** Show a day-slot target on its goal card (MOM-112).
+- **What went wrong:** The card read "2 of 3 days filled (Mon, Wed, Fri)". The engine says how many slots are filled, not which, so listing the named days in brackets after the count reads as if those were the filled ones. The mock-up I showed had the same problem as pips, and I changed it to the bracket wording and told the owner it was a different shape, not that it still implied which days were filled.
+- **Why:** I treated "the engine does not say which" as a reason to drop the pips, and stopped there instead of reading the new sentence as a person would.
+- **Caught by:** The owner, after the close-out. The count and the named days are now two separate lines.
+- **Predicted it?** No.
+
+### F-055 · 2026-10-28 · build tool
+- **Asked:** Write component tests for manual entry part 2 (a log on a chosen day) and keep the existing timer tests passing (MOM-110).
+- **What went wrong:** Two tests failed once each under load and passed on rerun. One waited for the day label to go back to "Today" and then clicked the log button at once; the other waited for the refusal message and then looked for the "Stop timer" button at once. In both, the button was still in its saving state for a moment after the signal the test waited on, so it could not be found by its name. The first failed the day-end build check; the second had failed earlier the same day in another block's test run.
+- **Why:** Each test waited for an earlier signal instead of the state it was about to use, the pattern an open backlog item already warns about. A test that passes alone was taken as proof it was settled, and the earlier one-off failure was put down to load without being fixed.
+- **Caught by:** The day-end build check on the branch, then three clean reruns of the file, which showed timing, not the code, was at fault. Both tests now wait for the button by its settled name.
+- **Predicted it?** No.
+
+### F-056 · 2026-10-28 · build tool
+- **Asked:** At the start of the day-end, count the unreviewed entries in the failure log (one of the four "nothing to sync" conditions).
+- **What went wrong:** The count printed 0 while eleven failure entries were marked unreviewed. The pattern looks for the mark on the "Predicted it?" line, but entries carry it in their heading line and leave "Predicted it?" for the owner's answer. It is the same kind of miss as F-041 in the risk log, one file over.
+- **Why:** The F-041 fix corrected the risk-log pattern only; the failure-log pattern beside it was not tested against a real unreviewed entry at the same time.
+- **Caught by:** The build agent, because the uncommitted log edits showed the file had new entries; a plain search for the mark found eleven. The run continued anyway, because other conditions held. The command's pattern still needs fixing.
+- **Predicted it?** No.
+
+### F-057 · 2026-10-28 · build tool
+- **Asked:** During the day-end build checks, see whether the local stack was up before the database and browser checks, and never print a value.
+- **What went wrong:** The same slip as F-047, F-049 and F-051, a fourth time in one day and in a different command: the Supabase status command was run with only its first lines kept, and those lines held the local stack's keys in plain text. They are the CLI's fixed demo values, not secrets of this project.
+- **Why:** As F-051 said, writing the failure down does not change the habit at the moment a command is chosen. Cutting output to its first lines is not the same as reducing it to the one fact needed.
+- **Caught by:** The build agent, in the same message; nothing was copied anywhere. A check that prints only "running" or "not running" belongs in the commands, so the choice is not made fresh each time.
+- **Predicted it?** No.
+
+### F-058 · 2026-10-28 · build tool (advising thread)
+- **Asked:** Give the owner a review prompt to paste into the build session.
+- **What went wrong:** The advising thread split a review paste across two messages. The first one left out the standing backlog line and the migration stop, and the owner had to ask for one full prompt.
+- **Why:** It answered the block's questions and forgot the standing lines.
+- **Caught by:** The owner.
+- **Predicted it?** No.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
