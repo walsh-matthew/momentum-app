@@ -5,6 +5,7 @@ import { disconnectApp, saveHevyApiKey } from '@/app/actions/integrations';
 import { Button } from '@/components/ui/button';
 import type { IntegrationCatalogEntry } from '@/lib/integrations/catalog';
 import type { ConnectFormState, ConnectionStatus, IntegrationAccount } from '@/types/integrations';
+import { HevySyncControl } from './HevySyncControl';
 
 interface ConnectionControlsProps {
   entry: IntegrationCatalogEntry;
@@ -111,6 +112,8 @@ export function ConnectionControls({ entry, account }: ConnectionControlsProps) 
         </form>
       )}
       {!connected && entry.provider === 'hevy' && <HevyKeyForm reconnect={status !== 'not_connected'} />}
+
+      {connected && entry.provider === 'hevy' && <HevySyncControl />}
 
       {(connected || status === 'needs_reauth' || status === 'error') && (
         <div className="mt-3 flex flex-wrap items-center gap-2">

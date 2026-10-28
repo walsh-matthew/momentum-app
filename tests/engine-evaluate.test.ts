@@ -2,7 +2,7 @@
 // outcome targets, carry-over by kind).
 
 import { describe, expect, it } from 'vitest';
-import { evaluateTarget } from '@/lib/engine';
+import { evaluateTarget, specProblem } from '@/lib/engine';
 import { anchors, entry, target } from './helpers/engineFixtures';
 import type { ScoreboardEntry, ScoreboardTarget, TargetResult, TimeAnchors } from '@/types/scoreboard';
 
@@ -29,6 +29,19 @@ describe('levels and partial credit', () => {
   it('a period with no entries has nothing yet, which is not a fail', () => {
     const r = evaluate(target(), '2026-10-12', '2026-10-14');
     expect(r).toMatchObject({ counted: 0, level: 'none', fractionOfFloor: 0, remainingToFloor: 3, owed: 0 });
+  });
+
+  it('says what is left to the aspiration: all of it at first, less as entries count, 0 once reached (MOM-112)', () => {
+    // The default target is a floor of 3 and an aspiration of 5.
+    expect(evaluate(target(), '2026-10-12', '2026-10-14').remainingToAspiration).toBe(5);
+    expect(evaluate(target(), '2026-10-12', '2026-10-14', week(3))).toMatchObject({ level: 'floor', remainingToFloor: 0, remainingToAspiration: 2 });
+    expect(evaluate(target(), '2026-10-12', '2026-10-14', week(5))).toMatchObject({ level: 'aspiration', remainingToAspiration: 0 });
+    expect(evaluate(target(), '2026-10-12', '2026-10-14', week(7)).remainingToAspiration).toBe(0);
+  });
+
+  it('has no remaining-to-aspiration without an aspiration, or without levels', () => {
+    expect(evaluate(target({}, { levels: { floor: 3, aspiration: null } }), '2026-10-12', '2026-10-14', week(3)).remainingToAspiration).toBeNull();
+    expect(evaluate(target({}, { role: 'outcome', levels: null }), '2026-10-12', '2026-10-14', week(3)).remainingToAspiration).toBeNull();
   });
 
   it('partway to the floor is partial credit', () => {
@@ -91,6 +104,32 @@ describe('a spec that contradicts the model is refused', () => {
     expect(bad({ period: { kind: 'deadline', due: '2026-12-18' } })).toThrow(/habit repeats/));
   it('a checklist with no steps', () => expect(bad({ measure: 'checklist' })).toThrow(/steps/));
   it('day slots with no days', () => expect(bad({ period: { kind: 'day_slots', days: [] } })).toThrow(/at least one day/));
+});
+
+describe('specProblem: the same refusals, asked before grading and never thrown (MOM-112)', () => {
+  const problem = (specOver: Parameters<typeof target>[1]) => specProblem(target({}, specOver).versions[0].spec);
+
+  it('is null for a spec the engine can grade', () => {
+    expect(problem({})).toBeNull();
+    expect(problem({ role: 'outcome', levels: null })).toBeNull();
+  });
+
+  it('names each case the database does not stop, in the words the engine throws', () => {
+    expect(problem({ period: { kind: 'deadline', due: '2026-12-18' } })).toMatch(/habit repeats/);
+    expect(problem({ measure: 'checklist' })).toMatch(/needs its steps/);
+    expect(problem({ measure: 'checklist', stepIds: [] })).toMatch(/needs its steps/);
+    expect(problem({ period: { kind: 'day_slots', days: [] } })).toMatch(/at least one day/);
+    expect(problem({ levels: null })).toMatch(/needs a floor/);
+    expect(problem({ carryOver: 'cumulative' })).toMatch(/deadline period/);
+  });
+
+  it('agrees with what evaluating the same spec throws', () => {
+    for (const specOver of [{ levels: null }, { measure: 'checklist' as const }, { carryOver: 'cumulative' as const }]) {
+      const found = problem(specOver);
+      expect(found).not.toBeNull();
+      expect(() => evaluate(target({}, specOver), '2026-10-12', '2026-10-14')).toThrow(found as string);
+    }
+  });
 });
 
 describe('carry-over by kind', () => {

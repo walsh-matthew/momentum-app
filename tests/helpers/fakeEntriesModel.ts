@@ -27,7 +27,8 @@ type TableName =
   | 'work_item_steps'
   | 'sources'
   | 'entries'
-  | 'entry_corrections';
+  | 'entry_corrections'
+  | 'period_snapshots';
 
 // What the authenticated role may do on each table (migration 013, section 7).
 const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'delete'>> = {
@@ -39,6 +40,7 @@ const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'de
   sources: new Set(['select', 'insert', 'update', 'delete']),
   entries: new Set(['select', 'insert']),
   entry_corrections: new Set(['select', 'insert', 'update', 'delete']),
+  period_snapshots: new Set(['select']),
 };
 
 export const ENFORCED_CONSTRAINTS = [
@@ -70,6 +72,7 @@ export const gm = {
     sources: [] as Row[],
     entries: [] as Row[],
     entry_corrections: [] as Row[],
+    period_snapshots: [] as Row[],
   } satisfies Record<TableName, Row[]>,
   user: null as { id: string } | null,
   rls: true,
@@ -77,6 +80,8 @@ export const gm = {
   writes: [] as Array<{ table: TableName; op: 'insert' | 'update' | 'delete' }>,
   // When set, the next write to this table (any op) fails with this message, like a database error that quotes the row.
   failNextWrite: null as { table: TableName; message: string } | null,
+  // When set, the next read of this table fails, like a database that cannot be reached.
+  failNextRead: null as { table: TableName; message: string } | null,
   clock: 0,
 };
 
@@ -86,6 +91,7 @@ export function resetGoalModel(user: { id: string } | null = null): void {
   gm.rls = true;
   gm.writes = [];
   gm.failNextWrite = null;
+  gm.failNextRead = null;
   gm.clock = 0;
 }
 
@@ -244,6 +250,7 @@ class Query implements PromiseLike<Result> {
   private filters: Array<(r: Row) => boolean> = [];
   private orders: Array<{ column: string; ascending: boolean }> = [];
   private max: number | null = null;
+  private offset = 0;
   private mode: 'many' | 'maybe' | 'one' = 'many';
   private payload: Row | Row[] | null = null;
   private returning = false;
@@ -286,6 +293,12 @@ class Query implements PromiseLike<Result> {
   }
   limit(count: number) {
     this.max = count;
+    return this;
+  }
+  // Rows from..to, both inclusive, like the API's range header.
+  range(from: number, to: number) {
+    this.offset = from;
+    this.max = to - from + 1;
     return this;
   }
   maybeSingle() {
@@ -337,6 +350,11 @@ class Query implements PromiseLike<Result> {
     if (!GRANTS[this.table].has(this.op)) return failure('42501', `permission denied for table ${this.table}`);
 
     if (this.op === 'select') {
+      if (gm.failNextRead?.table === this.table) {
+        const { message } = gm.failNextRead;
+        gm.failNextRead = null;
+        return failure('XX000', message);
+      }
       const rows = this.matched();
       for (const { column, ascending } of [...this.orders].reverse()) {
         rows.sort((a, b) => {
@@ -345,7 +363,7 @@ class Query implements PromiseLike<Result> {
           return (x < y ? -1 : x > y ? 1 : 0) * (ascending ? 1 : -1);
         });
       }
-      return this.shape(this.max === null ? rows : rows.slice(0, this.max));
+      return this.shape(rows.slice(this.offset, this.max === null ? undefined : this.offset + this.max));
     }
 
     if (gm.failNextWrite?.table === this.table) {
