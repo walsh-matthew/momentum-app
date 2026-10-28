@@ -226,7 +226,7 @@ describe('the timer', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Stop timer/ }));
     expect((await screen.findByRole('alert')).textContent).toContain('under 30 seconds');
-    expect(screen.getByRole('button', { name: /Stop timer/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Stop timer/ })).toBeTruthy();
     expect(window.localStorage.getItem('momentum:timer:t-3')).toBe(started);
   });
 
@@ -460,7 +460,7 @@ describe('logging on a chosen day', () => {
     await waitFor(() => expect(actions.tap).toHaveBeenCalledWith('t-1', '2026-10-26'));
     expect(await screen.findByRole('button', { name: /When: Today/ })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Log one: Workouts/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Log one: Workouts/ }));
     await waitFor(() => expect(actions.tap).toHaveBeenCalledTimes(2));
     expect(actions.tap).toHaveBeenLastCalledWith('t-1');
   });
