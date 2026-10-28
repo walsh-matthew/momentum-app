@@ -14,6 +14,31 @@ export interface Leaf {
   value: number | string | boolean | number[];
 }
 
+// The forms a provenance path takes, written out for the setup prompt (MOM-128): the model must name each value it records
+// in `said` by exactly these paths, and nothing else tells it how. <goalKey>, <targetKey> and <itemKey> are the "key" the
+// model gave that goal, target or work item; <name> is a day type's name in lowercase. tests/setup-prompt-schema.test.ts
+// checks that every path provenanceLeaves() produces matches one of them, so adding a leaf below without adding its form
+// here fails a test.
+export const PROVENANCE_PATH_FORMS: readonly string[] = [
+  'person.dayEnd',
+  'person.weekStart',
+  'person.planning.weekday',
+  'person.planning.time',
+  'person.dayTypes.<name>.capacityAmount',
+  'goals.<goalKey>.startDate',
+  'goals.<goalKey>.endDate',
+  'goals.<goalKey>.blockWeeks',
+  'goals.<goalKey>.returnDate',
+  'goals.<goalKey>.targets.<targetKey>.floor',
+  'goals.<goalKey>.targets.<targetKey>.aspiration',
+  'goals.<goalKey>.targets.<targetKey>.qualifyingThreshold',
+  'goals.<goalKey>.targets.<targetKey>.dueDate',
+  'goals.<goalKey>.targets.<targetKey>.slotWeekdays',
+  'goals.<goalKey>.items.<itemKey>.dueDate',
+  'goals.<goalKey>.items.<itemKey>.dateCanMove',
+  'goals.<goalKey>.items.<itemKey>.estimateMinutes',
+];
+
 // Every value in the model that must have come from the person: numbers, dates, clock times, weekdays and yes/no
 // answers. Null values are not leaves: nothing was assumed.
 export function provenanceLeaves(model: SetupModel): Leaf[] {

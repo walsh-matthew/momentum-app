@@ -3,7 +3,17 @@
 // prompt cannot drift from the rules it is checked against. Fixed text, so the request prefix never changes between turns.
 // Pure: no model call here (that is lib/ai/setup.ts).
 
+import { AssistantTurnSchema, SetupDraftSchema } from '@/types/setup';
+import { PROVENANCE_PATH_FORMS } from './leaves';
+import { renderSchema } from './schemaText';
 import { HARD_RULES, SETUP_STEPS } from './steps';
+
+// The exact shape of a reply and of the draft inside it, written from the same zod schemas the validator uses
+// (lib/setup/schemaText.ts), so the prompt cannot name a field the validator does not know or leave one out. The first
+// live run showed why this is needed: with prose alone the model made up its own field names for a goal.
+export const REPLY_SHAPE_TEXT = renderSchema(AssistantTurnSchema, { draft: 'Draft' });
+export const DRAFT_SHAPE_TEXT = renderSchema(SetupDraftSchema);
+const pathFormsText = PROVENANCE_PATH_FORMS.map((f) => `- ${f}`).join('\n');
 
 const stepsText = SETUP_STEPS.map((s) => `${s.n}. ${s.title}. ${s.summary}`).join('\n');
 const rulesText = HARD_RULES.map((r) => `${r.n}. ${r.text}`).join('\n');
@@ -25,6 +35,16 @@ How you reply. Every reply is one JSON object and nothing else, with exactly the
 - "topic": what the question is about, or null.
 - "options": the starting ideas or interpretations, without numbers; otherwise [].
 - "draft": the whole draft after this turn, as {"model", "said", "approved"}.
+
+The exact shape of your reply. It is one JSON object with exactly the keys below. Every key is required: write null (or an empty list) for what the person has not answered, never leave a key out, and never add a key of your own. A value written in quotes is one of the only values allowed there.
+
+Reply = ${REPLY_SHAPE_TEXT}
+
+Draft = ${DRAFT_SHAPE_TEXT}
+
+Each entry of "said" names the value it explains by one of these paths:
+${pathFormsText}
+<goalKey>, <targetKey> and <itemKey> are the "key" you gave that goal, target or work item, and <name> is a day type's name in lowercase. Only the values these paths name need an entry.
 
 The draft. "model" holds the person's facts (time zone, day end, week start, day types, protected priorities, planning moment), their settings, and their goals with targets and work items. Leave a field null until the person has answered it; never fill one in for them. Every number, date, clock time, weekday and yes/no answer you write in the model needs an entry in "said": {"path", "turn", "how"}, where "turn" is the position in the conversation of the person's message that holds it. Use how "said" when the message contains the value, and "accepted" when the message accepts a suggestion you showed in an "ideas" or "proposal" turn that contained it. Whether a deadline task's date can move is the person's answer to its own question, asked in its own turn after the date. A deadline is always an exact date they gave: never work a date out from words like "the week before". Only record a change when the person's newest message made it, and when a part changes after approval, take it out of "approved" so it is played back again. Add a part to "approved" only after its playback and the person's yes.
 

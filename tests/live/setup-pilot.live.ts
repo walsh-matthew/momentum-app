@@ -7,7 +7,8 @@
 //    which points at production) and refuses unless that address is 127.0.0.1 or localhost. The only thing it reads from
 //    .env.local is ANTHROPIC_API_KEY. See lib/ai/setupLive.ts, and tests/setup-live.test.ts for the proof.
 // 2. Makes one throwaway account on the local stack, runs the case, and deletes the account (and its usage rows) at the end.
-// 3. Stops by itself if the estimated cost passes MAX_COST_USD, or at the setup budget's turn and token limits.
+// 3. Stops by itself if the estimated cost passes MAX_COST_USD, or at the setup budget's turn and token limits. A reply
+//    that is not a valid turn is asked for again up to twice; every such reply is counted in the report.
 // 4. Prints a report (turns, tokens, estimated cost, rule violations, final validation) and writes it to a file in the
 //    system temp folder. The report goes in the Jira comment; it is not committed.
 
@@ -29,7 +30,7 @@ import {
 } from '@/lib/ai/setupLive';
 import { SETUP_BUDGET, runSetupTurn } from '@/lib/services/llm';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import type { AssistantTurn } from '@/types/setup';
+import { AssistantTurnSchema, type AssistantTurn } from '@/types/setup';
 import { SETUP_CASES } from '../setup-evals/cases';
 
 // run-h is the longest full case (22 scripted turns, about the 20 to 25 a real setup takes) and the one that sets a goal
@@ -61,42 +62,72 @@ describe('live setup pilot', () => {
     const userId = created.data.user.id;
 
     const person = topicKeyedReplies(c.script.map((t) => t.topic), c.person);
-    const perCall: Array<{ call: number; kind: string; topic: string | null; ok: boolean; input: number; output: number }> = [];
+    const perCall: Array<{
+      call: number;
+      turn: number;
+      attempt: number;
+      kind: string;
+      topic: string | null;
+      ok: boolean;
+      schemaValid: boolean | null;
+      input: number;
+      output: number;
+    }> = [];
     let spentTokens = 0;
     let inputTokens = 0;
     let outputTokens = 0;
     let stoppedBy: string | null = null;
     const started = Date.now();
 
+    // A reply that is not a valid turn is asked for again, up to this many times, as a real setup service would (nothing a
+    // person said is lost; DOMAIN_MODEL §2.3). Every attempt is a real call and is counted and logged.
+    const MAX_SCHEMA_RETRIES = 2;
+    const schemaFailures: Array<{ turn: number; attempt: number; problems: string[] }> = [];
+
     const model: SetupModelFn = async ({ transcript, draft }) => {
-      const result = await runSetupTurn({ userId, transcript, draft, spentTokens });
-      if (result.kind !== 'answered') {
-        stoppedBy = result.kind === 'quick_path' ? `quick path (${result.reason})` : 'wait';
-        // Not a turn, so the runner records it as malformed and ends the case.
-        return { stoppedBy } as unknown as AssistantTurn;
+      for (let attempt = 0; ; attempt++) {
+        const result = await runSetupTurn({ userId, transcript, draft, spentTokens });
+        if (result.kind !== 'answered') {
+          stoppedBy = result.kind === 'quick_path' ? `quick path (${result.reason})` : 'wait';
+          // Not a turn, so the runner records it as malformed and ends the case.
+          return { stoppedBy } as unknown as AssistantTurn;
+        }
+        spentTokens = result.spentTokens;
+        const usage = result.result.usage ?? null;
+        inputTokens += usage?.inputTokens ?? 0;
+        outputTokens += usage?.outputTokens ?? 0;
+        const parsed = result.result.ok ? AssistantTurnSchema.safeParse(result.result.raw) : null;
+        const raw = result.result.ok ? (result.result.raw as { kind?: string; topic?: string | null }) : null;
+        perCall.push({
+          call: perCall.length + 1,
+          turn: result.turns,
+          attempt,
+          kind: raw?.kind ?? `failed:${result.result.ok ? '' : result.result.reason}`,
+          topic: raw?.topic ?? null,
+          ok: result.result.ok,
+          schemaValid: parsed ? parsed.success : null,
+          input: usage?.inputTokens ?? 0,
+          output: usage?.outputTokens ?? 0,
+        });
+        if ((estimateCostUsd(SETUP_MODEL, inputTokens, outputTokens) ?? Infinity) > MAX_COST_USD) {
+          stoppedBy = `stop-loss: estimated cost passed $${MAX_COST_USD}`;
+          return { stoppedBy } as unknown as AssistantTurn;
+        }
+        if (!result.result.ok) {
+          stoppedBy = `model call failed: ${result.result.reason}`;
+          return { stoppedBy } as unknown as AssistantTurn;
+        }
+        if (parsed && !parsed.success) {
+          // Field names and rules only: the messages name keys and expected types, never what the person said.
+          schemaFailures.push({
+            turn: result.turns,
+            attempt,
+            problems: parsed.error.issues.slice(0, 6).map((i) => `${i.path.join('.')}: ${i.message}`),
+          });
+          if (attempt < MAX_SCHEMA_RETRIES) continue;
+        }
+        return result.result.raw as AssistantTurn;
       }
-      spentTokens = result.spentTokens;
-      const usage = result.result.usage ?? null;
-      inputTokens += usage?.inputTokens ?? 0;
-      outputTokens += usage?.outputTokens ?? 0;
-      const raw = result.result.ok ? (result.result.raw as { kind?: string; topic?: string | null }) : null;
-      perCall.push({
-        call: result.turns,
-        kind: raw?.kind ?? `failed:${result.result.ok ? '' : result.result.reason}`,
-        topic: raw?.topic ?? null,
-        ok: result.result.ok,
-        input: usage?.inputTokens ?? 0,
-        output: usage?.outputTokens ?? 0,
-      });
-      if ((estimateCostUsd(SETUP_MODEL, inputTokens, outputTokens) ?? Infinity) > MAX_COST_USD) {
-        stoppedBy = `stop-loss: estimated cost passed $${MAX_COST_USD}`;
-        return { stoppedBy } as unknown as AssistantTurn;
-      }
-      if (!result.result.ok) {
-        stoppedBy = `model call failed: ${result.result.reason}`;
-        return { stoppedBy } as unknown as AssistantTurn;
-      }
-      return result.result.raw as AssistantTurn;
     };
 
     let report: EvalReport;
@@ -116,12 +147,29 @@ describe('live setup pilot', () => {
       model: SETUP_MODEL,
       supabase: 'local',
       calls: perCall.length,
+      turnsReached: Math.max(0, ...perCall.map((c) => c.turn)),
+      repliesFailingTheSchema: schemaFailures.length,
+      schemaFailures,
       finished: report.finished,
       stoppedBy,
       malformed: report.malformed,
       ranOutOfPerson: report.ranOutOfPerson,
       finalValidationIssues: report.finalIssues?.map((i) => `${i.path}: ${i.message}`) ?? null,
       ruleViolations: violationsOf(report),
+      // The same violation repeated on every later turn (the draft is returned whole each time) is listed once, with the
+      // first turn it appeared on and how many turns carried it.
+      violationDetails: [
+        ...report.turns
+          .flatMap((t) => t.violations.map((v) => ({ turn: t.index, rule: v.rule, message: v.message })))
+          .reduce((m, v) => {
+            const key = `${v.rule}|${v.message}`;
+            const seen = m.get(key);
+            if (seen) seen.turns += 1;
+            else m.set(key, { ...v, turns: 1 });
+            return m;
+          }, new Map<string, { turn: number; rule: string; message: string; turns: number }>())
+          .values(),
+      ],
       tokens: { input: inputTokens, output: outputTokens, total: inputTokens + outputTokens },
       estimatedCostUsd: cost === null ? null : Number(cost.toFixed(3)),
       budget: SETUP_BUDGET,

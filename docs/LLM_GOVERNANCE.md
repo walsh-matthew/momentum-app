@@ -120,7 +120,7 @@ Why setup has its own limits: a real setup is one conversation of about 20 to 25
 
 **Who carries the budget.** The conversation, not the server: a setup is stored nowhere until the person approves it, so the budget is carried by the client. A modified client could reset it. That is acceptable because the budget is a cost and fairness control for honest testers; the hard shared cap is the real backstop and cannot be reset from the client. If setups ever need a server-side budget, they need a setup id on the usage log (a migration).
 
-**What is sent each turn** (cost, and the privacy notice): the fixed setup prompt, the person's messages, Claude's earlier turns *without their drafts* (each is replaced by a short note) and the current draft once, at the end of the newest message. Before MOM-128 every earlier turn carried its whole draft, so the request grew with the square of the number of turns. Nothing else is sent: no other goals, tasks, ids or email.
+**What is sent each turn** (cost, and the privacy notice): the fixed setup prompt (which includes the exact shape of a reply and of the draft, written from the zod schemas in `types/setup.ts` by `lib/setup/schemaText.ts`, so it cannot drift from the validator; about 5,000 tokens in all), the person's messages, Claude's earlier turns *without their drafts* (each is replaced by a short note) and the current draft once, at the end of the newest message. Before MOM-128 every earlier turn carried its whole draft, so the request grew with the square of the number of turns. Nothing else is sent: no other goals, tasks, ids or email.
 
 **The shared cap and the old features.** Every row counts toward a person's daily count whatever its feature, so a person who has done a 25-turn setup has also used up that day's 20 rebalance and week 1 plan calls. Left as it is on purpose: those two features are retired by MOM-115. Noted in `BACKLOG.md`.
 
@@ -153,7 +153,7 @@ From the Claude API price table cached 2026-10-06 (check it is current): `claude
 
 ### Running the live eval (owner's OK first)
 
-`npm run eval:setup:pilot` runs one full scripted case against the real model through `runSetupTurn()`, which makes real, paid calls. It is not part of `npm test` or CI. It will not run unless the Supabase address it uses is `127.0.0.1` or `localhost`: it ignores every Supabase value in `.env.local` (which points at production), takes the local stack's own address and keys from `npx supabase start`, and reads only the Anthropic key from `.env.local`. It stops by itself past an estimated $6. `tests/setup-live.test.ts` proves the refusal.
+`npm run eval:setup:pilot` runs one full scripted case against the real model through `runSetupTurn()`, which makes real, paid calls. It is not part of `npm test` or CI. It will not run unless the Supabase address it uses is `127.0.0.1` or `localhost`: it ignores every Supabase value in `.env.local` (which points at production), takes the local stack's own address and keys from `npx supabase start`, and reads only the Anthropic key from `.env.local`. It stops by itself past an estimated $6, and a reply that is not a valid turn is asked for again up to twice, with every such reply counted in the report. `tests/setup-live.test.ts` proves the refusal.
 
 ## Changing a limit
 
