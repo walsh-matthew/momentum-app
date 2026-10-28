@@ -63,6 +63,9 @@ import type {
 // The columns the service reads, no more.
 export type SettingsRead = Pick<PersonSettingsRow, 'time_zone' | 'week_start' | 'day_end' | 'tone' | 'celebrations'>;
 export type GoalRead = Pick<GoalRow, 'id' | 'title' | 'state' | 'shape' | 'start_date' | 'end_date' | 'created_at'>;
+// Only a parked goal may lack a shape or a start (migration 014), so an active goal on home always has both.
+export type ActiveGoalRead = GoalRead & { shape: NonNullable<GoalRead['shape']>; start_date: string };
+const isActiveGoal = (g: GoalRead): g is ActiveGoalRead => g.state === 'active' && g.shape !== null && g.start_date !== null;
 export type TargetRead = Pick<
   TargetRow,
   | 'id'
@@ -157,7 +160,7 @@ export function toSpec(t: TargetRead, stepIds: string[]): TargetSpec {
 // A target counts from its goal's start date: the tables store no start of their own for a target. That is right while
 // every target is made at first setup; a target added later must store its own start or it would be graded on weeks it
 // did not exist (BACKLOG.md, MOM-112). blockEndsOn is the goal's stored end date, never computed here.
-export function toScoreboardTarget(t: TargetRead, goal: GoalRead, stepIds: string[]): ScoreboardTarget {
+export function toScoreboardTarget(t: TargetRead, goal: ActiveGoalRead, stepIds: string[]): ScoreboardTarget {
   return {
     id: t.id,
     startsOn: goal.start_date,
@@ -238,7 +241,7 @@ const PATTERN_ORDER = ['slipping', 'aspiration_repeated', 'holding'] as const;
 export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboard {
   const anchors = toAnchors(rows.settings);
 
-  const goals = rows.goals.filter((g) => g.state === 'active' && g.start_date).sort(byCreated);
+  const goals = rows.goals.filter(isActiveGoal).sort(byCreated);
   if (goals.length === 0) return { state: 'no_goals' };
   const goalById = new Map(goals.map((g) => [g.id, g]));
 
@@ -267,7 +270,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
   for (const t of targets) {
     const stepIds = stepIdsOfTarget(t.id);
     stepIdsByTarget.set(t.id, stepIds);
-    const target = toScoreboardTarget(t, goalById.get(t.goal_id) as GoalRead, stepIds);
+    const target = toScoreboardTarget(t, goalById.get(t.goal_id) as ActiveGoalRead, stepIds);
     const spec = target.versions[0].spec;
     const grade = canGrade(anchors, spec.period.kind);
     if (!grade.ok) waiting.set(t.id, 'needs_week_start');
@@ -304,7 +307,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
     return {
       id: item.id,
       goalId: item.goal_id,
-      goalTitle: (goalById.get(item.goal_id) as GoalRead).title,
+      goalTitle: (goalById.get(item.goal_id) as ActiveGoalRead).title,
       title: item.title,
       kind: item.kind as MilestoneView['kind'],
       dueOn: item.due_date ?? (feeding?.period_kind === 'deadline' ? feeding.due_date : null),
@@ -334,7 +337,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
     if (wait) return { ...base, status: wait };
     const result = scoreboard.results.find((r) => r.targetId === t.id);
     // A target that starts after today has no result yet; it is not shown as graded or as a miss.
-    if (!result) return { ...base, status: 'not_started', startsOn: (goalById.get(t.goal_id) as GoalRead).start_date };
+    if (!result) return { ...base, status: 'not_started', startsOn: (goalById.get(t.goal_id) as ActiveGoalRead).start_date };
 
     const pattern: PatternView | null = result.graded
       ? (() => {

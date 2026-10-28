@@ -1,7 +1,7 @@
 // Limits, caps and usage logging for every Claude call (MOM-73, docs/LLM_GOVERNANCE.md). Server-side only.
 //
-// Both places the app calls Claude (the rebalance proposal and the wizard's week 1 plan) go through
-// runWithinBudget(). It does three things around the call:
+// Every place the app calls Claude (the rebalance proposal, the wizard's week 1 plan and, since MOM-128, a turn of guided
+// setup through runSetupTurn() below) goes through runWithinBudget(). It does three things around the call:
 //   1. BEFORE: reserve_llm_call() (migration 011) checks three limits in the database and, if they pass, inserts a
 //      'pending' usage row in the same transaction. The limits are therefore the same for every serverless instance
 //      and survive a cold start. If one trips, the model is NOT called and the result says which one and when the
@@ -25,8 +25,10 @@ import 'server-only';
 import { z } from 'zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { requestSetupTurnFromModel, SETUP_MODEL, type ModelSetupDeps, type ModelSetupResult } from '@/lib/ai/setup';
 import type { ModelUsage } from '@/lib/ai/usage';
 import type { LlmFeature, LlmOutcome, Tables } from '@/types/database.types';
+import type { SetupDraft, Transcript } from '@/types/setup';
 import type { ServiceResult } from './result';
 
 // The limits. Placeholders to be tuned once real usage has been measured (docs/LLM_GOVERNANCE.md): they are a ceiling
@@ -163,6 +165,149 @@ async function finish(
     .eq('id', logId)
     .eq('user_id', userId);
   if (error) console.error('[llm] could not record usage', { code: error.code ?? 'none' });
+}
+
+// ---------------------------------------------------------------------------
+// Guided setup (MOM-128, design record §6.2)
+// ---------------------------------------------------------------------------
+//
+// A setup is one conversation from its first turn to the person's save or their walking away: about 20 to 25 Claude calls,
+// each a turn, close together. The per-call limits above (20 calls a day, 20 seconds apart) would stop a real setup
+// partway, so setup has its own, and the old model keeps LLM_LIMITS untouched.
+//
+// Three rules, each in one place below:
+// 1. Per-person limits are LOG-ONLY during the family trial. They are set so high that reserve_llm_call() never refuses on
+//    them; every setup call still lands in llm_usage_logs as 'setup', and that table is the log that shows where
+//    production limits belong (docs/LLM_GOVERNANCE.md has the query). The row it writes is the same as any other call's.
+// 2. One hard shared cap stays on: everyone's calls together, across all features. It protects spend if sign-up is abused.
+// 3. A per-setup BUDGET in turns and tokens. When a setup has used it, the call is not made and nothing is reserved: setup
+//    falls back to the quick path. These numbers are placeholders until live eval runs set them (90th percentile plus a
+//    margin the owner approves); they are not measurements.
+//
+// The budget is carried by the caller: the turn count is read from the transcript it passes, and the tokens spent so far
+// come back from each call for the caller to hand in again. Nothing stores a setup, so a modified client could reset its
+// own budget. That is acceptable here because the budget is a fairness and cost control for honest testers; the hard
+// shared cap is the backstop that cannot be reset from the client (BACKLOG, MOM-128).
+
+export const SETUP_LIMITS: LlmLimits = {
+  // The function's own minimum. Spacing is log-only; this only stops two requests landing in the same second.
+  minIntervalSeconds: 1,
+  // Log-only: far beyond any real setup, still a whole number the database accepts.
+  userDailyCap: 1_000_000,
+  // The one hard cap, the same shared number as every other feature.
+  overallDailyCap: LLM_LIMITS.overallDailyCap,
+};
+
+export interface SetupBudget {
+  // Claude replies in one setup.
+  maxTurns: number;
+  // Input plus output tokens, summed over every call in one setup.
+  maxTokens: number;
+}
+
+// STARTING numbers (MOM-128). Replace them with the 90th percentile of the live eval runs plus the approved margin.
+export const SETUP_BUDGET: SetupBudget = { maxTurns: 40, maxTokens: 1_000_000 };
+
+export type SetupOverBudget = 'turns' | 'tokens';
+
+// Is there room for one more call? `tokens` comes from the caller, so a value that is not a whole, non-negative number is
+// treated as used up: the budget fails closed.
+export function setupBudgetStatus(
+  spend: { turns: number; tokens: number },
+  budget: SetupBudget = SETUP_BUDGET,
+): { ok: true } | { ok: false; over: SetupOverBudget } {
+  if (!Number.isSafeInteger(spend.tokens) || spend.tokens < 0 || spend.tokens >= budget.maxTokens) return { ok: false, over: 'tokens' };
+  if (!Number.isSafeInteger(spend.turns) || spend.turns < 0 || spend.turns >= budget.maxTurns) return { ok: false, over: 'turns' };
+  return { ok: true };
+}
+
+// Why setup stopped using Claude and offered the quick path instead.
+export type SetupQuickPathReason = 'over_turns' | 'over_tokens' | 'shared_cap' | 'person_cap' | 'unchecked';
+
+// What the person is offered: what they have said so far (played back by code from the validated draft), then the quick
+// path, which is sensible defaults they can see and change. Nothing is saved until they approve (DOMAIN_MODEL §2.3).
+const QUICK_PATH_OFFER =
+  'Here is what you have told me so far. You can check it and finish with the quick path: sensible defaults you can change later. Nothing is saved until you approve it.';
+
+export const SETUP_QUICK_PATH_MESSAGES: Record<SetupQuickPathReason, string> = {
+  over_turns: `This setup has used its share of Claude's time. ${QUICK_PATH_OFFER}`,
+  over_tokens: `This setup has used its share of Claude's time. ${QUICK_PATH_OFFER}`,
+  shared_cap: `Claude is at its shared limit for everyone right now. ${QUICK_PATH_OFFER}`,
+  // Unreachable while per-person limits are log-only, but it must say something true if the sentinel is ever reached.
+  person_cap: `Claude cannot take more requests from you right now. ${QUICK_PATH_OFFER}`,
+  unchecked: `Claude's usage limits could not be checked, so setup cannot go on with Claude. ${QUICK_PATH_OFFER}`,
+};
+
+export type SetupTurnResult =
+  // Claude was asked. `result` may still be a failure (refused, unavailable, bad output): the caller decides what to show.
+  // `turns` and `spentTokens` are what the caller hands back on the next call.
+  | { kind: 'answered'; result: ModelSetupResult; turns: number; spentTokens: number }
+  // The call was not made. The screen shows `message`, the playback of the draft so far, and the quick path.
+  | { kind: 'quick_path'; reason: SetupQuickPathReason; message: string }
+  // Two requests within a second of each other. Not a reason to leave the conversation: ask again.
+  | { kind: 'wait'; retryAfterSeconds: number; message: string };
+
+export interface RunSetupTurnArgs {
+  // From the verified session. Never from a request.
+  userId: string;
+  transcript: Transcript;
+  draft: SetupDraft;
+  // Input plus output tokens used by this setup's earlier calls; 0 for the first.
+  spentTokens: number;
+  // The smaller-model trial runs the same path on another model.
+  model?: string;
+  // Tests and the eval runner only. The app uses the constants above.
+  budget?: SetupBudget;
+  limits?: LlmLimits;
+}
+
+export interface RunSetupTurnDeps extends BudgetDeps {
+  modelDeps?: ModelSetupDeps;
+  // Swappable in tests so no network call is made.
+  requestTurn?: typeof requestSetupTurnFromModel;
+}
+
+const quickPath = (reason: SetupQuickPathReason): SetupTurnResult => ({
+  kind: 'quick_path',
+  reason,
+  message: SETUP_QUICK_PATH_MESSAGES[reason],
+});
+
+// One turn of guided setup, the only way the app asks Claude for one: the budget check, then the reservation under
+// 'setup' with the setup limits, then the call, then the record. Everything that makes it stop is a value, not a throw.
+export async function runSetupTurn(args: RunSetupTurnArgs, deps: RunSetupTurnDeps = {}): Promise<SetupTurnResult> {
+  const turns = args.transcript.filter((m) => m.role === 'assistant').length;
+  const room = setupBudgetStatus({ turns, tokens: args.spentTokens }, args.budget);
+  if (!room.ok) return quickPath(room.over === 'turns' ? 'over_turns' : 'over_tokens');
+
+  const model = args.model ?? SETUP_MODEL;
+  const requestTurn = deps.requestTurn ?? requestSetupTurnFromModel;
+  const budgeted = await runWithinBudget(
+    {
+      userId: args.userId,
+      feature: 'setup',
+      model,
+      limits: args.limits ?? SETUP_LIMITS,
+      call: () => requestTurn({ transcript: args.transcript, draft: args.draft }, { ...deps.modelDeps, model }),
+      report: reportModelResult,
+    },
+    deps,
+  );
+
+  switch (budgeted.kind) {
+    case 'unchecked':
+      return quickPath('unchecked');
+    case 'limited':
+      if (budgeted.limit === 'too_soon') {
+        return { kind: 'wait', retryAfterSeconds: budgeted.retryAfterSeconds, message: TOO_SOON_MESSAGE };
+      }
+      return quickPath(budgeted.limit === 'overall_daily' ? 'shared_cap' : 'person_cap');
+    case 'answered': {
+      const usage = budgeted.result.usage ?? null;
+      const used = usage ? usage.inputTokens + usage.outputTokens : 0;
+      return { kind: 'answered', result: budgeted.result, turns: turns + 1, spentTokens: args.spentTokens + used };
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
