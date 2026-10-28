@@ -52,6 +52,8 @@ export function localStackEnvFrom(status: Record<string, string>): LocalStackEnv
       // Pinned empty, not left unset: see the comment above.
       ANTHROPIC_API_KEY: '',
       HEVY_API_KEY: '',
+      // Hevy answers from a canned stand-in (lib/services/hevySyncDeps.ts, MOM-129); it still needs a local Supabase URL and a non-production NODE_ENV.
+      E2E_FAKE_HEVY: '1',
       GOOGLE_CLIENT_ID: '',
       GOOGLE_CLIENT_SECRET: '',
       // No CAPTCHA widget: the local Auth server has CAPTCHA off, so a site key from .env.local would break sign-in (MOM-64).

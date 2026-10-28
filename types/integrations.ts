@@ -228,3 +228,37 @@ export interface SyncedEntrySummary {
   failed: number;
   results: SyncedEntryResult[];
 }
+
+// ---------------------------------------------------------------------------
+// "Sync now" (lib/integrations/hevySyncView.ts, MOM-129)
+// ---------------------------------------------------------------------------
+// What the Hevy card is told after a sync, in plain words. The card never sees the raw results, a key, or anything
+// the provider wrote.
+//   done            entries were added or updated
+//   nothing_new     Hevy was read and every entry already matched (or Hevy had no workouts)
+//   no_target       no target uses Hevy, so nothing was counted
+//   nothing_counted workouts were read but none counted for the targets bound (a unit or measure a workout cannot fill)
+//   sync_off        the person has paused syncing
+//   failed_fixable  the key was refused or the answer could not be used: the person has to act
+//   failed_retry    Hevy did not answer in time (or asked us to slow down): nothing changed, try again
+//   busy            this person already has a sync running
+//   error           something else went wrong; the message says what
+export const HEVY_SYNC_KINDS = [
+  'done',
+  'nothing_new',
+  'no_target',
+  'nothing_counted',
+  'sync_off',
+  'failed_fixable',
+  'failed_retry',
+  'busy',
+  'error',
+] as const;
+export type HevySyncKind = (typeof HEVY_SYNC_KINDS)[number];
+
+export interface HevySyncView {
+  kind: HevySyncKind;
+  message: string;
+  added: number;
+  updated: number;
+}
