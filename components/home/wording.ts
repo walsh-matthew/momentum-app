@@ -139,8 +139,10 @@ export function trendText(trend: TrendView): string | null {
   return `Last ${trend.counts.length} ${trend.counts.length === 1 ? 'week' : 'weeks'}: ${trend.counts.join(', ')}${direction ? ` (${direction})` : ''}.`;
 }
 
-export function slotsText(slots: { filled: number; total: number; weekdays: number[] }): string {
-  return `${slots.filled} of ${slots.total} days filled (${slots.weekdays.map(weekdayName).join(', ')})`;
+// The days the person named, on their own: the engine says how many slots are filled, not which, so these are never
+// shown as if they were the filled ones.
+export function slotDaysText(slots: { weekdays: number[] }): string {
+  return `Named days: ${slots.weekdays.map(weekdayName).join(', ')}`;
 }
 
 export function stepsText(m: Pick<MilestoneView, 'stepsDone' | 'steps'>): string {

@@ -614,6 +614,24 @@ describe('how Momentum talks: the person’s stored choice, or the code’s star
     const view = ready(buildHomeScoreboard(worked(), NOW));
     expect([view.tone, view.celebration]).toEqual([DEFAULT_TONE, DEFAULT_CELEBRATION]);
   });
+
+  // The literal values, from DOMAIN_MODEL §4.1: a null setting means not chosen yet, and the default there is low-key
+  // celebrations and a middle tone. Written out so a change to the defaults file cannot quietly change what they mean.
+  it('a null celebrations setting is low-key and a null tone is middle (§4.1)', () => {
+    const view = ready(buildHomeScoreboard(worked({ settings: { ...SETTINGS, tone: null, celebrations: null } }), NOW));
+    expect(view.celebration).toBe('low_key');
+    expect(view.tone).toBe('middle');
+  });
+
+  it('no settings row at all is the same, with the anchors asked for first', () => {
+    expect(buildHomeScoreboard(worked({ settings: null }), NOW).state).toBe('needs_day_anchors');
+  });
+
+  it('a chosen celebrations setting is never replaced by the default', () => {
+    for (const level of ['low_key', 'medium', 'big'] as const) {
+      expect(ready(buildHomeScoreboard(worked({ settings: { ...SETTINGS, celebrations: level } }), NOW)).celebration).toBe(level);
+    }
+  });
 });
 
 describe('goals and targets come in the order the database made them, not an order of importance', () => {

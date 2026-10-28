@@ -293,10 +293,12 @@ describe('the way to the next level lives on the target’s own card', () => {
 });
 
 describe('day slots', () => {
-  it('say how many of the named days are filled, and which days they named', () => {
+  it('say how many named days are filled, and list the named days apart, never as if they were the filled ones', () => {
     render(<TargetRow card={counted({ ...base, title: 'Mobility', period: 'day_slots', floor: 3, aspiration: null, counted: 2, level: 'partway', remainingToFloor: 1, remainingToAspiration: null, slots: { filled: 2, total: 3, weekdays: [1, 3, 5] } })} tone="middle" />);
     expect(screen.getByText('Partway · 1 to floor')).toBeTruthy();
-    expect(screen.getByText('2 of 3 days filled (Mon, Wed, Fri)')).toBeTruthy();
+    expect(screen.getByText('days filled').parentElement?.textContent).toBe('2 of 3days filled');
+    expect(screen.getByText('Named days: Mon, Wed, Fri')).toBeTruthy();
+    expect(screen.queryByText(/days filled \(/)).toBeNull();
   });
 });
 

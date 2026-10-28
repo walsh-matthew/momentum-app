@@ -1,6 +1,6 @@
 import type { Tone } from '@/types/database.types';
 import type { TargetCardView } from '@/types/home';
-import { formatNumber, levelChip, levelsText, patternLine, slotsText, toAspirationLine, trendText } from './wording';
+import { formatNumber, levelChip, levelsText, patternLine, slotDaysText, toAspirationLine, trendText } from './wording';
 
 interface TargetRowProps {
   card: TargetCardView;
@@ -64,7 +64,7 @@ export function TargetRow({ card, tone }: TargetRowProps) {
             {card.slots.filled} of {card.slots.total}
             <span>days filled</span>
           </p>
-          <p className="home-note">{slotsText(card.slots)}</p>
+          <p className="home-note">{slotDaysText(card.slots)}</p>
         </>
       ) : (
         <p className="home-count">
