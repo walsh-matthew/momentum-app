@@ -412,8 +412,12 @@ describe('saveApprovedSetup: parked goals and incomplete drafts', () => {
 // The payload and the SQL read the same keys
 // ---------------------------------------------------------------------------
 
-describe('the payload and migration 015 agree', () => {
-  const sql = readFileSync(join(process.cwd(), 'supabase', 'migrations', '015_save_guided_setup.sql'), 'utf8').replace(/--.*$/gm, '');
+describe('the payload and migrations 015 and 016 agree', () => {
+  // 016 redefines save_guided_setup (CREATE OR REPLACE) to also read "metric"; 015's own file is untouched, but the
+  // function it created is superseded, so both files together say what the deployed function actually reads.
+  const sql = ['015_save_guided_setup.sql', '016_quantity_metric.sql']
+    .map((f) => readFileSync(join(process.cwd(), 'supabase', 'migrations', f), 'utf8').replace(/--.*$/gm, ''))
+    .join('\n');
 
   // Every key of the payload at every level, from a setup that uses every column once.
   const rows: SetupRows = {
@@ -436,7 +440,7 @@ describe('the payload and migration 015 agree', () => {
     steps: [{ goalKey: 'g', itemKey: 'i', row: { title: 'S', sort_order: 0 } }],
     targetSources: [
       { goalKey: 'g', targetKey: 't', source: { kind: 'manual' } },
-      { goalKey: 'g', targetKey: 't', source: { kind: 'synced', provider: 'hevy' } },
+      { goalKey: 'g', targetKey: 't', source: { kind: 'synced', provider: 'hevy', metric: 'volume_lbs' } },
     ],
   };
 
@@ -471,9 +475,12 @@ describe('the payload and migration 015 agree', () => {
     expect([...sent].filter((k) => !read.has(k)).sort(), 'sent by the app but never read by the SQL').toEqual([]);
   });
 
-  it('names a synced source by its catalog name, and carries no user id', () => {
+  it('names a synced source by its catalog name, carries the bound metric, and carries no user id', () => {
     const payload = toSavePayload(rows);
-    expect(payload.goals[0].targets[0].sources).toEqual([{ kind: 'manual' }, { kind: 'synced', provider: 'hevy', label: 'Hevy' }]);
+    expect(payload.goals[0].targets[0].sources).toEqual([
+      { kind: 'manual' },
+      { kind: 'synced', provider: 'hevy', label: 'Hevy', metric: 'volume_lbs' },
+    ]);
     expect(JSON.stringify(payload)).not.toMatch(/user_id/);
   });
 });

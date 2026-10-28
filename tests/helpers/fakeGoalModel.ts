@@ -241,8 +241,8 @@ export function seedTarget(userId: string, over: Row = {}): Seeded {
   return row;
 }
 
-export function bind(userId: string, target: Seeded, source: Seeded): void {
-  gm.targetSources.push({ target_id: target.id, source_id: source.id, user_id: userId, created_at: stamp() });
+export function bind(userId: string, target: Seeded, source: Seeded, metric: string | null = null): void {
+  gm.targetSources.push({ target_id: target.id, source_id: source.id, user_id: userId, metric, created_at: stamp() });
 }
 
 export function seedEntry(over: Row & { user_id: string }): Seeded {

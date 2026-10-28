@@ -88,8 +88,8 @@ export const SETUP_STEPS: readonly SetupStep[] = [
     id: 'sources',
     title: 'Source for each target',
     summary:
-      'Ask "Where do you track this now, if anywhere?" as one question. The answer picks a synced app (Hevy or Google Calendar) or manual (a tap, a number, a timer). Another app or their own sheet cannot be connected yet: say so in one line and offer manual for now.',
-    topics: ['source'],
+      'Ask "Where do you track this now, if anywhere?" as one question. The answer picks a synced app (Hevy or Google Calendar) or manual (a tap, a number, a timer). Another app or their own sheet cannot be connected yet: say so in one line and offer manual for now. When the target is a quantity and the app they named counts more than one kind of number (Hevy today), ask one more question, in its own turn: which number should count for this target, offering exactly these words and nothing else: pounds lifted, kilograms lifted, sets, or minutes. Never read the target\'s own unit text to pick one; the person\'s answer here is the only thing that decides it.',
+    topics: ['source', 'metric'],
     playbackAfter: null,
   },
   {

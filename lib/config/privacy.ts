@@ -134,16 +134,91 @@ export const PROMPTS = {
     leavesOut: null,
     note: 'Anything you type there goes to Anthropic, so leave out anything you would not want them to receive.',
   },
+  // Guided setup (MOM-111 block 3): field by field, against what lib/ai/setup.ts's setupPromptFacts() really sends
+  // (tests/setup-prompt-fields.test.ts). Every field here is part of the conversation itself: there was nothing to
+  // leave out beyond what is already excluded (no ids, no email, no other saved goal or task).
+  setup: {
+    title: 'Guided setup',
+    sends: [
+      { field: 'personMessages', words: "what you've typed in the setup so far" },
+      { field: 'assistantTurns.kind', words: 'its own earlier turns in this setup' },
+      { field: 'assistantTurns.chunk', words: 'its own earlier turns in this setup' },
+      { field: 'assistantTurns.skipped.topic', words: 'its own earlier turns in this setup' },
+      { field: 'assistantTurns.skipped.line', words: 'its own earlier turns in this setup' },
+      { field: 'assistantTurns.say', words: 'its own earlier turns in this setup' },
+      { field: 'assistantTurns.question', words: 'its own earlier turns in this setup' },
+      { field: 'assistantTurns.topic', words: 'its own earlier turns in this setup' },
+      { field: 'assistantTurns.options', words: 'its own earlier turns in this setup' },
+      {
+        field: 'draft.model.person.timeZone',
+        words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)",
+      },
+      { field: 'draft.model.person.dayEnd', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.person.weekStart', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.person.dayTypes.name', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.person.dayTypes.capacityUnit', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.person.dayTypes.capacityAmount', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.person.priorities', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.person.planning.weekday', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.person.planning.time', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.settings.tone', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.settings.reminders', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.settings.checkIns', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.settings.celebrations', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.settings.balanceMentions', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.settings.reviewDepth', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.settings.reviewPlanning', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.settings.quietTimes', words: "the facts and settings you've given so far (time zone, day end, week start, day types, priorities, planning time, and how you want things handled)" },
+      { field: 'draft.model.goals.key', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.title', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.why', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.startDate', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.shape', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.endDate', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.blockWeeks', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.state', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.returnWhen.kind', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.returnWhen.date', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.returnWhen.note', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.completionMode', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.tone', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.key', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.title', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.measure', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.unit', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.role', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.period.kind', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.period.dueDate', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.period.weekdays', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.floor', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.aspiration', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.qualifyingThreshold', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.carryOver', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.completionMode', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.tone', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.sources.kind', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.sources.provider', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.targets.sources.metric', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.items.key', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.items.kind', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.items.title', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.items.targetKey', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.items.dueDate', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.items.dateCanMove', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.items.estimateMinutes', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.model.goals.items.steps', words: "the goals, targets and work items you've described so far, including where each target is tracked" },
+      { field: 'draft.said.path', words: "which answers you've already given and approved" },
+      { field: 'draft.said.turn', words: "which answers you've already given and approved" },
+      { field: 'draft.said.how', words: "which answers you've already given and approved" },
+      { field: 'draft.approved', words: "which answers you've already given and approved" },
+      { field: 'today', words: "today's date on your device, as a suggested start date" },
+    ],
+    leavesOut: 'other saved goals or tasks, their ids, or your email',
+    note: null,
+  },
 } as const satisfies Record<string, PromptNotice>;
 
 export const NEVER_SENT = "your email, your passwords or tokens, other people's data, or workout and calendar details";
-
-// Guided setup (MOM-111) is a conversation with Claude. Each question sends what the code in lib/ai/setup.ts sends: the
-// person's own words so far, Claude's earlier replies, the draft as it stands, and today's date on their device as a
-// suggested start date. Block 3 of MOM-111 replaces this line with a field-by-field PROMPTS entry that a test pins
-// (BACKLOG.md, MOM-102); until then the line says it in one sentence and must stay true.
-export const GUIDED_SETUP_LINE =
-  "Guided setup is a conversation with Claude. With each question, what you have typed in the setup so far, Claude's earlier replies, the setup as drafted so far and today's date on your device (as a suggested start date) are sent to Anthropic.";
 
 // ---------------------------------------------------------------------------
 // What is kept from each connected service: the fields of the activity the adapter produces

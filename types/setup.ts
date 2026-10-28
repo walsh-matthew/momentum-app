@@ -20,6 +20,7 @@ import {
   GOAL_SHAPES,
   GOAL_STATES,
   MEASURES,
+  QUANTITY_METRICS,
   REMINDER_MODES,
   REVIEW_DEPTHS,
   REVIEW_PLANNING_MODES,
@@ -66,6 +67,7 @@ export const SETUP_TOPICS = [
   'aspiration',
   'expansion',
   'source',
+  'metric',
   'time_zone',
   'day_end',
   'week_start',
@@ -169,7 +171,14 @@ const PeriodSchema = z.discriminatedUnion('kind', [
 
 const SourceRefSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('manual') }),
-  z.strictObject({ kind: z.literal('synced'), provider: z.string().regex(/^[a-z][a-z0-9_]*$/) }),
+  z.strictObject({
+    kind: z.literal('synced'),
+    provider: z.string().regex(/^[a-z][a-z0-9_]*$/),
+    // Which number a quantity target counts in this app (MOM-111, MOM-109 design review): null until the person
+    // answers the metric question, and for a quantity target not bound to an app with more than one metric, or for
+    // any other measure. Never worked out from the target's own unit text.
+    metric: z.enum(QUANTITY_METRICS).nullable(),
+  }),
 ]);
 
 export const TargetDraftSchema = z.strictObject({

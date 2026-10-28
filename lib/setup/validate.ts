@@ -13,7 +13,7 @@
 //   weekly or day-slot target needs it. Setup collects them at step 10, after the targets, so only 'final' asks.
 // Issues are written for the person-facing reader of the log, not as error codes. Pure.
 
-import { SUPPORTED_PROVIDER_IDS } from '@/lib/integrations/catalog';
+import { SUPPORTED_PROVIDER_IDS, quantityMetricsOf } from '@/lib/integrations/catalog';
 import {
   SETUP_CHUNKS,
   SetupDraftSchema,
@@ -184,6 +184,15 @@ function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
     if (final) {
       if (t.role === 'effort' && t.floor === null) tat('floor', 'An effort target needs a floor, the number the person named.');
       if (t.sources.length === 0) tat('sources', 'Ask where this is tracked (step 9).');
+      // A quantity target bound to an app with more than one kind of number needs the person's answer to which one
+      // counts (MOM-111, MOM-109 design review): never saved with the question still open.
+      if (t.measure === 'quantity') {
+        for (const source of t.sources) {
+          if (source.kind === 'synced' && source.metric === null && quantityMetricsOf(source.provider).length > 0) {
+            tat('sources', `Ask which number counts for this target in ${source.provider}.`);
+          }
+        }
+      }
     }
   }
 

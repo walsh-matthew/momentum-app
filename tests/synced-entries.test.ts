@@ -65,12 +65,13 @@ const workout = (id: string, over: Record<string, unknown> = {}) => ({ ...WORKOU
 const admin = () => createSupabaseAdminClient() as unknown as Db;
 const session = () => createSupabaseServerClient() as unknown as Promise<Db>;
 
-// A person with a Hevy source and one target per given shape, all bound to it.
-function person(userId: string, targets: Array<Row> = [{ measure: 'count' }]) {
+// A person with a Hevy source and one target per given shape, all bound to it. `metric` (on the shape, not the
+// target row) names the binding's metric, same as the setup save would write.
+function person(userId: string, targets: Array<Row & { metric?: string | null }> = [{ measure: 'count' }]) {
   const source = seedSource(userId);
-  const made = targets.map((t) => {
+  const made = targets.map(({ metric, ...t }) => {
     const target = seedTarget(userId, t);
-    bind(userId, target, source);
+    bind(userId, target, source, metric ?? null);
     return target;
   });
   return { source, targets: made };
@@ -113,44 +114,39 @@ describe('what a workout is worth to a target', () => {
   });
 
   it('a count is 1, whatever the workout holds', () => {
-    expect(entryValue(a, { measure: 'count', unit: null })).toEqual({ ok: true, value: 1 });
+    expect(entryValue(a, { measure: 'count', metric: null })).toEqual({ ok: true, value: 1 });
   });
 
   it('time is the duration in minutes', () => {
-    expect(entryValue(a, { measure: 'time', unit: null })).toEqual({ ok: true, value: 44.07 });
+    expect(entryValue(a, { measure: 'time', metric: null })).toEqual({ ok: true, value: 44.07 });
   });
 
-  it('a quantity is the metric its unit names', () => {
+  it('a quantity counts the number its binding names, never a unit the person typed', () => {
     const lbs = a.metrics.volumeLbs as number;
-    for (const unit of ['lb', 'lbs', 'pounds', ' LBS ']) {
-      expect(entryValue(a, { measure: 'quantity', unit })).toEqual({ ok: true, value: lbs });
-    }
-    for (const unit of ['kg', 'Kilograms']) {
-      expect(entryValue(a, { measure: 'quantity', unit })).toEqual({ ok: true, value: Math.round((lbs / 2.2046226218) * 10) / 10 });
-    }
-    expect(entryValue(a, { measure: 'quantity', unit: 'sets' })).toEqual({ ok: true, value: 18 });
-    expect(entryValue(a, { measure: 'quantity', unit: 'minutes' })).toEqual({ ok: true, value: 44.07 });
+    expect(entryValue(a, { measure: 'quantity', metric: 'volume_lbs' })).toEqual({ ok: true, value: lbs });
+    expect(entryValue(a, { measure: 'quantity', metric: 'volume_kg' })).toEqual({ ok: true, value: Math.round((lbs / 2.2046226218) * 10) / 10 });
+    expect(entryValue(a, { measure: 'quantity', metric: 'sets' })).toEqual({ ok: true, value: 18 });
+    expect(entryValue(a, { measure: 'quantity', metric: 'minutes' })).toEqual({ ok: true, value: 44.07 });
   });
 
-  it('a unit it cannot read, or a checklist, makes no entry and says which rule', () => {
-    expect(entryValue(a, { measure: 'quantity', unit: 'km' })).toEqual({ ok: false, reason: 'unit_not_supported' });
-    expect(entryValue(a, { measure: 'quantity', unit: null })).toEqual({ ok: false, reason: 'unit_not_supported' });
-    expect(entryValue(a, { measure: 'checklist', unit: null })).toEqual({ ok: false, reason: 'measure_not_supported' });
+  it('a quantity with no metric named, or a checklist, makes no entry and says which rule', () => {
+    expect(entryValue(a, { measure: 'quantity', metric: null })).toEqual({ ok: false, reason: 'metric_not_bound' });
+    expect(entryValue(a, { measure: 'checklist', metric: null })).toEqual({ ok: false, reason: 'measure_not_supported' });
   });
 
   it('a workout with nothing to count for the target makes no entry (entries must be above zero)', () => {
     const bodyweight = activity({ metrics: { volumeLbs: 0, setsCompleted: 0 }, durationMinutes: 0 });
     for (const target of [
-      { measure: 'quantity' as const, unit: 'lbs' },
-      { measure: 'quantity' as const, unit: 'kg' },
-      { measure: 'quantity' as const, unit: 'sets' },
-      { measure: 'time' as const, unit: null },
+      { measure: 'quantity' as const, metric: 'volume_lbs' as const },
+      { measure: 'quantity' as const, metric: 'volume_kg' as const },
+      { measure: 'quantity' as const, metric: 'sets' as const },
+      { measure: 'time' as const, metric: null },
     ]) {
       expect(entryValue(bodyweight, target)).toEqual({ ok: false, reason: 'no_value_for_measure' });
     }
     const noMetrics = activity({ metrics: {} });
-    expect(entryValue(noMetrics, { measure: 'quantity', unit: 'lbs' })).toEqual({ ok: false, reason: 'no_value_for_measure' });
-    expect(entryValue(noMetrics, { measure: 'quantity', unit: 'kg' })).toEqual({ ok: false, reason: 'no_value_for_measure' });
+    expect(entryValue(noMetrics, { measure: 'quantity', metric: 'volume_lbs' })).toEqual({ ok: false, reason: 'no_value_for_measure' });
+    expect(entryValue(noMetrics, { measure: 'quantity', metric: 'volume_kg' })).toEqual({ ok: false, reason: 'no_value_for_measure' });
   });
 });
 
@@ -160,7 +156,7 @@ describe('what a workout is worth to a target', () => {
 
 describe('a workout becomes one entry per bound target', () => {
   it('writes the fixture workout to each target the person bound, as raw values with the source record id', async () => {
-    const { source, targets } = person(USER_A, [{ measure: 'count' }, { measure: 'time' }, { measure: 'quantity', unit: 'lbs' }]);
+    const { source, targets } = person(USER_A, [{ measure: 'count' }, { measure: 'time' }, { measure: 'quantity', metric: 'volume_lbs' }]);
     const summary = await write(USER_A, [activityOf()]);
 
     expect(summary).toMatchObject({ created: 3, updated: 0, unchanged: 0, skipped: 0, invalid: 0, failed: 0 });
@@ -207,12 +203,12 @@ describe('a workout becomes one entry per bound target', () => {
   });
 
   it('each target decides on its own: one counts, one skips with its reason', async () => {
-    const { targets } = person(USER_A, [{ measure: 'count' }, { measure: 'quantity', unit: 'km' }, { measure: 'checklist' }]);
+    const { targets } = person(USER_A, [{ measure: 'count' }, { measure: 'quantity' }, { measure: 'checklist' }]);
     const summary = await write(USER_A, [activityOf()]);
     expect(summary).toMatchObject({ created: 1, skipped: 2 });
     expect(gm.entries.map((e) => e.target_id)).toEqual([targets[0].id]);
     expect(summary.results.filter((r) => r.outcome === 'skipped').map((r) => [r.targetId, r.reason])).toEqual([
-      [targets[1].id, 'unit_not_supported'],
+      [targets[1].id, 'metric_not_bound'],
       [targets[2].id, 'measure_not_supported'],
     ]);
   });
@@ -381,7 +377,7 @@ describe('one person’s sync never touches another’s rows', () => {
   it('refuses a target or source that belongs to someone else, whatever it is told', async () => {
     person(USER_A);
     const b = person(USER_B);
-    const stolen: SourceBinding = { sourceId: b.source.id as string, provider: 'hevy', targets: [{ id: b.targets[0].id as string, measure: 'count', unit: null }] };
+    const stolen: SourceBinding = { sourceId: b.source.id as string, provider: 'hevy', targets: [{ id: b.targets[0].id as string, measure: 'count', metric: null }] };
     const summary = await write(USER_A, [activityOf()], stolen);
     expect(summary).toMatchObject({ created: 0, failed: 1 });
     expect(gm.entries).toEqual([]);

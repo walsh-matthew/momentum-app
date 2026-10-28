@@ -4,7 +4,7 @@
 // creates the ids and fills goal_id, target_id and work_item_id from the keys, and takes the person's id from the
 // session. toSavePayload() is the shape that function reads. Pure: no database call.
 
-import type { TablesInsert } from '@/types/database.types';
+import type { QuantityMetric, TablesInsert } from '@/types/database.types';
 import type { SetupDraft, Transcript } from '@/types/setup';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
 import { validateDraft, type DraftIssue } from './validate';
@@ -18,7 +18,7 @@ export type GoalRow = Without<TablesInsert<'goals'>, 'id'>;
 export type TargetRow = Without<TablesInsert<'targets'>, 'id' | 'goal_id'>;
 export type WorkItemRow = Without<TablesInsert<'work_items'>, 'id' | 'goal_id' | 'target_id'>;
 export type StepRow = Without<TablesInsert<'work_item_steps'>, 'id' | 'work_item_id'>;
-export type SourceNeed = { kind: 'manual' } | { kind: 'synced'; provider: string };
+export type SourceNeed = { kind: 'manual' } | { kind: 'synced'; provider: string; metric: QuantityMetric | null };
 
 export interface SetupRows {
   personSettings: PersonSettingsRow;
@@ -37,7 +37,7 @@ export type DraftRowsResult = { ok: true; rows: SetupRows } | { ok: false; issue
 
 // What save_guided_setup() takes (migration 015). Nested, with the keys kept, because the function creates the ids and
 // resolves a work item's target by key. There is no user id anywhere in it: the function takes the owner from the session.
-export type SavePayloadSource = { kind: 'manual' } | { kind: 'synced'; provider: string; label: string };
+export type SavePayloadSource = { kind: 'manual' } | { kind: 'synced'; provider: string; label: string; metric: QuantityMetric | null };
 export interface SavePayload {
   person: PersonSettingsRow;
   day_types: DayTypeRow[];
@@ -168,7 +168,7 @@ export function toSavePayload(rows: SetupRows): SavePayload {
             .map((s): SavePayloadSource =>
               s.source.kind === 'manual'
                 ? { kind: 'manual' }
-                : { kind: 'synced', provider: s.source.provider, label: providerLabel(s.source.provider) },
+                : { kind: 'synced', provider: s.source.provider, label: providerLabel(s.source.provider), metric: s.source.metric },
             ),
         })),
       items: rows.workItems

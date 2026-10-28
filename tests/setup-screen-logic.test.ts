@@ -147,11 +147,24 @@ describe('the validator rules added for saving', () => {
 
   it('refuses a synced source the app cannot connect (a supported one is fine), in both modes', () => {
     for (const mode of ['progress', 'final'] as const) {
-      const bad = issuesFor((m) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'strava' }]), mode);
+      const bad = issuesFor((m) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'strava', metric: null }]), mode);
       expect(bad.map((i) => i.message)).toContain('"strava" cannot be connected yet. Offer manual for now.');
-      const ok = issuesFor((m) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'hevy' }, { kind: 'manual' }]), mode);
+      const ok = issuesFor(
+        (m) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'hevy', metric: 'volume_lbs' }, { kind: 'manual' }]),
+        mode,
+      );
       expect(ok).toEqual([]);
     }
+  });
+
+  it('refuses a quantity target bound to Hevy with no metric named, only at the end, and only for an app with metrics to choose', () => {
+    const noMetric = (m: SetupDraft['model']) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'hevy', metric: null }]);
+    expect(issuesFor(noMetric, 'progress')).toEqual([]);
+    expect(issuesFor(noMetric, 'final').map((i) => i.message)).toContain('Ask which number counts for this target in hevy.');
+
+    // Google Calendar has nothing to choose between, so naming it with no metric is never an issue.
+    const google = (m: SetupDraft['model']) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'google_calendar', metric: null }]);
+    expect(issuesFor(google, 'final')).toEqual([]);
   });
 
   it('refuses an item with steps that feeds a target that is not a checklist, in both modes', () => {
@@ -222,7 +235,7 @@ describe('a synced source is never shown as connected', () => {
   it('the playback says where a target is tracked and never that it is connected', () => {
     const model = structuredClone(draft.model);
     const target = model.goals.flatMap((g) => g.targets)[0];
-    target.sources = [{ kind: 'synced', provider: 'hevy' }, { kind: 'manual' }];
+    target.sources = [{ kind: 'synced', provider: 'hevy', metric: 'volume_lbs' }, { kind: 'manual' }];
     const lines = [...quickPathSections(model).flatMap((s) => s.lines)];
     const tracked = lines.find((l) => l.startsWith(`${target.title} is tracked`));
     expect(tracked).toBe(`${target.title} is tracked in hevy and by you, by hand.`);

@@ -4,7 +4,6 @@ import {
   DELETION_WITHIN_DAYS,
   DEVICE_STORAGE,
   GOOGLE_TESTING_LINE,
-  GUIDED_SETUP_LINE,
   NEVER_SENT,
   NOTICE_CHANGE_LINE,
   PROMPTS,
@@ -75,7 +74,6 @@ export function PrivacyNotice() {
               {prompt.note ? ` ${prompt.note}` : ''}
             </li>
           ))}
-          <li>{GUIDED_SETUP_LINE}</li>
         </ul>
         <p>Never sent: {NEVER_SENT}.</p>
         <p>
