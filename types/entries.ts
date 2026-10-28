@@ -42,16 +42,35 @@ export interface LoggedEntry {
   unit: string | null;
   value: number;
   occurredAt: string;
-  // How it was logged: 'tap', 'number', 'timer' or 'tick'. Null if the evidence does not say.
+  // How it was logged: 'tap', 'number', 'minutes', 'timer' or 'tick'. Null if the evidence does not say.
   via: string | null;
   // For a tick: the step's title, as it was when ticked. Null for the other ways to log.
   detail: string | null;
+  // The day the person chose (YYYY-MM-DD) when they logged on another day. Its time of day is a stand-in, so it is
+  // shown as a day only. Null for a log made now.
+  chosenDay: string | null;
+  // The entry falls before its goal's start date, so the engine does not count it. It is kept and shown as such.
+  // False when that cannot be told (no day end yet) or the entry is on or after the start.
+  beforeStart: boolean;
   removed: boolean;
+}
+
+// A day the person can log on, built by the server in their own time zone (the browser's clock is never used).
+export interface LogDay {
+  // YYYY-MM-DD
+  date: string;
+  // "Today", "Yesterday", or the weekday ("Mon").
+  label: string;
+  // The date for display ("Oct 26").
+  detail: string;
 }
 
 export interface LogPanel {
   // The person's own time zone, or null when it is not set (or not a real zone). Logging refuses without it.
   timeZone: string | null;
+  // Today and the days back to the log window's edge, newest first, or null when the time zone or the day end is
+  // not set: a chosen day needs both, and neither is assumed.
+  days: LogDay[] | null;
   targets: LogTarget[];
   recent: LoggedEntry[];
 }

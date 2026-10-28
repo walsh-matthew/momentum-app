@@ -17,10 +17,18 @@
 // Never assume (principle 1): logging refuses until the person has set a time zone, and a missing or invalid one is
 // never replaced by a default. Logging does not bind the manual source to the target; bindings are the person's own
 // setting, made in setup (MOM-111). Entries from a synced source are not touched here (MOM-109).
+//
+// When it happened (MOM-110 part 2): a log is now, or a chosen day within the last 7 local days. The browser sends only
+// a date; the day is read in the person's own time zone and day end (resolveOccurredAt), and an earlier day is stored
+// as noon on that day, shown as a day only. Typed minutes are the alternative to the timer on a time target. The
+// engine counts nothing before a goal's start date, so an entry that falls before it is saved and the person is told,
+// in the result and in the recent list, never left to find out (the owner's decision, 2026-10-28). A closed week needs
+// no recomputing for a late entry: results are never stored, and a snapshot holds only the target's values.
 
+import { addDays, assertDate, localDay, localNoon } from '@/lib/engine';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { Json, Measure } from '@/types/database.types';
-import type { LogItem, LogPanel, LogTarget, LoggedEntry } from '@/types/entries';
+import type { LogDay, LogItem, LogPanel, LogTarget, LoggedEntry } from '@/types/entries';
 import { UNIQUE_VIOLATION } from './goals';
 import type { ServiceResult } from './result';
 
@@ -39,10 +47,20 @@ export const MIN_TIMER_SECONDS = 30;
 export const MAX_TIMER_SECONDS = 24 * 60 * 60;
 // How far a timer's start may be ahead of the server's clock (clock drift between the phone and the server).
 const CLOCK_SKEW_MS = 5_000;
+// Typed minutes: whole minutes, up to a day, the same ceiling as a timer.
+export const MAX_MINUTES = 24 * 60;
+// How many local days back a log may be dated: today and the 7 before it.
+export const MAX_DAYS_BACK = 7;
 
 export const NO_TIME_ZONE =
   'Set your time zone before logging, so your entries land on the right day. Nothing was logged.';
 export const BAD_TIME_ZONE = 'The time zone you saved is not a real one. Set it again before logging. Nothing was logged.';
+export const NO_DAY_END =
+  'Set your day end before choosing a day, so the day you pick is the day you mean. Nothing was logged.';
+export const NOT_A_DATE = 'That day is not a real date. Nothing was logged.';
+export const DAY_IN_FUTURE = "That day hasn't happened yet, so nothing was logged.";
+export const DAY_TOO_OLD = `You can log up to ${MAX_DAYS_BACK} days back. That day is older, so nothing was logged.`;
+export const TIMER_HAS_NO_DAY = 'A timer logs the time it ran. To log another day, type the minutes.';
 const SAVE_FAILED = 'Could not save your entry. Nothing was saved.';
 const NOT_FOUND_ENTRY = 'Entry not found.';
 const NOT_FOUND_STEP = 'Step not found.';
@@ -59,11 +77,14 @@ const WAY_TO_LOG: Record<Measure, string> = {
 };
 
 export interface LogOptions {
-  // The person's chosen time for the entry. Part 1 takes none: see resolveOccurredAt.
+  // The day the person chose, as a local date (YYYY-MM-DD), or nothing for now. See resolveOccurredAt.
   when?: unknown;
   // The clock, for tests. Never set from a request.
   now?: () => number;
 }
+
+// What a successful log answers. `notice` is set when the entry was saved but the engine will not count it.
+export type LogResult = ServiceResult<{ entryId: string; notice?: string }>;
 
 // True for a real IANA zone name ("America/Los_Angeles"). The database only checks that the text is not blank.
 export function isRealTimeZone(zone: string): boolean {
@@ -75,14 +96,73 @@ export function isRealTimeZone(zone: string): boolean {
   }
 }
 
-// The instant an entry is logged at. Part 1: always now, taken from the server's clock and never from the browser,
-// and any chosen time is refused. Part 2 (MOM-110, owner decision 2026-10-27) lets the person choose a day within
-// the last 7 days, read in their own time zone; this is where it will be validated (a real date, not in the future,
-// not older than 7 local days), so the log functions and the actions will not change shape. `timeZone` is passed
-// already for that.
-export function resolveOccurredAt(when: unknown, context: { nowMs: number; timeZone: string }): ServiceResult<string> {
-  if (when !== undefined) return { ok: false, error: 'Choosing when it happened is not available yet.' };
-  return { ok: true, data: new Date(context.nowMs).toISOString() };
+// When an entry happened: the instant it is stored at, the person's local day it falls on, and the day they chose.
+export interface Occurrence {
+  occurredAt: string;
+  // The local day, read with the person's time zone and day end. Null when a log is made now and no day end is set
+  // yet: the engine needs both and none is assumed.
+  day: string | null;
+  // Set only when the person chose an earlier day; null for a log made now.
+  chosenDay: string | null;
+}
+
+const isRealDate = (text: string): boolean => {
+  try {
+    assertDate(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// The day end column is a time ("22:00:00"); the engine wants minutes after midnight. Anything else is not a day end.
+export function dayEndMinutesOf(dayEnd: string | null): number | null {
+  const match = /^(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(dayEnd ?? '');
+  if (!match) return null;
+  const [hours, minutes] = [Number(match[1]), Number(match[2])];
+  return hours < 24 && minutes < 60 ? hours * 60 + minutes : null;
+}
+
+// When an entry happened. Now is the server's clock, never the browser's. A chosen day (a local date, YYYY-MM-DD) is
+// read in the person's own time zone and day end (docs/DOMAIN_MODEL.md principle 1): it must be a real date, not after
+// today, and no more than MAX_DAYS_BACK days before it. Today's date is the same as now. Any earlier day is stored as
+// noon on that day, the one time no daylight-saving change or early day end can move to another date; it stands for
+// "that day", not for a time. A chosen day needs the day end as well as the time zone, because where a day starts is
+// the person's to say, and none is assumed.
+export function resolveOccurredAt(
+  when: unknown,
+  context: { nowMs: number; timeZone: string; dayEndMinutes: number | null },
+): ServiceResult<Occurrence> {
+  const nowIso = new Date(context.nowMs).toISOString();
+  const { timeZone, dayEndMinutes } = context;
+  const today = dayEndMinutes === null ? null : localDay(nowIso, { timeZone, dayEndMinutes, weekStartsOn: null });
+  if (when === undefined) return { ok: true, data: { occurredAt: nowIso, day: today, chosenDay: null } };
+
+  if (typeof when !== 'string' || !isRealDate(when)) return { ok: false, error: NOT_A_DATE };
+  if (today === null) return { ok: false, error: NO_DAY_END };
+  if (when > today) return { ok: false, error: DAY_IN_FUTURE };
+  if (when < addDays(today, -MAX_DAYS_BACK)) return { ok: false, error: DAY_TOO_OLD };
+  if (when === today) return { ok: true, data: { occurredAt: nowIso, day: today, chosenDay: null } };
+  return { ok: true, data: { occurredAt: localNoon(when, timeZone), day: when, chosenDay: when } };
+}
+
+// "Oct 26" and "Mon", for a local date. The date is read as a calendar date, so no zone moves it.
+const shortDate = (date: string): string =>
+  new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00Z`));
+const shortWeekday = (date: string): string =>
+  new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short' }).format(new Date(`${date}T12:00:00Z`));
+
+// What the person is told when an entry is saved but falls before its goal's start date. The engine counts nothing
+// before a target starts (types/scoreboard.ts), so the entry is kept and the person hears about it at once.
+async function startDateNotice(supabase: Client, userId: string, goalId: string, day: string | null): Promise<string | undefined> {
+  if (day === null) return undefined;
+  const { data, error } = await supabase.from('goals').select('start_date').eq('id', goalId).eq('user_id', userId).maybeSingle();
+  if (error) {
+    console.error('[manual-entry] could not check the goal start date', { code: error.code });
+    return undefined;
+  }
+  if (!data || day >= data.start_date) return undefined;
+  return `Saved. It's before this goal's start date (${shortDate(data.start_date)}), so it won't count unless you move the start date earlier.`;
 }
 
 async function signedInUser(supabase: Client, message: string): Promise<ServiceResult<string>> {
@@ -91,14 +171,21 @@ async function signedInUser(supabase: Client, message: string): Promise<ServiceR
   return { ok: true, data: data.user.id };
 }
 
-// The person's own time zone, or the reason there is none. Logging goes no further without it.
-async function timeZoneFor(supabase: Client, userId: string): Promise<ServiceResult<string>> {
-  const { data, error } = await supabase.from('person_settings').select('time_zone').eq('user_id', userId).maybeSingle();
+interface TimeAnchorsOfPerson {
+  timeZone: string;
+  // Null until the person has set a day end. Logging for now does not need it; choosing a day does.
+  dayEndMinutes: number | null;
+}
+
+// The person's own time zone, or the reason there is none. Logging goes no further without it. The day end comes
+// from the same row and may still be missing.
+async function anchorsFor(supabase: Client, userId: string): Promise<ServiceResult<TimeAnchorsOfPerson>> {
+  const { data, error } = await supabase.from('person_settings').select('time_zone, day_end').eq('user_id', userId).maybeSingle();
   if (error) return { ok: false, error: 'Could not check your time zone. Nothing was logged.' };
   const zone = data?.time_zone ?? null;
   if (zone === null) return { ok: false, error: NO_TIME_ZONE };
   if (!isRealTimeZone(zone)) return { ok: false, error: BAD_TIME_ZONE };
-  return { ok: true, data: zone };
+  return { ok: true, data: { timeZone: zone, dayEndMinutes: dayEndMinutesOf(data?.day_end ?? null) } };
 }
 
 // The oldest manual source of the person, or null when they have not logged anything yet.
@@ -135,10 +222,9 @@ async function ensureManualSource(supabase: Client, userId: string): Promise<Ser
   return { ok: true, data: created.data };
 }
 
-interface LoggingContext {
+interface LoggingContext extends TimeAnchorsOfPerson {
   supabase: Client;
   userId: string;
-  timeZone: string;
 }
 
 // Everything every log needs before it touches a target: a verified session and the person's own time zone.
@@ -146,19 +232,19 @@ async function openForLogging(): Promise<ServiceResult<LoggingContext>> {
   const supabase = await createSupabaseServerClient();
   const user = await signedInUser(supabase, 'Sign in to log.');
   if (!user.ok) return user;
-  const zone = await timeZoneFor(supabase, user.data);
-  if (!zone.ok) return zone;
-  return { ok: true, data: { supabase, userId: user.data, timeZone: zone.data } };
+  const anchors = await anchorsFor(supabase, user.data);
+  if (!anchors.ok) return anchors;
+  return { ok: true, data: { supabase, userId: user.data, ...anchors.data } };
 }
 
 // A target of the signed-in person, held to the measure the control logs. The id comes from the browser, so it is
-// only trusted after it is found among the person's own targets.
-async function loadTarget(supabase: Client, userId: string, targetId: string, measure: Measure): Promise<ServiceResult<null>> {
-  const { data, error } = await supabase.from('targets').select('id, measure').eq('id', targetId).eq('user_id', userId).maybeSingle();
+// only trusted after it is found among the person's own targets. The goal comes back for the start-date check.
+async function loadTarget(supabase: Client, userId: string, targetId: string, measure: Measure): Promise<ServiceResult<{ goalId: string }>> {
+  const { data, error } = await supabase.from('targets').select('id, measure, goal_id').eq('id', targetId).eq('user_id', userId).maybeSingle();
   if (error) return { ok: false, error: SAVE_FAILED };
   if (!data) return { ok: false, error: NOT_FOUND_TARGET };
   if (data.measure !== measure) return { ok: false, error: `That target is logged with ${WAY_TO_LOG[data.measure]}.` };
-  return { ok: true, data: null };
+  return { ok: true, data: { goalId: data.goal_id } };
 }
 
 interface NewEntry {
@@ -168,13 +254,17 @@ interface NewEntry {
   evidence: Record<string, Json | undefined>;
 }
 
-// One tap, number or timer: a new entry with a record id of its own. The time zone was checked in openForLogging
-// and the target is held to its measure.
-async function insertEntry(context: LoggingContext, entry: NewEntry, options: LogOptions): Promise<ServiceResult<{ entryId: string }>> {
-  const { supabase, userId, timeZone } = context;
+// The entry's evidence with the day the person chose, when they chose one, so the list can show it as a day.
+const withChosenDay = (evidence: NewEntry['evidence'], chosenDay: string | null): NewEntry['evidence'] =>
+  chosenDay === null ? evidence : { ...evidence, chosenDay };
+
+// One tap, number, typed minutes or timer: a new entry with a record id of its own. The time zone was checked in
+// openForLogging and the target is held to its measure. A refusal of the chosen day happens before anything is written.
+async function insertEntry(context: LoggingContext, entry: NewEntry, options: LogOptions): Promise<LogResult> {
+  const { supabase, userId, timeZone, dayEndMinutes } = context;
   const target = await loadTarget(supabase, userId, entry.targetId, entry.measure);
   if (!target.ok) return target;
-  const when = resolveOccurredAt(options.when, { nowMs: (options.now ?? Date.now)(), timeZone });
+  const when = resolveOccurredAt(options.when, { nowMs: (options.now ?? Date.now)(), timeZone, dayEndMinutes });
   if (!when.ok) return when;
   const source = await ensureManualSource(supabase, userId);
   if (!source.ok) return source;
@@ -186,9 +276,9 @@ async function insertEntry(context: LoggingContext, entry: NewEntry, options: Lo
       target_id: entry.targetId,
       source_id: source.data,
       source_record_id: crypto.randomUUID(),
-      occurred_at: when.data,
+      occurred_at: when.data.occurredAt,
       value: entry.value,
-      evidence: entry.evidence,
+      evidence: withChosenDay(entry.evidence, when.data.chosenDay),
     })
     .select('id')
     .single();
@@ -196,13 +286,14 @@ async function insertEntry(context: LoggingContext, entry: NewEntry, options: Lo
     console.error('[manual-entry] could not save an entry', { code: error?.code ?? 'no_row' });
     return { ok: false, error: SAVE_FAILED };
   }
-  return { ok: true, data: { entryId: data.id } };
+  const notice = await startDateNotice(supabase, userId, target.data.goalId, when.data.day);
+  return { ok: true, data: { entryId: data.id, ...(notice ? { notice } : {}) } };
 }
 
 const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID_PATTERN.test(value);
 
 // A tap on a count target: one entry of 1.
-export async function logTap(targetId: unknown, options: LogOptions = {}): Promise<ServiceResult<{ entryId: string }>> {
+export async function logTap(targetId: unknown, options: LogOptions = {}): Promise<LogResult> {
   if (!isUuid(targetId)) return { ok: false, error: NOT_FOUND_TARGET };
   const context = await openForLogging();
   if (!context.ok) return context;
@@ -210,11 +301,7 @@ export async function logTap(targetId: unknown, options: LogOptions = {}): Promi
 }
 
 // One number on a quantity target: the number is the entry's value, as the person typed it.
-export async function logNumber(
-  targetId: unknown,
-  value: unknown,
-  options: LogOptions = {},
-): Promise<ServiceResult<{ entryId: string }>> {
+export async function logNumber(targetId: unknown, value: unknown, options: LogOptions = {}): Promise<LogResult> {
   if (!isUuid(targetId)) return { ok: false, error: NOT_FOUND_TARGET };
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return { ok: false, error: 'Enter a number above 0.' };
   if (value > MAX_QUANTITY) {
@@ -225,15 +312,27 @@ export async function logNumber(
   return insertEntry(context.data, { targetId, measure: 'quantity', value, evidence: { via: 'number' } }, options);
 }
 
+// Typed minutes on a time target, for time the person forgot to time (RAID R-20): a whole number from 1 to 1,440, as
+// typed. Nothing is rounded for them. It may be dated on a chosen day.
+export async function logMinutes(targetId: unknown, minutes: unknown, options: LogOptions = {}): Promise<LogResult> {
+  if (!isUuid(targetId)) return { ok: false, error: NOT_FOUND_TARGET };
+  if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < 1) {
+    return { ok: false, error: 'Enter a whole number of minutes, 1 or more.' };
+  }
+  if (minutes > MAX_MINUTES) {
+    return { ok: false, error: `That is more than 24 hours (${MAX_MINUTES.toLocaleString('en-US')} minutes), so it was not logged. Check it and try again.` };
+  }
+  const context = await openForLogging();
+  if (!context.ok) return context;
+  return insertEntry(context.data, { targetId, measure: 'time', value: minutes, evidence: { via: 'minutes' } }, options);
+}
+
 // Stopping a timer on a time target. The browser sends only when the timer started; the stop is the server's clock,
 // and the entry is the whole minutes between them. A start in the future, a timer under 30 seconds and one over 24
-// hours are refused rather than guessed at.
-export async function logTimer(
-  targetId: unknown,
-  startedAt: unknown,
-  options: LogOptions = {},
-): Promise<ServiceResult<{ entryId: string }>> {
+// hours are refused rather than guessed at. A timer logs the time that ran, so it takes no chosen day.
+export async function logTimer(targetId: unknown, startedAt: unknown, options: LogOptions = {}): Promise<LogResult> {
   if (!isUuid(targetId)) return { ok: false, error: NOT_FOUND_TARGET };
+  if (options.when !== undefined) return { ok: false, error: TIMER_HAS_NO_DAY };
   const startedMs = typeof startedAt === 'string' ? Date.parse(startedAt) : Number.NaN;
   if (Number.isNaN(startedMs)) return { ok: false, error: 'The timer has no valid start time. Nothing was logged.' };
   const context = await openForLogging();
@@ -379,6 +478,7 @@ interface StepContext {
   step: { id: string; title: string };
   itemId: string;
   targetId: string;
+  goalId: string;
 }
 
 // A step of the signed-in person, with the checklist target its item feeds. An item that feeds no target (a
@@ -402,73 +502,98 @@ async function loadStep(supabase: Client, userId: string, stepId: string): Promi
   if (!item || item.target_id === null) return { ok: false, error: NO_CHECKLIST_TARGET };
   const target = await loadTarget(supabase, userId, item.target_id, 'checklist');
   if (!target.ok) return target.error.startsWith('That target is logged') ? { ok: false, error: NO_CHECKLIST_TARGET } : target;
-  return { ok: true, data: { step: { id: step.id, title: step.title }, itemId: item.id, targetId: item.target_id } };
+  return {
+    ok: true,
+    data: { step: { id: step.id, title: step.title }, itemId: item.id, targetId: item.target_id, goalId: target.data.goalId },
+  };
 }
 
-// Ticks a step. The first tick writes the step's one entry (the step's id is its record id, so a second can never
-// exist); a tick after an un-tick only takes the hide off, so the entry keeps its original time. Ticking a step that
-// is already ticked changes nothing.
-export async function tickStep(stepId: unknown, options: LogOptions = {}): Promise<ServiceResult<{ entryId: string }>> {
-  if (!isUuid(stepId)) return { ok: false, error: NOT_FOUND_STEP };
-  const context = await openForLogging();
-  if (!context.ok) return context;
-  const { supabase, userId, timeZone } = context.data;
-  const nowMs = (options.now ?? Date.now)();
+// The step's entry on a manual source, if it has one (hidden or not).
+function findTickEntry(supabase: Client, userId: string, targetId: string, sourceId: string, stepId: string) {
+  return supabase
+    .from('entries')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('target_id', targetId)
+    .eq('source_id', sourceId)
+    .eq('source_record_id', stepId)
+    .maybeSingle();
+}
 
-  const step = await loadStep(supabase, userId, stepId);
-  if (!step.ok) return step;
-  const when = resolveOccurredAt(options.when, { nowMs, timeZone });
+interface FirstTick {
+  entryId: string;
+  sourceId: string;
+  notice?: string;
+}
+
+// The step's first tick: its one entry, on the chosen day or now. The day is checked here and nowhere else, before
+// anything is written, because only a first tick makes a time.
+async function writeFirstTick(context: LoggingContext, step: StepContext, stepId: string, options: LogOptions, nowMs: number): Promise<ServiceResult<FirstTick>> {
+  const { supabase, userId, timeZone, dayEndMinutes } = context;
+  const when = resolveOccurredAt(options.when, { nowMs, timeZone, dayEndMinutes });
   if (!when.ok) return when;
   const source = await ensureManualSource(supabase, userId);
   if (!source.ok) return source;
 
-  const findTick = () =>
-    supabase
-      .from('entries')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('target_id', step.data.targetId)
-      .eq('source_id', source.data)
-      .eq('source_record_id', stepId)
-      .maybeSingle();
+  const { data, error } = await supabase
+    .from('entries')
+    .insert({
+      user_id: userId,
+      target_id: step.targetId,
+      source_id: source.data,
+      source_record_id: stepId,
+      work_item_id: step.itemId,
+      occurred_at: when.data.occurredAt,
+      value: 1,
+      evidence: withChosenDay({ via: 'tick', step: step.step.title }, when.data.chosenDay),
+    })
+    .select('id')
+    .single();
+  if (error?.code === UNIQUE_VIOLATION) {
+    // A second tap landed first: the step already has its entry, which is all this tick needed.
+    const raced = await findTickEntry(supabase, userId, step.targetId, source.data, stepId);
+    if (raced.error || !raced.data) return { ok: false, error: SAVE_FAILED };
+    return { ok: true, data: { entryId: raced.data.id, sourceId: source.data } };
+  }
+  if (error || !data) {
+    console.error('[manual-entry] could not save a tick', { code: error?.code ?? 'no_row' });
+    return { ok: false, error: SAVE_FAILED };
+  }
+  const notice = await startDateNotice(supabase, userId, step.goalId, when.data.day);
+  return { ok: true, data: { entryId: data.id, sourceId: source.data, ...(notice ? { notice } : {}) } };
+}
 
-  let entryId: string;
-  const existing = await findTick();
-  if (existing.error) return { ok: false, error: SAVE_FAILED };
-  if (existing.data) {
-    entryId = existing.data.id;
-  } else {
-    const { data, error } = await supabase
-      .from('entries')
-      .insert({
-        user_id: userId,
-        target_id: step.data.targetId,
-        source_id: source.data,
-        source_record_id: stepId,
-        work_item_id: step.data.itemId,
-        occurred_at: when.data,
-        value: 1,
-        evidence: { via: 'tick', step: step.data.step.title },
-      })
-      .select('id')
-      .single();
-    if (error?.code === UNIQUE_VIOLATION) {
-      // A second tap landed first: the step already has its entry, which is all this tick needed.
-      const raced = await findTick();
-      if (raced.error || !raced.data) return { ok: false, error: SAVE_FAILED };
-      entryId = raced.data.id;
-    } else if (error || !data) {
-      console.error('[manual-entry] could not save a tick', { code: error?.code ?? 'no_row' });
-      return { ok: false, error: SAVE_FAILED };
-    } else {
-      entryId = data.id;
-    }
+// Ticks a step. The first tick writes the step's one entry (the step's id is its record id, so a second can never
+// exist); a tick after an un-tick only takes the hide off, so the entry keeps its original time, and a day sent with
+// it is not read. Ticking a step that is already ticked changes nothing.
+export async function tickStep(stepId: unknown, options: LogOptions = {}): Promise<LogResult> {
+  if (!isUuid(stepId)) return { ok: false, error: NOT_FOUND_STEP };
+  const context = await openForLogging();
+  if (!context.ok) return context;
+  const { supabase, userId } = context.data;
+  const nowMs = (options.now ?? Date.now)();
+
+  const step = await loadStep(supabase, userId, stepId);
+  if (!step.ok) return step;
+  const found = await findManualSource(supabase, userId);
+  if (!found.ok) return found;
+
+  let tick: FirstTick | null = null;
+  if (found.data !== null) {
+    const existing = await findTickEntry(supabase, userId, step.data.targetId, found.data, stepId);
+    if (existing.error) return { ok: false, error: SAVE_FAILED };
+    if (existing.data) tick = { entryId: existing.data.id, sourceId: found.data };
+  }
+  if (tick === null) {
+    const first = await writeFirstTick(context.data, step.data, stepId, options, nowMs);
+    if (!first.ok) return first;
+    tick = first.data;
   }
 
-  const shown = await unhideRecord(supabase, userId, source.data, stepId);
+  const shown = await unhideRecord(supabase, userId, tick.sourceId, stepId);
   if (!shown.ok) return shown;
   await setStepDisplay(supabase, userId, stepId, true, nowMs);
-  return { ok: true, data: { entryId } };
+  return { ok: true, data: { entryId: tick.entryId, ...(tick.notice ? { notice: tick.notice } : {}) } };
 }
 
 // Un-ticks a step: hides its tick. The entry stays, so a later tick brings it back.
@@ -513,16 +638,17 @@ const textOf = (value: Json | undefined): string | null => (typeof value === 'st
 // checklist steps of each, and their latest manual entries. Read-only. MOM-112 builds the real home page from the
 // goal services; this is the smallest read that lets the controls be tried on the local stack. Only targets of an
 // active goal are offered. Each step is ticked when its entry exists and is not hidden; the step row's own marker
-// is not read.
-export async function getLogPanel(): Promise<ServiceResult<LogPanel>> {
+// is not read. The days a person can log on are built here, in their own time zone and day end, so the browser's clock
+// never decides what today is.
+export async function getLogPanel(deps: { now?: () => number } = {}): Promise<ServiceResult<LogPanel>> {
   const supabase = await createSupabaseServerClient();
   const user = await signedInUser(supabase, 'Sign in to log.');
   if (!user.ok) return user;
   const userId = user.data;
 
   const [settings, goals, targets, items, steps, source] = await Promise.all([
-    supabase.from('person_settings').select('time_zone').eq('user_id', userId).maybeSingle(),
-    supabase.from('goals').select('id, title, state').eq('user_id', userId),
+    supabase.from('person_settings').select('time_zone, day_end').eq('user_id', userId).maybeSingle(),
+    supabase.from('goals').select('id, title, state, start_date').eq('user_id', userId),
     supabase.from('targets').select('id, goal_id, title, measure, unit, created_at').eq('user_id', userId).order('created_at', { ascending: true }),
     supabase.from('work_items').select('id, target_id, title, sort_order').eq('user_id', userId).order('sort_order', { ascending: true }),
     supabase.from('work_item_steps').select('id, work_item_id, title, sort_order').eq('user_id', userId).order('sort_order', { ascending: true }),
@@ -584,9 +710,20 @@ export async function getLogPanel(): Promise<ServiceResult<LogPanel>> {
       items: t.measure === 'checklist' ? itemsOf(t.id) : [],
     }));
 
+  // The anchors the engine reads days with. Without a real zone and a day end, no entry can be placed on a local day,
+  // so none is judged against its goal's start and no day is offered.
+  const rawZone = settings.data?.time_zone ?? null;
+  const zone = rawZone !== null && isRealTimeZone(rawZone) ? rawZone : null;
+  const dayEnd = dayEndMinutesOf(settings.data?.day_end ?? null);
+  const anchors = zone !== null && dayEnd !== null ? { timeZone: zone, dayEndMinutes: dayEnd, weekStartsOn: null } : null;
+
+  const goalStart = new Map(goals.data.map((g) => [g.id, g.start_date]));
   const byTarget = new Map(targets.data.map((t) => [t.id, t]));
   const recent: LoggedEntry[] = recentRows.map((row) => {
     const target = byTarget.get(row.target_id);
+    const chosenDay = textOf(row.evidence.chosenDay);
+    const day = chosenDay ?? (anchors === null ? null : localDay(row.occurred_at, anchors));
+    const start = target ? goalStart.get(target.goal_id) : undefined;
     return {
       id: row.id,
       targetId: row.target_id,
@@ -597,9 +734,19 @@ export async function getLogPanel(): Promise<ServiceResult<LogPanel>> {
       occurredAt: row.occurred_at,
       via: textOf(row.evidence.via),
       detail: textOf(row.evidence.step),
+      chosenDay,
+      beforeStart: day !== null && start !== undefined && day < start,
       removed: hidden.has(row.source_record_id),
     };
   });
-  const zone = settings.data?.time_zone ?? null;
-  return { ok: true, data: { timeZone: zone !== null && isRealTimeZone(zone) ? zone : null, targets: loggable, recent } };
+
+  let days: LogDay[] | null = null;
+  if (anchors !== null) {
+    const today = localDay(new Date((deps.now ?? Date.now)()).toISOString(), anchors);
+    days = Array.from({ length: MAX_DAYS_BACK + 1 }, (_, back) => {
+      const date = addDays(today, -back);
+      return { date, label: back === 0 ? 'Today' : back === 1 ? 'Yesterday' : shortWeekday(date), detail: shortDate(date) };
+    });
+  }
+  return { ok: true, data: { timeZone: zone, days, targets: loggable, recent } };
 }

@@ -1,4 +1,4 @@
-import type { LogPanel, LogTarget } from '@/types/entries';
+import type { LogDay, LogPanel, LogTarget } from '@/types/entries';
 import { ChecklistControl } from './ChecklistControl';
 import { EntryList } from './EntryList';
 import { NumberControl } from './NumberControl';
@@ -11,16 +11,16 @@ interface ManualEntryPanelProps {
 
 // The control a target's measure calls for (docs/DOMAIN_MODEL.md §1.3): a count is a tap, a quantity is one number,
 // time is a timer, a checklist is a tick per step.
-function ControlFor({ target }: { target: LogTarget }) {
+function ControlFor({ target, days }: { target: LogTarget; days: LogDay[] | null }) {
   switch (target.measure) {
     case 'count':
-      return <TapControl target={target} />;
+      return <TapControl target={target} days={days} />;
     case 'quantity':
-      return <NumberControl target={target} />;
+      return <NumberControl target={target} days={days} />;
     case 'time':
-      return <TimerControl target={target} />;
+      return <TimerControl target={target} days={days} />;
     case 'checklist':
-      return <ChecklistControl target={target} />;
+      return <ChecklistControl target={target} days={days} />;
   }
 }
 
@@ -35,6 +35,12 @@ export function ManualEntryPanel({ panel }: ManualEntryPanelProps) {
         </p>
       )}
 
+      {panel.timeZone !== null && panel.days === null && (
+        <p role="status" className="channel-card text-sm text-muted">
+          No day end is set yet, so you can only log for now. Set your day end to log on another day. Nothing is assumed for you.
+        </p>
+      )}
+
       {panel.targets.length === 0 ? (
         <p className="channel-card text-sm text-muted">No targets yet. Set up a goal first, and its targets will appear here.</p>
       ) : (
@@ -46,7 +52,7 @@ export function ManualEntryPanel({ panel }: ManualEntryPanelProps) {
               </h2>
               <p className="text-sm text-muted">{target.goalTitle}</p>
             </div>
-            <ControlFor target={target} />
+            <ControlFor target={target} days={panel.days} />
           </section>
         ))
       )}

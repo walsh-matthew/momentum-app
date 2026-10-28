@@ -2,7 +2,7 @@
 // week start or day end, and each target asks only for the anchors its period needs.
 
 import { describe, expect, it } from 'vitest';
-import { assertAnchors, localDay, weekRange } from '@/lib/engine';
+import { addDays, assertAnchors, localDay, localNoon, weekRange } from '@/lib/engine';
 import { anchors } from './helpers/engineFixtures';
 
 describe('assertAnchors: nothing is assumed', () => {
@@ -124,5 +124,43 @@ describe('weekRange: weeks start on the person’s chosen weekday', () => {
 
   it('crosses a month and a year end', () => {
     expect(weekRange('2027-01-01', 1)).toEqual({ start: '2026-12-28', end: '2027-01-03' });
+  });
+});
+
+describe('localNoon: noon on a local day, as an instant (a log on a chosen day, MOM-110)', () => {
+  it('is noon wall-clock time in the zone, in daylight time and in standard time', () => {
+    expect(localNoon('2026-10-25', 'America/Los_Angeles')).toBe('2026-10-25T19:00:00.000Z');
+    expect(localNoon('2026-11-02', 'America/Los_Angeles')).toBe('2026-11-02T20:00:00.000Z');
+  });
+
+  it('settles on the day the clocks change, in both directions', () => {
+    // Los Angeles falls back on 2026-11-01 (02:00 to 01:00) and springs forward on 2026-03-08. Noon is after both.
+    expect(localNoon('2026-11-01', 'America/Los_Angeles')).toBe('2026-11-01T20:00:00.000Z');
+    expect(localNoon('2026-03-08', 'America/Los_Angeles')).toBe('2026-03-08T19:00:00.000Z');
+    // Sydney springs forward on 2026-10-04 (02:00 to 03:00).
+    expect(localNoon('2026-10-04', 'Australia/Sydney')).toBe('2026-10-04T01:00:00.000Z');
+  });
+
+  it('works for a zone with a half-hour offset and for one far east and far west of UTC', () => {
+    expect(localNoon('2026-10-25', 'Asia/Kolkata')).toBe('2026-10-25T06:30:00.000Z');
+    expect(localNoon('2026-10-25', 'Pacific/Kiritimati')).toBe('2026-10-24T22:00:00.000Z');
+    expect(localNoon('2026-10-25', 'Pacific/Pago_Pago')).toBe('2026-10-25T23:00:00.000Z');
+  });
+
+  it('always falls on the day asked for, for every day end and across a year of days', () => {
+    const zones = ['America/Los_Angeles', 'Europe/London', 'Australia/Sydney', 'Asia/Kolkata', 'Pacific/Kiritimati', 'America/Sao_Paulo'];
+    for (const timeZone of zones) {
+      for (let day = 0; day < 366; day += 1) {
+        const date = addDays('2026-01-01', day);
+        for (const dayEndMinutes of [0, 120, 359, 1320]) {
+          expect(localDay(localNoon(date, timeZone), anchors({ timeZone, dayEndMinutes }))).toBe(date);
+        }
+      }
+    }
+  });
+
+  it('refuses a date that is not a real one', () => {
+    expect(() => localNoon('2026-02-30', 'UTC')).toThrow(/not a real date/);
+    expect(() => localNoon('tomorrow', 'UTC')).toThrow(/not a date/);
   });
 });

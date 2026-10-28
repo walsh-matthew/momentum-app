@@ -88,6 +88,22 @@ export function localDay(instant: string, anchors: TimeAnchors): LocalDate {
   return minutes < boundaryShift(anchors.dayEndMinutes as number) ? addDays(date, -1) : date;
 }
 
+// Noon on a local day in the person's time zone, as an instant. Noon is the one time of day that no daylight-saving
+// change and no early day end can move to another date, so localDay puts the result on the day asked for. A manual
+// log on a chosen day uses it (MOM-110): the log says which day, not what time. The zone's offset is read at the
+// first guess and again at the corrected instant, which settles a day whose offset changes during it.
+export function localNoon(date: LocalDate, timeZone: string): string {
+  const wallClock = dateToMs(date) + 12 * 3_600_000;
+  const offsetAt = (ms: number): number => {
+    const part: Record<string, string> = {};
+    for (const p of formatterFor(timeZone).formatToParts(new Date(ms))) part[p.type] = p.value;
+    const shown = Date.UTC(Number(part.year), Number(part.month) - 1, Number(part.day), Number(part.hour), Number(part.minute));
+    return shown - Math.floor(ms / 60_000) * 60_000;
+  };
+  const first = wallClock - offsetAt(wallClock);
+  return new Date(wallClock - offsetAt(first)).toISOString();
+}
+
 // The week (start and end day, both inclusive) holding a day, starting on the person's week start.
 export function weekRange(date: LocalDate, weekStartsOn: Weekday): { start: LocalDate; end: LocalDate } {
   const start = addDays(date, -((dayOfWeek(date) - weekStartsOn + 7) % 7));

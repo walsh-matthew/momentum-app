@@ -10,4 +10,4 @@ export { evaluateTarget, evaluatePeriod } from './evaluate';
 export { forecastDeadline } from './forecast';
 export { detectPatterns, patternSettings } from './patterns';
 export { computeScoreboard } from './scoreboard';
-export { assertAnchors, localDay, weekRange } from './time';
+export { addDays, assertAnchors, assertDate, localDay, localNoon, weekRange } from './time';

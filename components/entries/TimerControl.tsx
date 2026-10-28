@@ -3,20 +3,26 @@
 import { Play, Square } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { logTimerEntry } from '@/app/actions/entries';
-import type { LogTarget } from '@/types/entries';
+import type { LogDay, LogTarget } from '@/types/entries';
+import { EntryFeedback } from './EntryFeedback';
+import { MinutesControl } from './MinutesControl';
 import { formatElapsed } from './format';
 import { clearTimerStart, readTimerStart, saveTimerStart } from './timerStorage';
 import { useEntryAction } from './useEntryAction';
 
 interface TimerControlProps {
   target: LogTarget;
+  // The days the person can log typed minutes on, or null/absent when they cannot choose one yet. The timer itself
+  // takes no day: it logs the time that ran.
+  days?: LogDay[] | null;
 }
 
 // A time target: start, then stop. Only the start is kept (in this browser, see timerStorage.ts); stopping sends it
 // and the server's clock sets the stop, so the entry is the minutes between them. The saved start is read after the
-// first render, never during it, so the server and browser renders agree.
-export function TimerControl({ target }: TimerControlProps) {
-  const { pending, error, run, setError } = useEntryAction();
+// first render, never during it, so the server and browser renders agree. Below the timer, typed minutes cover time
+// that was not timed (RAID R-20).
+export function TimerControl({ target, days = null }: TimerControlProps) {
+  const { pending, error, notice, run, setError } = useEntryAction();
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
 
@@ -79,11 +85,10 @@ export function TimerControl({ target }: TimerControlProps) {
           Discard this timer without logging
         </button>
       )}
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {error}
-        </p>
-      )}
+      <EntryFeedback error={error} notice={notice} />
+      <div className="mt-5 border-t border-border pt-4">
+        <MinutesControl target={target} days={days} />
+      </div>
     </div>
   );
 }

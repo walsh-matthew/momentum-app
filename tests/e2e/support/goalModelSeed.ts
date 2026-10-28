@@ -1,5 +1,5 @@
 // Gives a throwaway account the rows manual entry needs (MOM-110): a goal, a target of each measure, a milestone
-// feeding the checklist target with two steps, and optionally the person's time zone. Setup (MOM-111) will make
+// feeding the checklist target with two steps, and optionally the person's time zone and day end. Setup (MOM-111) will make
 // these in the real app; until it exists the spec makes them the only way a person can, as that person, through row
 // level security with the local anon key. Never the service role, and never anything but the local stack: the address
 // is held to localhost by readLocalStackEnv. Nothing is printed.
@@ -23,9 +23,24 @@ export const SEED_TITLES = {
   steps: ['Read the brief', 'Book the room'],
 } as const;
 
+// The date (YYYY-MM-DD, UTC) this many days from today. A negative number is in the past.
+export function dateFromToday(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+export interface SeedOptions {
+  // The goal's start date. Defaults to 30 days ago, so no day the specs log on is before it.
+  startDate?: string;
+  // The person's day end as a time ("22:00:00"), or null for a person who has not set one. Defaults to 22:00, an
+  // evening day end that leaves the day boundary at midnight.
+  dayEnd?: string | null;
+}
+
 // Signs in as the throwaway account and writes its rows. `timeZone` null leaves person_settings out entirely, which
 // is the state of a person who has not been through setup: logging must then refuse.
-export async function seedGoalModel(email: string, timeZone: string | null): Promise<SeededGoalModel> {
+export async function seedGoalModel(email: string, timeZone: string | null, options: SeedOptions = {}): Promise<SeededGoalModel> {
+  const startDate = options.startDate ?? dateFromToday(-30);
+  const dayEnd = options.dayEnd === undefined ? '22:00:00' : options.dayEnd;
   const { serverEnv } = readLocalStackEnv();
   const supabase = createClient<Database>(serverEnv.NEXT_PUBLIC_SUPABASE_URL, serverEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -42,12 +57,12 @@ export async function seedGoalModel(email: string, timeZone: string | null): Pro
   };
 
   if (timeZone !== null) {
-    const settings = await supabase.from('person_settings').insert({ user_id: userId, time_zone: timeZone });
+    const settings = await supabase.from('person_settings').insert({ user_id: userId, time_zone: timeZone, day_end: dayEnd });
     if (settings.error) throw new Error(`Could not seed the time zone (code ${settings.error.code}).`);
   }
 
   const goal = must(
-    await supabase.from('goals').insert({ user_id: userId, title: 'Stay fit', start_date: '2026-10-26', shape: 'ongoing' }).select('id').single(),
+    await supabase.from('goals').insert({ user_id: userId, title: 'Stay fit', start_date: startDate, shape: 'ongoing' }).select('id').single(),
     'a goal',
   );
   const target = async (title: string, measure: 'count' | 'quantity' | 'time' | 'checklist') =>

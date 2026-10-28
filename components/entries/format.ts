@@ -21,6 +21,14 @@ export function formatEntryTime(instant: string, timeZone: string | null): strin
   }
 }
 
+// A day the person chose ("Tue, Oct 27"). The entry's stored time on that day is a stand-in, so only the day is shown.
+// The date is read as a calendar date, so no time zone moves it.
+export function formatChosenDay(date: string): string {
+  const day = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(day.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(day);
+}
+
 // What one entry added, in the person's terms: "+1", "12 km", "25 min", or the step that was ticked.
 export function describeEntry(entry: LoggedEntry): string {
   switch (entry.measure) {
