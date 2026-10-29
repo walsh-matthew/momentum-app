@@ -58,9 +58,10 @@ export type IntegrationAuthType = (typeof INTEGRATION_AUTH_TYPES)[number];
 export const CREDENTIAL_STATUSES = ['connected', 'needs_reauth', 'error'] as const;
 export type CredentialStatus = (typeof CREDENTIAL_STATUSES)[number];
 
-// The two places the app calls Claude, and how a call can end. Match llm_usage_logs.feature and .outcome
-// (migration 011). 'pending' is a call that has been reserved but not yet recorded as finished.
-export const LLM_FEATURES = ['rebalance', 'week_one_plan', 'setup'] as const;
+// The places the app calls Claude, and how a call can end. Match llm_usage_logs.feature and .outcome (migration 011,
+// with 'setup' added by 014 and 'weekly_review' by 018). 'pending' is a call that has been reserved but not yet
+// recorded as finished.
+export const LLM_FEATURES = ['rebalance', 'week_one_plan', 'setup', 'weekly_review'] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
 export const LLM_OUTCOMES = ['pending', 'ok', 'refused', 'provider_rate_limited', 'unavailable', 'bad_output', 'not_configured'] as const;
 export type LlmOutcome = (typeof LLM_OUTCOMES)[number];
@@ -427,6 +428,38 @@ export type StartingPointRow = {
   // Set together when the person is asked at their first review.
   answered_at: string | null;
   outcome: StartingPointOutcome | null;
+};
+
+// A finished weekly review (migration 018, MOM-113): what the recap said, the week it covered, and the one adjustment
+// offered with what the person chose. Written once and never changed (docs/DOMAIN_MODEL.md §3, RAID R-26). The kinds
+// are the six of §3.2 and the outcomes are the three kill criterion 4 counts; tests/migrations.test.ts compares both with
+// 018's CHECK constraints.
+export const REVIEW_ADJUSTMENT_KINDS = [
+  'deadline_forecast',
+  'slipping_check_in',
+  'rebaseline',
+  'priority_changed',
+  'handling_preference',
+  'still_right',
+] as const;
+export type ReviewAdjustmentKind = (typeof REVIEW_ADJUSTMENT_KINDS)[number];
+export const REVIEW_ADJUSTMENT_OUTCOMES = ['changed', 'declined', 'skipped'] as const;
+export type ReviewAdjustmentOutcome = (typeof REVIEW_ADJUSTMENT_OUTCOMES)[number];
+
+export type WeeklyReviewRow = {
+  id: string;
+  user_id: string;
+  // The week reviewed, as the person's own calendar dates (seven days).
+  week_start: string;
+  week_end: string;
+  // What layer 1 showed, as stored (types/review.ts StoredRecap); read through lib/review/storedRecap.ts, never trusted as typed.
+  recap: Json;
+  // Offered means all three are set, not offered means none are.
+  adjustment_kind: ReviewAdjustmentKind | null;
+  adjustment: Json | null;
+  adjustment_outcome: ReviewAdjustmentOutcome | null;
+  // Set by a trigger to the database's own time, whatever an insert sends.
+  finished_at: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -1370,6 +1403,31 @@ export type Database = {
           },
         ];
       };
+      // Append-only (migration 018): the person's session inserts a finished review once per week; no role updates or
+      // deletes one. finished_at is set by a trigger, so an insert never needs to send it.
+      weekly_reviews: {
+        Row: WeeklyReviewRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          week_start: string;
+          week_end: string;
+          recap: Json;
+          adjustment_kind?: ReviewAdjustmentKind | null;
+          adjustment?: Json | null;
+          adjustment_outcome?: ReviewAdjustmentOutcome | null;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: 'weekly_reviews_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     // handle_new_user and the other trigger functions are not executable by anon, authenticated or service_role
@@ -1470,6 +1528,7 @@ export type Entry = Tables<'entries'>;
 export type EntryCorrection = Tables<'entry_corrections'>;
 export type PeriodSnapshot = Tables<'period_snapshots'>;
 export type StartingPoint = Tables<'starting_points'>;
+export type WeeklyReview = Tables<'weekly_reviews'>;
 
 export type GoalChannelInsert = TablesInsert<'goal_channels'>;
 export type GoalChannelUpdate = TablesUpdate<'goal_channels'>;

@@ -2,7 +2,7 @@
 // from October 2026: 2026-10-05 is a Monday (tests/helpers/engineFixtures.ts), so a Monday-start week runs 05 to 11.
 
 import { describe, expect, it } from 'vitest';
-import { buildLayer1Facts, selectLayerThreeAdjustment, weeklyReviewWindow } from '@/lib/engine';
+import { buildLayer1Facts, closesEarly, compareRecapToLive, reviewAsOf, selectLayerThreeAdjustment, weeklyReviewWindow } from '@/lib/engine';
 import { periodResult } from './helpers/engineFixtures';
 import type { Crossing, DeadlineForecast, Pattern, ReviewWindow, Trend } from '@/types/scoreboard';
 
@@ -151,5 +151,63 @@ describe('selectLayerThreeAdjustment', () => {
   it('breaks a pattern tie on the longest run, then the target id', () => {
     const out = selectLayerThreeAdjustment({ patterns: [slipping('tB', 2), slipping('tA', 4), slipping('tC', 4)], forecasts: [] }, WINDOW);
     expect(out).toEqual({ kind: 'slipping_check_in', targetId: 'tA', periods: 4 });
+  });
+});
+
+describe('closesEarly and reviewAsOf (the last-day decision, RAID I-11)', () => {
+  it('closes the week early only when its own last day is today', () => {
+    expect(closesEarly('2026-10-11', WINDOW)).toBe(true);
+    expect(closesEarly('2026-10-12', WINDOW)).toBe(false);
+    expect(closesEarly('2026-10-14', WINDOW)).toBe(false);
+  });
+
+  it('asks the engine about the day after the week ends when it closes early, and about today otherwise', () => {
+    expect(reviewAsOf('2026-10-11', WINDOW)).toBe('2026-10-12');
+    expect(reviewAsOf('2026-10-12', WINDOW)).toBe('2026-10-12');
+    expect(reviewAsOf('2026-10-14', WINDOW)).toBe('2026-10-14');
+  });
+
+  it('crosses a month end when it asks about the day after', () => {
+    expect(reviewAsOf('2026-10-31', { start: '2026-10-25', end: '2026-10-31' })).toBe('2026-11-01');
+  });
+});
+
+describe('compareRecapToLive (a later entry against a stored recap, RAID R-26)', () => {
+  const live = (targetId: string, counted: number, level: 'none' | 'partway' | 'floor' | 'aspiration', graded = true) => ({
+    targetId,
+    result: periodResult(level, { targetId, periodStart: '2026-10-05', periodEnd: '2026-10-11', counted, graded }),
+    crossings: [],
+    patterns: [],
+    trend: null,
+  });
+
+  it('names a target whose count and level read differently now, with both values', () => {
+    const changes = compareRecapToLive([{ targetId: 't1', counted: 2, level: 'partway', graded: true }], [live('t1', 3, 'floor')]);
+    expect(changes).toEqual([
+      { targetId: 't1', said: { counted: 2, level: 'partway', graded: true }, now: { counted: 3, level: 'floor', graded: true } },
+    ]);
+  });
+
+  it('names a target whose count changed even when its level did not', () => {
+    const changes = compareRecapToLive([{ targetId: 't1', counted: 3, level: 'floor', graded: true }], [live('t1', 4, 'floor')]);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ said: { counted: 3 }, now: { counted: 4 } });
+  });
+
+  it('says nothing about a target that reads the same', () => {
+    expect(compareRecapToLive([{ targetId: 't1', counted: 3, level: 'floor', graded: true }], [live('t1', 3, 'floor')])).toEqual([]);
+  });
+
+  it('leaves out a target with no closed period in that week now, and one the recap never named', () => {
+    const changes = compareRecapToLive([{ targetId: 'gone', counted: 3, level: 'floor', graded: true }], [live('new', 9, 'aspiration')]);
+    expect(changes).toEqual([]);
+  });
+
+  it('lists the changes in target id order, so the same inputs always read the same', () => {
+    const said = [
+      { targetId: 'b', counted: 1, level: 'partway' as const, graded: true },
+      { targetId: 'a', counted: 1, level: 'partway' as const, graded: true },
+    ];
+    expect(compareRecapToLive(said, [live('b', 2, 'floor'), live('a', 2, 'floor')]).map((c) => c.targetId)).toEqual(['a', 'b']);
   });
 });

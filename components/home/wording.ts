@@ -106,6 +106,15 @@ export function toAspirationLine(card: TargetCardView): string | null {
   return `${formatNumber(card.remainingToAspiration)}${unit} more to reach your aspiration`;
 }
 
+// What is left to the aspiration in a week that has closed (the weekly review's recap): said as how far short it was,
+// not as something still to reach. Only a graded target at its floor, with an aspiration it did not reach, has one.
+export function toSettledAspirationLine(card: TargetCardView): string | null {
+  if (card.status !== 'counted' || !card.graded || card.level !== 'floor' || card.remainingToAspiration === null) return null;
+  if (!(card.remainingToAspiration > 0)) return null;
+  const unit = card.unit ? ` ${card.unit}` : '';
+  return `${formatNumber(card.remainingToAspiration)}${unit} short of your aspiration that week`;
+}
+
 export interface PatternLine {
   text: string;
   // Holding is good news, slipping is a nudge; the words carry the meaning and the colour only reinforces it.
@@ -113,7 +122,8 @@ export interface PatternLine {
 }
 
 // A run of closed weeks, in the person's tone. Only a graded target has a pattern (the view never gives one otherwise).
-export function patternLine(pattern: PatternView, tone: Tone): PatternLine {
+// On the weekly review itself (`inReview`) a slipping run is not pointed at "your weekly review": the person is in it.
+export function patternLine(pattern: PatternView, tone: Tone, inReview = false): PatternLine {
   const run = weeks(pattern.periods);
   switch (pattern.kind) {
     case 'holding':
@@ -121,6 +131,7 @@ export function patternLine(pattern: PatternView, tone: Tone): PatternLine {
     case 'aspiration_repeated':
       return { tone: 'good', text: tone === 'gentle' ? `A good run: aspiration met ${run} running.` : `Aspiration met ${run} running.` };
     case 'slipping':
+      if (inReview) return { tone: 'nudge', text: tone === 'gentle' ? `Under the floor ${run} running. No rush.` : `Under the floor ${run} running.` };
       return {
         tone: 'nudge',
         text:

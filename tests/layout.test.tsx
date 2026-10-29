@@ -399,3 +399,29 @@ describe('the drawer and wizard sit outside the layout', () => {
     }
   });
 });
+
+// The one line about the weekly review (MOM-113 block 3.2), above the scoreboard and below the header.
+describe('the weekly review notice on home', () => {
+  const shellWith = (reviewPrompt?: { state: 'none' | 'due' | 'reviewed' }) => {
+    const views = buildChannelViews(goals, tasks, [], TODAY);
+    return render(
+      <AppShell views={views} connectedApps={[]} moveChains={{}} home={{ state: 'no_goals' }} reviewPrompt={reviewPrompt} />,
+    );
+  };
+
+  it('shows a way into the review on the planning day, and a way back to the finished one afterwards', () => {
+    shellWith({ state: 'due' });
+    expect(screen.getByRole('link', { name: 'See your weekly review' }).getAttribute('href')).toBe('/review');
+    cleanup();
+    shellWith({ state: 'reviewed' });
+    expect(screen.getByText("This week's review is done.")).toBeTruthy();
+  });
+
+  it('shows nothing on any other day, and nothing when home does not pass one', () => {
+    shellWith({ state: 'none' });
+    expect(screen.queryByRole('region', { name: 'Weekly review' })).toBeNull();
+    cleanup();
+    shellWith(undefined);
+    expect(screen.queryByRole('region', { name: 'Weekly review' })).toBeNull();
+  });
+});

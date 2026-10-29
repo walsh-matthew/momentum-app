@@ -9,7 +9,7 @@ export { selectEntries, measureTotal } from './entries';
 export { evaluateTarget, evaluatePeriod, specProblem } from './evaluate';
 export { forecastDeadline } from './forecast';
 export { detectPatterns, patternSettings } from './patterns';
-export { buildLayer1Facts, selectLayerThreeAdjustment, weeklyReviewWindow } from './review';
+export { buildLayer1Facts, closesEarly, compareRecapToLive, reviewAsOf, selectLayerThreeAdjustment, weeklyReviewWindow } from './review';
 export { computeScoreboard } from './scoreboard';
 export { addDays, assertAnchors, assertDate, canGrade, dayOfWeek, localDay, localNoon, weekRange } from './time';
 export { biggestCrossings, crossingKey, entriesPerDay, floorsMet } from './week';

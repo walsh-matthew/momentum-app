@@ -622,6 +622,50 @@ button:disabled {
   background: rgb(244 194 126 / 8%);
   color: var(--streak);
 }
+/* The weekly review's recap (MOM-113 block 3.2) reuses the home cards above; these are only its own lists and link. */
+.review-crossings,
+.review-priorities,
+.review-changes ul {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.review-priorities {
+  color: inherit;
+  font-size: 14px;
+}
+.review-crossings li,
+.review-priorities li,
+.review-changes li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.review-changes {
+  display: grid;
+  gap: 10px;
+}
+.review-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+.review-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--lime);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
 .home-steps {
   display: flex;
   flex-direction: column;

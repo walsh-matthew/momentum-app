@@ -119,7 +119,7 @@ export interface HomeRows {
 // ---------------------------------------------------------------------------
 
 // The database counts weekdays 1 to 7 with Monday as 1; the engine counts 0 to 6 with Sunday as 0 (Date.getUTCDay).
-const toWeekday = (day: number): Weekday => (day % 7) as Weekday;
+export const toWeekday = (day: number): Weekday => (day % 7) as Weekday;
 
 // 'HH:MM:SS' to minutes after midnight, or null when not set.
 function dayEndMinutes(time: string | null): number | null {

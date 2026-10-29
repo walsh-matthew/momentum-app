@@ -274,6 +274,20 @@ export interface Layer1TargetFact {
   trend: Trend | null;
 }
 
+// One target's count and level for a week: as a stored recap said it, or as the engine reads the same week now (§3, R-26).
+export interface ReviewedValue {
+  counted: number;
+  level: Level | null;
+  graded: boolean;
+}
+
+// A target whose week reads differently now than its stored recap said: both are the engine's own numbers (compareRecapToLive).
+export interface RecapComparison {
+  targetId: string;
+  said: ReviewedValue;
+  now: ReviewedValue;
+}
+
 // The one adjustment layer 3 raises (§3.2), picked by selectLayerThreeAdjustment. Only the three triggers buildable
 // from the engine's own facts are built yet: a deadline forecast that no longer fits, a slipping pattern, and an
 // aspiration hit repeatedly. The other three in §3.2 (a repeated priority exception, a goal clash, "still right for

@@ -9,8 +9,13 @@
 // - row level security: a signed-in person sees and changes only their own rows (switch off with gm.rls = false to
 //   prove the service filters by user id itself), and an entry can only be inserted through the person's own
 //   manual source (entries_insert_own_manual),
-// - the CHECK, unique and composite foreign key constraints of entries, entry_corrections, sources and steps.
-// ENFORCED_CONSTRAINTS lists every name it enforces; tests/fake-entries-model.test.ts checks each one exists in the SQL.
+// - the CHECK, unique and composite foreign key constraints of entries, entry_corrections, sources and steps,
+// - weekly_reviews (migration 018): select and insert only, one record per person and week, its CHECKs, and the trigger
+//   that sets finished_at whatever an insert sends.
+// ENFORCED_CONSTRAINTS and ENFORCED_REVIEW_CONSTRAINTS list every name it enforces; tests/fake-entries-model.test.ts checks
+// each one exists in the SQL.
+
+import { REVIEW_ADJUSTMENT_KINDS, REVIEW_ADJUSTMENT_OUTCOMES } from '@/types/database.types';
 
 type Row = Record<string, unknown>;
 
@@ -29,7 +34,8 @@ type TableName =
   | 'sources'
   | 'entries'
   | 'entry_corrections'
-  | 'period_snapshots';
+  | 'period_snapshots'
+  | 'weekly_reviews';
 
 // What the authenticated role may do on each table (migration 013, section 7).
 const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'delete'>> = {
@@ -43,6 +49,8 @@ const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'de
   entries: new Set(['select', 'insert']),
   entry_corrections: new Set(['select', 'insert', 'update', 'delete']),
   period_snapshots: new Set(['select']),
+  // 018: append-only. No update and no delete grant for the person.
+  weekly_reviews: new Set(['select', 'insert']),
 };
 
 export const ENFORCED_CONSTRAINTS = [
@@ -64,6 +72,17 @@ export const ENFORCED_CONSTRAINTS = [
   'work_item_steps_completed_together',
 ] as const;
 
+// Migration 018's constraints the fake enforces; the names are checked against the SQL.
+export const ENFORCED_REVIEW_CONSTRAINTS = [
+  'weekly_reviews_week_is_seven_days',
+  'weekly_reviews_recap_is_object',
+  'weekly_reviews_adjustment_kind_check',
+  'weekly_reviews_adjustment_is_object',
+  'weekly_reviews_adjustment_outcome_check',
+  'weekly_reviews_adjustment_together',
+  'weekly_reviews_user_week_unique',
+] as const;
+
 export const gm = {
   tables: {
     person_settings: [] as Row[],
@@ -76,6 +95,7 @@ export const gm = {
     entries: [] as Row[],
     entry_corrections: [] as Row[],
     period_snapshots: [] as Row[],
+    weekly_reviews: [] as Row[],
   } satisfies Record<TableName, Row[]>,
   user: null as { id: string } | null,
   rls: true,
@@ -86,6 +106,8 @@ export const gm = {
   // When set, the next read of this table fails, like a database that cannot be reached.
   failNextRead: null as { table: TableName; message: string } | null,
   clock: 0,
+  // The database's own time (an ISO instant), which weekly_reviews.finished_at takes whatever an insert sends. Null: the fake's clock.
+  dbNow: null as string | null,
 };
 
 export function resetGoalModel(user: { id: string } | null = null): void {
@@ -96,6 +118,7 @@ export function resetGoalModel(user: { id: string } | null = null): void {
   gm.failNextWrite = null;
   gm.failNextRead = null;
   gm.clock = 0;
+  gm.dbNow = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +223,22 @@ function checkViolation(table: TableName, row: Row): Violation | null {
       return { code: '23514', name: 'work_item_steps_completed_together' };
     }
   }
+  if (table === 'weekly_reviews') {
+    const start = Date.parse(`${String(row.week_start)}T00:00:00Z`);
+    if (!(new Date(start + 6 * 86_400_000).toISOString().slice(0, 10) === row.week_end)) {
+      return { code: '23514', name: 'weekly_reviews_week_is_seven_days' };
+    }
+    if (!isObject(row.recap)) return { code: '23514', name: 'weekly_reviews_recap_is_object' };
+    if (row.adjustment_kind !== null && !(REVIEW_ADJUSTMENT_KINDS as readonly unknown[]).includes(row.adjustment_kind)) {
+      return { code: '23514', name: 'weekly_reviews_adjustment_kind_check' };
+    }
+    if (row.adjustment !== null && !isObject(row.adjustment)) return { code: '23514', name: 'weekly_reviews_adjustment_is_object' };
+    if (row.adjustment_outcome !== null && !(REVIEW_ADJUSTMENT_OUTCOMES as readonly unknown[]).includes(row.adjustment_outcome)) {
+      return { code: '23514', name: 'weekly_reviews_adjustment_outcome_check' };
+    }
+    const none = [row.adjustment_kind === null, row.adjustment === null, row.adjustment_outcome === null];
+    if (!(none.every(Boolean) || none.every((n) => !n))) return { code: '23514', name: 'weekly_reviews_adjustment_together' };
+  }
   return null;
 }
 
@@ -210,6 +249,9 @@ function uniqueViolation(table: TableName, row: Row, self: Row | null): Violatio
   }
   if (table === 'entry_corrections' && clash((r) => r.source_id === row.source_id && r.source_record_id === row.source_record_id)) {
     return { code: '23505', name: 'entry_corrections_source_record_unique' };
+  }
+  if (table === 'weekly_reviews' && clash((r) => r.user_id === row.user_id && r.week_start === row.week_start)) {
+    return { code: '23505', name: 'weekly_reviews_user_week_unique' };
   }
   return null;
 }
@@ -396,6 +438,13 @@ class Query implements PromiseLike<Result> {
           row.work_item_id ??= null;
         }
         if (this.table === 'sources') row.provider ??= null;
+        if (this.table === 'weekly_reviews') {
+          row.adjustment_kind ??= null;
+          row.adjustment ??= null;
+          row.adjustment_outcome ??= null;
+          // The BEFORE INSERT trigger: the database's time, whatever the insert sent.
+          row.finished_at = gm.dbNow ?? stamp();
+        }
         const violation =
           insertPolicyViolation(this.table, row) ??
           checkViolation(this.table, row) ??

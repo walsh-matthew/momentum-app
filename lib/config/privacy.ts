@@ -67,6 +67,12 @@ export const STORED_GROUPS: readonly StoredGroup[] = [
     tables: ['starting_points'],
   },
   {
+    id: 'weekly_reviews',
+    words:
+      'A copy of each weekly recap you finish, as it was shown: each target, what crossed that week, and the priorities you named in your own words. It is never rewritten, so a later entry shows beside it in words instead of changing it.',
+    tables: ['weekly_reviews'],
+  },
+  {
     id: 'plan',
     words: "Your current plan's tasks, and where you have moved them.",
     tables: ['micro_tasks', 'task_rebalance_history'],
