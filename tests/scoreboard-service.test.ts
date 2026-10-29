@@ -136,6 +136,83 @@ describe('getHomeScoreboard reads every entry, a page at a time', () => {
   });
 });
 
+// A deadline task due tomorrow with a rough size of 6 hours (360 minutes), and the days the person set aside for it.
+function deadlineTask(userId: string, goalId: unknown, over: { pickToday?: boolean; kindToday?: boolean } = {}) {
+  const { pickToday = true, kindToday = true } = over;
+  const item = {
+    id: newId(),
+    user_id: userId,
+    goal_id: goalId,
+    target_id: null,
+    kind: 'deadline_task',
+    title: `${userId === ME ? 'My' : 'Their'} application`,
+    sort_order: 0,
+    due_date: '2026-10-30',
+    date_can_move: true,
+    estimate_minutes: 360,
+    completed_at: null,
+    created_at: '2026-10-05T00:00:02.000Z',
+  };
+  add('work_items', item);
+  const kind = { id: newId(), user_id: userId, name: 'Work day', capacity_unit: 'hours', capacity_amount: 4 };
+  add('person_day_types', kind);
+  if (pickToday) add('week_plan_picks', { id: newId(), user_id: userId, work_item_id: item.id, plan_date: '2026-10-29' });
+  add('week_plan_picks', { id: newId(), user_id: userId, work_item_id: item.id, plan_date: '2026-10-30' });
+  if (kindToday) add('week_plan_day_types', { id: newId(), user_id: userId, plan_date: '2026-10-29', day_type_id: kind.id });
+  add('week_plan_day_types', { id: newId(), user_id: userId, plan_date: '2026-10-30', day_type_id: kind.id });
+  return { item, kind };
+}
+
+const forecastOfMine = async () => {
+  const r = await getHomeScoreboard({ now });
+  if (!r.ok || r.data.state !== 'ready') throw new Error('not ready');
+  return r.data.goals[0].milestones[0]?.forecast;
+};
+
+describe('getHomeScoreboard gives a deadline task its forecast from the person’s own week plan', () => {
+  it('reads their picks, their kinds of days and their usual time', async () => {
+    const mine = world(ME, 'My');
+    deadlineTask(ME, mine.goal.id);
+    // 360 minutes is 270 to 450, and two four-hour days give 480.
+    expect(await forecastOfMine()).toEqual({ state: 'fits', soFar: false });
+  });
+
+  it('never uses another person’s picks, kinds or usual time, even with row level security off', async () => {
+    const mine = world(ME, 'My');
+    const theirs = world(OTHER, 'Their');
+    // Mine has a pick and no kind for today; theirs has everything. Theirs must not fill in my day.
+    deadlineTask(ME, mine.goal.id, { kindToday: false });
+    deadlineTask(OTHER, theirs.goal.id);
+    expect(await forecastOfMine()).toEqual({ state: 'day_without_kind', date: '2026-10-29' });
+    gm.rls = false;
+    expect(await forecastOfMine()).toEqual({ state: 'day_without_kind', date: '2026-10-29' });
+  });
+
+  it('says nothing is set aside when the person has not put the task on a day', async () => {
+    const mine = world(ME, 'My');
+    deadlineTask(ME, mine.goal.id);
+    gm.tables.week_plan_picks = [];
+    expect(await forecastOfMine()).toEqual({ state: 'nothing_set_aside' });
+  });
+
+  it('writes nothing', async () => {
+    const mine = world(ME, 'My');
+    deadlineTask(ME, mine.goal.id);
+    await getHomeScoreboard({ now });
+    expect(gm.writes).toEqual([]);
+  });
+
+  it.each(['week_plan_picks', 'week_plan_day_types', 'person_day_types', 'work_items'] as const)(
+    'is an error result, not a scoreboard without its forecast, when %s cannot be read',
+    async (table) => {
+      const mine = world(ME, 'My');
+      deadlineTask(ME, mine.goal.id);
+      gm.failNextRead = { table, message: 'connection reset' };
+      expect(await getHomeScoreboard({ now })).toEqual({ ok: false, error: 'Could not load your scoreboard.' });
+    },
+  );
+});
+
 describe('getHomeScoreboard does not write, and does not guess', () => {
   it('writes nothing', async () => {
     world(ME, 'My').log('2026-10-28');
