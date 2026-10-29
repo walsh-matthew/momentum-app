@@ -73,6 +73,12 @@ export const STORED_GROUPS: readonly StoredGroup[] = [
     tables: ['weekly_reviews'],
   },
   {
+    id: 'week_plan',
+    words:
+      'How you plan your week: which of your steps and habits you put on which day, and which of your kinds of days a date is. You choose both, and you can change or clear either.',
+    tables: ['week_plan_picks', 'week_plan_day_types'],
+  },
+  {
     id: 'plan',
     words: "Your current plan's tasks, and where you have moved them.",
     tables: ['micro_tasks', 'task_rebalance_history'],

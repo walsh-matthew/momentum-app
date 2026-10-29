@@ -134,7 +134,19 @@ allow_list (rel, role, privs) as (values
   -- A finished weekly review (018, MOM-113): the person's session writes it once; nobody changes or deletes one.
   ('weekly_reviews',          'anon',          ''),
   ('weekly_reviews',          'authenticated', 'SELECT,INSERT'),
-  ('weekly_reviews',          'service_role',  '')
+  ('weekly_reviews',          'service_role',  ''),
+
+  -- The week plan (019, MOM-112): the person's own pick of items for their days (added and removed, never edited) and
+  -- which of their day types a date is (changed and cleared). Nothing without a session touches either. UPDATE of a
+  -- date's kind is a COLUMN privilege (day_type_id only), which this table-level check does not see, so UPDATE is not
+  -- listed; supabase/verify/019_week_plan.sql checks the column.
+  ('week_plan_picks',         'anon',          ''),
+  ('week_plan_picks',         'authenticated', 'SELECT,INSERT,DELETE'),
+  ('week_plan_picks',         'service_role',  ''),
+
+  ('week_plan_day_types',     'anon',          ''),
+  ('week_plan_day_types',     'authenticated', 'SELECT,INSERT,DELETE'),
+  ('week_plan_day_types',     'service_role',  '')
 ),
 roles (role) as (values ('anon'), ('authenticated'), ('service_role')),
 dml (ord, priv) as (values (1, 'SELECT'), (2, 'INSERT'), (3, 'UPDATE'), (4, 'DELETE')),
