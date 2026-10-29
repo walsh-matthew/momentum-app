@@ -631,7 +631,7 @@ describe('an entry saved before its goal’s start date', () => {
     render(<TapControl target={target()} />);
     fireEvent.click(screen.getByRole('button', { name: /Log one/ }));
     expect((await screen.findByRole('status')).textContent).toBe(notice);
-    fireEvent.click(screen.getByRole('button', { name: /Log one/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Log one/ }));
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 

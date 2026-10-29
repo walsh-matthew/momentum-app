@@ -3,13 +3,11 @@
 // The "Sync now" button on the Hevy card (MOM-129), in a DOM with the server action mocked: where it appears, and
 // what it shows in each state. The card is told words, never a key or a raw result.
 
-import { cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IntegrationCardList } from '@/components/integrations/IntegrationCardList';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { ConnectionStatus, HevySyncView, IntegrationAccount } from '@/types/integrations';
-
-configure({ asyncUtilTimeout: 5000 });
 
 const actions = vi.hoisted(() => ({ sync: vi.fn() }));
 vi.mock('@/app/actions/integrations', () => ({
@@ -86,7 +84,7 @@ describe('the states', () => {
 
     finish({ ok: true, data: view({}) });
     expect((await card('Hevy').findByRole('status')).textContent).toBe('Added 2 entries.');
-    const ready = card('Hevy').getByRole('button', { name: 'Sync now' }) as HTMLButtonElement;
+    const ready = (await card('Hevy').findByRole('button', { name: 'Sync now' })) as HTMLButtonElement;
     expect(ready.disabled).toBe(false);
     expect(actions.sync).toHaveBeenCalledTimes(1);
   });
@@ -117,7 +115,7 @@ describe('the states', () => {
       actions.sync.mockResolvedValueOnce({ ok: true, data: view({ kind, message, added: 0 }) });
       fireEvent.click(await card('Hevy').findByRole('button', { name: 'Sync now' }));
       await waitFor(() => expect(card('Hevy').getByRole('alert').textContent).toBe(message));
-      expect((card('Hevy').getByRole('button', { name: 'Sync now' }) as HTMLButtonElement).disabled).toBe(false);
+      expect(((await card('Hevy').findByRole('button', { name: 'Sync now' })) as HTMLButtonElement).disabled).toBe(false);
     }
   });
 

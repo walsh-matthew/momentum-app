@@ -4,15 +4,13 @@
 // actions mocked. The cards get only IntegrationAccount (status and fixed wording), never a token or a key. The
 // Hevy key goes into a password field, is sent to the action and is not kept: not echoed, and the field is emptied.
 
-import { cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IntegrationCardList } from '@/components/integrations/IntegrationCardList';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { ConnectionStatus, IntegrationAccount } from '@/types/integrations';
 
 // The default of 1 second is too tight when the whole suite runs in parallel.
-configure({ asyncUtilTimeout: 5000 });
-
 const actions = vi.hoisted(() => ({ saveHevy: vi.fn(), disconnect: vi.fn(), toggle: vi.fn(), sync: vi.fn() }));
 vi.mock('@/app/actions/integrations', () => ({
   saveHevyApiKey: actions.saveHevy,
