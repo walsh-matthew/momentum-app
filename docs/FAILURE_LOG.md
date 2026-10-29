@@ -422,6 +422,41 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner.
 - **Predicted it?** No.
 
+### F-059 · 2026-10-29 · build tool
+- **Asked:** During `/run-block MOM-124`'s preflight (checking whether the local stack was up before trying the new script), check prerequisites by name only and never print a value.
+- **What went wrong:** A fifth instance of F-047/F-049/F-051/F-057: ran `npx supabase status` with no filter, and its output showed the local stack's keys in plain text. They are the CLI's fixed demo values, not secrets of this project.
+- **Why:** The exact pattern F-057 already named: no committed command existed yet that answers "is the stack up" with one word, so the habit of running the full status command came back.
+- **Caught by:** The build agent, in the same message; nothing was copied anywhere.
+- **Led to:** A fix in the same block (MOM-124 part 1): `npm run stack:status` answers "is the stack up" with one line and no keys, and `.claude/settings.json` denies the unfiltered status command.
+
+### F-060 · 2026-10-29 · build tool
+- **Asked:** Write component tests for the Hevy "Sync now" control (MOM-129, 2026-10-28).
+- **What went wrong:** Two tests in the file wait for the result message (the alert, or the "Added 2 entries." status) and then look for the "Sync now" button at once. For a moment after the message shows, the button still reads "Syncing…", so under a full-suite run it is not found. It failed 2 of 6 runs on 2026-10-28 and 2 of 4 full runs at the 2026-10-29 day-end (once on each of two branches that do not touch it), and passed alone every time. It can also turn a pull request's CI red.
+- **Why:** The same race as F-055, one file over. The warning about waiting for the settled state was in the backlog under MOM-96, and nothing points a block writing a component test to it, so the pattern was written again.
+- **Caught by:** The day-end build checks (step A), then a rerun of the full suite and of the file alone.
+- **Led to:** MOM-96: make every such test wait for the button by its settled name, starting with this file.
+
+### F-061 · 2026-10-29 · build tool
+- **Asked:** Draft new log entries marked `unreviewed`, so the day-end finds them and the owner reviews them.
+- **What went wrong:** A failure entry and a risk-log row were written into the working copy without the `unreviewed` mark, and the failure entry had the owner's "Predicted it?" answer filled in by the build agent. The day-end's start counted 0 unreviewed entries while two were waiting. It is the blind spot of F-041 and F-056 from the other side: there the pattern missed marked entries, here the entries missed the mark.
+- **Why:** The count trusts the mark, and the mark depends on whoever drafts the entry remembering it.
+- **Caught by:** The build agent at the day-end's start, from the uncommitted changes to the two log files.
+- **Led to:** MOM-124: the day-end's start also counts entries added in the uncommitted log changes, marked or not.
+
+### F-062 · 2026-10-29 · build tool (project thread)
+- **Asked:** Advise the build session on what to commit.
+- **What went wrong:** The advising thread told the build session to commit the pending live-checks file, which is git-ignored on purpose. The build session caught it.
+- **Why:** The thread did not check the ignore file before naming the file.
+- **Caught by:** The build session.
+- **Led to:** A rule: check that a file is tracked before telling anyone to commit it.
+
+### F-063 · 2026-10-29 · build tool (project thread)
+- **Asked:** Answer a block's two-question design form (MOM-111, block 3).
+- **What went wrong:** The thread wrote one combined answer without saying which question it was for, then sent it twice more. The owner had to ask where the confusion came from.
+- **Why:** It answered before seeing that the form had two tabs.
+- **Caught by:** The owner.
+- **Led to:** A rule: one labeled answer per form question.
+
 ## In-product failures
 
 None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
