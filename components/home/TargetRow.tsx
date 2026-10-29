@@ -1,17 +1,23 @@
+import type { ReactNode } from 'react';
 import type { Tone } from '@/types/database.types';
 import type { TargetCardView } from '@/types/home';
-import { formatNumber, levelChip, levelsText, patternLine, slotDaysText, toAspirationLine, trendText } from './wording';
+import { formatNumber, levelChip, levelsText, patternLine, slotDaysText, toAspirationLine, toSettledAspirationLine, trendText } from './wording';
 
 interface TargetRowProps {
   card: TargetCardView;
   tone: Tone;
+  // A week that has already closed, as the weekly review's recap shows it: the count is "that week", what is left to the
+  // aspiration is said as how far short it was, and a slipping run is not pointed at the review the person is in.
+  settled?: boolean;
+  // Shown at the end of a counted target, inside its card (the recap's crossings).
+  children?: ReactNode;
 }
 
 const CHIP_CLASS = { accent: 'chip chip-accent', warn: 'chip chip-warn', dashed: 'chip chip-dashed', plain: 'chip' } as const;
 
 // One target on its goal's card. Every number is the engine's, and the chip always says the level in words. A target
 // that is not graded never shows a level word or a holding or slipping line, whatever level the engine's result holds.
-export function TargetRow({ card, tone }: TargetRowProps) {
+export function TargetRow({ card, tone, settled = false, children }: TargetRowProps) {
   const chip = levelChip(card);
   const levels = levelsText(card);
   const head = (
@@ -49,8 +55,8 @@ export function TargetRow({ card, tone }: TargetRowProps) {
   }
 
   const unit = card.unit ? ` ${card.unit}` : '';
-  const aspirationLine = toAspirationLine(card);
-  const pattern = card.graded && card.pattern ? patternLine(card.pattern, tone) : null;
+  const aspirationLine = settled ? toSettledAspirationLine(card) : toAspirationLine(card);
+  const pattern = card.graded && card.pattern ? patternLine(card.pattern, tone, settled) : null;
   const trend = card.trend ? trendText(card.trend) : null;
   const scaleMax = card.floor === null ? 0 : Math.max(card.aspiration ?? card.floor, card.counted);
   const percent = (value: number) => Math.min(100, (value / scaleMax) * 100);
@@ -70,7 +76,7 @@ export function TargetRow({ card, tone }: TargetRowProps) {
         <p className="home-count">
           {formatNumber(card.counted)}
           {unit && <span>{card.unit}</span>}
-          <span>{card.role === 'outcome' && card.period === 'weekly' ? 'this week' : 'so far'}</span>
+          <span>{settled ? 'that week' : card.role === 'outcome' && card.period === 'weekly' ? 'this week' : 'so far'}</span>
         </p>
       )}
       {scaleMax > 0 && !card.slots && card.floor !== null && (
@@ -99,6 +105,7 @@ export function TargetRow({ card, tone }: TargetRowProps) {
           {pattern.text}
         </p>
       )}
+      {children}
     </div>
   );
 }

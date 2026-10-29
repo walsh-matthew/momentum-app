@@ -129,7 +129,12 @@ allow_list (rel, role, privs) as (values
   -- Nobody deletes one.
   ('starting_points',         'anon',          ''),
   ('starting_points',         'authenticated', 'SELECT,INSERT'),
-  ('starting_points',         'service_role',  '')
+  ('starting_points',         'service_role',  ''),
+
+  -- A finished weekly review (018, MOM-113): the person's session writes it once; nobody changes or deletes one.
+  ('weekly_reviews',          'anon',          ''),
+  ('weekly_reviews',          'authenticated', 'SELECT,INSERT'),
+  ('weekly_reviews',          'service_role',  '')
 ),
 roles (role) as (values ('anon'), ('authenticated'), ('service_role')),
 dml (ord, priv) as (values (1, 'SELECT'), (2, 'INSERT'), (3, 'UPDATE'), (4, 'DELETE')),

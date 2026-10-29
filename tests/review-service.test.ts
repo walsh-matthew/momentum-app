@@ -2,89 +2,20 @@
 // (tests/helpers/fakeEntriesModel.ts). Dates are from October 2026: 2026-10-05 is a Monday.
 //
 // Case A and case B from lib/engine/review.ts's weeklyReviewWindow are both exercised here through real database
-// rows: case B (planning the Monday after the reviewed week) lands on a week the engine has already marked closed,
-// so a slipping pattern can be detected; case A (planning on the reviewed week's own last day) lands on a week the
-// engine still calls open (it closes the day after its last day, not on it), so layer 1's numbers are complete but
-// no pattern-based adjustment can fire yet — see RAID I-11.
+// rows: case B (planning the Monday after the reviewed week) lands on a week the engine has already marked closed;
+// case A (planning on the reviewed week's own last day) lands on a week the engine still calls open, so the review asks
+// it about the day after (reviewAsOf) and both cases find the same pattern (RAID I-11). The finished review's record, the
+// "already reviewed" state and the later-entry comparison are in tests/review-records-service.test.ts.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getWeeklyReviewFacts } from '@/lib/services/review';
-import { ME, OTHER, add, newId, resetGoalModel } from './helpers/fakeEntriesModel';
+import { ME, OTHER, add, resetGoalModel } from './helpers/fakeEntriesModel';
+import { CASE_A_NOW, CASE_B_NOW, NOT_DUE_NOW, settingsRow, world } from './helpers/reviewWorld';
 
 vi.mock('@/lib/supabase/server', async () => {
   const { createSupabaseServerClient } = await import('./helpers/fakeEntriesModel');
   return { createSupabaseServerClient };
 });
-
-// Monday-start week, planning the following Monday (DB value 1 both ways): reviews 10-19..10-25, already closed.
-const CASE_B_NOW = Date.UTC(2026, 9, 26, 19, 0, 0); // Monday 2026-10-26, noon in Los Angeles
-// Same week start and planning weekday as DB value 7 (Sunday): reviews the same week on its own last day, 10-25.
-const CASE_A_NOW = Date.UTC(2026, 9, 25, 19, 0, 0); // Sunday 2026-10-25, noon in Los Angeles
-// A Wednesday: not the planning day under either setting above.
-const NOT_DUE_NOW = Date.UTC(2026, 9, 21, 19, 0, 0);
-
-const settingsRow = (userId: string, over: Record<string, unknown> = {}) => ({
-  user_id: userId,
-  time_zone: 'America/Los_Angeles',
-  week_start: 1,
-  day_end: '00:00:00',
-  planning_weekday: null,
-  review_depth: null,
-  slipping_periods: null,
-  ...over,
-});
-
-function world(userId: string, title: string) {
-  const goal = {
-    id: newId(),
-    user_id: userId,
-    title: `${title} goal`,
-    state: 'active',
-    shape: 'ongoing',
-    start_date: '2026-10-05',
-    end_date: null,
-    created_at: '2026-10-05T00:00:00.000Z',
-  };
-  add('goals', goal);
-  const target = {
-    id: newId(),
-    user_id: userId,
-    goal_id: goal.id,
-    title: `${title} workouts`,
-    measure: 'count',
-    unit: null,
-    role: 'effort',
-    period_kind: 'weekly',
-    due_date: null,
-    slot_weekdays: null,
-    floor: 3,
-    aspiration: 5,
-    qualifying_threshold: null,
-    carry_over_kind: 'habit',
-    created_at: '2026-10-05T00:00:01.000Z',
-  };
-  add('targets', target);
-  const source = { id: newId(), user_id: userId, kind: 'manual', provider: null, label: 'Manual' };
-  add('sources', source);
-  const log = (day: string, n = 1) => {
-    for (let i = 0; i < n; i++) {
-      add('entries', {
-        id: newId(),
-        user_id: userId,
-        target_id: target.id,
-        source_id: source.id,
-        source_record_id: newId(),
-        work_item_id: null,
-        occurred_at: `${day}T19:00:00+00:00`,
-        value: 1,
-        evidence: {},
-        created_at: '2026-10-29T00:00:00.000Z',
-      });
-    }
-  };
-  const priority = (label: string) => add('person_priorities', { id: newId(), user_id: userId, label, sort_order: 0, created_at: '2026-10-01T00:00:00.000Z' });
-  return { goal, target, source, log, priority };
-}
 
 beforeEach(() => resetGoalModel({ id: ME }));
 
@@ -120,7 +51,8 @@ describe('getWeeklyReviewFacts: states before "ready"', () => {
     world(ME, 'My');
     add('person_settings', settingsRow(ME, { planning_weekday: 1 }));
     const r = await getWeeklyReviewFacts({ now: () => NOT_DUE_NOW });
-    expect(r).toEqual({ ok: true, data: { state: 'not_due' } });
+    // Nothing finished before, so there is no last review and nothing to compare.
+    expect(r).toEqual({ ok: true, data: { state: 'not_due', tone: 'middle', planningWeekday: 1, last: null, changes: [] } });
   });
 });
 
@@ -184,7 +116,7 @@ describe('getWeeklyReviewFacts: ready, case B (planning the day after the review
 });
 
 describe('getWeeklyReviewFacts: ready, case A (planning on the reviewed week’s own last day)', () => {
-  it('shows the recap for the week ending today, with no pattern-based adjustment yet (RAID I-11)', async () => {
+  it('closes the week early, so the slipping check-in is found in the same sitting (RAID I-11)', async () => {
     const mine = world(ME, 'My');
     mine.log('2026-10-12'); // week 2 misses the floor
     mine.log('2026-10-19'); // week 3 (reviewed) misses the floor too
@@ -194,9 +126,28 @@ describe('getWeeklyReviewFacts: ready, case A (planning on the reviewed week’s
     if (!r.ok || r.data.state !== 'ready') throw new Error('not ready');
     expect(r.data.window).toEqual({ start: '2026-10-19', end: '2026-10-25' });
     expect(r.data.targets[0]).toMatchObject({ result: { counted: 1, level: 'partway' } });
-    // The week being reviewed is numerically final but still "open" (today is not yet past its last day), so the
-    // engine has not folded it into a pattern run. See RAID I-11.
-    expect(r.data.adjustment).toBeNull();
+    // Today is the week's own last day, which the engine still calls open. The review asks it about the day after, as
+    // it would be asked the next morning (reviewAsOf), so the week is closed and the run that ends in it is found now:
+    // weeks 1, 2 and 3 all missed the floor. Before this was fixed the adjustment was null here (I-11).
+    expect(r.data.adjustment).toEqual({ kind: 'slipping_check_in', targetId: mine.target.id, periods: 3 });
+    // The recap says it closed early, so the screen can say it counts through today.
+    expect(r.data.recap.closedEarly).toBe(true);
+  });
+
+  it('gives the same pattern the next morning that it gave on the last day itself', async () => {
+    const mine = world(ME, 'My');
+    mine.log('2026-10-12');
+    mine.log('2026-10-19');
+    const settings = add('person_settings', settingsRow(ME, { planning_weekday: 7 }));
+    const sunday = await getWeeklyReviewFacts({ now: () => CASE_A_NOW });
+    // The same person, planning on Mondays instead: the same week, now already closed for the engine.
+    settings.planning_weekday = 1;
+    const monday = await getWeeklyReviewFacts({ now: () => CASE_B_NOW });
+    if (!sunday.ok || sunday.data.state !== 'ready' || !monday.ok || monday.data.state !== 'ready') throw new Error('not ready');
+    expect(sunday.data.adjustment).toEqual(monday.data.adjustment);
+    expect(sunday.data.targets).toEqual(monday.data.targets);
+    expect(sunday.data.recap.closedEarly).toBe(true);
+    expect(monday.data.recap.closedEarly).toBe(false);
   });
 });
 

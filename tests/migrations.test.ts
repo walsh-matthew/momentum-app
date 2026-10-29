@@ -31,6 +31,8 @@ import {
   LLM_OUTCOMES,
   REMINDER_MODES,
   RETURN_KINDS,
+  REVIEW_ADJUSTMENT_KINDS,
+  REVIEW_ADJUSTMENT_OUTCOMES,
   REVIEW_DEPTHS,
   REVIEW_PLANNING_MODES,
   SHIFT_TYPES,
@@ -339,10 +341,12 @@ describe('LLM usage logs and limits (migration 011, MOM-73)', () => {
   const reserve = sql.slice(sql.indexOf('create function public.reserve_llm_call'));
 
   it('the feature and outcome lists match types/database.types.ts', () => {
-    // 011 defined the feature list; 014 (MOM-128) replaced it with one that adds 'setup', so the types follow 014.
+    // 011 defined the feature list; 014 (MOM-128) replaced it with one that adds 'setup', and 018 (MOM-113) with one that
+    // adds 'weekly_review', so the types follow 018.
     expect(inList(sql, 'llm_usage_logs_feature_check')).toEqual(['rebalance', 'week_one_plan']);
-    expect(inList(sqlOf('014'), 'llm_usage_logs_feature_check')).toEqual([...LLM_FEATURES]);
-    expect(LLM_FEATURES).toEqual(['rebalance', 'week_one_plan', 'setup']);
+    expect(inList(sqlOf('014'), 'llm_usage_logs_feature_check')).toEqual(['rebalance', 'week_one_plan', 'setup']);
+    expect(inList(sqlOf('018'), 'llm_usage_logs_feature_check')).toEqual([...LLM_FEATURES]);
+    expect(LLM_FEATURES).toEqual(['rebalance', 'week_one_plan', 'setup', 'weekly_review']);
     expect(inList(sql, 'llm_usage_logs_outcome_check')).toEqual([...LLM_OUTCOMES]);
   });
 
@@ -906,6 +910,83 @@ describe('migration 017 stores which setup values came from a suggestion (MOM-13
   });
 });
 
+describe('migration 018 stores a finished weekly review once and never changes it (MOM-113)', () => {
+  const sql = sqlOf('018');
+  const table = /create table public\.weekly_reviews \(([\s\S]*?)\n\);/.exec(sql)?.[1] ?? '';
+  const fn = /create function public\.weekly_reviews_set_finished_at\(\)[\s\S]*?\n\$\$;/i.exec(sql)?.[0] ?? '';
+  const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '018_weekly_reviews.sql'), 'utf8');
+
+  it('adds the table and the feature name, and leaves every earlier migration as it was', () => {
+    for (const earlier of ['011', '013', '014', '017']) expect(sqlOf(earlier), earlier).not.toMatch(/weekly_reviews/);
+    expect(inList(sqlOf('014'), 'llm_usage_logs_feature_check')).not.toContain('weekly_review');
+    // The one change to an applied table is the usage log's feature check, dropped and re-added as 014 did.
+    const altered = [...sql.matchAll(/alter table public\.([a-z_]+)\s+(add|drop|alter|enable)\s+(\w+)/gi)].map((m) => `${m[1]} ${m[2]} ${m[3]}`.toLowerCase());
+    expect(altered).toEqual(['weekly_reviews enable row', 'llm_usage_logs drop constraint', 'llm_usage_logs add constraint']);
+  });
+
+  it('keeps its kinds and outcomes in step with types/database.types.ts', () => {
+    expect(inList(table, 'weekly_reviews_adjustment_kind_check')).toEqual([...REVIEW_ADJUSTMENT_KINDS]);
+    expect(inList(table, 'weekly_reviews_adjustment_outcome_check')).toEqual([...REVIEW_ADJUSTMENT_OUTCOMES]);
+    expect(REVIEW_ADJUSTMENT_KINDS).toHaveLength(6);
+    expect(REVIEW_ADJUSTMENT_OUTCOMES).toEqual(['changed', 'declined', 'skipped']);
+  });
+
+  it('is written once per person and week, seven days long, and goes with the account', () => {
+    expect(table).toMatch(/user_id\s+uuid not null references public\.users \(id\) on delete cascade/);
+    expect(table).toMatch(/constraint weekly_reviews_user_week_unique unique \(user_id, week_start\)/);
+    expect(table).toMatch(/constraint weekly_reviews_week_is_seven_days check \(week_end = week_start \+ 6\)/);
+    expect(table).toMatch(/constraint weekly_reviews_adjustment_together/);
+  });
+
+  it('turns row level security on, takes every default privilege back, and grants select and insert only', () => {
+    expect(sql).toMatch(/alter table public\.weekly_reviews enable row level security/);
+    expect(sql).toMatch(/revoke all on table public\.weekly_reviews from anon, authenticated, service_role/);
+    const grants = [...sql.matchAll(/grant ([a-z, ()_]+) on table public\.weekly_reviews to ([a-z_]+)/g)].map((m) => `${m[2]}: ${m[1]}`);
+    expect(grants).toEqual(['authenticated: select, insert']);
+    expect(sql).not.toMatch(/grant [^;]*\b(update|delete|truncate|references|trigger|all)\b[^;]*on table public\.weekly_reviews/i);
+  });
+
+  it('has an owner-only select and insert policy and no update or delete policy', () => {
+    const policies = [...sql.matchAll(/create policy "([^"]+)" on public\.weekly_reviews\s+for (select|insert|update|delete|all)/g)].map((m) => `${m[1]} ${m[2]}`);
+    expect(policies).toEqual(['weekly_reviews_select_own select', 'weekly_reviews_insert_own insert']);
+  });
+
+  it('sets finished_at in a BEFORE INSERT trigger, and the trigger function follows 012: no EXECUTE for any API role', () => {
+    expect(fn).toMatch(/returns trigger/);
+    expect(fn).toMatch(/set search_path = ''/);
+    expect(fn).toMatch(/new\.finished_at := now\(\)/);
+    expect(sql).toMatch(/create trigger weekly_reviews_set_finished_at before insert on public\.weekly_reviews\s+for each row execute function public\.weekly_reviews_set_finished_at\(\)/);
+    expect(sql).toMatch(/revoke execute on function public\.weekly_reviews_set_finished_at\(\) from public, anon, authenticated, service_role/);
+    expect(sql).not.toMatch(/grant execute on function public\.weekly_reviews_set_finished_at/i);
+  });
+
+  it('adds \'weekly_review\' to the usage log\'s feature check and keeps the three it had', () => {
+    expect(inList(sql, 'llm_usage_logs_feature_check')).toEqual(['rebalance', 'week_one_plan', 'setup', 'weekly_review']);
+  });
+
+  it('is checked by a verify script with checks that fail without the trigger, the revoke and the missing grants', () => {
+    expect(verify).toMatch(/It reads back within a minute of now, not a week ago/);
+    expect(verify).toMatch(/anon, authenticated and service_role cannot execute the trigger function/);
+    expect(verify).toMatch(/PUBLIC cannot execute the trigger function either/);
+    expect(verify).toMatch(/Calling the trigger function directly is refused by privilege for each of the three/);
+    expect(verify).toMatch(/A person cannot rewrite their own record/);
+    expect(verify).toMatch(/A person cannot delete their own record/);
+    expect(verify).toMatch(/A second record for the same week is refused by the unique key/);
+    expect(verify).toMatch(/A weekly_review call is accepted by the usage log/);
+  });
+
+  it('leaves nothing behind on production: one block that always rolls back, then checks that run after it', () => {
+    expect(verify).toMatch(/raise exception 'mom113_rollback'/);
+    expect(verify.indexOf("raise exception 'mom113_rollback'")).toBeLessThan(verify.indexOf('The rollback left no throwaway account behind'));
+    expect(verify).toMatch(/The rollback left no throwaway account behind/);
+    expect(verify).toMatch(/The rollback left no weekly_reviews row, usage row or user row for either of them/);
+    expect(verify).toMatch(/from public\.weekly_reviews where user_id in \(a, b\)/);
+    // Every write is a throwaway account's own, in the one inner block before the handler.
+    const block = verify.slice(verify.indexOf('begin\n    insert into auth.users'), verify.indexOf("exception when others then\n    if sqlerrm"));
+    expect(block.match(/insert into auth\.users/g)).toHaveLength(1);
+  });
+});
+
 describe('the grants allow-list covers the goal model tables (supabase/verify/900_table_grants.sql)', () => {
   const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8').replace(/--.*$/gm, '');
   const entry = (table: string, role: string) => new RegExp(`\\('${table}',\\s+'${role}',\\s+'([A-Z,]*)'\\)`).exec(allow)?.[1];
@@ -926,6 +1007,8 @@ describe('the grants allow-list covers the goal model tables (supabase/verify/90
     ['period_snapshots', 'SELECT,INSERT', ''],
     // 017: UPDATE of answered_at and outcome is a column privilege, so the table-level check lists SELECT and INSERT only.
     ['starting_points', 'SELECT,INSERT', ''],
+    // 018: a finished review is written once and never changed.
+    ['weekly_reviews', 'SELECT,INSERT', ''],
   ])('%s: anon nothing, authenticated %s, service_role %s', (table, authenticated, service) => {
     expect(entry(table, 'anon')).toBe('');
     expect(entry(table, 'authenticated')).toBe(authenticated);

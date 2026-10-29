@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ENFORCED_CONSTRAINTS } from './helpers/fakeEntriesModel';
+import { ENFORCED_CONSTRAINTS, ENFORCED_REVIEW_CONSTRAINTS } from './helpers/fakeEntriesModel';
 
 // Statements only: comments say things like "never edited" and would match.
 const sql = readFileSync(join(process.cwd(), 'supabase', 'migrations', '013_goal_model_tables.sql'), 'utf8').replace(/--.*$/gm, '');
@@ -32,5 +32,24 @@ describe('the goal model fake matches migration 013', () => {
   it('an entry can be neither updated nor deleted by the person: a removal is a correction', () => {
     expect(sql).toContain('grant select, insert on table public.entries to authenticated;');
     expect(sql).not.toMatch(/grant[^;]*\b(update|delete)\b[^;]*on table public\.entries to authenticated/i);
+  });
+});
+
+// Migration 018 (MOM-113): the weekly_reviews table the fake also stands in for.
+const sql018 = readFileSync(join(process.cwd(), 'supabase', 'migrations', '018_weekly_reviews.sql'), 'utf8').replace(/--.*$/gm, '');
+
+describe('the goal model fake matches migration 018', () => {
+  it.each([...ENFORCED_REVIEW_CONSTRAINTS])('%s exists in the SQL', (name) => {
+    expect(sql018).toMatch(new RegExp(`(constraint|policy)\\s+"?${name}"?\\b`, 'i'));
+  });
+
+  it('the person can select and insert a record and nothing else, as the fake allows', () => {
+    expect(sql018).toContain('grant select, insert on table public.weekly_reviews to authenticated;');
+    expect(sql018).not.toMatch(/grant[^;]*\b(update|delete)\b[^;]*on table public\.weekly_reviews/i);
+  });
+
+  it('finished_at is set by a BEFORE INSERT trigger, as the fake does', () => {
+    expect(sql018).toMatch(/create trigger weekly_reviews_set_finished_at before insert on public\.weekly_reviews/);
+    expect(sql018).toMatch(/new\.finished_at := now\(\)/);
   });
 });

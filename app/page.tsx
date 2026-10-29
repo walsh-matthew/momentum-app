@@ -1,6 +1,7 @@
 import { AppShell } from '@/components/layout/AppShell';
 import { getCurrentUser, type SessionUser } from '@/lib/services/auth';
 import { listConnectedApps } from '@/lib/services/integrations';
+import { getReviewPrompt } from '@/lib/services/reviewRecords';
 import { getHomeScoreboard } from '@/lib/services/scoreboard';
 import { getPlanSnapshot, type PlanSnapshot } from '@/lib/services/tasks';
 import { buildChannelViews } from '@/lib/utils/channelViews';
@@ -9,6 +10,7 @@ import { groupMovesByTask } from '@/lib/utils/rebalance';
 import { LOAD_FAILED_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { HomeScoreboard } from '@/types/home';
+import type { ReviewPrompt } from '@/types/review';
 
 // Reads the signed-in user's session, so this page renders per request.
 export const dynamic = 'force-dynamic';
@@ -60,13 +62,23 @@ async function loadHome(): Promise<HomeScoreboard | null> {
   }
 }
 
+// The one line about the weekly review (MOM-113), read on its own so a failure here never touches the rest of the page.
+// getReviewPrompt already answers "none" for a read that fails; the catch covers a throw (for example no Supabase env vars).
+async function loadReviewPrompt(): Promise<ReviewPrompt> {
+  try {
+    return await getReviewPrompt();
+  } catch {
+    return { state: 'none' };
+  }
+}
+
 export default async function HomePage() {
   // Asked first, so a signed-out render reads nothing.
   const user = await sessionUser();
   if (user === null) {
     return <AppShell views={SIGNED_OUT_CHANNEL_VIEWS} connectedApps={[]} moveChains={{}} />;
   }
-  const [snapshot, connectedApps, home] = await Promise.all([loadSnapshot(), loadConnectedApps(), loadHome()]);
+  const [snapshot, connectedApps, home, reviewPrompt] = await Promise.all([loadSnapshot(), loadConnectedApps(), loadHome(), loadReviewPrompt()]);
   // One view per active goal plus "all channels": its feed, velocity and rule-based rebalance proposal, each
   // from that goal's own tasks and start date. The sidebar switches between them in the browser, so no
   // selection is sent to the server and the server never trusts one.
@@ -85,6 +97,7 @@ export default async function HomePage() {
       progress={progress}
       userEmail={user.email}
       home={home}
+      reviewPrompt={reviewPrompt}
     />
   );
 }

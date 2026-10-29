@@ -3,7 +3,17 @@
 // discipline as the rest of lib/engine/. Claude never scores (principle 9): this file only picks facts and the one
 // adjustment to raise; the words around them are written later, around these facts.
 
-import type { Layer1TargetFact, LayerThreeAdjustment, LocalDate, Pattern, ReviewWindow, Scoreboard, Weekday } from '@/types/scoreboard';
+import type {
+  Layer1TargetFact,
+  LayerThreeAdjustment,
+  LocalDate,
+  Pattern,
+  RecapComparison,
+  ReviewedValue,
+  ReviewWindow,
+  Scoreboard,
+  Weekday,
+} from '@/types/scoreboard';
 import { addDays, dayOfWeek, weekRange } from './time';
 
 // The week the review covers. The planning moment is the person's own weekday (never a fixed one), and it can land
@@ -23,6 +33,35 @@ export function weeklyReviewWindow(today: LocalDate, weekStartsOn: Weekday | nul
   // last day, otherwise how far into the next week the planning day sits.
   const offset = (planningWeekday - lastDayOfWeek + 7) % 7;
   return weekRange(addDays(today, -offset), weekStartsOn);
+}
+
+// True when the reviewed week's own last day is today or later: the planning day is the week's last day (case A above),
+// so the week is complete as the person plans but the engine, which closes a period the day after its last day, still
+// calls it open (BACKLOG, RAID I-11).
+export const closesEarly = (today: LocalDate, window: ReviewWindow): boolean => window.end >= today;
+
+// The day the review asks the engine about. Normally today. When the week closes early it is the day after the week
+// ends, which is exactly what the engine would be asked the next morning: the week is closed and a pattern ending in it
+// is found in the same sitting instead of a week late. An entry logged later on that last day is the "later entry" case
+// (compareRecapToLive), so the recap says it counts through that day. The engine's own rule is not changed: home keeps it.
+export const reviewAsOf = (today: LocalDate, window: ReviewWindow): LocalDate => (closesEarly(today, window) ? addDays(window.end, 1) : today);
+
+// A later entry can land in a week that already has a stored recap (up to 7 local days back, MOM-110). The record is
+// never rewritten; this says which targets read differently now, from the engine's own facts for the same week. A target
+// compared is one the recap named that still has a closed period in that week; one that does not (it was removed, or the
+// person's week start moved) is left out: there is nothing to compare, and nothing is guessed. A target that reads the
+// same is left out too.
+export function compareRecapToLive(said: Array<{ targetId: string } & ReviewedValue>, live: Layer1TargetFact[]): RecapComparison[] {
+  const liveByTarget = new Map(live.map((f) => [f.targetId, f.result]));
+  const changes: RecapComparison[] = [];
+  for (const before of said) {
+    const result = liveByTarget.get(before.targetId);
+    if (result === undefined) continue;
+    const now: ReviewedValue = { counted: result.counted, level: result.level, graded: result.graded };
+    if (now.counted === before.counted && now.level === before.level && now.graded === before.graded) continue;
+    changes.push({ targetId: before.targetId, said: { counted: before.counted, level: before.level, graded: before.graded }, now });
+  }
+  return changes.sort((a, b) => (a.targetId < b.targetId ? -1 : a.targetId > b.targetId ? 1 : 0));
 }
 
 // Layer 1 (§3.1): per target, the period that closed in the reviewed week, what crossed in it, its pattern streaks

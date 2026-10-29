@@ -11,18 +11,20 @@ const services = vi.hoisted(() => ({
   listConnectedApps: vi.fn(),
   getPlanSnapshot: vi.fn(),
   getHomeScoreboard: vi.fn(),
+  getReviewPrompt: vi.fn(),
 }));
 vi.mock('@/lib/services/auth', () => ({ getCurrentUser: services.getCurrentUser }));
 vi.mock('@/lib/services/integrations', () => ({ listConnectedApps: services.listConnectedApps }));
 vi.mock('@/lib/services/tasks', () => ({ getPlanSnapshot: services.getPlanSnapshot }));
 vi.mock('@/lib/services/scoreboard', () => ({ getHomeScoreboard: services.getHomeScoreboard }));
+vi.mock('@/lib/services/reviewRecords', () => ({ getReviewPrompt: services.getReviewPrompt }));
 // The page imports the shell, which pulls in client code that is not under test here.
 vi.mock('@/components/layout/AppShell', () => ({ AppShell: () => null }));
 
 import HomePage from '@/app/page';
 
 interface ShellElement {
-  props: { views: ChannelViews; connectedApps: unknown[]; home?: unknown };
+  props: { views: ChannelViews; connectedApps: unknown[]; home?: unknown; reviewPrompt?: unknown };
 }
 async function propsOfPage() {
   const element = (await HomePage()) as unknown as ShellElement;
@@ -38,6 +40,7 @@ beforeEach(() => {
   services.getCurrentUser.mockResolvedValue({ ok: true, data: { id: 'u', email: 'a@example.com' } });
   services.listConnectedApps.mockResolvedValue({ ok: true, data: [] });
   services.getHomeScoreboard.mockResolvedValue({ ok: true, data: { state: 'no_goals' } });
+  services.getReviewPrompt.mockResolvedValue({ state: 'none' });
 });
 
 describe('the home page chooses between could-not-load and no-goals', () => {
@@ -110,5 +113,36 @@ describe('the home page passes the goal model scoreboard to the shell', () => {
     const props = await propsOfPage();
     expect(props.home).toBeUndefined();
     expect(services.getHomeScoreboard).not.toHaveBeenCalled();
+  });
+});
+
+// The one line about the weekly review (MOM-113) is read on its own too: it can never make the plan or the scoreboard look failed.
+describe('the home page passes the weekly review prompt to the shell', () => {
+  const planWithNoGoals = { ok: true, data: { goals: [], tasks: [], history: [], today: '2026-10-26' } };
+
+  it('passes what the service said: due, reviewed or none', async () => {
+    services.getPlanSnapshot.mockResolvedValue(planWithNoGoals);
+    services.getReviewPrompt.mockResolvedValue({ state: 'due' });
+    expect((await propsOfPage()).reviewPrompt).toEqual({ state: 'due' });
+    services.getReviewPrompt.mockResolvedValue({ state: 'reviewed' });
+    expect((await propsOfPage()).reviewPrompt).toEqual({ state: 'reviewed' });
+    services.getReviewPrompt.mockResolvedValue({ state: 'none' });
+    expect((await propsOfPage()).reviewPrompt).toEqual({ state: 'none' });
+  });
+
+  it('a thrown error is none, and the plan and the scoreboard are untouched', async () => {
+    services.getPlanSnapshot.mockResolvedValue(planWithNoGoals);
+    services.getReviewPrompt.mockRejectedValue(new Error('unreachable'));
+    const props = await propsOfPage();
+    expect(props.reviewPrompt).toEqual({ state: 'none' });
+    expect(stateOf(props.views)).toBe('no_goals');
+    expect(props.home).toEqual({ state: 'no_goals' });
+  });
+
+  it('with no session it is not read and none is passed', async () => {
+    services.getCurrentUser.mockResolvedValue({ ok: false, error: 'no session' });
+    const props = await propsOfPage();
+    expect(props.reviewPrompt).toBeUndefined();
+    expect(services.getReviewPrompt).not.toHaveBeenCalled();
   });
 });

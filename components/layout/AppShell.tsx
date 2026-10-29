@@ -11,6 +11,7 @@ import { MobileHeader } from './MobileHeader';
 import { RebalanceNudge } from './RebalanceNudge';
 import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
 import { HomeScoreboardSection } from '@/components/home/HomeScoreboardSection';
+import { ReviewNotice } from '@/components/home/ReviewNotice';
 import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
 import { CHANNEL_PARAM, withChannelParam } from '@/lib/utils/channelParam';
 import { resolveChannel } from '@/lib/utils/channelViews';
@@ -19,6 +20,7 @@ import type { ConnectedAppPublic } from '@/types/database.types';
 import type { HomeScoreboard } from '@/types/home';
 import type { GoalProgress } from '@/types/progress';
 import type { TaskMoveChains } from '@/types/rebalance';
+import type { ReviewPrompt } from '@/types/review';
 
 interface AppShellProps {
   // One view (feed, velocity and rebalance proposal) per active goal channel plus all channels, built on the
@@ -34,6 +36,8 @@ interface AppShellProps {
   // The goal model's week hero and goal scoreboards (MOM-112), shown above the feed. undefined shows nothing (signed
   // out); null means they could not be read, which is said in words and is not the same as having no goals.
   home?: HomeScoreboard | null;
+  // The one line about the weekly review on the person's planning day (MOM-113). undefined or none shows nothing.
+  reviewPrompt?: ReviewPrompt;
 }
 
 // The home page's layout. Below 1200px it is one scrolling column (sticky header, feed, goal cards, and the nudge
@@ -44,7 +48,7 @@ interface AppShellProps {
 // rendered per request, so that hook has the same value on the server and in the browser's first render: a
 // reload or a shared link lands on the right channel with no flash and no hydration mismatch. The server
 // never uses the parameter to load or filter anything; it only chooses among the user's own views below.
-export function AppShell({ views, connectedApps, moveChains, progress = [], userEmail = null, home }: AppShellProps) {
+export function AppShell({ views, connectedApps, moveChains, progress = [], userEmail = null, home, reviewPrompt }: AppShellProps) {
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
   // The one goal wizard, opened from the sidebar, the banner and the empty states' call to action.
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -92,6 +96,7 @@ export function AppShell({ views, connectedApps, moveChains, progress = [], user
               onAdjustPace={() => setRebalanceOpen(true)}
               actionsDisabled={loadFailed}
             />
+            {reviewPrompt !== undefined && <ReviewNotice prompt={reviewPrompt} />}
             {home !== undefined && <HomeScoreboardSection home={home} />}
             <MainFeed
               feedState={channel.feedState}
