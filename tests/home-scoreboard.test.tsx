@@ -6,7 +6,7 @@
 // - the hero celebrates a crossing alone: no "next level" line, which lives on the target's own card (§4.2 principle 8),
 // - a target that is not graded shows no level word and no holding or slipping line, whatever level it carries,
 // - only a person with a weekly or day-slot target is ever asked for a week start; deadline goals only never are (§2.2),
-// - a milestone shows steps and a due date and never a forecast verdict,
+// - a milestone shows steps and a due date and has no forecast (only a deadline task does, see tests/forecast-screen.test.tsx),
 // - the person's titles are kept as written and never singularised, and a tie names every tied target,
 // - the hero follows the person's celebration setting, and the empty state is calm, never 0%.
 
@@ -68,6 +68,7 @@ const milestone = (over: Partial<MilestoneView> = {}): MilestoneView => ({
     { id: 's4', title: 'Get two reviews', done: false },
   ],
   stepsDone: 2,
+  forecast: null,
   ...over,
 });
 
@@ -324,7 +325,7 @@ describe('patterns follow the person’s tone, and only a graded target has one'
   });
 });
 
-describe('a milestone shows its steps and due date, never a forecast verdict', () => {
+describe('a milestone shows its steps and due date, with no forecast', () => {
   it('lists the steps with done and to do in words, and the steps done', () => {
     render(<MilestoneRow milestone={milestone()} today="2026-10-29" />);
     expect(screen.getByRole('heading', { name: 'Portfolio ready' })).toBeTruthy();
@@ -335,7 +336,7 @@ describe('a milestone shows its steps and due date, never a forecast verdict', (
     expect(list.textContent).toContain('To do: Build the site');
   });
 
-  it('says nothing about whether it fits: no verdict until the weekly plan gives the days set aside', () => {
+  it('says nothing about whether it fits: only a deadline task has a forecast', () => {
     const { container } = render(<MilestoneRow milestone={milestone()} />);
     expect(container.textContent).not.toMatch(/fits|tight|does not fit|doesn.t fit|on track|behind|at risk/i);
   });

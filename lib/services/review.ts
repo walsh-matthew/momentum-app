@@ -10,11 +10,11 @@
 // The week closes early when the planning day is the week's own last day: the engine calls that week open until the
 // day after, so the review asks it about the day after (reviewAsOf) and the recap says it counts through that day.
 //
-// Deadline forecasts: lib/services/scoreboard.ts passes the engine an empty forecast list, because mapping a
-// deadline task's logged time and remaining capacity onto a ForecastRequest needs groundwork that is not built yet
-// (BACKLOG.md, MOM-108/MOM-112). This service does the same for now, so selectLayerThreeAdjustment's deadline
-// forecast candidate does not fire in production yet; it is written and tested in lib/engine/review.ts so it
-// starts working the day that mapping lands, with no change here.
+// Deadline forecasts: home maps a deadline task's days set aside onto a ForecastRequest (lib/services/forecastRows.ts,
+// MOM-112), but this service still passes the engine an empty forecast list, by the owner's decision of 2026-10-29: wiring
+// it in changes what Claude is told at the review and wakes selectLayerThreeAdjustment's deadline forecast candidate, so it
+// needs its own approval. Until then that candidate does not fire in production; it is written and tested in
+// lib/engine/review.ts. This service would read the same rows as home and call planForecasts.
 
 import {
   buildLayer1Facts,

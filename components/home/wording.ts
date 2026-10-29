@@ -6,8 +6,8 @@
 // aspiration"). A level is always said in words, and a target that is not graded never gets a level word.
 
 import type { CelebrationLevel, Tone } from '@/types/database.types';
-import type { HeroHeadline, MilestoneView, PatternView, TargetCardView, TrendView } from '@/types/home';
-import type { LocalDate } from '@/types/scoreboard';
+import type { ForecastView, HeroHeadline, MilestoneView, PatternView, TargetCardView, TrendView } from '@/types/home';
+import type { ForecastOption, LocalDate } from '@/types/scoreboard';
 import { casualDate, type CasualDateOptions } from '@/lib/dates/casual';
 
 // 1 decimal at most, no trailing zero: 8.5, 15.
@@ -161,4 +161,64 @@ export function slotDaysText(slots: { weekdays: number[] }): string {
 
 export function stepsText(m: Pick<MilestoneView, 'stepsDone' | 'steps'>): string {
   return `${m.stepsDone} of ${m.steps.length} ${m.steps.length === 1 ? 'step' : 'steps'} done`;
+}
+
+// ---------------------------------------------------------------------------
+// A deadline task's forecast (MOM-112, slice 2)
+// ---------------------------------------------------------------------------
+
+export interface ForecastLine {
+  // A short verdict beside the sentence, or null when the sentence is the whole answer.
+  chip: { label: string; tone: 'accent' | 'warn' | 'plain' } | null;
+  text: string;
+  // What the person could do, said as words. Only a verdict that does not fit has these.
+  could: string | null;
+  // A way into the week plan, when the plan is where the answer is.
+  link: { label: string; href: '/plan' } | null;
+}
+
+const PLAN_MORE: ForecastLine['link'] = { label: 'Plan more days', href: '/plan' };
+const OPTION_WORDS: Record<ForecastOption, string> = {
+  more_time: 'add more days',
+  smaller_scope: "make what's left smaller",
+  move_date: 'move the date',
+  accept_risk: 'keep going as it is',
+};
+
+// "a, b or c".
+const joinOr = (parts: string[]): string => (parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}`);
+
+// What home says of whether a deadline task fits the days the person set aside. A fact about those days, never a promise,
+// and never a minute, a slot or a free-time figure (principle 12). Says "set aside" and "kind of day", the person's words.
+export function forecastLine(forecast: ForecastView, today: LocalDate | null = null): ForecastLine {
+  const day = (d: LocalDate) => formatDay(d, today, { relative: false });
+  const line = (text: string, over: Partial<ForecastLine> = {}): ForecastLine => ({ chip: null, text, could: null, link: null, ...over });
+  switch (forecast.state) {
+    case 'fits':
+      return forecast.soFar
+        ? line("The days you've set aside so far look like enough for what's left.", { chip: { label: 'Enough so far', tone: 'accent' } })
+        : line("The days you've set aside look like enough for what's left.", { chip: { label: 'Enough time', tone: 'accent' } });
+    case 'tight':
+      return line("The days you've set aside are close to what's left.", { chip: { label: 'Close', tone: 'plain' }, link: PLAN_MORE });
+    case 'does_not_fit':
+      return line("The days you've set aside look short for what's left.", {
+        chip: { label: 'Short on time', tone: 'warn' },
+        could: `You could ${joinOr(forecast.options.map((o) => OPTION_WORDS[o]))}.`,
+        link: forecast.options.includes('more_time') ? PLAN_MORE : null,
+      });
+    case 'planned_so_far':
+      return line(`You've set aside ${forecast.days} ${forecast.days === 1 ? 'day' : 'days'} through ${day(forecast.through)}. Plan more days as you go.`, { link: PLAN_MORE });
+    case 'past_due':
+      return line('The date has passed.');
+    case 'not_enough_data':
+      return line("Not enough to say yet. There's no rough size for this, and no time logged against it.");
+    case 'nothing_set_aside':
+      return line("You haven't set aside any days for this yet.", { link: { label: 'Plan your week', href: '/plan' } });
+    case 'day_without_kind':
+      return line(`Say what kind of day ${day(forecast.date)} is, so we can tell how much time it gives.`, { link: { label: 'Say what kind of day', href: '/plan' } });
+    case 'kind_without_time':
+      return line(`"${forecast.kindName}" has no usual amount of time yet, so we can't say how much ${day(forecast.date)} gives.`);
+    case 'counted_in_sessions':
+      return line("You count your time in sessions, and this one is sized in time, so we can't say yet.");
+  }
 }

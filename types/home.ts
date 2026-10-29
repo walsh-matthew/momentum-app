@@ -4,7 +4,7 @@
 // Wording is written later, in components/home/wording.ts, around these facts and the person's own titles.
 
 import type { CelebrationLevel, GoalShape, Measure, Tone, WorkItemKind } from '@/types/database.types';
-import type { Level, LocalDate, PatternKind, TargetRole, TrendDirection } from '@/types/scoreboard';
+import type { ForecastOption, Level, LocalDate, PatternKind, TargetRole, TrendDirection } from '@/types/scoreboard';
 
 export type TargetPeriodView = 'weekly' | 'day_slots' | 'deadline';
 
@@ -79,8 +79,30 @@ export interface StepView {
   done: boolean;
 }
 
-// A milestone or a deadline task, with its steps. There is no forecast verdict yet: it needs the days the person
-// has set aside, which come with the weekly plan (BACKLOG.md, MOM-112).
+// What home says about whether a deadline task fits the days the person has set aside for it (docs/DOMAIN_MODEL.md §1.4).
+// A fact about those days, never a promise (RAID A-07). The verdicts are the engine's; the states after `past_due` are the
+// reasons the engine was not asked, or its answer was not used, because a day, a kind of day or a size was not the person's
+// to be guessed at (principle 1). Built by lib/services/forecastRows.ts.
+export type ForecastView =
+  // The days set aside are enough. `soFar` is true when the due date is later than the last day the person has planned, so
+  // the days to come are not counted.
+  | { state: 'fits'; soFar: boolean }
+  | { state: 'tight' }
+  | { state: 'does_not_fit'; options: ForecastOption[] }
+  // The days set aside so far are not enough, but the plan does not reach the due date yet: no tight or short claim. `days`
+  // is how many days are set aside for this task, `through` the last day the person has planned.
+  | { state: 'planned_so_far'; days: number; through: LocalDate }
+  | { state: 'past_due' }
+  // No rough size and no pace from logged time.
+  | { state: 'not_enough_data' }
+  | { state: 'nothing_set_aside' }
+  // A day the task is on has no kind, or its kind has no usual time: the capacity is not known.
+  | { state: 'day_without_kind'; date: LocalDate }
+  | { state: 'kind_without_time'; date: LocalDate; kindName: string }
+  // The person counts their time in sessions, and a task is sized in minutes.
+  | { state: 'counted_in_sessions' };
+
+// A milestone or a deadline task, with its steps. Only a deadline task has a forecast; a milestone is null.
 export interface MilestoneView {
   id: string;
   goalId: string;
@@ -90,6 +112,7 @@ export interface MilestoneView {
   dueOn: LocalDate | null;
   steps: StepView[];
   stepsDone: number;
+  forecast: ForecastView | null;
 }
 
 export interface GoalCardView {
