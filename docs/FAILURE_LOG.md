@@ -11,7 +11,7 @@ Each dated entry records a place where an AI tool got it wrong, and the entry is
 - The repository is public, so entries carry no personal data, secrets or exploit detail.
 - Risks, assumptions, issues and dependencies no longer go in a RAID log entry; see `docs/RAID_LOG.md` (frozen) and CLAUDE.md, "RAID and Failure Logs (MOM-92, lighter rule MOM-133)" — they go to Jira with the `risk` label instead.
 
-The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes were not kept. The owner reviewed the seed entries in the pull request that added this file (MOM-92). Entries F-001 through F-059 predate the lighter rule and keep their original "Predicted it?" answers as history; the question is not asked of new entries.
+The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes were not kept. The owner reviewed the seed entries in the pull request that added this file (MOM-92). Entries F-001 through F-058 predate the lighter rule and keep their original "Predicted it?" answers as history; the question is not asked of new entries.
 
 ## Entries
 
