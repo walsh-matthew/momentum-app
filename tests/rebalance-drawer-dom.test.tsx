@@ -8,14 +8,12 @@
 // Nothing changes the plan except the user's own Apply click (docs/NINETY_DAY_PLAN_CONTEXT.md §5 rule 1): every
 // test checks that nothing was applied before it.
 
-import { cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
 import type { RebalanceProposalView } from '@/types/rebalance';
 
 // The default of 1 second is too tight when the whole suite runs in parallel.
-configure({ asyncUtilTimeout: 5000 });
-
 const actions = vi.hoisted(() => ({ apply: vi.fn(), ask: vi.fn() }));
 vi.mock('@/app/actions/tasks', () => ({
   applyRebalanceProposal: actions.apply,

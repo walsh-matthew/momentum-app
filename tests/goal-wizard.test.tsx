@@ -8,14 +8,12 @@
 // Nothing here saves anything until Create is clicked, and the model is only asked when Generate is clicked
 // (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6).
 
-import { cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
 import { buildStubTaskPlan, parseWizardInput } from '@/lib/goals/taskPlan';
 
 // The default of 1 second is too tight when the whole suite runs in parallel.
-configure({ asyncUtilTimeout: 5000 });
-
 const actions = vi.hoisted(() => ({ generate: vi.fn(), create: vi.fn() }));
 vi.mock('@/app/actions/goals', () => ({
   generateWeekOnePlanAction: actions.generate,
