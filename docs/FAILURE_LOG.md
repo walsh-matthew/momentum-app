@@ -1,16 +1,17 @@
 # Momentum AI Failure Log
 
-Each dated entry records a place where an AI tool got it wrong: what was asked, what it did, why, and how it was caught. Over time this log shows where models fail and why. It is also the source of interview examples, and the 90-day plan's Phase 2 gate needs at least 20 entries.
+Each dated entry records a place where an AI tool got it wrong, and the entry is written only because it led to something durable: a fix made that session, a new standing rule, or a Jira ticket. Over time this log shows where models fail and why. It is also the source of interview examples, and the 90-day plan's Phase 2 gate needs at least 20 entries.
 
-**How this log is kept**
+**How this log is kept (lighter rule, MOM-133, 2026-10-29)**
 
-- **Capture.** When the owner corrects the AI, a check fails, or a claim turns out to be false, the build agent drafts an entry marked `unreviewed`. In any chat, the owner can also say "log that". Project threads draft their entries for the next day-end.
-- **Review.** At day-end the build agent lists the unreviewed entries with its own draft of the "why". The owner answers in plain words, for example "ok all", "drop 2", or "3: partly". Each entry asks the owner one question: **predicted it? yes / no / partly.** That answer trains the habit of predicting where a model will fail. Approved entries lose the `unreviewed` mark and are committed. Nothing is committed unreviewed.
+- **Capture only what changes something.** When the owner corrects the AI, a check fails, or a claim turns out to be false, the build agent drafts an entry marked `unreviewed` **only if it leads to a fix made that session, a new standing rule, or a Jira ticket** — the entry names which (for example "→ fix in this session", "→ rule: ...", "→ MOM-nnn"). A correction with no durable result is not logged. In any chat, the owner can also say "log that". Project threads draft their entries for the next day-end.
+- **Review.** At day-end the build agent lists the day's unreviewed entries with its own draft of the "why". The owner answers in plain words, for example "ok all", "drop 2", or "3: no". Approved entries lose the `unreviewed` mark and are committed. Nothing is committed unreviewed. The per-entry "predicted it?" question is dropped; a **monthly pattern review**, at the first day-end of each calendar month, looks across that month's entries for a cause that recurred and records the result — including that month's entry count and how many led to a fix, a rule or a ticket — as a Jira comment on MOM-92.
 - **Source** tags who failed. `build tool` means Claude Code or a project thread building Momentum. `in-product` means Momentum's own Claude features (the plan generator and the rebalance proposals). In-product entries feed the Phase 2 evals.
 - **Interview-ready** (★) marks entries that make a clean story: a clear miss, a clear cause, and a lesson.
 - The repository is public, so entries carry no personal data, secrets or exploit detail.
+- Risks, assumptions, issues and dependencies no longer go in a RAID log entry; see `docs/RAID_LOG.md` (frozen) and CLAUDE.md, "RAID and Failure Logs (MOM-92, lighter rule MOM-133)" — they go to Jira with the `risk` label instead.
 
-The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes were not kept. The owner reviews the seed entries in the pull request that adds this file (MOM-92).
+The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes were not kept. The owner reviewed the seed entries in the pull request that added this file (MOM-92). Entries F-001 through F-058 predate the lighter rule and keep their original "Predicted it?" answers as history; the question is not asked of new entries.
 
 ## Entries
 
