@@ -15,6 +15,7 @@ import {
   type TurnContext,
 } from '@/lib/setup/checks';
 import { emptyDraft } from '@/lib/setup/draft';
+import { SETUP_STEPS } from '@/lib/setup/steps';
 import {
   acceptsText,
   dateIsIn,
@@ -217,6 +218,31 @@ describe('rule 5: skip what is already answered', () => {
   it('allows a clarifying turn on the topic just asked', () => {
     const history: Transcript = [asked({ topic: 'tone', question: 'How direct?' }), said('Whatever')];
     expect(checkSkipAnswered(turn({ kind: 'interpretations', topic: 'tone', options: ['a', 'b'], question: 'Which one?' }), ctx(history))).toEqual([]);
+  });
+
+  // Production, MOM-111: "Is getting in shape one goal, or several?" / "2 goals" / "What are the two goals?" was thrown
+  // away three times in a row. Naming the goals is the same topic carried on, not the topic asked again.
+  it.each(['breakup', 'idea'] as const)('lets a follow-up on "%s" through right after the person answered it', (topic) => {
+    const history: Transcript = [
+      asked({ topic, question: 'Is getting in shape one goal for you, or does it break into several goals?' }),
+      said('2 goals'),
+    ];
+    expect(checkSkipAnswered(turn({ topic, question: 'What are the two goals?' }), ctx(history))).toEqual([]);
+  });
+
+  it('tells Claude in step 3 to ask what the goals are, as its own breakup question, before together or one first', () => {
+    const step = SETUP_STEPS.find((x) => x.n === 3);
+    expect(step?.summary).toContain('If several, first ask what the goals are, as its own question tagged breakup, then ask together or one first.');
+  });
+
+  it('still stops the same topic asked again after the conversation has moved on', () => {
+    const history: Transcript = [
+      asked({ topic: 'breakup', question: 'One goal or several?' }),
+      said('2 goals'),
+      asked({ topic: 'why', question: 'Why does it matter?' }),
+      said('Health.'),
+    ];
+    expect(rules(checkSkipAnswered(turn({ topic: 'breakup', question: 'One goal or several?' }), ctx(history)))).toEqual(['skip_answered']);
   });
 
   it('wants the skip notice to be one short line about something answered', () => {
