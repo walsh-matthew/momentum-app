@@ -186,7 +186,7 @@ export const SYNC_SKIP_REASONS = [
   'no_source',
   'no_bound_target',
   'measure_not_supported',
-  'unit_not_supported',
+  'metric_not_bound',
   'no_value_for_measure',
 ] as const;
 export type SyncSkipReason = (typeof SYNC_SKIP_REASONS)[number];
@@ -196,7 +196,9 @@ export const SYNC_SKIP_MESSAGES: Record<SyncSkipReason, string> = {
   no_source: 'This app is not set up as a source yet, so nothing was counted.',
   no_bound_target: 'No target uses this app yet, so nothing was counted. Bind it to a target to count it.',
   measure_not_supported: 'This target counts checklist steps, which a workout cannot tick.',
-  unit_not_supported: "This target's unit is not one a workout can be measured in, so nothing was counted.",
+  // A binding made before MOM-111's metric question (a new setup cannot save a quantity target bound to Hevy
+  // without one). Never tells the person to open or change anything: editing a binding after setup is MOM-132.
+  metric_not_bound: "This target's app link doesn't say which number to count, so nothing was logged from it.",
   no_value_for_measure: 'The workout has nothing to count for this target, so nothing was counted.',
 };
 

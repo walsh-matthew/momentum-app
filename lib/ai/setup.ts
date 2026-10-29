@@ -12,7 +12,8 @@
 // the real API (no live call has been approved). Whether to move to it is for the live-run block.
 //
 // What it sends: only what the person typed in this setup, Claude's own earlier turns, the current draft once, and the
-// date on their device as a suggested start date. No other goals, tasks, ids or email.
+// date on their device as a suggested start date. No other goals, tasks, ids or email. Pinned field by field in
+// `lib/config/privacy.ts`'s `PROMPTS.setup`, against `setupPromptFacts()` below (MOM-111 block 3, MOM-102).
 //
 // Since MOM-128 it is called through runSetupTurn() in lib/services/llm.ts, which counts the call, applies the setup limits
 // and the per-setup budget, and logs it under 'setup'. The default model is still this file's SETUP_MODEL.
@@ -21,7 +22,7 @@ import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAnthropicApiKey } from '@/lib/config/env';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
-import type { SetupDraft, Transcript } from '@/types/setup';
+import type { AssistantTurn, SetupDraft, Transcript } from '@/types/setup';
 import { readUsage, type ModelUsage } from './usage';
 
 // Claude Opus 5.5, the default model. One constant, so changing it is a one-line decision. The smaller-model trial
@@ -54,6 +55,33 @@ export const SETUP_BEGIN_MESSAGE = 'Begin setup.';
 // is the one Claude starts from, and it already holds everything the older ones did.
 export const SETUP_DRAFT_PLACEHOLDER = 'Earlier draft left out. The current draft is at the end of the newest message.';
 
+// An earlier assistant turn, as it is actually sent: everything but its own (placeholdered) draft.
+export type SentAssistantTurn = Omit<AssistantTurn, 'draft'>;
+
+// Exactly what one setup call sends Claude, as a plain object rather than the API's wire format (MOM-111, MOM-102): the
+// person's own words so far, Claude's own earlier turns (without their drafts), the current draft once, and the device
+// date. `lib/config/privacy.ts`'s `PROMPTS.setup` is pinned against this by `fieldPaths()`, the same way `buildModelFacts`
+// backs the rebalance notice. Pure: no network, no model.
+export interface SetupPromptFacts {
+  personMessages: string[];
+  assistantTurns: SentAssistantTurn[];
+  draft: SetupDraft;
+  today?: string;
+}
+
+export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, today?: string): SetupPromptFacts {
+  const personMessages: string[] = [];
+  const assistantTurns: SentAssistantTurn[] = [];
+  for (const m of transcript) {
+    if (m.role === 'person') personMessages.push(m.text);
+    else {
+      const { draft: _draft, ...rest } = m.turn;
+      assistantTurns.push(rest);
+    }
+  }
+  return today === undefined ? { personMessages, assistantTurns, draft } : { personMessages, assistantTurns, draft, today };
+}
+
 // The conversation as the API takes it: the person's words as user messages, Claude's earlier turns as assistant messages
 // with their draft replaced by the placeholder, and the current draft once, at the end of the newest message. Everything
 // else in an earlier turn (what it said and asked, its kind, topic and options) is sent unchanged.
@@ -62,16 +90,19 @@ export const SETUP_DRAFT_PLACEHOLDER = 'Earlier draft left out. The current draf
 // does not know their time zone before setup has asked it). It is one extra line after the draft, labelled as a
 // suggestion, and is left out when the browser did not send one (MOM-111).
 export function buildSetupMessages(transcript: Transcript, draft: SetupDraft, today?: string): Anthropic.MessageParam[] {
+  const facts = setupPromptFacts(transcript, draft, today);
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: SETUP_BEGIN_MESSAGE }];
+  let personIndex = 0;
+  let assistantIndex = 0;
   for (const m of transcript) {
     messages.push(
       m.role === 'person'
-        ? { role: 'user', content: m.text }
-        : { role: 'assistant', content: JSON.stringify({ ...m.turn, draft: SETUP_DRAFT_PLACEHOLDER }) },
+        ? { role: 'user', content: facts.personMessages[personIndex++] }
+        : { role: 'assistant', content: JSON.stringify({ ...facts.assistantTurns[assistantIndex++], draft: SETUP_DRAFT_PLACEHOLDER }) },
     );
   }
-  const suggestion = today ? `\nSuggested start date (today's date on the person's device, a suggestion only): ${today}` : '';
-  const current = `Current draft, to start from:\n${JSON.stringify(draft)}${suggestion}`;
+  const suggestion = facts.today ? `\nSuggested start date (today's date on the person's device, a suggestion only): ${facts.today}` : '';
+  const current = `Current draft, to start from:\n${JSON.stringify(facts.draft)}${suggestion}`;
   const last = messages[messages.length - 1];
   if (last.role === 'user' && typeof last.content === 'string') {
     // Two blocks in the one message, so the person's own words stay apart from the draft.

@@ -79,6 +79,10 @@ export const TONES = ['gentle', 'middle', 'direct'] as const;
 export type Tone = (typeof TONES)[number];
 export const MEASURES = ['count', 'quantity', 'time', 'checklist'] as const;
 export type Measure = (typeof MEASURES)[number];
+// Which number a quantity target counts, named by the binding (migration 016, MOM-111/MOM-109): never guessed from
+// the target's own unit text.
+export const QUANTITY_METRICS = ['volume_lbs', 'volume_kg', 'sets', 'minutes'] as const;
+export type QuantityMetric = (typeof QUANTITY_METRICS)[number];
 export const TARGET_ROLES = ['effort', 'outcome'] as const;
 export type TargetRole = (typeof TARGET_ROLES)[number];
 export const PERIOD_KINDS = ['weekly', 'day_slots', 'deadline'] as const;
@@ -339,6 +343,9 @@ export type TargetSourceRow = {
   target_id: string;
   source_id: string;
   user_id: string;
+  // Which number a quantity target counts, for a synced provider with more than one (migration 016). Null for a
+  // manual source, or a synced one with no metric to choose.
+  metric: QuantityMetric | null;
   created_at: string;
 };
 
@@ -1105,6 +1112,7 @@ export type Database = {
           target_id: string;
           source_id: string;
           user_id: string;
+          metric?: QuantityMetric | null;
           created_at?: string;
         };
         Update: never;

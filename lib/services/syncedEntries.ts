@@ -29,7 +29,7 @@ import { suggestMerges, type MergeCandidate, type MergeSuggestion } from '@/lib/
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database, EntryRow, Measure } from '@/types/database.types';
+import type { Database, EntryRow, Measure, QuantityMetric } from '@/types/database.types';
 import {
   SYNC_SKIP_MESSAGES,
   type SyncedEntryResult,
@@ -61,7 +61,9 @@ const LBS_PER_KG = 2.2046226218;
 export interface BoundTarget {
   id: string;
   measure: Measure;
-  unit: string | null;
+  // Which number a quantity target counts, named by the binding (migration 016, MOM-111/MOM-109). Null for any
+  // other measure, for a manual source, or a binding made before this metric existed.
+  metric: QuantityMetric | null;
 }
 
 // A person's source for one provider and the targets they bound to it. `targets` is empty when none is bound.
@@ -73,17 +75,14 @@ export interface SourceBinding {
 
 export type EntryValue = { ok: true; value: number } | { ok: false; reason: SyncSkipReason };
 
-const POUND_UNITS = new Set(['lb', 'lbs', 'pound', 'pounds']);
-const KILOGRAM_UNITS = new Set(['kg', 'kgs', 'kilogram', 'kilograms']);
-const SET_UNITS = new Set(['set', 'sets']);
-const MINUTE_UNITS = new Set(['min', 'mins', 'minute', 'minutes']);
-
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-// What one workout adds to one target (docs/plans block 3.1, approved mapping): a count is 1, time is the duration in
-// minutes, and a quantity is the metric its unit names. Choosing the metric from the unit text is a stopgap: the
-// binding should name it (BACKLOG.md, MOM-111). A value of 0 or no value makes no entry (entries must be above 0).
-export function entryValue(activity: InboundActivityPayload, target: Pick<BoundTarget, 'measure' | 'unit'>): EntryValue {
+// What one workout adds to one target (docs/plans block 3.1, approved mapping, re-approved with the metric design
+// MOM-111 block 3): a count is 1, time is the duration in minutes, and a quantity counts the number its binding's
+// metric names. Nothing is worked out from the target's own unit text: a quantity target bound to an app with
+// metrics to choose from (Hevy) and no metric named is skipped, not guessed. A value of 0 or no value makes no
+// entry (entries must be above 0).
+export function entryValue(activity: InboundActivityPayload, target: Pick<BoundTarget, 'measure' | 'metric'>): EntryValue {
   const positive = (n: number | undefined): EntryValue =>
     typeof n === 'number' && Number.isFinite(n) && n > 0 ? { ok: true, value: n } : { ok: false, reason: 'no_value_for_measure' };
 
@@ -95,15 +94,20 @@ export function entryValue(activity: InboundActivityPayload, target: Pick<BoundT
     case 'checklist':
       return { ok: false, reason: 'measure_not_supported' };
     case 'quantity': {
-      const unit = (target.unit ?? '').trim().toLowerCase();
-      if (POUND_UNITS.has(unit)) return positive(activity.metrics.volumeLbs);
-      if (KILOGRAM_UNITS.has(unit)) {
-        const lbs = activity.metrics.volumeLbs;
-        return positive(typeof lbs === 'number' ? round1(lbs / LBS_PER_KG) : undefined);
+      switch (target.metric) {
+        case null:
+          return { ok: false, reason: 'metric_not_bound' };
+        case 'volume_lbs':
+          return positive(activity.metrics.volumeLbs);
+        case 'volume_kg': {
+          const lbs = activity.metrics.volumeLbs;
+          return positive(typeof lbs === 'number' ? round1(lbs / LBS_PER_KG) : undefined);
+        }
+        case 'sets':
+          return positive(activity.metrics.setsCompleted);
+        case 'minutes':
+          return positive(activity.durationMinutes);
       }
-      if (SET_UNITS.has(unit)) return positive(activity.metrics.setsCompleted);
-      if (MINUTE_UNITS.has(unit)) return positive(activity.durationMinutes);
-      return { ok: false, reason: 'unit_not_supported' };
     }
   }
 }
@@ -304,7 +308,7 @@ export async function loadSourceBinding(db: Db, userId: string, provider: string
 
   const { data: links, error: linkError } = await db
     .from('target_sources')
-    .select('target_id')
+    .select('target_id, metric')
     .eq('user_id', userId)
     .eq('source_id', source.id);
   if (linkError) return { ok: false, error: 'Could not load your targets.' };
@@ -312,13 +316,14 @@ export async function loadSourceBinding(db: Db, userId: string, provider: string
 
   const { data: targets, error: targetError } = await db
     .from('targets')
-    .select('id, measure, unit')
+    .select('id, measure')
     .eq('user_id', userId)
     .in('id', links.map((l) => l.target_id));
   if (targetError) return { ok: false, error: 'Could not load your targets.' };
+  const metricOf = new Map(links.map((l) => [l.target_id, l.metric]));
   return {
     ok: true,
-    data: { sourceId: source.id, provider, targets: targets.map((t) => ({ id: t.id, measure: t.measure, unit: t.unit })) },
+    data: { sourceId: source.id, provider, targets: targets.map((t) => ({ id: t.id, measure: t.measure, metric: metricOf.get(t.id) ?? null })) },
   };
 }
 

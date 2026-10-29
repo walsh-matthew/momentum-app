@@ -123,7 +123,9 @@ describe('the prompt states the exact shape of a reply and a draft', () => {
     expect(DRAFT_SHAPE_TEXT).toContain('weekday number from 1 to 7 where Monday is 1 and Sunday is 7');
     expect(DRAFT_SHAPE_TEXT).toMatch(/name made of a lowercase letter then lowercase letters, digits or underscores/);
     // A list of alternatives is bracketed, so it cannot be read as one alternative being a list.
-    expect(DRAFT_SHAPE_TEXT).toContain('sources: list of ({ kind: "manual" } | { kind: "synced", provider: string }) (at most 4)');
+    expect(DRAFT_SHAPE_TEXT).toContain(
+      'sources: list of ({ kind: "manual" } | { kind: "synced", provider: string, metric: "volume_lbs" | "volume_kg" | "sets" | "minutes" | null }) (at most 4)',
+    );
     expect(DRAFT_SHAPE_TEXT).toContain('approved: list of ("goals" | "targets" | "planning" | "talk") (at most 4)');
     // Zod's safe-integer ceiling is noise.
     expect(DRAFT_SHAPE_TEXT).not.toContain('9007199254740991');

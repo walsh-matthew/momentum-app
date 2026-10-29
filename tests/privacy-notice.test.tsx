@@ -14,7 +14,6 @@ import {
   DELETION_WITHIN_DAYS,
   DEVICE_STORAGE,
   GOOGLE_TESTING_LINE,
-  GUIDED_SETUP_LINE,
   NEVER_SENT,
   NOTICE_CHANGE_LINE,
   PROMPTS,
@@ -79,10 +78,9 @@ describe('the privacy notice', () => {
       if (prompt.note) expect(claude).toContain(prompt.note);
     }
     expect(claude).toContain('Not task titles, minutes or scores');
-    expect(claude).toContain(GUIDED_SETUP_LINE);
-    // Guided setup is reachable (MOM-111), so the notice no longer says it is still to come, and it names what is sent.
-    expect(claude).toMatch(/Guided setup is a conversation with Claude\./);
-    expect(claude).toContain("today's date on your device (as a suggested start date)");
+    // Guided setup (MOM-111 block 3) is pinned field by field, like every other prompt, not a standalone sentence.
+    expect(claude).toContain('Guided setup');
+    expect(claude).toContain("today's date on your device, as a suggested start date");
     expect(claude).not.toMatch(/When guided setup arrives/);
     expect(claude).toContain(`Never sent: ${NEVER_SENT}`);
   });
