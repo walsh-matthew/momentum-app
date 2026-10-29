@@ -52,7 +52,7 @@ describe('getWeeklyReviewFacts: states before "ready"', () => {
     add('person_settings', settingsRow(ME, { planning_weekday: 1 }));
     const r = await getWeeklyReviewFacts({ now: () => NOT_DUE_NOW });
     // Nothing finished before, so there is no last review and nothing to compare.
-    expect(r).toEqual({ ok: true, data: { state: 'not_due', tone: 'middle', planningWeekday: 1, last: null, changes: [] } });
+    expect(r).toEqual({ ok: true, data: { state: 'not_due', tone: 'middle', today: '2026-10-21', planningWeekday: 1, last: null, changes: [] } });
   });
 });
 

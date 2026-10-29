@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SetupConversation } from '@/components/setup/SetupConversation';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
-import { APPROVE_TEXT, MEANING_TEXT, setupStorageKey } from '@/lib/setup/session';
+import { APPROVE_TEXT, MEANING_LINK, MEANING_TEXT, setupStorageKey } from '@/lib/setup/session';
 import { runSetupEval } from '@/lib/setup/evals';
 import type { AssistantTurn, SetupSession, Transcript } from '@/types/setup';
 import type { SetupTurnView } from '@/types/setupScreen';
@@ -51,6 +51,9 @@ beforeAll(async () => {
 });
 
 const firstOf = (kind: AssistantTurn['kind']): number => script.findIndex((t) => t.kind === kind);
+
+// The date on this device, as the screen works it out.
+const deviceToday = () => new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 
 const sent = (call = 0) => actions.ask.mock.calls[call][0] as SetupSession & { today: string };
 
@@ -123,8 +126,12 @@ describe('one question at a time', () => {
     expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
 
     answerWith('Run more');
+    // MOM-111 finding 10: the question stays, with the answer just sent under it and a thinking state; there is no box to
+    // send another answer from.
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Thinking…'));
-    expect((screen.getByLabelText('Your answer') as HTMLTextAreaElement).disabled).toBe(true);
+    expect(screen.getByRole('heading', { name: script[0].question ?? '' })).toBeTruthy();
+    expect(screen.getByText('Run more')).toBeTruthy();
+    expect(screen.queryByLabelText('Your answer')).toBeNull();
     pending.resolve(turnView(script[1]));
     await screen.findByRole('heading', { name: script[1].question ?? '' });
     expect(actions.ask).toHaveBeenCalledTimes(2);
@@ -152,8 +159,8 @@ describe('playback is written by code, and the latest answer wins', () => {
     actions.ask.mockResolvedValueOnce(turnView(turn)).mockResolvedValueOnce(turnView(script[at + 1]));
     await start();
     await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
-    // Every line of the playback is the code's rendering of the validated draft.
-    for (const line of renderPlayback(turn.draft.model, 'targets')) {
+    // Every line of the playback is the code's rendering of the validated draft, its dates read against the device's today.
+    for (const line of renderPlayback(turn.draft.model, 'targets', { today: deviceToday() })) {
       expect(screen.getByText(line.trim(), { exact: false })).toBeTruthy();
     }
     expect(turn.say).toBe(''); // Claude wrote none of it
@@ -196,7 +203,9 @@ describe('changing your mind about changing something (production, 2026-10-29)',
 
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
     const box = screen.getByLabelText('What would you like to change?') as HTMLTextAreaElement;
-    expect(box.placeholder).toBe('What would you like to change?');
+    // The same placeholder as every answer box (MOM-111 finding 1), with the question said above the box.
+    expect(box.placeholder).toBe('Type your answer');
+    expect(screen.getByText('What would you like to change?')).toBeTruthy();
     const send = screen.getByRole('button', { name: 'Send the change' });
     const keep = screen.getByRole('button', { name: 'Keep it as it is' });
     // The same row, the same size: a real button, not a small link.
@@ -217,7 +226,7 @@ describe('changing your mind about changing something (production, 2026-10-29)',
     await screen.findByRole('heading', { name: 'Ready to save?' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
-    expect((screen.getByLabelText('What would you like to change?') as HTMLTextAreaElement).placeholder).toBe('What would you like to change?');
+    expect((screen.getByLabelText('What would you like to change?') as HTMLTextAreaElement).placeholder).toBe('Type your answer');
     fireEvent.click(screen.getByRole('button', { name: 'Keep it as it is' }));
 
     expect(screen.queryByLabelText('What would you like to change?')).toBeNull();
@@ -240,12 +249,12 @@ describe('changing your mind about changing something (production, 2026-10-29)',
 });
 
 describe('asking what a question means (MOM-111)', () => {
-  it('offers "What do you mean?" on every question and sends it as the person\'s answer', async () => {
+  it('offers "Not sure what I mean?" on every question and sends "What do you mean?" as the person\'s answer', async () => {
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockResolvedValueOnce(turnView(script[1]));
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
-    expect((screen.getByLabelText('Your answer') as HTMLTextAreaElement).placeholder).toBe('Type your answer, or ask what I mean');
-    fireEvent.click(screen.getByRole('button', { name: MEANING_TEXT }));
+    expect((screen.getByLabelText('Your answer') as HTMLTextAreaElement).placeholder).toBe('Type your answer');
+    fireEvent.click(screen.getByRole('button', { name: MEANING_LINK }));
     await waitFor(() => expect(actions.ask).toHaveBeenCalledTimes(2));
     expect(sent(1).transcript.at(-1)).toEqual({ role: 'person', text: MEANING_TEXT });
   });
@@ -329,6 +338,31 @@ describe('when a turn does not come', () => {
     expect(retried.transcript.filter((m) => m.role === 'person')).toEqual([{ role: 'person', text: 'Run more' }]);
   });
 
+  // MOM-111 finding 10: the error keeps the question on screen, and "Change my answer" puts the answer back in the box.
+  it('keeps the question on screen, and "Change my answer" puts the answer back in the box to edit and send', async () => {
+    actions.ask
+      .mockResolvedValueOnce(turnView(script[0]))
+      .mockResolvedValueOnce({ ok: true, data: { kind: 'failed', message: 'I couldn\'t put together a good reply just now.', rejected: 3 } })
+      .mockResolvedValueOnce(turnView(script[1]));
+    await start();
+    await screen.findByRole('heading', { name: script[0].question ?? '' });
+    answerWith('Run more, maybe');
+    await screen.findByRole('alert');
+    expect(screen.getByRole('heading', { name: script[0].question ?? '' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change my answer' }));
+    const box = screen.getByLabelText('Your answer') as HTMLTextAreaElement;
+    expect(box.value).toBe('Run more, maybe');
+    expect(screen.queryByRole('alert')).toBeNull();
+    // The taken-back answer is gone from the stored conversation too: nothing is waiting on Claude.
+    expect(JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null').transcript).toHaveLength(1);
+    fireEvent.change(box, { target: { value: 'Run more' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await screen.findByRole('heading', { name: script[1].question ?? '' });
+    expect(sent(2).transcript.filter((m) => m.role === 'person')).toEqual([{ role: 'person', text: 'Run more' }]);
+  });
+
   it('says so when the server cannot be reached, and keeps the conversation', async () => {
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockRejectedValueOnce(new Error('offline'));
     await start();
@@ -405,30 +439,33 @@ describe('this tab keeps a setup in progress', () => {
     expect(stored.draft).toEqual(script[0].draft);
   });
 
-  it('offers to continue a stored conversation, and shows its newest question without asking Claude', async () => {
+  // MOM-111 finding 10: a phone drops a background tab while Claude thinks, and the page reloads. It opens straight on the
+  // question, never on a screen in front of it.
+  it('opens a stored conversation straight on its newest question, without asking Claude', async () => {
     const session: SetupSession = { transcript: transcript.slice(0, 3), draft: script[1].draft, spentTokens: 4000 };
     window.sessionStorage.setItem(KEY, JSON.stringify(session));
     render(<SetupConversation userId={USER} />);
-    await screen.findByRole('heading', { name: 'You have a setup in progress' });
-    expect(actions.ask).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await screen.findByRole('heading', { name: script[1].question ?? '' });
+    expect(screen.queryByRole('heading', { name: 'You have a setup in progress' })).toBeNull();
     expect(actions.ask).not.toHaveBeenCalled();
   });
 
-  it('asks again only on a tap when the stored conversation ends with the person\'s answer', async () => {
+  it('after a reload with the person\'s answer still waiting, shows the question and the answer, and asks again only on a tap', async () => {
     const session: SetupSession = { transcript: transcript.slice(0, 2), draft: script[0].draft, spentTokens: 1000 };
     window.sessionStorage.setItem(KEY, JSON.stringify(session));
     actions.ask.mockResolvedValue(turnView(script[1]));
     render(<SetupConversation userId={USER} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: script[0].question ?? '' });
+    const waitingAnswer = transcript[1].role === 'person' ? transcript[1].text : '';
+    expect(screen.getByText(waitingAnswer)).toBeTruthy();
+    expect(actions.ask).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Send it again' }));
     await screen.findByRole('heading', { name: script[1].question ?? '' });
     expect(actions.ask).toHaveBeenCalledTimes(1);
     expect(sent().transcript).toEqual(session.transcript);
   });
 
-  it('starts fresh when the stored value is not a valid conversation, and when the person says start again', async () => {
+  it('starts fresh when the stored value is not a valid conversation, and when the person says start again and confirms', async () => {
     window.sessionStorage.setItem(KEY, '{"transcript": "nonsense"}');
     render(<SetupConversation userId={USER} />);
     await screen.findByRole('button', { name: 'Start' });
@@ -438,6 +475,11 @@ describe('this tab keeps a setup in progress', () => {
     window.sessionStorage.setItem(KEY, JSON.stringify(session));
     render(<SetupConversation userId={USER} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Start again' }));
+    // A stray tap clears nothing: it asks first, and "Keep going" leaves everything as it was.
+    fireEvent.click(screen.getByRole('button', { name: 'Keep going' }));
+    expect(window.sessionStorage.getItem(KEY)).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, start again' }));
     await screen.findByRole('button', { name: 'Start' });
     expect(window.sessionStorage.getItem(KEY)).toBeNull();
   });

@@ -229,7 +229,13 @@ export const PROMPTS = {
       { field: 'draft.said.turn', words: "which answers you've already given and approved" },
       { field: 'draft.said.how', words: "which answers you've already given and approved" },
       { field: 'draft.approved', words: "which answers you've already given and approved" },
+      { field: 'draft.plain.path', words: "Claude's tidied-up wording of what you've said, for you to approve" },
+      { field: 'draft.plain.text', words: "Claude's tidied-up wording of what you've said, for you to approve" },
       { field: 'today', words: "today's date on your device, as a suggested start date" },
+      // MOM-111: two notes written by code, never anything new from the person: why its last try at a turn was not used, in
+      // fixed words, and the date a day you named ("Monday") works out to.
+      { field: 'retryFeedback', words: 'when its last try at a reply was not usable, which setup rule it broke' },
+      { field: 'dateHint', words: 'the date a day you named (like "Monday") works out to' },
     ],
     leavesOut: 'other saved goals or tasks, their ids, or your email',
     note: null,

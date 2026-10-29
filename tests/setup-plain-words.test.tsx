@@ -51,15 +51,21 @@ describe('the step summaries and the prompt', () => {
     for (const e of step.examples) expect(unexplainedTerms(`${e.say ?? ''} ${e.question}`)).toEqual([]);
   });
 
-  it.each(SETUP_STEPS.filter((s) => s.n !== 12).map((s) => [s.n, s] as const))('step %i carries a short reason Claude can say', (_n, step) => {
-    expect(step.reason).toBeTruthy();
+  // A reason goes after the ask, in the question, only where it is not plain (MOM-111 finding 4): a step whose question says
+  // what it is for on its own has none.
+  it.each(SETUP_STEPS.filter((s) => s.reason !== null).map((s) => [s.n, s] as const))('step %i carries a short reason to put after the ask', (_n, step) => {
     const reason = step.reason ?? '';
     expect(reason.split(' ').length).toBeLessThanOrEqual(12);
     expect(unexplainedTerms(reason)).toEqual([]);
     // A reason never names a day, a time or a number the person has not said.
     expect(dayTimeWords(reason)).toEqual([]);
     expect(numbersIn(reason, { skipOne: true })).toEqual([]);
-    expect(SETUP_SYSTEM_PROMPT).toContain(`Say why in a few words, for example: "${reason}".`);
+    expect(SETUP_SYSTEM_PROMPT).toContain(`Where the reason is not plain, add it after the ask, for example "${reason}".`);
+  });
+
+  it('gives most steps a reason, and never tells Claude to say it in a lead-in', () => {
+    expect(SETUP_STEPS.filter((s) => s.reason !== null).length).toBeGreaterThanOrEqual(6);
+    expect(SETUP_SYSTEM_PROMPT).not.toMatch(/Say why in a few words/);
   });
 
   it('gives the final step, which asks nothing, no reason', () => {
@@ -97,7 +103,7 @@ describe('what the setup cards show', () => {
   const kinds = [...new Map(question.map((t) => [t.kind, t])).values()];
 
   it.each(kinds.map((t) => [t.kind, t] as const))('a %s card', (_kind, turn: AssistantTurn) => {
-    const { container } = render(<QuestionCard turn={turn} busy={false} onAnswer={() => {}} />);
+    const { container } = render(<QuestionCard turn={turn} busy={false} onAnswer={() => {}} today="2026-10-29" />);
     expect(unexplainedTerms(readable(container))).toEqual([]);
   });
 
@@ -130,7 +136,7 @@ describe('what the setup cards show', () => {
       ...['dueDate', 'dateCanMove', 'targetKey', 'title'].map((f) => `goals.${empty.goals[0].key}.items.i1.${f}`),
       'somewhere.else',
     ];
-    const missing = describeMissing(empty, paths.map((path) => ({ path, message: '' })));
+    const missing = describeMissing(empty, paths.map((path) => ({ path, message: '', code: 'rule' as const })));
     for (const message of Object.values(SETUP_QUICK_PATH_MESSAGES)) {
       const { container } = render(
         <QuickPathCard message={message} sections={quickPathSections(empty, { locale: 'en-US' })} missing={missing} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,

@@ -4,10 +4,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { emptyDraft } from '@/lib/setup/draft';
-import { renderFinal, renderPlayback, spelledDate, spokenTimes } from '@/lib/setup/playback';
+import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { listOf, restate } from '@/lib/setup/restate';
 import type { SetupModel, Transcript } from '@/types/setup';
 import { goal, item, target } from './helpers/setupScript';
+
+// The person's today for the playback's dates (MOM-111 finding 7): the year shows only when a date is not in this year.
+const TODAY = '2026-10-29';
 
 describe('restating the person\'s words', () => {
   it('restates the owner\'s why the way a person would', () => {
@@ -98,11 +101,11 @@ describe('each part, played back in the second person', () => {
     m.goals.push(goal('g2', 'Paint', { state: 'parked', returnWhen: { kind: 'condition', note: 'spring' } }));
     m.goals.push(goal('g3', 'Learn guitar', { state: 'parked', returnWhen: { kind: 'on_request' } }));
     m.goals.push(goal('g4', 'Garden', { state: 'parked', returnWhen: { kind: 'date', date: '2027-03-01' } }));
-    expect(renderPlayback(m, 'goals')).toEqual([
+    expect(renderPlayback(m, 'goals', { today: TODAY })).toEqual([
       'Set aside for now: Cook at home. It comes back when your knee heals.',
       'Set aside for now: Paint. It comes back, in your words: "spring"',
       'Set aside for now: Learn guitar. It comes back when you ask.',
-      'Set aside for now: Garden. It comes back on March 1, 2027.',
+      'Set aside for now: Garden. It comes back on Monday, Mar 1, 2027.',
     ]);
   });
 
@@ -121,12 +124,12 @@ describe('each part, played back in the second person', () => {
     g.targets.push(target('t2', 'Interviews', { role: 'outcome' }));
     g.targets.push(target('t3', 'Practice', { measure: 'time', floor: 90, qualifyingThreshold: 20 }));
     m.goals.push(g, goal('g2', 'Quilt', { shape: 'project', endDate: '2027-06-14', startDate: '2026-10-27' }));
-    expect(renderPlayback(m, 'targets')).toEqual([
-      'Get fit keeps going, starting October 27, 2026, with a first stretch of 10 weeks.',
+    expect(renderPlayback(m, 'targets', { today: TODAY })).toEqual([
+      'Get fit keeps going, starting Tuesday, Oct 27, with a first stretch of 10 weeks.',
       '  Gym sessions: at least 2 each week, aiming for 4.',
       "  Interviews: counted each week. It isn't fully in your hands, so it's shown to you, never judged.",
       '  Practice: at least 90 minutes each week. Only entries of 20 minutes or more count.',
-      'Quilt has a deadline of June 14, 2027, starting October 27, 2026.',
+      'Quilt has a deadline of Monday, Jun 14, 2027, starting Tuesday, Oct 27.',
     ]);
   });
 
@@ -141,13 +144,13 @@ describe('each part, played back in the second person', () => {
     g.items.push(item('i1', 'deadline_task', 'Quilt finished', { dueDate: '2027-06-14', dateCanMove: false }));
     g.targets.push(target('t1', 'Blocks sewn', { sources: [{ kind: 'manual' }] }));
     m.goals.push(g);
-    expect(renderPlayback(m, 'planning', { locale: 'en-US' })).toEqual([
+    expect(renderPlayback(m, 'planning', { locale: 'en-US', today: TODAY })).toEqual([
       "You're in the America/Denver time zone.",
       'Your day ends at 2:00 AM, so anything you log before then counts toward the day before.',
       'Your week starts on Monday.',
       'Your kinds of days: your office days (2 hours).',
       "You'll plan your week on Sunday at 6:30 PM.",
-      "Due by June 14, 2027: Quilt finished. The date can't move.",
+      "Due by Monday, Jun 14, 2027: Quilt finished. The date can't move.",
       'Blocks sewn: you log it yourself.',
     ]);
     // Another locale writes times its own way.
@@ -207,8 +210,11 @@ describe('each part, played back in the second person', () => {
     ]);
   });
 
-  it('spells dates out', () => {
-    expect(spelledDate('2027-06-05')).toBe('June 5, 2027');
-    expect(spelledDate('not a date')).toBe('not a date');
+  it('writes a date the casual way, with the year only when it is not this year', () => {
+    const m = model();
+    m.goals.push(goal('g1', 'Garden', { state: 'parked', returnWhen: { kind: 'date', date: '2026-11-05' } }));
+    expect(renderPlayback(m, 'goals', { today: TODAY })).toEqual(['Set aside for now: Garden. It comes back on Thursday, Nov 5.']);
+    // Without the person's today, "this year" is not known, so the year is always shown.
+    expect(renderPlayback(m, 'goals')).toEqual(['Set aside for now: Garden. It comes back on Thursday, Nov 5, 2026.']);
   });
 });

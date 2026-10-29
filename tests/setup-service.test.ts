@@ -23,7 +23,9 @@ import {
   takeSetupTurn,
 } from '@/lib/services/setup';
 import type { RunSetupTurnArgs, SetupTurnResult } from '@/lib/services/llm';
+import { checkTurn } from '@/lib/setup/checks';
 import { emptyDraft } from '@/lib/setup/draft';
+import { RETRY_FEEDBACK, retryFeedback } from '@/lib/setup/feedback';
 import { runSetupEval } from '@/lib/setup/evals';
 import { latestProvenance, provenanceLeaves } from '@/lib/setup/leaves';
 import { draftToRows, toSavePayload, type SetupRows } from '@/lib/setup/rows';
@@ -166,13 +168,16 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     expect(stub.calls.map((c) => c.spentTokens)).toEqual([0, 1000, 2000]);
   });
 
-  it('logs the category, rule names and topic names only, never any of the reply', async () => {
+  it('logs the category, rule names, check codes, draft paths and topic names only, never any of the reply', async () => {
     const full = await fullCase();
     const stub = stubTurn([{ raw: { kind: 'question' } }, { raw: badQuestion(full.script[2]) }, { raw: full.script[2] }]);
     await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
     expect(warn.mock.calls).toEqual([
       ['[setup] a reply was thrown away', { category: 'schema' }],
-      ['[setup] a reply was thrown away', { category: 'rules', rules: ['one_question'], topic: badQuestion(full.script[2]).topic, skippedTopic: null }],
+      [
+        '[setup] a reply was thrown away',
+        { category: 'rules', rules: ['one_question'], codes: ['one_question.joined'], paths: [], topic: badQuestion(full.script[2]).topic, skippedTopic: null },
+      ],
     ]);
     // Names from the fixed topic list, or null: never text.
     for (const [, fields] of warn.mock.calls) {
@@ -226,6 +231,145 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
     expect(result).toEqual({ ok: true, data: { kind: 'failed', message: SETUP_FAILURE_MESSAGES[reason], rejected: 0 } });
     expect(stub.calls).toHaveLength(1);
+  });
+});
+
+// MOM-111 root cause A: a retry used to send exactly the same input, so Claude repeated the same mistake until "Try again".
+describe('takeSetupTurn: a retry is told what went wrong, in code\'s own words', () => {
+  const badQuestion = (turn: AssistantTurn): AssistantTurn => ({ ...turn, question: 'What is your goal and how often will you work on it?' });
+  // The production failure of finding 9: a number the person never said, filled into the draft.
+  const guessedFloor = (turn: AssistantTurn): AssistantTurn => {
+    const draft = structuredClone(turn.draft);
+    const g = draft.model.goals[0];
+    g.targets.push({
+      key: 'guess', title: 'Sessions', measure: 'count', unit: null, role: 'effort', period: { kind: 'weekly' }, floor: 4, aspiration: null,
+      qualifyingThreshold: null, carryOver: 'habit', completionMode: null, tone: null, sources: [],
+    });
+    draft.said.push({ path: `goals.${g.key}.targets.guess.floor`, turn: 3, how: 'said' });
+    return { ...turn, draft };
+  };
+  // A lead-in that previews the question (finding 4): a plain-words check, not a hard rule.
+  const preview = (turn: AssistantTurn): AssistantTurn => ({ ...turn, say: "Next, I'll ask you something about this." });
+
+  it('sends nothing extra on a first try, and the failed rules\' fixed feedback on the next', async () => {
+    const full = await fullCase();
+    const good = full.script[2];
+    const stub = stubTurn([{ raw: badQuestion(good) }, { raw: good }]);
+    const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    expect(result).toMatchObject({ ok: true, data: { kind: 'turn', rejected: 1 } });
+    expect(stub.calls[0].retryFeedback).toBeUndefined();
+    const violations = checkTurn(badQuestion(good), { transcript: sessionBefore(full, 2).transcript, prevDraft: sessionBefore(full, 2).draft });
+    expect(stub.calls[1].retryFeedback).toEqual(retryFeedback(violations));
+    expect(stub.calls[1].retryFeedback).toContain(RETRY_FEEDBACK['one_question.joined']);
+  });
+
+  it('puts no person text in the feedback: only fixed sentences and draft paths', async () => {
+    const full = await fullCase();
+    const session = sessionBefore(full, 3);
+    const good = full.script[3];
+    const stub = stubTurn([{ raw: badQuestion(guessedFloor(good)) }, { raw: good }]);
+    await takeSetupTurn(session, { runTurn: stub.run });
+    const feedback = stub.calls[1].retryFeedback ?? [];
+    expect(feedback.length).toBeGreaterThan(0);
+    const fixed = Object.values(RETRY_FEEDBACK);
+    for (const line of feedback) expect(fixed.some((f) => line === f || line.startsWith(`${f} Paths: `)), line).toBe(true);
+    for (const m of session.transcript) if (m.role === 'person') expect(feedback.join('\n')).not.toContain(m.text);
+  });
+
+  it('tells a retry to ask for a value with no source in this turn, not to guess another (finding 9), and logs its path, not its value', async () => {
+    const full = await fullCase();
+    const good = full.script[3];
+    const stub = stubTurn([{ raw: guessedFloor(good) }, { raw: good }]);
+    await takeSetupTurn(sessionBefore(full, 3), { runTurn: stub.run });
+    const line = (stub.calls[1].retryFeedback ?? []).find((l) => l.includes('targets.guess.floor'));
+    expect(line).toMatch(/Ask the person for it in this turn, in plain words; do not guess another value/);
+    const logged = (warn.mock.calls as unknown[][]).find((call) => (call[1] as { category?: string }).category === 'rules')?.[1] as Record<string, unknown>;
+    expect(logged.paths).toEqual([`goals.${good.draft.model.goals[0].key}.targets.guess.floor`]);
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/"floor":4|: 4\b/);
+  });
+
+  // MOM-111 addition a: the plain-words checks never dead-end the person.
+  it('gives a reply that breaks only the plain-words checks one retry, then shows it and logs the rule names', async () => {
+    const full = await fullCase();
+    const good = full.script[2];
+    const stub = stubTurn([{ raw: preview(good) }, { raw: preview(good) }, { raw: good }]);
+    const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    expect(stub.calls).toHaveLength(2);
+    expect(stub.calls[1].retryFeedback).toEqual([RETRY_FEEDBACK['plain.lead_in']]);
+    expect(result).toMatchObject({ ok: true, data: { kind: 'turn', turn: preview(good), rejected: 1 } });
+    expect(warn).toHaveBeenLastCalledWith('[setup] a reply was shown after its plain-words retry', { category: 'plain_words', rules: ['plain_words'], codes: ['plain.lead_in'] });
+  });
+
+  it('shows a plain-words-only reply on the last try, and never ends in "try again" for one', async () => {
+    const full = await fullCase();
+    const good = full.script[2];
+    const stub = stubTurn([{ raw: badQuestion(good) }, { raw: {} }, { raw: preview(good) }]);
+    const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    expect(stub.calls).toHaveLength(3);
+    expect(result).toMatchObject({ ok: true, data: { kind: 'turn', turn: preview(good), rejected: 2 } });
+  });
+
+  it('still ends in "try again" when a hard rule keeps failing, plain words or not', async () => {
+    const full = await fullCase();
+    const good = full.script[2];
+    const both = preview(badQuestion(good));
+    const stub = stubTurn([{ raw: both }, { raw: both }, { raw: good }]);
+    const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    expect(result).toMatchObject({ ok: true, data: { kind: 'failed' } });
+  });
+});
+
+// MOM-111 finding 8 and addition b: code, not Claude, turns a relative date into a date.
+describe('takeSetupTurn: relative dates', () => {
+  const asked: AssistantTurn = {
+    kind: 'question',
+    chunk: null,
+    skipped: null,
+    say: '',
+    question: 'When would you like to start?',
+    topic: 'start_date',
+    options: [],
+    draft: emptyDraft(),
+  };
+  const session = (text: string): SetupSession & { today: string } => ({
+    transcript: [{ role: 'assistant', turn: asked }, { role: 'person', text }],
+    draft: emptyDraft(),
+    spentTokens: 0,
+    today: '2026-10-27',
+  });
+
+  it('answers a reply that is only a relative date itself, with no call: a proposal of the date', async () => {
+    const stub = stubTurn([]);
+    const result = await takeSetupTurn(session('Monday'), { runTurn: stub.run });
+    expect(stub.calls).toHaveLength(0);
+    expect(result).toMatchObject({ ok: true, data: { kind: 'turn', rejected: 0, spentTokens: 0, turn: { kind: 'proposal', topic: 'start_date', question: 'Start Monday, Nov 2?' } } });
+  });
+
+  it('asks for the day again when the words name none ("next week"), still with no call', async () => {
+    const stub = stubTurn([]);
+    const result = await takeSetupTurn(session('next week'), { runTurn: stub.run });
+    expect(stub.calls).toHaveLength(0);
+    expect(result).toMatchObject({ ok: true, data: { kind: 'turn', turn: { kind: 'question', topic: 'start_date', question: 'Which day would you like to start?' } } });
+  });
+
+  it('lets Claude take a reply with more in it ("Monday, 3 times a week"), with the date code read as a hint', async () => {
+    const stub = stubTurn([{ raw: { ...asked, kind: 'proposal', question: 'Start Monday, Nov 2?' } }]);
+    await takeSetupTurn(session('Monday, 3 times a week'), { runTurn: stub.run });
+    expect(stub.calls).toHaveLength(1);
+    expect(stub.calls[0].dateHint).toContain('"monday"');
+    expect(stub.calls[0].dateHint).toContain('2026-11-02 (Monday, Nov 2)');
+    expect(stub.calls[0].dateHint).toMatch(/show it in a "proposal" for them to accept, and record it only after they do/);
+  });
+
+  it('works the date out from the person\'s own time zone once setup knows it, not the device\'s date', async () => {
+    const stub = stubTurn([]);
+    const s = session('tomorrow');
+    s.draft.model.person.timeZone = 'Pacific/Kiritimati';
+    s.transcript[0] = { role: 'assistant', turn: { ...asked, draft: s.draft } };
+    const result = await takeSetupTurn({ ...s, today: '1999-01-01' }, { runTurn: stub.run });
+    if (!result.ok || result.data.kind !== 'turn') throw new Error('expected a turn');
+    expect(result.data.turn.question).not.toContain('1999');
+    expect(result.data.turn.question).toMatch(/^Start tomorrow, /);
   });
 });
 

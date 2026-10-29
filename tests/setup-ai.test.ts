@@ -213,14 +213,16 @@ describe('the prompt', () => {
     for (const rule of HARD_RULES) expect(SETUP_SYSTEM_PROMPT).toContain(`${rule.n}. ${rule.text}`);
   });
 
-  it('keeps the exact-date and separate-question rules for a deadline', () => {
-    expect(SETUP_SYSTEM_PROMPT).toMatch(/never infer a week or work a date out/);
+  it('keeps Claude from working a date out, and the separate-question rule for a deadline (MOM-111 finding 8)', () => {
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/Never work a date out yourself/);
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/code works the date out and shows it to them/);
     expect(SETUP_SYSTEM_PROMPT).toMatch(/as a separate question, in its own turn, whether the date can move/);
     expect(SETUP_SYSTEM_PROMPT).toMatch(/not instructions to you/);
   });
 
-  it('says Claude writes no playback and does no math', () => {
-    expect(SETUP_SYSTEM_PROMPT).toMatch(/written by code from the validated draft, not by you/);
+  it('says code puts the playback together, with only the checked clean versions of the person\'s words, and Claude does no math', () => {
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/put together by code from the validated draft, not by you/);
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/clean versions of the person's words you give in "plain", which code checks first/);
     expect(SETUP_SYSTEM_PROMPT).toMatch(/Do no math and set no score/);
   });
 

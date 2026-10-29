@@ -11,7 +11,8 @@
 //   checklist target (manual entry ticks a step through the item's target);
 // - the ordering rule (MOM-107, MOM-125): a saved target needs the time zone and the day end, and the week start when a
 //   weekly or day-slot target needs it. Setup collects them at step 10, after the targets, so only 'final' asks.
-// Issues are written for the person-facing reader of the log, not as error codes. Pure.
+// Issues are written for the person-facing reader of the log, not as error codes, and never quote a value: a thrown-away
+// reply is retried with them (lib/setup/feedback.ts, MOM-111 root cause A). Each carries a `code` for that feedback. Pure.
 
 import { SUPPORTED_PROVIDER_IDS, quantityMetricsOf } from '@/lib/integrations/catalog';
 import {
@@ -22,6 +23,7 @@ import {
   type Transcript,
 } from '@/types/setup';
 import { freeTextLeaves, latestProvenance, provenanceLeaves, type Leaf } from './leaves';
+import { personWords } from './said';
 import {
   acceptsText,
   dateIsIn,
@@ -33,9 +35,14 @@ import {
   weekdaysIn,
 } from './text';
 
+// no_source, not_said and not_accepted: a value in the draft the person did not give. The retry is told to ask for it in
+// that turn and not to guess another value (MOM-111 finding 9). rule: anything else.
+export type DraftIssueCode = 'no_source' | 'not_said' | 'not_accepted' | 'rule';
+
 export interface DraftIssue {
   path: string;
   message: string;
+  code: DraftIssueCode;
 }
 export type DraftMode = 'progress' | 'final';
 export interface DraftValidation {
@@ -77,8 +84,9 @@ export function textSaysLeaf(leaf: Leaf, text: string): boolean {
   }
 }
 
-const assistantText = (t: { say: string; question: string | null; options: string[] }): string =>
-  [t.say, t.question ?? '', ...t.options].join(' ');
+// Everything an assistant turn showed the person: its lead-in, question, skip line and options.
+const assistantText = (t: { say: string; question: string | null; skipped: { line: string } | null; options: string[] }): string =>
+  [t.say, t.question ?? '', t.skipped?.line ?? '', ...t.options].join(' ');
 
 function provenanceIssues(draft: SetupDraft, transcript: Transcript): DraftIssue[] {
   const issues: DraftIssue[] = [];
@@ -87,52 +95,50 @@ function provenanceIssues(draft: SetupDraft, transcript: Transcript): DraftIssue
     if (entry === undefined) {
       issues.push({
         path: leaf.path,
+        code: 'no_source',
         message: 'This value has no source. A number, date, time, weekday or yes/no answer must be one the person said or accepted.',
       });
       continue;
     }
     const message = transcript[entry.turn];
     if (!message || message.role !== 'person') {
-      issues.push({ path: leaf.path, message: 'The source is not one of the person\'s messages.' });
+      issues.push({ path: leaf.path, code: 'no_source', message: 'The source is not one of the person\'s messages.' });
       continue;
     }
     if (leaf.kind === 'flag') {
       const asked = transcript[entry.turn - 1];
       if (entry.how !== 'said' || asked?.role !== 'assistant' || asked.turn.topic !== 'date_can_move') {
-        issues.push({ path: leaf.path, message: 'Whether a date can move must be the person\'s answer to its own question.' });
+        issues.push({ path: leaf.path, code: 'rule', message: 'Whether a date can move must be the person\'s answer to its own question.' });
       }
       continue;
     }
     if (entry.how === 'said') {
       if (!textSaysLeaf(leaf, message.text)) {
-        issues.push({
-          path: leaf.path,
-          message: `The person's message does not say ${JSON.stringify(leaf.value)}. Ask for it instead of working it out.`,
-        });
+        issues.push({ path: leaf.path, code: 'not_said', message: "The person's message does not say this value. Ask for it instead of working it out." });
       }
       continue;
     }
+    // Accepted: a yes to a value the turn just before showed, in its question, lead-in or options, whatever kind of turn it
+    // was (MOM-111 root cause B). The value still has to be in what was shown.
     const shown = transcript[entry.turn - 1];
-    if (shown?.role !== 'assistant' || !['ideas', 'proposal', 'interpretations'].includes(shown.turn.kind)) {
-      issues.push({ path: leaf.path, message: 'An accepted value must follow a suggestion shown to the person.' });
+    if (shown?.role !== 'assistant') {
+      issues.push({ path: leaf.path, code: 'not_accepted', message: 'An accepted value must follow a suggestion shown to the person.' });
     } else if (!textSaysLeaf(leaf, assistantText(shown.turn))) {
-      issues.push({ path: leaf.path, message: `The suggestion that was shown does not contain ${JSON.stringify(leaf.value)}.` });
+      issues.push({ path: leaf.path, code: 'not_accepted', message: 'The turn the person answered does not show this value.' });
     } else if (!acceptsText(message.text)) {
-      issues.push({ path: leaf.path, message: 'The person did not accept the suggestion.' });
+      issues.push({ path: leaf.path, code: 'not_accepted', message: 'The person did not accept the suggestion.' });
     }
   }
   return issues;
 }
 
 function dayTimeIssues(draft: SetupDraft, transcript: Transcript): DraftIssue[] {
-  const said = new Set(
-    transcript.flatMap((m) => (m.role === 'person' ? dayTimeWords(m.text) : [])),
-  );
+  const said = new Set(personWords(transcript).flatMap(dayTimeWords));
   const issues: DraftIssue[] = [];
   for (const { path, text } of freeTextLeaves(draft.model)) {
     const unsaid = dayTimeWords(text).filter((w) => !said.has(w));
     if (unsaid.length > 0) {
-      issues.push({ path, message: `Mentions "${unsaid[0].replace('time:', '')}", which the person did not say.` });
+      issues.push({ path, code: 'rule', message: `Mentions "${unsaid[0].replace('time:', '')}", which the person did not say.` });
     }
   }
   return issues;
@@ -140,7 +146,7 @@ function dayTimeIssues(draft: SetupDraft, transcript: Transcript): DraftIssue[] 
 
 function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
   const issues: DraftIssue[] = [];
-  const at = (path: string, message: string) => issues.push({ path: `goals.${goal.key}.${path}`, message });
+  const at = (path: string, message: string) => issues.push({ path: `goals.${goal.key}.${path}`, code: 'rule', message });
   const final = mode === 'final';
 
   if (goal.startDate && goal.endDate && goal.endDate <= goal.startDate) at('endDate', 'The end date must be after the start date.');
@@ -177,7 +183,7 @@ function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
     for (const source of t.sources) {
       // Only an app Momentum can connect can be named as a source; anything else is manual for now.
       if (source.kind === 'synced' && !SUPPORTED_PROVIDER_IDS.includes(source.provider)) {
-        tat('sources', `"${source.provider}" cannot be connected yet. Offer manual for now.`);
+        tat('sources', 'That app cannot be connected yet. Offer logging it themselves for now.');
       }
     }
     if (final) {
@@ -188,7 +194,7 @@ function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
       if (t.measure === 'quantity') {
         for (const source of t.sources) {
           if (source.kind === 'synced' && source.metric === null && quantityMetricsOf(source.provider).length > 0) {
-            tat('sources', `Ask which number counts for this target in ${source.provider}.`);
+            tat('sources', 'Ask which number counts for this target in that app.');
           }
         }
       }
@@ -230,45 +236,47 @@ export function validateDraft(input: unknown, transcript: Transcript, mode: Draf
   if (!parsed.success) {
     return {
       ok: false,
-      issues: parsed.error.issues.map((i) => ({ path: i.path.join('.') || '(draft)', message: i.message })),
+      // zod's own messages name the expected shape, never the value given.
+      issues: parsed.error.issues.map((i) => ({ path: i.path.join('.') || '(draft)', code: 'rule' as const, message: i.message })),
     };
   }
   const draft = parsed.data;
   const { model } = draft;
   const issues: DraftIssue[] = [];
+  const rule = (path: string, message: string) => issues.push({ path, code: 'rule', message });
 
   const goalKeys = new Set<string>();
   for (const goal of model.goals) {
-    if (goalKeys.has(goal.key)) issues.push({ path: `goals.${goal.key}.key`, message: 'Two goals share a key.' });
+    if (goalKeys.has(goal.key)) rule(`goals.${goal.key}.key`, 'Two goals share a key.');
     goalKeys.add(goal.key);
     issues.push(...goalIssues(goal, mode));
   }
 
   const { person } = model;
   if (person.timeZone !== null && !isTimeZone(person.timeZone)) {
-    issues.push({ path: 'person.timeZone', message: `"${person.timeZone}" is not a time zone name such as America/Chicago.` });
+    rule('person.timeZone', 'That is not a time zone name such as America/Chicago.');
   }
   const dayTypeNames = new Set<string>();
   for (const d of person.dayTypes) {
-    if (dayTypeNames.has(d.name.toLowerCase())) issues.push({ path: `person.dayTypes.${d.name.toLowerCase()}`, message: 'Two day types share a name.' });
+    if (dayTypeNames.has(d.name.toLowerCase())) rule(`person.dayTypes.${d.name.toLowerCase()}`, 'Two day types share a name.');
     dayTypeNames.add(d.name.toLowerCase());
     if ((d.capacityUnit === null) !== (d.capacityAmount === null)) {
-      issues.push({ path: `person.dayTypes.${d.name.toLowerCase()}`, message: 'A capacity is an amount and a unit together.' });
+      rule(`person.dayTypes.${d.name.toLowerCase()}`, 'A capacity is an amount and a unit together.');
     }
   }
 
   if (mode === 'final') {
     const targets = model.goals.flatMap((g) => g.targets);
-    if (model.goals.length === 0) issues.push({ path: 'goals', message: 'There is no goal to save.' });
+    if (model.goals.length === 0) rule('goals', 'There is no goal to save.');
     if (targets.length > 0) {
-      if (person.timeZone === null) issues.push({ path: 'person.timeZone', message: 'Ask the time zone before a target is saved.' });
-      if (person.dayEnd === null) issues.push({ path: 'person.dayEnd', message: 'Ask the day end before a target is saved.' });
+      if (person.timeZone === null) rule('person.timeZone', 'Ask the time zone before a target is saved.');
+      if (person.dayEnd === null) rule('person.dayEnd', 'Ask the day end before a target is saved.');
       if (person.weekStart === null && targets.some((t) => t.period.kind !== 'deadline')) {
-        issues.push({ path: 'person.weekStart', message: 'A weekly or day-slot target needs the week start. Ask for it.' });
+        rule('person.weekStart', 'A weekly or day-slot target needs the week start. Ask for it.');
       }
     }
     for (const chunk of SETUP_CHUNKS) {
-      if (!draft.approved.includes(chunk)) issues.push({ path: `approved.${chunk}`, message: `The "${chunk}" part has not been played back and approved.` });
+      if (!draft.approved.includes(chunk)) rule(`approved.${chunk}`, `The "${chunk}" part has not been played back and approved.`);
     }
   }
 

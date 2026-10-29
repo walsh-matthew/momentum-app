@@ -11,8 +11,9 @@
 // constraint: the draft schema has unions and bounds that constraint may not accept, and that has not been tried against
 // the real API (no live call has been approved). Whether to move to it is for the live-run block.
 //
-// What it sends: only what the person typed in this setup, Claude's own earlier turns, the current draft once, and the
-// date on their device as a suggested start date. No other goals, tasks, ids or email. Pinned field by field in
+// What it sends: only what the person typed in this setup, Claude's own earlier turns, the current draft once, the date on
+// their device as a suggested start date, and two notes written by code (MOM-111): why a previous try at this turn was
+// thrown away, and what a relative date in their newest message works out to. No other goals, tasks, ids or email. Pinned field by field in
 // `lib/config/privacy.ts`'s `PROMPTS.setup`, against `setupPromptFacts()` below (MOM-111 block 3, MOM-102).
 //
 // Since MOM-128 it is called through runSetupTurn() in lib/services/llm.ts, which counts the call, applies the setup limits
@@ -21,6 +22,8 @@
 import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAnthropicApiKey } from '@/lib/config/env';
+import { casualDate } from '@/lib/dates/casual';
+import { RETRY_HEADER } from '@/lib/setup/feedback';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import type { AssistantTurn, SetupDraft, Transcript } from '@/types/setup';
 import { readUsage, type ModelUsage } from './usage';
@@ -67,9 +70,22 @@ export interface SetupPromptFacts {
   assistantTurns: SentAssistantTurn[];
   draft: SetupDraft;
   today?: string;
+  // Why the previous try at this same turn was thrown away, in fixed words written by code (lib/setup/feedback.ts): no
+  // person text, no value (MOM-111 root cause A). Absent on a first try.
+  retryFeedback?: string[];
+  // What code read a relative date in the person's newest message as (lib/setup/codeTurns.ts, MOM-111 finding 8). Absent
+  // when there is none.
+  dateHint?: string;
 }
 
-export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, today?: string): SetupPromptFacts {
+// The extras one turn can carry besides the conversation itself.
+export interface SetupTurnExtras {
+  today?: string;
+  retryFeedback?: string[];
+  dateHint?: string;
+}
+
+export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, extras: SetupTurnExtras = {}): SetupPromptFacts {
   const personMessages: string[] = [];
   const assistantTurns: SentAssistantTurn[] = [];
   for (const m of transcript) {
@@ -79,7 +95,11 @@ export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, toda
       assistantTurns.push(rest);
     }
   }
-  return today === undefined ? { personMessages, assistantTurns, draft } : { personMessages, assistantTurns, draft, today };
+  const facts: SetupPromptFacts = { personMessages, assistantTurns, draft };
+  if (extras.today !== undefined) facts.today = extras.today;
+  if (extras.retryFeedback && extras.retryFeedback.length > 0) facts.retryFeedback = extras.retryFeedback;
+  if (extras.dateHint) facts.dateHint = extras.dateHint;
+  return facts;
 }
 
 // The conversation as the API takes it: the person's words as user messages, Claude's earlier turns as assistant messages
@@ -88,9 +108,10 @@ export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, toda
 //
 // `today` is the date on the person's own device, sent by the browser as a SUGGESTION for a goal's start date (the server
 // does not know their time zone before setup has asked it). It is one extra line after the draft, labelled as a
-// suggestion, and is left out when the browser did not send one (MOM-111).
-export function buildSetupMessages(transcript: Transcript, draft: SetupDraft, today?: string): Anthropic.MessageParam[] {
-  const facts = setupPromptFacts(transcript, draft, today);
+// suggestion, with the words to say it in (MOM-111 finding 7), and is left out when the browser did not send one (MOM-111).
+// A date hint and retry feedback, when there are any, follow it as their own text blocks.
+export function buildSetupMessages(transcript: Transcript, draft: SetupDraft, extras: SetupTurnExtras = {}): Anthropic.MessageParam[] {
+  const facts = setupPromptFacts(transcript, draft, extras);
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: SETUP_BEGIN_MESSAGE }];
   let personIndex = 0;
   let assistantIndex = 0;
@@ -101,17 +122,23 @@ export function buildSetupMessages(transcript: Transcript, draft: SetupDraft, to
         : { role: 'assistant', content: JSON.stringify({ ...facts.assistantTurns[assistantIndex++], draft: SETUP_DRAFT_PLACEHOLDER }) },
     );
   }
-  const suggestion = facts.today ? `\nSuggested start date (today's date on the person's device, a suggestion only): ${facts.today}` : '';
+  const suggestion = facts.today
+    ? `\nSuggested start date (today's date on the person's device, a suggestion only): ${facts.today}. Say it as "today, ${casualDate(facts.today, facts.today, { relative: false })}", never as ${facts.today}.`
+    : '';
   const current = `Current draft, to start from:\n${JSON.stringify(facts.draft)}${suggestion}`;
+  const extraBlocks: Anthropic.TextBlockParam[] = [];
+  if (facts.dateHint) extraBlocks.push({ type: 'text', text: facts.dateHint });
+  if (facts.retryFeedback) extraBlocks.push({ type: 'text', text: [RETRY_HEADER, ...facts.retryFeedback.map((line) => `- ${line}`)].join('\n') });
   const last = messages[messages.length - 1];
   if (last.role === 'user' && typeof last.content === 'string') {
-    // Two blocks in the one message, so the person's own words stay apart from the draft.
+    // Separate blocks in the one message, so the person's own words stay apart from the draft and from code's notes.
     last.content = [
       { type: 'text', text: last.content },
       { type: 'text', text: current },
+      ...extraBlocks,
     ];
   } else {
-    messages.push({ role: 'user', content: current });
+    messages.push({ role: 'user', content: extraBlocks.length > 0 ? [{ type: 'text', text: current }, ...extraBlocks] : current });
   }
   return messages;
 }
@@ -126,7 +153,7 @@ function extractJson(text: string): unknown {
 
 // Asks Claude for the next turn. Returns the model's raw JSON, parsed but otherwise untouched.
 export async function requestSetupTurnFromModel(
-  input: { transcript: Transcript; draft: SetupDraft; today?: string },
+  input: { transcript: Transcript; draft: SetupDraft } & SetupTurnExtras,
   deps: ModelSetupDeps = {},
 ): Promise<ModelSetupResult> {
   let client: Pick<Anthropic, 'messages'>;
@@ -144,7 +171,7 @@ export async function requestSetupTurnFromModel(
       max_tokens: MAX_OUTPUT_TOKENS,
       output_config: { effort: 'medium' },
       system: SETUP_SYSTEM_PROMPT,
-      messages: buildSetupMessages(input.transcript, input.draft, input.today),
+      messages: buildSetupMessages(input.transcript, input.draft, { today: input.today, retryFeedback: input.retryFeedback, dateHint: input.dateHint }),
     });
   } catch (error) {
     // Most specific first. Log the kind of failure, never the message body or anything about the key.

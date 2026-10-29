@@ -59,9 +59,13 @@ const recap = (over: Partial<StoredRecap> = {}): StoredRecap => ({
   ...over,
 });
 
+// The person's today in these fixtures (MOM-111 finding 7): every date here is this year, so none shows a year.
+const TODAY = '2026-10-28';
+
 const ready = (over: Partial<Extract<WeeklyReviewFacts, { state: 'ready' }>> = {}): WeeklyReviewFacts => ({
   state: 'ready',
   tone: 'middle',
+  today: TODAY,
   window: WINDOW,
   targets: [],
   recap: recap(),
@@ -121,7 +125,7 @@ describe('the last-day decision is said in words (RAID I-11)', () => {
   });
 
   it('says it on a finished review read back later, in the past tense', () => {
-    show({ state: 'reviewed', tone: 'middle', review: review({ recap: recap({ closedEarly: true }) }), changes: [] });
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review({ recap: recap({ closedEarly: true }) }), changes: [] });
     expect(screen.getByText(closedEarlyReviewedLine(WINDOW))).toBeTruthy();
     expect(closedEarlyReviewedLine(WINDOW)).toBe(
       'This recap counted through Sunday, the last day of the week. Anything logged for a day in that week after you finished shows below under Since this recap.',
@@ -150,6 +154,7 @@ describe('a later entry is said against the stored recap, in plain words (RAID R
     show({
       state: 'reviewed',
       tone: 'middle',
+      today: TODAY,
       review: review(),
       changes: [change(), change({ weekStart: '2026-10-12', weekEnd: '2026-10-18', targetId: 't2', title: 'Reading' })],
     });
@@ -160,7 +165,7 @@ describe('a later entry is said against the stored recap, in plain words (RAID R
   });
 
   it('shows no such section when nothing changed', () => {
-    show({ state: 'reviewed', tone: 'middle', review: review(), changes: [] });
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review(), changes: [] });
     expect(screen.queryByRole('heading', { name: 'Since this recap' })).toBeNull();
   });
 
@@ -171,7 +176,7 @@ describe('a later entry is said against the stored recap, in plain words (RAID R
 
   it('shows the stored numbers as they were said, not the live ones', () => {
     // The record says 1; a later entry makes it 3. The card is drawn from the record, the change from both.
-    show({ state: 'reviewed', tone: 'middle', review: review({ recap: recap({ goals: [{ id: 'g1', title: 'Stay fit', targets: [target({ counted: 1, level: 'partway', remainingToFloor: 2, remainingToAspiration: 4 })] }] }) }), changes: [change()] });
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review({ recap: recap({ goals: [{ id: 'g1', title: 'Stay fit', targets: [target({ counted: 1, level: 'partway', remainingToFloor: 2, remainingToAspiration: 4 })] }] }) }), changes: [change()] });
     const goal = screen.getByRole('region', { name: 'Stay fit' });
     expect(within(goal).getByText('Partway · 2 to floor')).toBeTruthy();
     expect(within(goal).queryByText('Floor met')).toBeNull();
@@ -209,7 +214,7 @@ describe('the recap (layer 1)', () => {
     show(ready({ recap: recap({ goals: [{ id: 'g1', title: 'Stay fit', targets: [target({ crossings: [{ kind: 'floor', on: '2026-10-21' }, { kind: 'aspiration', on: '2026-10-24' }] })] }] }) }));
     expect(screen.getByText('Reached your floor on Wed, Oct 21')).toBeTruthy();
     expect(screen.getByText('Reached your aspiration on Sat, Oct 24')).toBeTruthy();
-    expect(crossingLine({ kind: 'block_end', on: '2026-10-25' })).toBe('Finished your block on Sun, Oct 25');
+    expect(crossingLine({ kind: 'block_end', on: '2026-10-25' }, TODAY)).toBe('Finished your block on Sun, Oct 25');
   });
 
   it('shows a pattern in both directions, and does not point a slipping run at the review the person is in', () => {
@@ -287,13 +292,13 @@ describe('the states before a review exists', () => {
   });
 
   it('says which day the review comes on when it is not due, with no recap of this week', () => {
-    show({ state: 'not_due', tone: 'middle', planningWeekday: 1, last: null, changes: [] });
+    show({ state: 'not_due', tone: 'middle', today: TODAY, planningWeekday: 1, last: null, changes: [] });
     expect(screen.getByText('Your weekly review comes on Mondays, the day you chose to plan your week.')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Your last review' })).toBeNull();
   });
 
   it('keeps the last finished review there to read when it is not due', () => {
-    show({ state: 'not_due', tone: 'middle', planningWeekday: 3, last: review(), changes: [change()] });
+    show({ state: 'not_due', tone: 'middle', today: TODAY, planningWeekday: 3, last: review(), changes: [change()] });
     expect(screen.getByText('Your weekly review comes on Wednesdays, the day you chose to plan your week.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Your last review' })).toBeTruthy();
     expect(screen.getByText('You finished it on Mon, Oct 26.')).toBeTruthy();
@@ -303,7 +308,7 @@ describe('the states before a review exists', () => {
 
 describe('the finished review', () => {
   it('says when it was finished and that it stays as it was said, and never asks again', () => {
-    show({ state: 'reviewed', tone: 'middle', review: review(), changes: [] });
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review(), changes: [] });
     expect(screen.getByText('You finished this review on Mon, Oct 26. It stays as it was said.')).toBeTruthy();
     expect(screen.queryAllByRole('button')).toHaveLength(0);
     expect(screen.queryByText(/start|begin|review again/i)).toBeNull();
@@ -338,7 +343,9 @@ describe('the words around the facts', () => {
   });
 
   it('labels a week and names a weekday in full', () => {
-    expect(weekLabel(WINDOW)).toBe('Mon, Oct 19 to Sun, Oct 25');
+    expect(weekLabel(WINDOW, TODAY)).toBe('Mon, Oct 19 to Sun, Oct 25');
+    // MOM-111 finding 7: the year only when it is not this year, through the one casual formatter.
+    expect(weekLabel({ start: '2025-12-29', end: '2026-01-04' }, TODAY)).toBe('Mon, Dec 29, 2025 to Sun, Jan 4');
     expect([0, 1, 6].map(fullWeekdayName)).toEqual(['Sunday', 'Monday', 'Saturday']);
   });
 });

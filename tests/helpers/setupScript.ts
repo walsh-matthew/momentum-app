@@ -8,6 +8,7 @@ import type { PersonLine, SetupModelFn } from '@/lib/setup/evals';
 import type {
   AssistantTurn,
   GoalDraft,
+  PlainWords,
   SetupChunk,
   SetupModel,
   SetupTopic,
@@ -89,6 +90,8 @@ export interface Step {
   unapprove?: SetupChunk[];
   // Do not approve the part just played back (a replay after a change).
   noApproval?: boolean;
+  // Claude's clean versions of the person's words this turn adds (MOM-111 finding 11).
+  plain?: PlainWords[];
   // The person's reply to this turn.
   reply?: string | PersonLine;
 }
@@ -116,6 +119,7 @@ export class Script {
     };
     step.said?.forEach((s) => mark(s, 'said'));
     step.accepted?.forEach((s) => mark(s, 'accepted'));
+    for (const p of step.plain ?? []) draft.plain = [...draft.plain.filter((x) => x.path !== p.path), p];
 
     const approve = [...(this.pending && !step.noApproval ? [this.pending] : []), ...(step.approve ?? [])];
     this.pending = null;

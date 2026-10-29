@@ -656,7 +656,7 @@ describe('an entry saved before its goal’s start date', () => {
 
 describe('an entry on a chosen day, in the recent list', () => {
   it('shows the day only, never a clock time, because the stored time is a stand-in', () => {
-    render(<EntryList timeZone="America/Los_Angeles" entries={[entry({ chosenDay: '2026-10-26', occurredAt: '2026-10-26T19:00:00.000Z' })]} />);
+    render(<EntryList timeZone="America/Los_Angeles" today="2026-10-29" entries={[entry({ chosenDay: '2026-10-26', occurredAt: '2026-10-26T19:00:00.000Z' })]} />);
     expect(screen.getByText('Mon, Oct 26 · the day you chose')).toBeTruthy();
     expect(screen.queryByText(/AM|PM/)).toBeNull();
   });
@@ -664,7 +664,9 @@ describe('an entry on a chosen day, in the recent list', () => {
   it('shows the chosen day even when no time zone is set, and a day that is not a date as nothing', () => {
     const { rerender } = render(<EntryList timeZone={null} entries={[entry({ chosenDay: '2026-10-26' })]} />);
     expect(screen.getByText(/Mon, Oct 26/)).toBeTruthy();
-    expect(formatChosenDay('2026-10-26')).toBe('Mon, Oct 26');
+    expect(formatChosenDay('2026-10-26', '2026-10-29')).toBe('Mon, Oct 26');
+    expect(formatChosenDay('2026-10-28', '2026-10-29')).toBe('Yesterday');
+    expect(formatChosenDay('2026-10-26')).toBe('Mon, Oct 26, 2026');
     expect(formatChosenDay('not a date')).toBe('');
     rerender(<EntryList timeZone={null} entries={[entry()]} />);
     expect(screen.queryByText(/the day you chose/)).toBeNull();

@@ -25,6 +25,7 @@
 // in the result and in the recent list, never left to find out (the owner's decision, 2026-10-28). A closed week needs
 // no recomputing for a late entry: results are never stored, and a snapshot holds only the target's values.
 
+import { casualDate } from '@/lib/dates/casual';
 import { addDays, assertDate, localDay, localNoon } from '@/lib/engine';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { Json, Measure } from '@/types/database.types';
@@ -146,9 +147,9 @@ export function resolveOccurredAt(
   return { ok: true, data: { occurredAt: localNoon(when, timeZone), day: when, chosenDay: when } };
 }
 
-// "Oct 26" and "Mon", for a local date. The date is read as a calendar date, so no zone moves it.
-const shortDate = (date: string): string =>
-  new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00Z`));
+// "Oct 26" (the year only when it is not the year of `near`) and "Mon", for a local date, through the app's one date formatter
+// (lib/dates/casual.ts, MOM-111 finding 7). The date is read as a calendar date, so no zone moves it.
+const shortDate = (date: string, near: string | null): string => casualDate(date, near, { weekday: 'none', relative: false });
 const shortWeekday = (date: string): string =>
   new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short' }).format(new Date(`${date}T12:00:00Z`));
 
@@ -163,7 +164,7 @@ async function startDateNotice(supabase: Client, userId: string, goalId: string,
   }
   // A parked goal may have no start yet (migration 014), and then nothing is before it.
   if (!data || data.start_date === null || day >= data.start_date) return undefined;
-  return `Saved. It's before this goal's start date (${shortDate(data.start_date)}), so it won't count unless you move the start date earlier.`;
+  return `Saved. It's before this goal's start date (${shortDate(data.start_date, day)}), so it won't count unless you move the start date earlier.`;
 }
 
 async function signedInUser(supabase: Client, message: string): Promise<ServiceResult<string>> {
@@ -746,7 +747,7 @@ export async function getLogPanel(deps: { now?: () => number } = {}): Promise<Se
     const today = localDay(new Date((deps.now ?? Date.now)()).toISOString(), anchors);
     days = Array.from({ length: MAX_DAYS_BACK + 1 }, (_, back) => {
       const date = addDays(today, -back);
-      return { date, label: back === 0 ? 'Today' : back === 1 ? 'Yesterday' : shortWeekday(date), detail: shortDate(date) };
+      return { date, label: back === 0 ? 'Today' : back === 1 ? 'Yesterday' : shortWeekday(date), detail: shortDate(date, today) };
     });
   }
   return { ok: true, data: { timeZone: zone, days, targets: loggable, recent } };

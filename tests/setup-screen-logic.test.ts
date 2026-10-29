@@ -103,18 +103,21 @@ describe('the quick path', () => {
   it('says what is missing in plain words, once each, with the person\'s own titles, and ignores the approvals', () => {
     const goal = draft.model.goals[0];
     const target = goal.targets[0];
-    const lines = describeMissing(draft.model, [
-      { path: 'person.timeZone', message: 'Ask the time zone before a target is saved.' },
-      { path: 'person.timeZone', message: 'again' },
-      { path: 'person.dayEnd', message: 'x' },
-      { path: 'person.weekStart', message: 'x' },
-      { path: `goals.${goal.key}.startDate`, message: 'x' },
-      { path: `goals.${goal.key}.targets.${target.key}.sources`, message: 'x' },
-      { path: `goals.${goal.key}.targets.${target.key}.floor`, message: 'x' },
-      { path: 'goals', message: 'x' },
-      { path: 'approved.goals', message: 'x' },
-      { path: 'something.else', message: 'x' },
-    ]);
+    const lines = describeMissing(
+      draft.model,
+      [
+        { path: 'person.timeZone', message: 'Ask the time zone before a target is saved.' },
+        { path: 'person.timeZone', message: 'again' },
+        { path: 'person.dayEnd', message: 'x' },
+        { path: 'person.weekStart', message: 'x' },
+        { path: `goals.${goal.key}.startDate`, message: 'x' },
+        { path: `goals.${goal.key}.targets.${target.key}.sources`, message: 'x' },
+        { path: `goals.${goal.key}.targets.${target.key}.floor`, message: 'x' },
+        { path: 'goals', message: 'x' },
+        { path: 'approved.goals', message: 'x' },
+        { path: 'something.else', message: 'x' },
+      ].map((issue) => ({ ...issue, code: 'rule' as const })),
+    );
     expect(lines).toEqual([
       'Your time zone.',
       'When your day ends.',
@@ -148,7 +151,8 @@ describe('the validator rules added for saving', () => {
   it('refuses a synced source the app cannot connect (a supported one is fine), in both modes', () => {
     for (const mode of ['progress', 'final'] as const) {
       const bad = issuesFor((m) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'strava', metric: null }]), mode);
-      expect(bad.map((i) => i.message)).toContain('"strava" cannot be connected yet. Offer manual for now.');
+      // The message names no value: a thrown-away reply is retried with it (MOM-111 root cause A).
+      expect(bad.map((i) => i.message)).toContain('That app cannot be connected yet. Offer logging it themselves for now.');
       const ok = issuesFor(
         (m) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'hevy', metric: 'volume_lbs' }, { kind: 'manual' }]),
         mode,
@@ -160,7 +164,7 @@ describe('the validator rules added for saving', () => {
   it('refuses a quantity target bound to Hevy with no metric named, only at the end, and only for an app with metrics to choose', () => {
     const noMetric = (m: SetupDraft['model']) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'hevy', metric: null }]);
     expect(issuesFor(noMetric, 'progress')).toEqual([]);
-    expect(issuesFor(noMetric, 'final').map((i) => i.message)).toContain('Ask which number counts for this target in hevy.');
+    expect(issuesFor(noMetric, 'final').map((i) => i.message)).toContain('Ask which number counts for this target in that app.');
 
     // Google Calendar has nothing to choose between, so naming it with no metric is never an issue.
     const google = (m: SetupDraft['model']) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'google_calendar', metric: null }]);
@@ -196,10 +200,12 @@ describe('the wording of step 9 and step 6', () => {
     expect(SETUP_SYSTEM_PROMPT).not.toMatch(/Are you already tracking/);
   });
 
-  it('step 6 offers the suggested date, lets the person give an earlier exact one, and never works one out', () => {
+  it('step 6 offers the suggested date, lets the person give an earlier one, and leaves working a date out to code (MOM-111 finding 8)', () => {
     expect(step(6)).toContain('"Suggested start date"');
     expect(step(6)).toMatch(/earlier date/);
-    expect(step(6)).toMatch(/never work one out/);
+    expect(step(6)).toMatch(/Never work a date out yourself/);
+    expect(step(6)).toMatch(/code works the date out/);
+    expect(step(6)).toMatch(/record it only after they accept/);
     expect(step(6)).not.toMatch(/Propose today/);
   });
 });
@@ -210,16 +216,18 @@ describe('the suggested start date that goes to Claude', () => {
     return typeof last.content === 'string' ? last.content : last.content.map((b) => (b.type === 'text' ? b.text : '')).join('\n');
   };
 
-  it('is one labelled line after the draft, and only when the browser sent one', () => {
-    const withDate = lastText(buildSetupMessages(transcript.slice(0, 2), draft, '2026-10-28'));
-    expect(withDate).toContain("\nSuggested start date (today's date on the person's device, a suggestion only): 2026-10-28");
+  it('is one labelled line after the draft, with the casual words to say it in, and only when the browser sent one', () => {
+    const withDate = lastText(buildSetupMessages(transcript.slice(0, 2), draft, { today: '2026-10-28' }));
+    expect(withDate).toContain("\nSuggested start date (today's date on the person's device, a suggestion only): 2026-10-28.");
+    // MOM-111 finding 7: Claude is told how to say it, so the ISO date never reaches the screen.
+    expect(withDate).toContain('Say it as "today, Wednesday, Oct 28", never as 2026-10-28.');
     expect(withDate.indexOf('Current draft')).toBeLessThan(withDate.indexOf('Suggested start date'));
     const without = lastText(buildSetupMessages(transcript.slice(0, 2), draft));
     expect(without).not.toContain('Suggested start date');
   });
 
   it('sends the person\'s own words apart from it', () => {
-    const messages = buildSetupMessages(transcript.slice(0, 2), draft, '2026-10-28');
+    const messages = buildSetupMessages(transcript.slice(0, 2), draft, { today: '2026-10-28' });
     const last = messages[messages.length - 1];
     expect(Array.isArray(last.content)).toBe(true);
     if (Array.isArray(last.content)) {

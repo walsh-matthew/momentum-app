@@ -8,6 +8,7 @@
 import type { CelebrationLevel, Tone } from '@/types/database.types';
 import type { HeroHeadline, MilestoneView, PatternView, TargetCardView, TrendView } from '@/types/home';
 import type { LocalDate } from '@/types/scoreboard';
+import { casualDate, type CasualDateOptions } from '@/lib/dates/casual';
 
 // 1 decimal at most, no trailing zero: 8.5, 15.
 export const formatNumber = (n: number): string => String(Math.round(n * 10) / 10);
@@ -18,10 +19,12 @@ export function joinTitles(titles: string[]): string {
   return `${titles.slice(0, -1).join(', ')} and ${titles[titles.length - 1]}`;
 }
 
-// A day as the person's calendar shows it ("Fri, Nov 20"). Fixed to UTC on a date with no time, so the server and the
-// browser always agree and no time zone shifts it.
-export function formatDay(day: LocalDate): string {
-  return new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+// A day as the person reads it, through the app's one date formatter (lib/dates/casual.ts, MOM-111 finding 7): "today",
+// "tomorrow", "Fri, Nov 20", with the year only when it is not this year. Short weekdays, for chips and tight rows; pass
+// `relative: false` where the date sits inside a sentence that would not read with "today". `today` is the person's own
+// date; without it the year is always shown.
+export function formatDay(day: LocalDate, today: LocalDate | null, options: CasualDateOptions = {}): string {
+  return casualDate(day, today, { weekday: 'short', ...options });
 }
 
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -67,14 +70,14 @@ export interface Chip {
 
 // The chip that says where a target stands. It keys on `graded`, never on `level` alone: a target that started
 // partway through its first week has a level in the engine's result and is not graded, so it gets no level word.
-export function levelChip(card: TargetCardView): Chip {
+export function levelChip(card: TargetCardView, today: LocalDate | null = null): Chip {
   switch (card.status) {
     case 'needs_week_start':
       return { label: 'Needs your week start', tone: 'warn' };
     case 'not_counted':
       return { label: 'Tracked, not counted yet', tone: 'plain' };
     case 'not_started':
-      return { label: `Starts ${formatDay(card.startsOn)}`, tone: 'plain' };
+      return { label: `Starts ${formatDay(card.startsOn, today)}`, tone: 'plain' };
     case 'counted': {
       if (card.startedPartway) return { label: 'Started midweek · not graded', tone: 'dashed' };
       if (!card.graded || card.level === null) return { label: 'Tracked, not judged', tone: 'plain' };
@@ -88,10 +91,10 @@ export function levelChip(card: TargetCardView): Chip {
 }
 
 // What the target asks, in the person's own levels. "Floor 5 a week", "Floor 15 km a week · aspiration 20 km".
-export function levelsText(card: TargetCardView): string | null {
+export function levelsText(card: TargetCardView, today: LocalDate | null = null): string | null {
   if (card.floor === null) return null;
   const unit = card.unit ? ` ${card.unit}` : '';
-  const per = card.period === 'weekly' ? ' a week' : card.period === 'deadline' && card.dueOn ? ` by ${formatDay(card.dueOn)}` : '';
+  const per = card.period === 'weekly' ? ' a week' : card.period === 'deadline' && card.dueOn ? ` by ${formatDay(card.dueOn, today)}` : '';
   const aspiration = card.aspiration === null ? '' : ` · aspiration ${formatNumber(card.aspiration)}${unit}`;
   const floorWhat = card.period === 'day_slots' ? ' of your named days' : '';
   return `Floor ${formatNumber(card.floor)}${unit}${floorWhat}${per}${aspiration}`;

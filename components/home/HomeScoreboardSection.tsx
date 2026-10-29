@@ -41,10 +41,10 @@ export function HomeScoreboardSection({ home, plan }: HomeScoreboardSectionProps
   }
   return (
     <section aria-label="Your week" className="home-scoreboard">
-      {home.hero && <HomeHeroCard hero={home.hero} celebration={home.celebration} />}
+      {home.hero && <HomeHeroCard hero={home.hero} celebration={home.celebration} today={home.today} />}
       <YourPlanCard plan={plan} />
       {home.goals.map((goal) => (
-        <GoalScoreboardCard key={goal.id} goal={goal} tone={home.tone} />
+        <GoalScoreboardCard key={goal.id} goal={goal} tone={home.tone} today={home.today} />
       ))}
     </section>
   );

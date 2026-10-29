@@ -8,6 +8,9 @@
 //   wizard spec expects, so those specs behave as they did when the key was empty.
 // - GET /__fake/last reports the newest setup request (how many, and the text of its last user message), so the spec can check
 //   what the screen sent. It never holds a conversation.
+// - POST /__fake/slow?ms=N holds each setup answer back N milliseconds, and POST /__fake/unusable?count=N answers the next N
+//   setup requests with a reply that is not a turn, so a spec can watch the screen while Claude is slow or a reply is thrown
+//   away (MOM-111 finding 10). Both reset with ms=0 and count=0.
 
 import { createServer, type Server } from 'node:http';
 import type { AssistantTurn } from '../../../types/setup';
@@ -34,6 +37,8 @@ function lastUserText(body: MessagesBody): string {
 export function startFakeAnthropic(port: number, script: readonly AssistantTurn[]): Promise<FakeAnthropic> {
   let setupRequests = 0;
   let lastSetupUserText = '';
+  let slowMs = 0;
+  let unusableLeft = 0;
 
   const server: Server = createServer((req, res) => {
     const send = (status: number, body: unknown) => {
@@ -43,6 +48,13 @@ export function startFakeAnthropic(port: number, script: readonly AssistantTurn[
 
     if (req.method === 'GET' && req.url === '/__fake/last') {
       send(200, { setupRequests, lastSetupUserText });
+      return;
+    }
+    if (req.method === 'POST' && req.url?.startsWith('/__fake/')) {
+      const url = new URL(req.url, 'http://127.0.0.1');
+      if (url.pathname === '/__fake/slow') slowMs = Math.max(0, Number(url.searchParams.get('ms')) || 0);
+      if (url.pathname === '/__fake/unusable') unusableLeft = Math.max(0, Number(url.searchParams.get('count')) || 0);
+      send(200, { slowMs, unusableLeft });
       return;
     }
     if (req.method !== 'POST' || !req.url?.startsWith('/v1/messages')) {
@@ -72,16 +84,20 @@ export function startFakeAnthropic(port: number, script: readonly AssistantTurn[
         send(500, { type: 'error', error: { type: 'api_error', message: `the script has no turn ${turnIndex}` } });
         return;
       }
-      send(200, {
-        id: `msg_fake_${setupRequests}`,
-        type: 'message',
-        role: 'assistant',
-        model: body.model ?? 'fake',
-        content: [{ type: 'text', text: JSON.stringify(turn) }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: { input_tokens: 4000, output_tokens: 700 },
-      });
+      const unusable = unusableLeft > 0;
+      if (unusable) unusableLeft -= 1;
+      setTimeout(() => {
+        send(200, {
+          id: `msg_fake_${setupRequests}`,
+          type: 'message',
+          role: 'assistant',
+          model: body.model ?? 'fake',
+          content: [{ type: 'text', text: unusable ? '{"not":"a turn"}' : JSON.stringify(turn) }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 4000, output_tokens: 700 },
+        });
+      }, slowMs);
     });
   });
 

@@ -105,7 +105,10 @@ describe('every number, date, time and weekday must be the person\'s', () => {
     const { draft, transcript } = await finished('run-a-deadline-only');
     targetOf(draft.model, 'g1', 't1').floor = 99;
     const issue = issuesOf(draft, transcript).find((i) => i.path === 'goals.g1.targets.t1.floor');
-    expect(issue?.message).toMatch(/does not say 99/);
+    expect(issue?.message).toMatch(/does not say this value/);
+    // The retry is told this issue's code (MOM-111 root cause A), and the message quotes no value.
+    expect(issue?.code).toBe('not_said');
+    expect(issue?.message).not.toMatch(/99/);
   });
 
   it('fails a date nobody gave, such as one worked out from "the week before"', async () => {
@@ -134,7 +137,9 @@ describe('every number, date, time and weekday must be the person\'s', () => {
   it('rejects an accepted value that the suggestion never contained', async () => {
     const { draft, transcript } = await finished('run-b-habit-ideas');
     targetOf(draft.model, 'g1', 't1').floor = 7;
-    expect(issuesOf(draft, transcript).find((i) => i.path === 'goals.g1.targets.t1.floor')?.message).toMatch(/does not contain 7/);
+    const issue = issuesOf(draft, transcript).find((i) => i.path === 'goals.g1.targets.t1.floor');
+    expect(issue?.message).toMatch(/does not show this value/);
+    expect(issue?.code).toBe('not_accepted');
   });
 
   it('reads hours as minutes for a time target, and nothing else', async () => {

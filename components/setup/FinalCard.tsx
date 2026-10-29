@@ -36,14 +36,16 @@ export function FinalCard({ lines, saving, error, onSave, onChange }: FinalCardP
         </p>
       )}
       {changing ? (
-        <AnswerBox
-          label={CHANGE_PROMPT}
-          placeholder={CHANGE_PROMPT}
-          submitLabel="Send the change"
-          busy={saving}
-          onSubmit={onChange}
-          secondary={{ label: KEEP_IT, onClick: () => setChanging(false) }}
-        />
+        <div className="space-y-2">
+          <p className="text-base font-medium">{CHANGE_PROMPT}</p>
+          <AnswerBox
+            label={CHANGE_PROMPT}
+            submitLabel="Send the change"
+            busy={saving}
+            onSubmit={onChange}
+            secondary={{ label: KEEP_IT, onClick: () => setChanging(false) }}
+          />
+        </div>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button size="lg" disabled={saving} onClick={onSave} className="w-full sm:w-auto">

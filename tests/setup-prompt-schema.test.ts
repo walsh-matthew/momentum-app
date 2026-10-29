@@ -46,6 +46,7 @@ function walk(schema: z.ZodType, out: { keys: string[]; values: string[] }, skip
       break;
     case 'nullable':
     case 'optional':
+    case 'default':
       walk(d.innerType as z.ZodType, out, skip);
       break;
     case 'array':
@@ -174,7 +175,7 @@ describe('real drafts use only the fields the prompt names', () => {
   });
 
   it('the empty draft the first call sends has exactly the fields the prompt names at its top levels', () => {
-    expect(Object.keys(emptyDraft())).toEqual(['model', 'said', 'approved']);
+    expect(Object.keys(emptyDraft())).toEqual(['model', 'said', 'approved', 'plain']);
     expect(Object.keys(emptyDraft().model)).toEqual(['person', 'settings', 'goals']);
   });
 });

@@ -41,15 +41,11 @@ export function needsDaysText(plan: Extract<WeekPlanView, { state: 'needs_day_an
   return plan.anchor === 'time_zone' ? NEEDS_DAYS_TIME_ZONE : NEEDS_DAYS_DAY_END;
 }
 
-// "Oct 26 to Nov 1": the span of the dates shown, with no year and no weekday.
-function shortDay(day: string): string {
-  return new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-}
-
-// Which stretch of days is on screen. Without a week start it is the next 14 days: dates, not weeks.
+// Which stretch of days is on screen ("This week · Oct 26 to Nov 1", no weekday, the year only when it is not this year).
+// Without a week start it is the next 14 days: dates, not weeks.
 export function windowTitle(plan: ReadyPlan): string {
   if (plan.window === 'next_14_days') return 'The next 14 days';
-  const span = `${shortDay(plan.start)} to ${shortDay(plan.end)}`;
+  const span = `${formatDay(plan.start, plan.today, { weekday: 'none', relative: false })} to ${formatDay(plan.end, plan.today, { weekday: 'none', relative: false })}`;
   if (plan.offset === 0) return `This week · ${span}`;
   if (plan.offset === 1) return `Next week · ${span}`;
   return `In ${plan.offset} weeks · ${span}`;
@@ -59,20 +55,21 @@ export const PREVIOUS_WEEK = 'Earlier week';
 export const NEXT_WEEK = 'Later week';
 
 // What a thing is, in a word a first-time person knows, with its due date when it has one.
-export function itemChips(item: PlanItemView): string[] {
+export function itemChips(item: PlanItemView, today: string | null = null): string[] {
   const chips: string[] = [];
   if (item.kind === 'habit') chips.push('Repeats');
   else if (item.kind === 'milestone') chips.push('One-off');
-  if (item.dueOn) chips.push(`Due ${formatDay(item.dueOn)}`);
+  if (item.dueOn) chips.push(`Due ${formatDay(item.dueOn, today)}`);
   return chips;
 }
 
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 export const setDaysText = (days: number[]): string => `Your set days: ${days.map((d) => WEEKDAY_SHORT[d]).join(', ')}`;
 
-// "Prep checklist, Mon, Nov 2": what a day button is for, read aloud.
-export const dayButtonLabel = (title: string, date: string): string => `${title}, ${formatDay(date)}`;
-export const kindSelectLabel = (date: string): string => `${formatDay(date)}: what kind of day`;
+// "Prep checklist, Mon, Nov 2": what a day button is for, read aloud. Always the date itself, so every button says which day.
+export const dayButtonLabel = (title: string, date: string, today: string | null = null): string =>
+  `${title}, ${formatDay(date, today, { relative: false })}`;
+export const kindSelectLabel = (date: string, today: string | null = null): string => `${formatDay(date, today, { relative: false })}: what kind of day`;
 
 // The "Your plan" card on home.
 export const CARD_HEADING = 'Your plan';

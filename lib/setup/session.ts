@@ -15,9 +15,27 @@ export const APPROVE_TEXT = 'Yes, that is right.';
 export const CHANGE_PROMPT = 'What would you like to change?';
 export const KEEP_IT = 'Keep it as it is';
 
-// The question card's button for a person who is not sure what a question means. It sends this sentence as their answer,
-// and Claude explains the question in plainer words (lib/setup/text.ts asksMeaning).
+// The question card's link for a person who is not sure what a question means (MOM-111 finding 1: a small muted link under
+// Send). It sends MEANING_TEXT as their answer, and Claude explains the question in plainer words (lib/setup/text.ts
+// asksMeaning).
+export const MEANING_LINK = 'Not sure what I mean?';
 export const MEANING_TEXT = 'What do you mean?';
+
+// What a proposal's Yes sends for the person: an acceptance (lib/setup/text.ts acceptsText), so the value it showed counts as
+// accepted (MOM-111 finding 8).
+export const PROPOSAL_YES_TEXT = 'Yes, that works.';
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// A date picked on the date picker, as the person's answer: "Monday, November 2, 2026". Spelled with its year, so it is an
+// exact date they said (lib/setup/text.ts datesIn reads it) and can never be read in the wrong order.
+export function pickedDateText(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const weekday = WEEKDAYS[new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay()];
+  return `${weekday}, ${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+}
 
 // The key under which the browser tab keeps the conversation in progress (components/setup/setupStorage.ts). It carries the
 // signed-in person's id, so a different person who signs in in the same tab is never offered, or sent on with, someone else's
@@ -38,6 +56,15 @@ export function withPersonMessage(session: SetupSession, text: string): SetupSes
 // newest whole one, never a merge of older ones.
 export function withAssistantTurn(session: SetupSession, turn: AssistantTurn, spentTokens: number): SetupSession {
   return { transcript: [...session.transcript, { role: 'assistant', turn }], draft: turn.draft, spentTokens };
+}
+
+// "Change my answer" (MOM-111 finding 10): the person's last answer, taken back so they can edit it, when nothing has
+// answered it yet. This is the one exception to "only ever append": no draft can point at a message Claude never replied to,
+// because a draft comes only with a reply. Null when the person did not speak last.
+export function withoutLastAnswer(session: SetupSession): { session: SetupSession; text: string } | null {
+  const last = session.transcript[session.transcript.length - 1];
+  if (last?.role !== 'person') return null;
+  return { session: { ...session, transcript: session.transcript.slice(0, -1) }, text: last.text };
 }
 
 // True when the conversation is waiting on Claude: it is empty (nothing asked yet) or the person spoke last.

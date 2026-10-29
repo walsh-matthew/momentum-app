@@ -2,7 +2,7 @@
 // which free text to scan, what each approved part of the draft holds, and which topics the draft already answers.
 // Paths use keys, not positions, so a reordered list does not change what a path means. Pure.
 
-import type { Provenance, SetupChunk, SetupModel, SetupTopic } from '@/types/setup';
+import type { Provenance, SetupChunk, SetupDraft, SetupModel, SetupTopic } from '@/types/setup';
 
 // number: a plain amount. minutes: an amount the person may have said in hours or minutes. date, time, weekday: as named.
 // flag: a yes/no the person answered (whether a deadline date can move).
@@ -115,10 +115,50 @@ export function freeTextLeaves(model: SetupModel): { path: string; text: string 
   return out;
 }
 
+// The free-text values Claude may give a clean version of (MOM-111 finding 11), as path forms for the setup prompt. A day
+// type's name and a target's unit are left out: other values are found by them (a capacity's path, the unit the log shows).
+export const PLAIN_PATH_FORMS: readonly string[] = [
+  'goals.<goalKey>.title',
+  'goals.<goalKey>.why',
+  'goals.<goalKey>.returnNote',
+  'goals.<goalKey>.targets.<targetKey>.title',
+  'goals.<goalKey>.items.<itemKey>.title',
+  'goals.<goalKey>.items.<itemKey>.steps.<n>',
+  'person.priorities.<n>',
+  'settings.quietTimes.<n>',
+];
+
+// The model with each listed free-text value replaced by `text(path, value)`, at the paths PLAIN_PATH_FORMS names. Pure:
+// returns a copy.
+export function withFreeText(model: SetupModel, text: (path: string, value: string) => string): SetupModel {
+  const m = structuredClone(model);
+  m.person.priorities = m.person.priorities.map((p, i) => text(`person.priorities.${i}`, p));
+  if (m.settings.quietTimes) m.settings.quietTimes = m.settings.quietTimes.map((q, i) => text(`settings.quietTimes.${i}`, q));
+  for (const g of m.goals) {
+    g.title = text(`goals.${g.key}.title`, g.title);
+    if (g.why) g.why = text(`goals.${g.key}.why`, g.why);
+    if (g.returnWhen?.kind === 'condition') g.returnWhen.note = text(`goals.${g.key}.returnNote`, g.returnWhen.note);
+    for (const t of g.targets) t.title = text(`goals.${g.key}.targets.${t.key}.title`, t.title);
+    for (const i of g.items) {
+      i.title = text(`goals.${g.key}.items.${i.key}.title`, i.title);
+      i.steps = i.steps.map((s, n) => text(`goals.${g.key}.items.${i.key}.steps.${n}`, s));
+    }
+  }
+  return m;
+}
+
+// The model with every clean version Claude gave put in place, checked or not. A change to one changes what a part showed,
+// so the approval check compares parts through this (rule 7).
+export const withAllPlain = (draft: SetupDraft): SetupModel => {
+  const plain = new Map(draft.plain.map((p) => [p.path, p.text]));
+  return withFreeText(draft.model, (path, value) => plain.get(path) ?? value);
+};
+
 // What each approved part holds, so a change after approval can be seen and the part played back again (rule 7).
 // Steps 1 to 3 are goals; 4 to 7 are priorities, timeframe and targets; 8 to 10 are work items, sources and person
-// facts; 11 is settings.
-export function chunkSlice(model: SetupModel, chunk: SetupChunk): unknown {
+// facts; 11 is settings. The clean versions of the person's words count: they are what the playback showed.
+export function chunkSlice(draft: SetupDraft, chunk: SetupChunk): unknown {
+  const model = withAllPlain(draft);
   switch (chunk) {
     case 'goals':
       return model.goals.map((g) => ({ key: g.key, title: g.title, why: g.why, state: g.state, returnWhen: g.returnWhen }));

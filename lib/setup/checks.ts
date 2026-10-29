@@ -2,6 +2,14 @@
 // The setup eval set runs every one of them on every turn. They are heuristics over words and structure, not language
 // understanding, and each errs towards flagging: a turn that trips one is a turn to look at. A fake model in `npm test`
 // shows the checks catch what they should; only a live run shows whether the prompt keeps Claude inside them.
+//
+// Each violation carries a stable `code`, so a reply that is thrown away can be retried with fixed words that say which
+// rule failed and what to do instead (lib/setup/feedback.ts, MOM-111 root cause A). Besides the eight rules there are the
+// draft rules and the plain-words checks (a lead-in that previews the question, an activity the person never said): the
+// service gives a plain-words failure one retry and then shows the reply, so those never end a setup in "Try again".
+//
+// What the person said is read from their words wherever they said it (lib/setup/said.ts, root cause B), never from which
+// kind of turn came before.
 // Pure: no model, no database, no network.
 
 import {
@@ -14,10 +22,12 @@ import {
   type Transcript,
   type TurnKind,
 } from '@/types/setup';
-import { answeredTopics, changedLeafPaths, chunkSlice } from './leaves';
+import { unsaidActivities } from './activities';
+import { answeredTopics, changedLeafPaths, chunkSlice, freeTextLeaves } from './leaves';
 import { FINAL_MAX_LINES, renderFinal } from './playback';
-import { ASKED_ONCE_TOPICS, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
-import { acceptsText, asksMeaning, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas } from './text';
+import { answerWords, latestAnswer, personWords, type PersonAnswer } from './said';
+import { ASKED_ONCE_TOPICS, DAY_END_SAY, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
+import { acceptsText, asksForIdeas, asksMeaning, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas, withoutDateWeekdays } from './text';
 import { validateDraft } from './validate';
 
 export interface TurnContext {
@@ -29,9 +39,57 @@ export interface TurnContext {
   personFits?: boolean;
 }
 
+// The eight hard rules, the draft rules, and the plain-words checks (MOM-111 findings 4 and 6).
+export type ViolationRule = HardRuleId | 'draft' | 'plain_words';
+
+export const VIOLATION_CODES = [
+  'one_question.none',
+  'one_question.marks',
+  'one_question.no_mark',
+  'one_question.hidden',
+  'one_question.sentences',
+  'one_question.joined',
+  'one_question.options',
+  'assume_nothing.word',
+  'assume_nothing.changed',
+  'no_announced_reminder',
+  'choice.ideas_unasked',
+  'choice.offer_words',
+  'choice.offer_examples',
+  'choice.examples',
+  'skip.repeat',
+  'skip.unanswered',
+  'skip.long',
+  'interpretations.count',
+  'interpretations.guessed',
+  'interpretations.changed',
+  'playback.words',
+  'playback.final_changed',
+  'playback.no_chunk',
+  'playback.stray_chunk',
+  'playback.early_final',
+  'playback.final_long',
+  'playback.unapproved',
+  'playback.changed_after',
+  'math.score',
+  'math.arithmetic',
+  'math.number',
+  'draft.no_source',
+  'draft.not_said',
+  'draft.not_accepted',
+  'draft.rule',
+  'plain.lead_in',
+  'plain.activity',
+] as const;
+export type ViolationCode = (typeof VIOLATION_CODES)[number];
+
 export interface Violation {
-  rule: HardRuleId | 'draft';
+  rule: ViolationRule;
+  code: ViolationCode;
+  // For the eval report and the tests. Never sent to Claude or logged: it can quote a word of the turn.
   message: string;
+  // The draft path a draft violation is about. Paths are keys and field names, never values.
+  path?: string;
 }
 
 const ASKING_KINDS: readonly TurnKind[] = ['question', 'offer_ideas', 'ideas', 'interpretations', 'proposal'];
@@ -41,20 +99,13 @@ const DAY_END_BOUNDARY_WORDS = /\b(midnight|6 in the morning|six in the morning)
 
 const authored = (turn: AssistantTurn): string[] => [turn.say, turn.question ?? '', turn.skipped?.line ?? '', ...turn.options];
 
-// Claude's words as the day/time and number checks should read them: boundary words removed for the day-end question.
+// Claude's words as the day/time and number checks should read them: boundary words removed for the day-end question, and a
+// weekday that belongs to a written date ("Tuesday, Oct 27") left out, since it is the date's, not the person's week.
 const textForScan = (turn: AssistantTurn, parts: string[]): string => {
-  const text = parts.join(' \n ');
+  const text = withoutDateWeekdays(parts.join(' \n '));
   return turn.topic === 'day_end' ? text.replace(DAY_END_BOUNDARY_WORDS, ' ') : text;
 };
 
-const personTexts = (ctx: TurnContext): string[] => ctx.transcript.flatMap((m) => (m.role === 'person' ? [m.text] : []));
-const lastPerson = (ctx: TurnContext): { index: number; text: string } | null => {
-  for (let i = ctx.transcript.length - 1; i >= 0; i--) {
-    const m = ctx.transcript[i];
-    if (m.role === 'person') return { index: i, text: m.text };
-  }
-  return null;
-};
 const lastAssistant = (ctx: TurnContext): AssistantTurn | null => {
   for (let i = ctx.transcript.length - 1; i >= 0; i--) {
     const m = ctx.transcript[i];
@@ -64,7 +115,16 @@ const lastAssistant = (ctx: TurnContext): AssistantTurn | null => {
 };
 const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-const v = (rule: Violation['rule'], message: string): Violation => ({ rule, message });
+const v = (rule: ViolationRule, code: ViolationCode, message: string, path?: string): Violation =>
+  path === undefined ? { rule, code, message } : { rule, code, message, path };
+
+// The person asked for suggestions in their newest answer: in so many words, anywhere ("any recommendations?", a tapped
+// "starting ideas" option), or with a plain yes to the offer of ideas (MOM-111 root cause B).
+export function askedForSuggestions(answer: PersonAnswer | null): boolean {
+  if (!answer) return false;
+  if (asksForIdeas(answerWords(answer))) return true;
+  return answer.answers?.kind === 'offer_ideas' && wantsIdeas(answer.text);
+}
 
 // ---------------------------------------------------------------------------
 // Rule 1: one question per turn, single-part
@@ -73,21 +133,24 @@ const v = (rule: Violation['rule'], message: string): Violation => ({ rule, mess
 // Two asks joined together: "how long and how often?". "together, or one first?" is one question with a choice.
 const JOINED_ASK = /\b(and|also|plus)\s+(what|how|when|which|where|who|why|whether|do you|does|did|is|are|can you|could you|will you|would you|should)\b/i;
 
+// Turns that show choices: starting ideas and interpretations (numbered), and a proposal's other answers ("Today").
+const LISTING_KINDS: readonly TurnKind[] = ['ideas', 'interpretations', 'proposal'];
+
 export function checkOneQuestion(turn: AssistantTurn): Violation[] {
   if (turn.kind === 'playback' || turn.kind === 'final') return [];
   const out: Violation[] = [];
   const q = turn.question?.trim() ?? '';
-  if (!q) return [v('one_question', 'The turn has no question.')];
+  if (!q) return [v('one_question', 'one_question.none', 'The turn has no question.')];
   const marks = authored(turn).join(' ').split('?').length - 1;
-  if (marks !== 1) out.push(v('one_question', `The turn has ${marks} question marks; it must have exactly one, in the question.`));
-  if (!q.endsWith('?')) out.push(v('one_question', 'The question does not end in a question mark.'));
+  if (marks !== 1) out.push(v('one_question', 'one_question.marks', `The turn has ${marks} question marks; it must have exactly one, in the question.`));
+  if (!q.endsWith('?')) out.push(v('one_question', 'one_question.no_mark', 'The question does not end in a question mark.'));
   if (turn.say.includes('?') || turn.options.some((o) => o.includes('?'))) {
-    out.push(v('one_question', 'A question is hiding outside the question field.'));
+    out.push(v('one_question', 'one_question.hidden', 'A question is hiding outside the question field.'));
   }
-  if (/[.!]\s+\S/.test(q) || q.includes(';')) out.push(v('one_question', 'The question is more than one sentence.'));
-  if (JOINED_ASK.test(q)) out.push(v('one_question', 'Two asks are joined in one question.'));
-  if (turn.options.length > 0 && turn.kind !== 'ideas' && turn.kind !== 'interpretations') {
-    out.push(v('one_question', 'Only an ideas or interpretations turn lists options.'));
+  if (/[.!]\s+\S/.test(q) || q.includes(';')) out.push(v('one_question', 'one_question.sentences', 'The question is more than one sentence.'));
+  if (JOINED_ASK.test(q)) out.push(v('one_question', 'one_question.joined', 'Two asks are joined in one question.'));
+  if (turn.options.length > 0 && !LISTING_KINDS.includes(turn.kind)) {
+    out.push(v('one_question', 'one_question.options', 'Only an ideas, interpretations or proposal turn lists options.'));
   }
   return out;
 }
@@ -98,17 +161,17 @@ export function checkOneQuestion(turn: AssistantTurn): Violation[] {
 
 export function checkAssumeNothing(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out: Violation[] = [];
-  const said = new Set(personTexts(ctx).flatMap(dayTimeWords));
+  const said = new Set(personWords(ctx.transcript).flatMap(dayTimeWords));
   const unsaid = new Set(dayTimeWords(textForScan(turn, authored(turn))).filter((w) => !said.has(w)));
   for (const w of unsaid) {
-    out.push(v('assume_nothing', `Claude used "${w.replace('time:', 'a clock time ')}", which the person has not said.`));
+    out.push(v('assume_nothing', 'assume_nothing.word', `Claude used "${w.replace('time:', 'a clock time ')}", which the person has not said.`));
   }
   // A value that changed this turn must come from the newest answer. Otherwise it changed without being asked.
-  const latest = lastPerson(ctx);
+  const latest = latestAnswer(ctx.transcript);
   for (const path of changedLeafPaths(ctx.prevDraft.model, turn.draft.model)) {
     const entry = turn.draft.said.filter((s) => s.path === path).sort((a, b) => b.turn - a.turn)[0];
     if (!latest || !entry || entry.turn !== latest.index) {
-      out.push(v('assume_nothing', `${path} changed without the person's newest answer.`));
+      out.push(v('assume_nothing', 'assume_nothing.changed', `${path} changed without the person's newest answer.`, path));
     }
   }
   return out;
@@ -128,7 +191,7 @@ const ANNOUNCEMENTS: RegExp[] = [
 export function checkNoAnnouncedReminder(turn: AssistantTurn): Violation[] {
   for (const text of authored(turn)) {
     if (ANNOUNCEMENTS.some((re) => re.test(text))) {
-      return [v('no_announced_reminder', 'Claude announced a reminder, check-in or nudge instead of asking whether the person wants one.')];
+      return [v('no_announced_reminder', 'no_announced_reminder', 'Claude announced a reminder, check-in or nudge instead of asking whether the person wants one.')];
     }
   }
   return [];
@@ -143,27 +206,30 @@ const EXAMPLE_MARKERS = /\b(for example|for instance|such as|e\.g\.)/i;
 export function checkChoiceBeforeExamples(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out: Violation[] = [];
   const prev = lastAssistant(ctx);
-  const person = lastPerson(ctx);
+  const answer = latestAnswer(ctx.transcript);
+  // Counted from the person's words wherever they said them: after the offer, as a tapped "starting ideas" option in a list
+  // of interpretations, or unprompted ("any recommendations?") (MOM-111 root cause B, finding 14).
+  const asked = askedForSuggestions(answer);
   if (turn.kind === 'ideas') {
-    if (prev?.kind !== 'offer_ideas') out.push(v('choice_before_examples', 'Ideas were given without first offering "something in mind, or ideas?".'));
-    else if (!person || !wantsIdeas(person.text)) out.push(v('choice_before_examples', 'Ideas were given but the person did not ask for them.'));
+    if (!asked) out.push(v('choice_before_examples', 'choice.ideas_unasked', 'Ideas were given but the person did not ask for them.'));
   } else if (turn.kind === 'offer_ideas') {
     const q = turn.question ?? '';
     if (!/\b(ideas|examples|suggestions)\b/i.test(q) || !/\b(in mind|your own|own answer)\b/i.test(q)) {
-      out.push(v('choice_before_examples', 'The offer must give the choice: something in mind, or starting ideas.'));
+      out.push(v('choice_before_examples', 'choice.offer_words', 'The offer must give the choice: something in mind, or starting ideas.'));
     }
     if (turn.options.length > 0 || EXAMPLE_MARKERS.test(authored(turn).join(' '))) {
-      out.push(v('choice_before_examples', 'The offer already contains examples.'));
+      out.push(v('choice_before_examples', 'choice.offer_examples', 'The offer already contains examples.'));
     }
   } else if (
     turn.topic !== null &&
     SUGGESTION_TOPICS.has(turn.topic) &&
     EXAMPLE_MARKERS.test(authored(turn).join(' ')) &&
-    !(person && asksMeaning(person.text) && prev?.topic === turn.topic)
+    !asked &&
+    !(answer && asksMeaning(answer.text) && prev?.topic === turn.topic)
   ) {
     // Only where an example would plant the answer (the goal itself, a number). Short examples in any other question are
     // fine, and so is explaining any question with examples once the person asks what it means (MOM-111).
-    out.push(v('choice_before_examples', `Examples in a "${turn.topic}" question need "something in mind, or some ideas?" first.`));
+    out.push(v('choice_before_examples', 'choice.examples', `Examples in a "${turn.topic}" question need "something in mind, or some ideas?" first.`));
   }
   return out;
 }
@@ -192,7 +258,7 @@ export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violat
   const clarifying = turn.kind === 'ideas' || turn.kind === 'interpretations' || (followsReply && !settled);
   // Only the person's own facts are asked once; a goal's shape, dates and targets are asked again for the next goal.
   if (turn.topic && turn.question && ASKED_ONCE_TOPICS.has(turn.topic) && answered.has(turn.topic) && !clarifying) {
-    out.push(v('skip_answered', `"${turn.topic}" is already answered; skip it in one line instead of asking again.`));
+    out.push(v('skip_answered', 'skip.repeat', `"${turn.topic}" is already answered; skip it in one line instead of asking again.`));
   }
   if (turn.skipped) {
     // What this turn records from the person's newest message counts too (a long first message that already says why), and
@@ -200,10 +266,10 @@ export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violat
     const skippable =
       answered.has(turn.skipped.topic) ||
       answeredTopics(turn.draft.model).has(turn.skipped.topic) ||
-      (UNRECORDED_TOPICS.has(turn.skipped.topic) && personTexts(ctx).length > 0);
-    if (!skippable) out.push(v('skip_answered', `Skipped "${turn.skipped.topic}", which has not been answered.`));
+      (UNRECORDED_TOPICS.has(turn.skipped.topic) && personWords(ctx.transcript).length > 0);
+    if (!skippable) out.push(v('skip_answered', 'skip.unanswered', `Skipped "${turn.skipped.topic}", which has not been answered.`));
     if (sentencesOf(turn.skipped.line).length !== 1 || turn.skipped.line.length > 160) {
-      out.push(v('skip_answered', 'The skip notice must be one short line.'));
+      out.push(v('skip_answered', 'skip.long', 'The skip notice must be one short line.'));
     }
   }
   return out;
@@ -217,11 +283,13 @@ export function checkNumberedInterpretations(turn: AssistantTurn, ctx: TurnConte
   const out: Violation[] = [];
   const optionCount = turn.options.filter((o) => o.trim().length > 0).length;
   if (turn.kind === 'interpretations' && (optionCount < 2 || optionCount > 4)) {
-    out.push(v('numbered_interpretations', 'Offer two to four interpretations.'));
+    out.push(v('numbered_interpretations', 'interpretations.count', 'Offer two to four interpretations.'));
   }
   if (ctx.personFits === false) {
-    if (turn.kind !== 'interpretations') out.push(v('numbered_interpretations', 'The answer did not fit; offer numbered interpretations instead of guessing.'));
-    if (!sameJson(turn.draft, ctx.prevDraft)) out.push(v('numbered_interpretations', 'The draft changed on an answer that did not fit.'));
+    if (turn.kind !== 'interpretations') {
+      out.push(v('numbered_interpretations', 'interpretations.guessed', 'The answer did not fit; offer numbered interpretations instead of guessing.'));
+    }
+    if (!sameJson(turn.draft, ctx.prevDraft)) out.push(v('numbered_interpretations', 'interpretations.changed', 'The draft changed on an answer that did not fit.'));
   }
   return out;
 }
@@ -259,30 +327,32 @@ export function checkChunkedPlayback(turn: AssistantTurn, ctx: TurnContext): Vio
 
   if (turn.kind === 'playback' || turn.kind === 'final') {
     if (turn.say !== '' || turn.question !== null || turn.options.length > 0 || turn.skipped !== null) {
-      out.push(v('chunked_playback', 'Playback is written by code from the draft; Claude writes none of it.'));
+      out.push(v('chunked_playback', 'playback.words', 'Playback is written by code from the draft; Claude writes none of it.'));
     }
   }
   // A playback turn may apply the last answer of its part to the draft (the text is rendered from the result), but the
   // final confirmation changes nothing except the last approval.
   if (turn.kind === 'final' && !sameJson(next.model, prev.model)) {
-    out.push(v('chunked_playback', 'The model changed during the final confirmation.'));
+    out.push(v('chunked_playback', 'playback.final_changed', 'The model changed during the final confirmation.'));
   }
-  if (turn.kind === 'playback' && turn.chunk === null) out.push(v('chunked_playback', 'A playback turn names the part it plays back.'));
-  if (turn.kind !== 'playback' && turn.chunk !== null) out.push(v('chunked_playback', 'Only a playback turn names a part.'));
+  if (turn.kind === 'playback' && turn.chunk === null) out.push(v('chunked_playback', 'playback.no_chunk', 'A playback turn names the part it plays back.'));
+  if (turn.kind !== 'playback' && turn.chunk !== null) out.push(v('chunked_playback', 'playback.stray_chunk', 'Only a playback turn names a part.'));
   if (turn.kind === 'final') {
     for (const chunk of SETUP_CHUNKS) {
-      if (!next.approved.includes(chunk)) out.push(v('chunked_playback', `The final confirmation came before "${chunk}" was played back and approved.`));
+      if (!next.approved.includes(chunk)) {
+        out.push(v('chunked_playback', 'playback.early_final', `The final confirmation came before "${chunk}" was played back and approved.`));
+      }
     }
-    if (renderFinal(next.model).length > FINAL_MAX_LINES) out.push(v('chunked_playback', 'The final confirmation is too long.'));
+    if (renderFinal(next.model).length > FINAL_MAX_LINES) out.push(v('chunked_playback', 'playback.final_long', 'The final confirmation is too long.'));
   }
 
   for (const chunk of next.approved) {
     if (!prev.approved.includes(chunk)) {
       if (!approvalFollowsPlayback(ctx, chunk)) {
-        out.push(v('chunked_playback', `"${chunk}" was marked approved without being played back and accepted.`));
+        out.push(v('chunked_playback', 'playback.unapproved', `"${chunk}" was marked approved without being played back and accepted.`));
       }
-    } else if (!sameJson(chunkSlice(prev.model, chunk), chunkSlice(next.model, chunk))) {
-      out.push(v('chunked_playback', `"${chunk}" changed after it was approved; play it back again.`));
+    } else if (!sameJson(chunkSlice(prev, chunk), chunkSlice(next, chunk))) {
+      out.push(v('chunked_playback', 'playback.changed_after', `"${chunk}" changed after it was approved; play it back again.`));
     }
   }
   return out;
@@ -298,17 +368,78 @@ const ARITHMETIC = /\d\s*[+×*x/÷=]\s*\d/;
 export function checkNoMath(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out: Violation[] = [];
   const text = textForScan(turn, authored(turn));
-  if (SCORE_WORDS.test(text)) out.push(v('no_math', 'Claude scored or graded something; the engine does that, and only from entries.'));
-  if (ARITHMETIC.test(text)) out.push(v('no_math', 'Claude did arithmetic.'));
+  if (SCORE_WORDS.test(text)) out.push(v('no_math', 'math.score', 'Claude scored or graded something; the engine does that, and only from entries.'));
+  if (ARITHMETIC.test(text)) out.push(v('no_math', 'math.arithmetic', 'Claude did arithmetic.'));
   // Starting ideas, candidate readings of an unclear answer and a visible proposal may carry numbers of their own, shown
   // as suggestions the person can take or leave; nothing else may.
   const exempt = turn.kind === 'proposal' ? authored(turn) : turn.kind === 'ideas' || turn.kind === 'interpretations' ? turn.options : [];
   const scanned = authored(turn).filter((t) => !exempt.includes(t));
-  const said = new Set(personTexts(ctx).flatMap((t) => numbersIn(t)));
+  const said = new Set(personWords(ctx.transcript).flatMap((t) => numbersIn(t)));
   const unsaid = new Set(numbersIn(textForScan(turn, scanned), { skipOne: true }).filter((n) => !said.has(n)));
-  for (const n of unsaid) out.push(v('no_math', `Claude wrote the number ${n}, which the person has not said.`));
+  for (const n of unsaid) out.push(v('no_math', 'math.number', `Claude wrote the number ${n}, which the person has not said.`));
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Plain words (MOM-111 findings 4 and 6). Not hard rules: the service retries these once and then shows the reply.
+// ---------------------------------------------------------------------------
+
+// A lead-in ("say") that previews the question instead of reacting to the answer: "Next, I'll check...", "Next is the start
+// date", "Let's talk about your week", "One more question".
+const PREVIEWS: RegExp[] = [
+  /^(next|now|then|first|finally|lastly|ok(ay)?,? next|alright,? next|right,? next)\b/i,
+  /\bnext,? (i'?ll|i will|i'?d like to|i want to|let'?s|we'?ll|we will|is|up|comes|question|thing)\b/i,
+  /\blet'?s (talk about|move on|turn to|look at|figure out|get to|go to|cover|set up|pick|work out|think about)\b/i,
+  /\b(i'?ll|i will|i'?d like to|i want to|i need to|i'?m going to) (now )?(ask|check|find out|figure out|cover|go over|look at|get|confirm|make sure)\b/i,
+  /\bmoving on\b/i,
+  /\b(one|a few|some|two|three|a couple of) (more )?(quick )?questions?\b/i,
+  /\b(now|next) (for|about|on to|onto)\b/i,
+];
+// One short line: about the length of "Got it, one goal to start with, and that's a good place to begin."
+export const LEAD_IN_MAX_CHARS = 110;
+
+// A turn whose "say" is an explanation, not a lead-in: the fixed day-end explanation, and the answer to "What do you mean?"
+// (owner decision 2, 2026-10-29).
+function explains(turn: AssistantTurn, answer: PersonAnswer | null): boolean {
+  if (turn.topic === 'day_end' && turn.say.includes(DAY_END_SAY)) return true;
+  return answer !== null && asksMeaning(answer.text);
+}
+
+export function checkLeadIn(turn: AssistantTurn, ctx: TurnContext): Violation[] {
+  const say = turn.say.trim();
+  if (!say || !ASKING_KINDS.includes(turn.kind) || explains(turn, latestAnswer(ctx.transcript))) return [];
+  const out: Violation[] = [];
+  if (PREVIEWS.some((re) => re.test(say))) out.push(v('plain_words', 'plain.lead_in', 'The lead-in previews the question instead of reacting to the answer.'));
+  else if (sentencesOf(say).length > 1 || say.length > LEAD_IN_MAX_CHARS) {
+    out.push(v('plain_words', 'plain.lead_in', 'The lead-in is longer than one short line.'));
+  }
+  return out;
+}
+
+// An activity (exercising, running, lifting, the gym) the person never said, in Claude's words or in the draft's free text,
+// which the playback shows. Starting ideas the person asked for, and a proposal answering a request for a recommendation,
+// are suggestions they asked for. The question of which number counts in an app (Hevy: "pounds lifted") names that app's
+// own numbers.
+export function checkNoNewActivity(turn: AssistantTurn, ctx: TurnContext): Violation[] {
+  const said = personWords(ctx.transcript);
+  const asked = askedForSuggestions(latestAnswer(ctx.transcript));
+  const exempt = turn.kind === 'ideas' ? turn.options : turn.kind === 'proposal' && asked ? authored(turn) : [];
+  const parts = turn.topic === 'metric' ? [] : authored(turn).filter((t) => !exempt.includes(t));
+  const out: Violation[] = [];
+  for (const id of new Set(unsaidActivities(parts.join(' \n '), said))) {
+    out.push(v('plain_words', 'plain.activity', `Claude named the activity "${id}", which the person has not said.`));
+  }
+  // Free text in the draft may hold an activity only when the person said it, or Claude showed it in a turn they answered.
+  const shown = ctx.transcript.flatMap((m) => (m.role === 'assistant' ? authored(m.turn) : []));
+  for (const { path, text } of freeTextLeaves(turn.draft.model)) {
+    if (unsaidActivities(text, [...said, ...shown]).length > 0) {
+      out.push(v('plain_words', 'plain.activity', 'The draft names an activity the person has not said.', path));
+    }
+  }
+  return out;
+}
+
+export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity] as const;
 
 // ---------------------------------------------------------------------------
 // All of it
@@ -325,10 +456,16 @@ export const RULE_CHECKS: Record<HardRuleId, (turn: AssistantTurn, ctx: TurnCont
   no_math: checkNoMath,
 };
 
-// The eight rules plus the draft itself: after every turn the draft must validate (progress mode).
+const DRAFT_CODES: Record<string, ViolationCode> = { no_source: 'draft.no_source', not_said: 'draft.not_said', not_accepted: 'draft.not_accepted' };
+
+// The eight rules, the plain-words checks, and the draft itself: after every turn the draft must validate (progress mode).
 export function checkTurn(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out = HARD_RULE_IDS.flatMap((id) => RULE_CHECKS[id](turn, ctx));
+  for (const check of PLAIN_WORDS_CHECKS) out.push(...check(turn, ctx));
   const draft = validateDraft(turn.draft, ctx.transcript, 'progress');
-  for (const issue of draft.issues) out.push(v('draft', `${issue.path}: ${issue.message}`));
+  for (const issue of draft.issues) out.push(v('draft', DRAFT_CODES[issue.code] ?? 'draft.rule', `${issue.path}: ${issue.message}`, issue.path));
   return out;
 }
+
+// Only plain-words violations: the reply may be shown after its one retry (MOM-111 addition a).
+export const onlyPlainWords = (violations: readonly Violation[]): boolean => violations.length > 0 && violations.every((x) => x.rule === 'plain_words');

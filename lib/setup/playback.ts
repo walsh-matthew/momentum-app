@@ -4,6 +4,7 @@
 // back, and anything that cannot be restated is shown as said, in quotes (lib/setup/restate.ts, MOM-111). The final
 // confirmation is a few lines for the whole. Only fields that are set appear; nothing is filled in. Pure.
 
+import { casualDate } from '@/lib/dates/casual';
 import { EARLY_DAY_END_LIMIT } from '@/lib/engine/constants';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
 import type { GoalDraft, SetupChunk, SetupDraft, SetupModel, TargetDraft, Transcript } from '@/types/setup';
@@ -12,7 +13,6 @@ import { minutesOfClock, timePhrasesIn } from './text';
 
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const weekdayName = (n: number): string => WEEKDAY_NAMES[n - 1] ?? String(n);
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 // The clock times the playback shows, by the path they are saved under.
 export type ClockPath = 'person.dayEnd' | 'person.planning.time';
@@ -23,14 +23,14 @@ export interface PlaybackOptions {
   locale?: string | null;
   // The person's own words for the time saved at this path ("9 at night"), when they said one (spokenTimes below).
   spokenTime?: (path: ClockPath) => string | null;
+  // The person's today (YYYY-MM-DD), so a date reads "Thursday, Nov 5" with the year only when it is not this year
+  // (lib/dates/casual.ts, MOM-111 finding 7). Without it the year is always shown.
+  today?: string | null;
 }
 
-// "2027-06-14" as "June 14, 2027". Spelled out, the same everywhere: a date is never read in the wrong order.
-export function spelledDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return iso;
-  return `${MONTH_NAMES[Number(m[2]) - 1] ?? m[2]} ${Number(m[3])}, ${m[1]}`;
-}
+// A date in the playback: "Thursday, Nov 5", spelled, so it is never read in the wrong order. "today" and "tomorrow" are
+// left out, because the date sits inside a sentence ("It comes back on today" would not read).
+const dateWords = (iso: string, options: PlaybackOptions): string => casualDate(iso, options.today ?? null, { relative: false });
 
 // "21:00" in the person's locale ("9:00 PM" in en-US, "21:00" in de-DE). Null when there is no locale, or it is not one.
 function localClock(hhmm: string, locale: string | null | undefined): string | null {
@@ -65,14 +65,14 @@ export function spokenTimes(draft: SetupDraft, transcript: Transcript): (path: C
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
-function describePeriod(t: TargetDraft): string {
+function describePeriod(t: TargetDraft, options: PlaybackOptions): string {
   switch (t.period.kind) {
     case 'weekly':
       return 'each week';
     case 'day_slots':
       return `each week on ${listOf(t.period.weekdays.map(weekdayName))}`;
     case 'deadline':
-      return `by ${spelledDate(t.period.dueDate)}`;
+      return `by ${dateWords(t.period.dueDate, options)}`;
   }
 }
 
@@ -90,9 +90,9 @@ function amount(t: TargetDraft, n: number): string {
   }
 }
 
-function describeTarget(t: TargetDraft): string {
+function describeTarget(t: TargetDraft, options: PlaybackOptions): string {
   const title = titleOf(t.title);
-  const period = describePeriod(t);
+  const period = describePeriod(t, options);
   let line: string;
   if (t.floor !== null) {
     line = `${title}: at least ${amount(t, t.floor)} ${period}${t.aspiration !== null ? `, aiming for ${amount(t, t.aspiration)}` : ''}.`;
@@ -106,16 +106,16 @@ function describeTarget(t: TargetDraft): string {
   return line;
 }
 
-function describeShape(g: GoalDraft): string {
+function describeShape(g: GoalDraft, options: PlaybackOptions): string {
   const title = titleOf(g.title);
-  const start = g.startDate ? `, starting ${spelledDate(g.startDate)}` : '';
+  const start = g.startDate ? `, starting ${dateWords(g.startDate, options)}` : '';
   switch (g.shape) {
     case 'ongoing':
       return `${title} keeps going${start}${g.blockWeeks !== null ? `, with a first stretch of ${plural(g.blockWeeks, 'week', 'weeks')}` : ''}.`;
     case 'finite':
-      return `${title} runs until ${g.endDate ? spelledDate(g.endDate) : 'a date not set yet'}${start}.`;
+      return `${title} runs until ${g.endDate ? dateWords(g.endDate, options) : 'a date not set yet'}${start}.`;
     case 'project':
-      return g.endDate ? `${title} has a deadline of ${spelledDate(g.endDate)}${start}.` : `${title} runs until it's done${start}.`;
+      return g.endDate ? `${title} has a deadline of ${dateWords(g.endDate, options)}${start}.` : `${title} runs until it's done${start}.`;
     case null:
       return `${title}: how long it runs isn't set yet${start}.`;
   }
@@ -124,11 +124,11 @@ function describeShape(g: GoalDraft): string {
 // When a goal set aside comes back. A condition in the person's words reads after "It comes back" when it starts like one
 // ("in the spring", "when my knee heals"); otherwise it is shown as said.
 const RETURN_START = /^(in|when|after|once|on|at|by|next|before|if|until|around|this|after)\b/i;
-function describeReturn(g: GoalDraft): string {
+function describeReturn(g: GoalDraft, options: PlaybackOptions): string {
   if (!g.returnWhen) return 'When it comes back is not set yet.';
   switch (g.returnWhen.kind) {
     case 'date':
-      return `It comes back on ${spelledDate(g.returnWhen.date)}.`;
+      return `It comes back on ${dateWords(g.returnWhen.date, options)}.`;
     case 'condition': {
       const note = trimmed(g.returnWhen.note);
       const restated = RETURN_START.test(note) ? restate(note, 'item') : null;
@@ -181,7 +181,7 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
   switch (chunk) {
     case 'goals':
       for (const g of model.goals) {
-        lines.push(g.state === 'active' ? describeGoal(g) : `Set aside for now: ${titleOf(g.title)}. ${describeReturn(g)}`);
+        lines.push(g.state === 'active' ? describeGoal(g) : `Set aside for now: ${titleOf(g.title)}. ${describeReturn(g, options)}`);
       }
       break;
     case 'targets':
@@ -191,8 +191,8 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
         );
       }
       for (const g of active) {
-        lines.push(describeShape(g));
-        for (const t of g.targets) lines.push(`  ${describeTarget(t)}`);
+        lines.push(describeShape(g, options));
+        for (const t of g.targets) lines.push(`  ${describeTarget(t, options)}`);
       }
       break;
     case 'planning': {
@@ -222,7 +222,7 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
           const title = titleOf(i.title);
           if (i.kind === 'deadline_task') {
             const move = i.dateCanMove === null ? '' : i.dateCanMove ? ' The date can move.' : " The date can't move.";
-            lines.push(i.dueDate ? `Due by ${spelledDate(i.dueDate)}: ${title}.${move}` : `${title}: its date isn't set yet.`);
+            lines.push(i.dueDate ? `Due by ${dateWords(i.dueDate, options)}: ${title}.${move}` : `${title}: its date isn't set yet.`);
           } else {
             lines.push(`${i.kind === 'habit' ? 'Habit' : 'A step along the way'}: ${title}.`);
           }
