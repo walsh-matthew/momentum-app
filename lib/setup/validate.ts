@@ -21,7 +21,7 @@ import {
   type SetupDraft,
   type Transcript,
 } from '@/types/setup';
-import { freeTextLeaves, provenanceLeaves, type Leaf } from './leaves';
+import { freeTextLeaves, latestProvenance, provenanceLeaves, type Leaf } from './leaves';
 import {
   acceptsText,
   dateIsIn,
@@ -83,15 +83,14 @@ const assistantText = (t: { say: string; question: string | null; options: strin
 function provenanceIssues(draft: SetupDraft, transcript: Transcript): DraftIssue[] {
   const issues: DraftIssue[] = [];
   for (const leaf of provenanceLeaves(draft.model)) {
-    const entries = draft.said.filter((s) => s.path === leaf.path);
-    if (entries.length === 0) {
+    const entry = latestProvenance(draft.said, leaf.path);
+    if (entry === undefined) {
       issues.push({
         path: leaf.path,
         message: 'This value has no source. A number, date, time, weekday or yes/no answer must be one the person said or accepted.',
       });
       continue;
     }
-    const entry = entries.reduce((a, b) => (b.turn > a.turn ? b : a));
     const message = transcript[entry.turn];
     if (!message || message.role !== 'person') {
       issues.push({ path: leaf.path, message: 'The source is not one of the person\'s messages.' });

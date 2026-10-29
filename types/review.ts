@@ -2,6 +2,7 @@
 // from lib/engine/review.ts's facts, the same split as scoreboard/home: the engine judges, this maps database rows
 // and composes. No screen reads this yet (block 3.2) and nothing here is stored or sent to Claude (block 3.3).
 
+import type { StartingPointKind } from '@/types/database.types';
 import type { Layer1TargetFact, LayerThreeAdjustment, ReviewWindow } from '@/types/scoreboard';
 
 // A priority the person named at setup, in their own words, with no score (§3.1).
@@ -30,3 +31,18 @@ export type WeeklyReviewFacts =
       offerReflection: boolean;
       adjustment: LayerThreeAdjustment | null;
     };
+
+// A setup value the person took from a suggestion, not yet asked about (MOM-134, migration 017). The weekly review's
+// "Still right for you?" is built from these at the first review (MOM-113 block 3.4). Read by
+// lib/services/startingPoints.ts; a starting point is a question to ask, never a fact about the person (§2.1 rule 4).
+export interface UnconfirmedStartingPoint {
+  id: string;
+  // What the value belongs to, and which saved column holds it (migration 017's starting_points_field_check).
+  kind: StartingPointKind;
+  field: string;
+  // The goal's, target's or work item's title or the day type's name, as the person wrote it. Null for the person's own facts.
+  subject: string | null;
+  // What is saved there now, as text; null when nothing is.
+  value: string | null;
+  createdAt: string;
+}

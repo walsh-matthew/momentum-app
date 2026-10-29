@@ -397,6 +397,38 @@ export type PeriodSnapshotRow = {
   created_at: string;
 };
 
+// A setup value the person took from a suggestion (migration 017, MOM-134). A starting point is a question the first
+// weekly review has yet to ask ("Still right for you?"), never a fact about the person (docs/DOMAIN_MODEL.md §2.1 rule 4).
+// The kinds and the field each can name are the CHECK constraints of 017; tests/migrations.test.ts compares them.
+export const STARTING_POINT_KINDS = ['person', 'day_type', 'goal', 'target', 'work_item'] as const;
+export type StartingPointKind = (typeof STARTING_POINT_KINDS)[number];
+export const STARTING_POINT_FIELDS = {
+  person: ['day_end', 'week_start', 'planning_weekday', 'planning_time'],
+  day_type: ['capacity_amount'],
+  goal: ['start_date', 'end_date', 'block_weeks', 'return_date'],
+  target: ['floor', 'aspiration', 'qualifying_threshold', 'due_date', 'slot_weekdays'],
+  work_item: ['due_date', 'estimate_minutes'],
+} as const satisfies Record<StartingPointKind, readonly string[]>;
+export const STARTING_POINT_OUTCOMES = ['kept', 'changed'] as const;
+export type StartingPointOutcome = (typeof STARTING_POINT_OUTCOMES)[number];
+
+export type StartingPointRow = {
+  id: string;
+  user_id: string;
+  subject_kind: StartingPointKind;
+  // Exactly the one that matches subject_kind; all null for the person's own settings.
+  day_type_id: string | null;
+  goal_id: string | null;
+  target_id: string | null;
+  work_item_id: string | null;
+  // The saved column that holds the value, one of STARTING_POINT_FIELDS[subject_kind].
+  field: string;
+  created_at: string;
+  // Set together when the person is asked at their first review.
+  answered_at: string | null;
+  outcome: StartingPointOutcome | null;
+};
+
 // ---------------------------------------------------------------------------
 // Database (supabase-js generic)
 // ---------------------------------------------------------------------------
@@ -1281,6 +1313,63 @@ export type Database = {
           },
         ];
       };
+      // Setup values taken from a suggestion (migration 017). The save writes them in the person's session; a person may
+      // read their own and answer an unanswered one (answered_at and outcome are the only updatable columns); no delete.
+      starting_points: {
+        Row: StartingPointRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          subject_kind: StartingPointKind;
+          day_type_id?: string | null;
+          goal_id?: string | null;
+          target_id?: string | null;
+          work_item_id?: string | null;
+          field: string;
+          created_at?: string;
+        };
+        Update: {
+          answered_at?: string | null;
+          outcome?: StartingPointOutcome | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'starting_points_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'starting_points_day_type_fk';
+            columns: ['day_type_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'person_day_types';
+            referencedColumns: ['id', 'user_id'];
+          },
+          {
+            foreignKeyName: 'starting_points_goal_fk';
+            columns: ['goal_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'goals';
+            referencedColumns: ['id', 'user_id'];
+          },
+          {
+            foreignKeyName: 'starting_points_target_fk';
+            columns: ['target_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'targets';
+            referencedColumns: ['id', 'user_id'];
+          },
+          {
+            foreignKeyName: 'starting_points_work_item_fk';
+            columns: ['work_item_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'work_items';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     // handle_new_user and the other trigger functions are not executable by anon, authenticated or service_role
@@ -1332,7 +1421,9 @@ export type Database = {
       // Saves an approved guided setup in one transaction (migration 015, MOM-111): the person's settings, day types,
       // priorities, goals, targets, work items, steps and bindings, or nothing. The owner is auth.uid() and the payload
       // has no user id. First setup only: it refuses (SQLSTATE MS001) when the person already has a goal. The payload is
-      // built by toSavePayload() in lib/setup/rows.ts. Returns { goals, targets, work_items, steps, bindings }.
+      // built by toSavePayload() in lib/setup/rows.ts. Returns { goals, targets, work_items, steps, bindings }. Since
+      // migration 017 (MOM-134) it also reads an optional "starting_points" list of saved column names on the person, each
+      // day type, goal, target and work item, and marks those values; the answer is unchanged.
       save_guided_setup: {
         Args: { p_payload: Json };
         Returns: unknown;
@@ -1378,6 +1469,7 @@ export type TargetSource = Tables<'target_sources'>;
 export type Entry = Tables<'entries'>;
 export type EntryCorrection = Tables<'entry_corrections'>;
 export type PeriodSnapshot = Tables<'period_snapshots'>;
+export type StartingPoint = Tables<'starting_points'>;
 
 export type GoalChannelInsert = TablesInsert<'goal_channels'>;
 export type GoalChannelUpdate = TablesUpdate<'goal_channels'>;

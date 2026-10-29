@@ -2,7 +2,7 @@
 // which free text to scan, what each approved part of the draft holds, and which topics the draft already answers.
 // Paths use keys, not positions, so a reordered list does not change what a path means. Pure.
 
-import type { SetupChunk, SetupModel, SetupTopic } from '@/types/setup';
+import type { Provenance, SetupChunk, SetupModel, SetupTopic } from '@/types/setup';
 
 // number: a plain amount. minutes: an amount the person may have said in hours or minutes. date, time, weekday: as named.
 // flag: a yes/no the person answered (whether a deadline date can move).
@@ -77,6 +77,17 @@ export function provenanceLeaves(model: SetupModel): Leaf[] {
     }
   }
   return out;
+}
+
+// Where a value came from, when the draft names it more than once: the entry at the highest turn, the first one on a tie.
+// The newest answer is the one that counts (rule 7), so a value the person said after accepting a suggestion is theirs.
+// The validator and the marks of accepted values (lib/setup/startingPoints.ts) both read it here, so they cannot differ.
+export function latestProvenance(said: readonly Provenance[], path: string): Provenance | undefined {
+  let latest: Provenance | undefined;
+  for (const entry of said) {
+    if (entry.path === path && (latest === undefined || entry.turn > latest.turn)) latest = entry;
+  }
+  return latest;
 }
 
 // Every string the person's words end up in, to scan for a day or time word nobody said.

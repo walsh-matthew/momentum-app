@@ -35,6 +35,9 @@ import {
   REVIEW_PLANNING_MODES,
   SHIFT_TYPES,
   SOURCE_KINDS,
+  STARTING_POINT_FIELDS,
+  STARTING_POINT_KINDS,
+  STARTING_POINT_OUTCOMES,
   TARGET_ROLES,
   TASK_STATUSES,
   TASK_TYPES,
@@ -781,6 +784,128 @@ describe('migration 015 saves an approved guided setup in one transaction (MOM-1
 });
 
 
+describe('migration 017 stores which setup values came from a suggestion (MOM-134)', () => {
+  const sql = sqlOf('017');
+  const table = /create table public\.starting_points \(([\s\S]*?)\n\);/.exec(sql)?.[1] ?? '';
+  const fn = /create or replace function public\.save_guided_setup[\s\S]*?\n\$\$;/i.exec(sql)?.[0] ?? '';
+  const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '017_starting_points.sql'), 'utf8');
+
+  it('leaves 013, 015 and 016 as they were: the new table and the new function version live only in 017', () => {
+    for (const earlier of ['013', '015', '016']) expect(sqlOf(earlier), earlier).not.toMatch(/starting_points/);
+    expect(sql).toMatch(/create or replace function public\.save_guided_setup\(p_payload jsonb\)/i);
+    // The one change to an applied table is a unique key, never an edit of its columns.
+    const altered = [...sql.matchAll(/alter table public\.([a-z_]+)\s+(add|drop|alter)\s+(\w+)/gi)].map((m) => `${m[1]} ${m[2]} ${m[3]}`.toLowerCase());
+    expect(altered).toEqual(['person_day_types add constraint']);
+    expect(sql).toMatch(/add constraint person_day_types_id_user_unique unique \(id, user_id\)/);
+  });
+
+  it('keeps its kinds, fields and outcomes in step with types/database.types.ts', () => {
+    expect(inList(table, 'starting_points_kind_check')).toEqual([...STARTING_POINT_KINDS]);
+    expect(inList(table, 'starting_points_outcome_check')).toEqual([...STARTING_POINT_OUTCOMES]);
+    const fieldCheck = /constraint starting_points_field_check check \(([\s\S]*?)\n  \),/.exec(table)?.[1] ?? '';
+    const pairs = new Map<string, string[]>();
+    for (const m of fieldCheck.matchAll(/subject_kind = '([a-z_]+)'\s+and field (?:in \(([^)]*)\)|= '([a-z_]+)')/g)) {
+      pairs.set(m[1], m[2] ? [...m[2].matchAll(/'([^']+)'/g)].map((x) => x[1]) : [m[3]]);
+    }
+    expect([...pairs.keys()].sort()).toEqual([...STARTING_POINT_KINDS].sort());
+    for (const kind of STARTING_POINT_KINDS) expect(pairs.get(kind), kind).toEqual([...STARTING_POINT_FIELDS[kind]]);
+  });
+
+  it('points at the person\'s own rows only: every foreign key is (id, user_id) and removes the mark with its row', () => {
+    for (const [name, parent] of [
+      ['starting_points_day_type_fk', 'person_day_types'],
+      ['starting_points_goal_fk', 'goals'],
+      ['starting_points_target_fk', 'targets'],
+      ['starting_points_work_item_fk', 'work_items'],
+    ]) {
+      expect(table).toMatch(new RegExp(`constraint ${name} foreign key \\([a-z_]+, user_id\\)\\s+references public\\.${parent} \\(id, user_id\\) on delete cascade`));
+    }
+    expect(table).toMatch(/user_id\s+uuid not null references public\.users \(id\) on delete cascade/);
+    expect(table).toMatch(/constraint starting_points_subject_matches_kind/);
+    expect(table).toMatch(/constraint starting_points_answered_together check \(\(answered_at is null\) = \(outcome is null\)\)/);
+  });
+
+  it('turns row level security on, takes every default privilege back, and grants only what is approved', () => {
+    expect(sql).toMatch(/alter table public\.starting_points enable row level security/);
+    expect(sql).toMatch(/revoke all on table public\.starting_points from anon, authenticated, service_role/);
+    const grants = [...sql.matchAll(/grant ([a-z, ()_]+) on table public\.starting_points to ([a-z_]+)/g)].map((m) => `${m[2]}: ${m[1]}`);
+    expect(grants).toEqual(['authenticated: select, insert', 'authenticated: update (answered_at, outcome)']);
+    expect(sql).not.toMatch(/grant [^;]*\b(delete|truncate|references|trigger|all)\b[^;]*on table public\.starting_points/i);
+  });
+
+  it('has a select, an insert and an update policy, all the owner\'s, and no delete policy', () => {
+    const policies = [...sql.matchAll(/create policy "([^"]+)" on public\.starting_points\s+for (select|insert|update|delete|all)/g)].map((m) => `${m[1]} ${m[2]}`);
+    expect(policies).toEqual([
+      'starting_points_select_own select',
+      'starting_points_insert_own insert',
+      'starting_points_update_own update',
+    ]);
+    // A new mark is unanswered, and an answered one cannot be answered again.
+    expect(sql).toMatch(/starting_points_insert_own[\s\S]*?with check \(\(select auth\.uid\(\)\) = user_id and answered_at is null and outcome is null\)/);
+    expect(sql).toMatch(/starting_points_update_own[\s\S]*?using \(\(select auth\.uid\(\)\) = user_id and answered_at is null\)/);
+  });
+
+  it('the new function version is SECURITY INVOKER, takes the owner from auth.uid(), and refuses a second setup and an unknown top-level key as before', () => {
+    expect(fn.length).toBeGreaterThan(1000);
+    expect(fn).toMatch(/security invoker/i);
+    expect(fn).not.toMatch(/security definer/i);
+    expect(fn).toMatch(/set search_path = ''/i);
+    expect(fn).toMatch(/v_uid\s+uuid := auth\.uid\(\)/);
+    expect(fn).toMatch(/p_payload - 'person' - 'day_types' - 'priorities' - 'goals'/);
+    expect(fn).not.toMatch(/p_payload - [^<]*starting_points/);
+    expect(fn).toMatch(/errcode = 'MS001'/);
+    expect(fn.indexOf("errcode = 'MS001'")).toBeLessThan(fn.indexOf('insert into public.person_settings'));
+    // Its answer is 016's, key for key, so nothing that reads the answer (and no earlier verify script) changes.
+    expect(fn).toMatch(/return jsonb_build_object\('goals', n_goals, 'targets', n_targets, 'work_items', n_items, 'steps', n_steps, 'bindings', n_bindings\);/);
+    expect(sql.match(/grant execute/gi) ?? []).toHaveLength(1);
+    expect(sql).toMatch(/revoke execute on function public\.save_guided_setup\(jsonb\) from public, anon, authenticated, service_role/i);
+    expect(sql).toMatch(/grant execute on function public\.save_guided_setup\(jsonb\) to authenticated/i);
+  });
+
+  it('writes a mark only where it holds the new row\'s id, and treats a payload with no list as no marks', () => {
+    // Each list is read with coalesce(..., '[]'), so a payload without the key (an older app) marks nothing.
+    const reads = [...fn.matchAll(/coalesce\((v_[a-z_]+) -> 'starting_points', '\[\]'::jsonb\)/g)].map((m) => m[1]);
+    expect(reads).toEqual(['v_person', 'v_day_type', 'v_goal', 'v_target', 'v_item']);
+    const ids = [...fn.matchAll(/insert into public\.starting_points \(([^)]*)\) values \(([^)]*)\)/g)].map((m) => `${m[1]} | ${m[2]}`);
+    expect(ids).toEqual([
+      "user_id, subject_kind, field | v_uid, 'person', v_mark",
+      "user_id, subject_kind, day_type_id, field | v_uid, 'day_type', v_dt_id, v_mark",
+      "user_id, subject_kind, goal_id, field | v_uid, 'goal', v_goal_id, v_mark",
+      "user_id, subject_kind, target_id, field | v_uid, 'target', v_target_id, v_mark",
+      "user_id, subject_kind, work_item_id, field | v_uid, 'work_item', v_item_id, v_mark",
+    ]);
+  });
+
+  it('is checked by a verify script with the named checks, including an older payload that must still save', () => {
+    expect(verify).toMatch(/An older payload with no starting_points saves exactly as before/);
+    expect(verify).toMatch(/A second setup by the same person is still refused/);
+    expect(verify).toMatch(/A value the person said is saved but has no mark/);
+    expect(verify).toMatch(/A person reads their own 9 marks and none of anyone else/);
+    expect(verify).toMatch(/Answering another person''s mark touches no row/);
+    expect(verify).toMatch(/An answered mark cannot be answered again/);
+    expect(verify).toMatch(/Nothing of any refused save was kept/);
+  });
+
+  it('the verify script leaves nothing behind: every write is inside one block that always rolls back', () => {
+    // All the script's writes (accounts, setups, marks) are in the one DO block; outside it there are only temporary objects.
+    const doBlock = /\ndo \$\$[\s\S]*?\n\$\$;/.exec(verify)?.[0] ?? '';
+    expect(doBlock.length).toBeGreaterThan(1000);
+    const outside = verify.replace(doBlock, '');
+    expect(outside).not.toMatch(/\b(insert into|update|delete from|truncate)\s+(public|auth)\./i);
+    expect(outside.match(/create (or replace )?function (?!pg_temp\.)/gi) ?? []).toEqual([]);
+    expect(outside).not.toMatch(/\bcommit\b/i);
+    // The inner block's last statement is the exception that undoes it, and its handler expects exactly that one.
+    expect(doBlock).toMatch(/raise exception 'mom134_rollback';\s+exception when others then\s+if sqlerrm <> 'mom134_rollback' then/);
+    expect(doBlock).not.toMatch(/\bcommit\b/i);
+    // After the rollback it proves nothing is left: no account, and no row for any of the four in any table it wrote to.
+    expect(verify).toMatch(/The rollback left no throwaway account behind/);
+    expect(verify).toMatch(/The rollback left no row for any of them in any table the script wrote to/);
+    for (const t of ['users', 'person_settings', 'person_day_types', 'person_priorities', 'goals', 'targets', 'work_items', 'work_item_steps', 'sources', 'target_sources', 'starting_points']) {
+      expect(verify, t).toMatch(new RegExp(`from public\\.${t} where (user_)?id in \\(a, b, c, e\\)|from public\\.${t} where user_id in \\(a, b, c, e\\)`));
+    }
+  });
+});
+
 describe('the grants allow-list covers the goal model tables (supabase/verify/900_table_grants.sql)', () => {
   const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8').replace(/--.*$/gm, '');
   const entry = (table: string, role: string) => new RegExp(`\\('${table}',\\s+'${role}',\\s+'([A-Z,]*)'\\)`).exec(allow)?.[1];
@@ -799,6 +924,8 @@ describe('the grants allow-list covers the goal model tables (supabase/verify/90
     ['entries', 'SELECT,INSERT', 'SELECT,INSERT,UPDATE'],
     ['entry_corrections', 'SELECT,INSERT,UPDATE,DELETE', ''],
     ['period_snapshots', 'SELECT,INSERT', ''],
+    // 017: UPDATE of answered_at and outcome is a column privilege, so the table-level check lists SELECT and INSERT only.
+    ['starting_points', 'SELECT,INSERT', ''],
   ])('%s: anon nothing, authenticated %s, service_role %s', (table, authenticated, service) => {
     expect(entry(table, 'anon')).toBe('');
     expect(entry(table, 'authenticated')).toBe(authenticated);
