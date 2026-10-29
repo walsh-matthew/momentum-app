@@ -4,6 +4,8 @@
 //
 // - A request whose system prompt is setup's gets the next scripted turn of Claude's: the number of assistant messages in the
 //   request says how far the conversation has got, so the fake keeps no state and any number of people can talk to it.
+//   With several scripts (MOM-111 round 2: the card screenshots need a date question), the person's first answer picks
+//   the script whose first line it is; the first script is the default, and answers the opening turn for all of them.
 // - Every other request gets a 401 in the API's own error shape. The app turns that into "not configured", which is what the
 //   wizard spec expects, so those specs behave as they did when the key was empty.
 // - GET /__fake/last reports the newest setup request (how many, and the text of its last user message), so the spec can check
@@ -34,7 +36,21 @@ function lastUserText(body: MessagesBody): string {
   return Array.isArray(last.content) ? last.content.map((b) => (b as { text?: string }).text ?? '').join('\n') : '';
 }
 
-export function startFakeAnthropic(port: number, script: readonly AssistantTurn[]): Promise<FakeAnthropic> {
+// One scripted conversation: Claude's turns, and the person's first answer that picks it.
+export interface FakeScript {
+  firstAnswer: string;
+  turns: readonly AssistantTurn[];
+}
+
+// The person's first answer in a request: the user message after "Begin setup." and Claude's opening turn.
+function firstAnswer(body: MessagesBody): string | null {
+  const m = body.messages?.[2];
+  if (!m || m.role !== 'user') return null;
+  if (typeof m.content === 'string') return m.content;
+  return Array.isArray(m.content) ? ((m.content[0] as { text?: string } | undefined)?.text ?? null) : null;
+}
+
+export function startFakeAnthropic(port: number, scripts: readonly FakeScript[]): Promise<FakeAnthropic> {
   let setupRequests = 0;
   let lastSetupUserText = '';
   let slowMs = 0;
@@ -79,6 +95,8 @@ export function startFakeAnthropic(port: number, script: readonly AssistantTurn[
       setupRequests += 1;
       lastSetupUserText = lastUserText(body);
       const turnIndex = (body.messages ?? []).filter((m) => m.role === 'assistant').length;
+      const said = firstAnswer(body);
+      const script = (scripts.find((s) => s.firstAnswer === said) ?? scripts[0]).turns;
       const turn = script[turnIndex];
       if (!turn) {
         send(500, { type: 'error', error: { type: 'api_error', message: `the script has no turn ${turnIndex}` } });

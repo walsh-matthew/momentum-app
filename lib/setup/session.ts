@@ -25,6 +25,19 @@ export const MEANING_TEXT = 'What do you mean?';
 // accepted (MOM-111 finding 8).
 export const PROPOSAL_YES_TEXT = 'Yes, that works.';
 
+// The date layout's choices (MOM-111 round 2, findings 4 and 9): Yes for a suggested date, the picker opened in place, and a
+// small link to type it instead.
+export const PICK_DATE = 'Pick a date';
+export const PICK_OTHER_DATE = 'Pick a different date';
+export const TYPE_INSTEAD = 'Type it instead';
+
+// What the error card says, by why no reply came (MOM-111 round 2, findings 12 and 14). The server sends the first two with
+// a failed turn; the screen uses the second for a request that never reached it.
+export const STUCK_MESSAGE = 'I got stuck on that one. Could you say it another way?';
+export const UNREACHABLE_MESSAGE = "We couldn't reach Momentum just now. Your answer is safe.";
+export const CHANGE_ANSWER = 'Change my answer';
+export const TRY_AGAIN = 'Try again';
+
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 

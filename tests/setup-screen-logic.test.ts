@@ -151,8 +151,10 @@ describe('the validator rules added for saving', () => {
   it('refuses a synced source the app cannot connect (a supported one is fine), in both modes', () => {
     for (const mode of ['progress', 'final'] as const) {
       const bad = issuesFor((m) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'strava', metric: null }]), mode);
-      // The message names no value: a thrown-away reply is retried with it (MOM-111 root cause A).
-      expect(bad.map((i) => i.message)).toContain('That app cannot be connected yet. Offer logging it themselves for now.');
+      // Since MOM-111 round 2 (B1) the schema itself lists the apps Momentum can read, so the refusal is the shape's, at the
+      // provider's path. The message names no value: a thrown-away reply is retried with it (MOM-111 root cause A).
+      expect(bad.map((i) => i.path)).toContain('model.goals.0.targets.0.sources.0.provider');
+      expect(bad.map((i) => i.message).join(' ')).not.toContain('strava');
       const ok = issuesFor(
         (m) => (m.goals[0].targets[0].sources = [{ kind: 'synced', provider: 'hevy', metric: 'volume_lbs' }, { kind: 'manual' }]),
         mode,

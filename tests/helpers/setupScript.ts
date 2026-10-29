@@ -80,6 +80,8 @@ export interface Step {
   chunk?: SetupChunk;
   say?: string;
   question?: string;
+  // The question's examples and reason, under it in regular weight (MOM-111 round 2, finding 1).
+  detail?: string;
   options?: string[];
   skipped?: { topic: SetupTopic; line: string };
   // Changes to the model this turn makes (it applies the person's last reply).
@@ -132,6 +134,7 @@ export class Script {
       skipped: step.skipped ?? null,
       say: step.say ?? '',
       question: step.question ?? null,
+      detail: step.detail ?? null,
       topic: step.topic ?? null,
       options: step.options ?? [],
       draft: structuredClone(draft),

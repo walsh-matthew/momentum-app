@@ -258,8 +258,12 @@ export interface RunSetupTurnArgs {
   today?: string;
   // Why the previous try at this turn was thrown away, in code's fixed words (MOM-111 root cause A).
   retryFeedback?: string[];
-  // What code read a relative date in the person's newest message as (MOM-111 finding 8).
+  // What code read a relative date in the person's newest message as (MOM-111 finding 8), or a length of time they said.
   dateHint?: string;
+  // Which app code read in the person's answer to the source question (MOM-111 round 2).
+  sourceNote?: string;
+  // How long this one call may take: the time the setup turn has left (MOM-111 round 2, C).
+  timeoutMs?: number;
   // The smaller-model trial runs the same path on another model.
   model?: string;
   // Tests and the eval runner only. The app uses the constants above.
@@ -296,7 +300,15 @@ export async function runSetupTurn(args: RunSetupTurnArgs, deps: RunSetupTurnDep
       limits: args.limits ?? SETUP_LIMITS,
       call: () =>
         requestTurn(
-          { transcript: args.transcript, draft: args.draft, today: args.today, retryFeedback: args.retryFeedback, dateHint: args.dateHint },
+          {
+            transcript: args.transcript,
+            draft: args.draft,
+            today: args.today,
+            retryFeedback: args.retryFeedback,
+            dateHint: args.dateHint,
+            sourceNote: args.sourceNote,
+            timeoutMs: args.timeoutMs,
+          },
           { ...deps.modelDeps, model },
         ),
       report: reportModelResult,

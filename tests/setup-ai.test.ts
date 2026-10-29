@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SETUP_BEGIN_MESSAGE,
   SETUP_DRAFT_PLACEHOLDER,
+  REQUEST_TIMEOUT_MS,
   SETUP_MODEL,
   buildSetupMessages,
   requestSetupTurnFromModel,
@@ -22,6 +23,7 @@ const turn: AssistantTurn = {
   kind: 'question',
   chunk: null,
   skipped: null,
+  detail: null,
   say: '',
   question: 'What would you like to work on?',
   topic: 'idea',
@@ -279,19 +281,50 @@ describe('when the model does not give a usable answer', () => {
   });
   it('running out of tokens', async () => {
     const { client } = clientReturning(reply({ stop_reason: 'max_tokens' }));
-    expect(await requestSetupTurnFromModel(input, { client })).toEqual({ ok: false, reason: 'bad_output', usage: USAGE });
+    expect(await requestSetupTurnFromModel(input, { client })).toMatchObject({ ok: false, reason: 'bad_output', usage: USAGE });
   });
   it('no text block', async () => {
     const { client } = clientReturning(reply({ content: [] }));
-    expect(await requestSetupTurnFromModel(input, { client })).toEqual({ ok: false, reason: 'bad_output', usage: USAGE });
+    expect(await requestSetupTurnFromModel(input, { client })).toMatchObject({ ok: false, reason: 'bad_output', usage: USAGE });
   });
   it('text that is not JSON', async () => {
     const { client } = clientReturning(reply({ content: [{ type: 'text', text: 'Sure! Let us begin.', citations: null }] }));
-    expect(await requestSetupTurnFromModel(input, { client })).toEqual({ ok: false, reason: 'bad_output', usage: USAGE });
+    expect(await requestSetupTurnFromModel(input, { client })).toMatchObject({ ok: false, reason: 'bad_output', usage: USAGE });
   });
   it('broken JSON', async () => {
     const { client } = clientReturning(reply({ content: [{ type: 'text', text: '{"kind": ', citations: null }] }));
-    expect(await requestSetupTurnFromModel(input, { client })).toEqual({ ok: false, reason: 'bad_output', usage: USAGE });
+    expect(await requestSetupTurnFromModel(input, { client })).toMatchObject({ ok: false, reason: 'bad_output', usage: USAGE });
+  });
+
+  // MOM-111 round 2, A: the service tells the retry, and the log, which way the answer could not be read.
+  it.each([
+    ['max_tokens', reply({ stop_reason: 'max_tokens' })],
+    ['no_text', reply({ content: [] })],
+    ['not_json', reply({ content: [{ type: 'text', text: 'Sure! Let us begin.', citations: null }] })],
+    ['not_json', reply({ content: [{ type: 'text', text: '{"kind": ', citations: null }] })],
+  ] as const)('says the answer was %s', async (problem, message) => {
+    const { client } = clientReturning(message);
+    expect(await requestSetupTurnFromModel(input, { client })).toEqual({ ok: false, reason: 'bad_output', usage: USAGE, problem });
+  });
+});
+
+// MOM-111 round 2, C: one call may take only the time its turn has left, and the SDK never retries on its own.
+describe('the time one call may take', () => {
+  const optionsOf = (create: ReturnType<typeof clientReturning>['create']) => (create.mock.calls[0] as unknown as [Request, { timeout: number; maxRetries: number }])[1];
+
+  it('passes the time left as the call\'s timeout, with no hidden retry', async () => {
+    const { client, create } = clientReturning(reply());
+    await requestSetupTurnFromModel({ ...input, timeoutMs: 42_000 }, { client });
+    expect(optionsOf(create)).toEqual({ timeout: 42_000, maxRetries: 0 });
+  });
+
+  it('caps the timeout at REQUEST_TIMEOUT_MS, and uses it when no time is given', async () => {
+    const a = clientReturning(reply());
+    await requestSetupTurnFromModel({ ...input, timeoutMs: 10 * REQUEST_TIMEOUT_MS }, { client: a.client });
+    expect(optionsOf(a.create).timeout).toBe(REQUEST_TIMEOUT_MS);
+    const b = clientReturning(reply());
+    await requestSetupTurnFromModel(input, { client: b.client });
+    expect(optionsOf(b.create).timeout).toBe(REQUEST_TIMEOUT_MS);
   });
 });
 

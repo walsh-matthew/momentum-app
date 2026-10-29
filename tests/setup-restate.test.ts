@@ -164,7 +164,7 @@ describe('each part, played back in the second person', () => {
     draft.model.person.dayEnd = '21:00';
     draft.said.push({ path: 'person.dayEnd', turn: 1, how: 'said' });
     const transcript: Transcript = [
-      { role: 'assistant', turn: { kind: 'question', chunk: null, skipped: null, say: '', question: 'When does your day end?', topic: 'day_end', options: [], draft: emptyDraft() } },
+      { role: 'assistant', turn: { kind: 'question', chunk: null, skipped: null, detail: null, say: '', question: 'When does your day end?', topic: 'day_end', options: [], draft: emptyDraft() } },
       { role: 'person', text: 'I check in around 9 at night.' },
     ];
     const spoken = spokenTimes(draft, transcript);

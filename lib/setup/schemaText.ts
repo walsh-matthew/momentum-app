@@ -72,7 +72,8 @@ function render(n: JsonNode, indent: string, inline: boolean): string {
   if (branches) {
     const nonNull = branches.filter((b) => b.type !== 'null');
     const hasNull = nonNull.length !== branches.length;
-    const text = nonNull.map((b) => render(b, indent, true)).join(' | ');
+    // A hint on the nullable key itself (a source's metric) says more than its values do.
+    const text = n.description ?? nonNull.map((b) => render(b, indent, true)).join(' | ');
     return hasNull ? `${text} | null` : text;
   }
   if (n.type === 'array') {
@@ -100,4 +101,32 @@ export function renderSchema(schema: z.ZodType, named: Record<string, string> = 
     json.properties[key] = { description: name };
   }
   return render(json, '', false);
+}
+
+// The nodes a value at one step of a path could be: an object's key, a list's item, or, inside a union, every branch that
+// has that key.
+function stepInto(nodes: JsonNode[], step: string | number): JsonNode[] {
+  const out: JsonNode[] = [];
+  for (const n of nodes) {
+    const branches = n.anyOf ?? n.oneOf;
+    if (branches) {
+      out.push(...stepInto(branches, step));
+      continue;
+    }
+    if (typeof step === 'number' && n.items) out.push(n.items);
+    else if (typeof step === 'string' && n.properties?.[step]) out.push(n.properties[step]);
+  }
+  return out;
+}
+
+// What `schema` needs at `path`, written the way the prompt writes it, on one line (MOM-111 round 2, A): the retry of a reply
+// that failed the shape is told this, not a general note about the shape. Null when the path is not in the schema.
+export function describeAt(schema: z.ZodType, path: readonly (string | number)[]): string | null {
+  let nodes: JsonNode[] = [z.toJSONSchema(schema) as JsonNode];
+  for (const step of path) {
+    nodes = stepInto(nodes, step);
+    if (nodes.length === 0) return null;
+  }
+  const texts = [...new Set(nodes.map((n) => render(n, '', true)))];
+  return texts.join(' | ');
 }

@@ -48,6 +48,7 @@ const turn: AssistantTurn = {
   kind: 'question',
   chunk: null,
   skipped: null,
+  detail: null,
   say: '',
   question: 'What would you like to work on?',
   topic: 'idea',

@@ -34,8 +34,30 @@ describe('casualDate', () => {
 });
 
 describe('casualText, for Claude\'s words in setup', () => {
-  it('rewrites a machine date and a fully spelled one, without relative words', () => {
-    expect(casualText('Start on 2026-10-29?', TODAY)).toBe('Start on Thursday, Oct 29?');
+  // MOM-111 round 2, finding 3: "today" and "tomorrow" stand alone; the weekday and date only for other days.
+  it('says today and tomorrow on their own, however the date was written', () => {
+    expect(casualText('Start on 2026-10-29?', TODAY)).toBe('Start today?');
+    expect(casualText('Start today, Thursday, Oct 29?', TODAY)).toBe('Start today?');
+    expect(casualText('Start tomorrow, Friday, Oct 30?', TODAY)).toBe('Start tomorrow?');
+    expect(casualText('Today, Thursday, Oct 29', TODAY)).toBe('Today');
+    expect(casualText('Thursday, Oct 29 works.', TODAY)).toBe('Today works.');
+    expect(casualText('Thursday, October 29, 2026', TODAY)).toBe('Today');
+    // A "today" in front of a date that is not today was wrong: the date is what counts.
+    expect(casualText('Start today, Tuesday, Oct 27?', TODAY)).toBe('Start Tuesday, Oct 27?');
+  });
+
+  it('gives every other day its weekday, and reads a date with no year as the nearest one', () => {
+    expect(casualText('Start Monday, Nov 2?', TODAY)).toBe('Start Monday, Nov 2?');
+    expect(casualText('Start Nov 2?', TODAY)).toBe('Start Monday, Nov 2?');
+    expect(casualText('A first stretch of 9 weeks, through Sunday, Jan 3, 2027?', TODAY)).toBe('A first stretch of 9 weeks, through Sunday, Jan 3, 2027?');
+    expect(casualText('End Jan 2?', TODAY)).toBe('End Saturday, Jan 2, 2027?');
+    expect(casualText('Start on Monday, Nov 2?', TODAY)).toBe('Start on Monday, Nov 2?');
+    // "may" the word is not a month, and without the person's today a short date is left as written.
+    expect(casualText('You may 2 or 3 times.', TODAY)).toBe('You may 2 or 3 times.');
+    expect(casualText('Start Nov 2?', null)).toBe('Start Nov 2?');
+  });
+
+  it('rewrites a machine date and a fully spelled one', () => {
     expect(casualText('Due June 14, 2027, as you said.', TODAY)).toBe('Due Monday, Jun 14, 2027, as you said.');
     expect(casualText('From 2026-11-02 to 2026-11-08.', TODAY)).toBe('From Monday, Nov 2 to Sunday, Nov 8.');
   });

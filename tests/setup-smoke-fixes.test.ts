@@ -4,7 +4,17 @@
 // person's words (finding 11), and the smoke-test eval cases, including the owner's own paths. Pure: no network, no model.
 
 import { describe, expect, it } from 'vitest';
-import { VIOLATION_CODES, askedForSuggestions, checkLeadIn, checkNoNewActivity, checkTurn, type TurnContext } from '@/lib/setup/checks';
+import {
+  VIOLATION_CODES,
+  askedForSuggestions,
+  checkDateLeadIn,
+  checkLeadIn,
+  checkNoNewActivity,
+  checkOneQuestion,
+  checkQuestionLength,
+  checkTurn,
+  type TurnContext,
+} from '@/lib/setup/checks';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval, violationsOf } from '@/lib/setup/evals';
 import { RETRY_FEEDBACK, failingPaths, retryFeedback } from '@/lib/setup/feedback';
@@ -21,10 +31,10 @@ import { activitiesIn, unsaidActivities } from '@/lib/setup/activities';
 import type { AssistantTurn, Transcript, TurnKind } from '@/types/setup';
 import { scriptedModel } from './helpers/setupScript';
 import { SETUP_CASES } from './setup-evals/cases';
-import { SMOKE_CASES, SMOKE_TODAY } from './setup-evals/smokeCases';
+import { PHONE_CODE_TURNS, SMOKE_CASES, SMOKE_TODAY } from './setup-evals/smokeCases';
 
 function turn(over: Partial<AssistantTurn> = {}): AssistantTurn {
-  return { kind: 'question', chunk: null, skipped: null, say: '', question: 'What would you like to work on?', topic: 'idea', options: [], draft: emptyDraft(), ...over };
+  return { kind: 'question', chunk: null, skipped: null, detail: null, say: '', question: 'What would you like to work on?', topic: 'idea', options: [], draft: emptyDraft(), ...over };
 }
 const asked = (over: Partial<AssistantTurn> = {}): Transcript[number] => ({ role: 'assistant', turn: turn(over) });
 const said = (text: string): Transcript[number] => ({ role: 'person', text });
@@ -55,20 +65,30 @@ describe('the owner\'s phone paths (run-m-phone-paths)', () => {
   const phone = SMOKE_CASES.find((c) => c.id === 'run-m-phone-paths');
   if (!phone) throw new Error('no phone case');
 
-  it('has code, not the model, answer "next week" and "Monday", with exactly the turns the script expects', async () => {
+  it('has code, not the model, answer "next week", "Monday" and "two months from now", with exactly the turns the script expects', async () => {
     const report = await runSetupEval(phone, scriptedModel(phone.script));
     const byCode = report.turns.filter((t) => t.byCode);
-    expect(byCode.map((t) => t.turn.question)).toEqual(['Which day would you like to start?', 'Start Monday, Nov 2?']);
+    expect(byCode.map((t) => t.turn.question)).toEqual([PHONE_CODE_TURNS.askDay, PHONE_CODE_TURNS.start, PHONE_CODE_TURNS.stretch]);
     for (const t of byCode) expect(t.turn).toEqual(phone.script[t.index]);
     expect(report.draft.model.goals[0].startDate).toBe('2026-11-02');
     // The start date counts as accepted: the person said yes to the proposal code showed.
     expect(report.draft.said.find((s) => s.path === 'goals.g1.startDate')?.how).toBe('accepted');
   });
 
-  it('accepts a recommendation they asked for with one tap (finding 12)', async () => {
+  it('turns "two months from now" into whole weeks from the start date, accepted with one tap (round 2 finding 7)', async () => {
     const report = await runSetupEval(phone, scriptedModel(phone.script));
-    expect(report.draft.model.goals[0].blockWeeks).toBe(8);
+    expect(report.draft.model.goals[0].blockWeeks).toBe(9);
     expect(report.draft.said.find((s) => s.path === 'goals.g1.blockWeeks')?.how).toBe('accepted');
+  });
+
+  it('records "Heavy for lifts, I log my runs" as Hevy plus the person\'s own logging, on the one target (round 2)', async () => {
+    for (const id of ['run-m-phone-paths', 'run-m-apple-watch']) {
+      const c = SMOKE_CASES.find((x) => x.id === id);
+      if (!c) throw new Error(id);
+      const report = await runSetupEval(c, scriptedModel(c.script));
+      expect(report.finalIssues).toEqual([]);
+      expect(report.draft.model.goals[0].targets[0].sources).toEqual([{ kind: 'synced', provider: 'hevy', metric: null }, { kind: 'manual' }]);
+    }
   });
 
   it('plays the why back in clean words, and saves what was shown (finding 11)', async () => {
@@ -246,17 +266,25 @@ describe('no activity the person never said (finding 6)', () => {
 describe('every scripted example (finding 5)', () => {
   const examples = SETUP_STEPS.flatMap((s) => s.examples.map((e) => [s.n, e] as const));
 
-  it.each(examples)('step %i example passes the plain-words checks with nothing said yet', (_n, e) => {
-    const t = turn({ topic: e.topic, say: e.say ?? '', question: e.question });
+  // Round 2: the detail line is read too, the core question is short, and nothing hides a second question in the detail.
+  it.each(examples)('step %i example passes the plain-words checks and rule 1 with nothing said yet', (_n, e) => {
+    const t = turn({ topic: e.topic, say: e.say ?? '', question: e.question, detail: e.detail ?? null });
     expect(checkLeadIn(t, ctx())).toEqual([]);
     expect(checkNoNewActivity(t, ctx())).toEqual([]);
+    expect(checkQuestionLength(t)).toEqual([]);
+    expect(checkDateLeadIn(t)).toEqual([]);
+    expect(checkOneQuestion(t)).toEqual([]);
+    expect(e.question.split(/\s+/).length, e.question).toBeLessThanOrEqual(12);
   });
 
   it('names no activity in any step summary, example or rule, and says "moving more and eating better"', () => {
-    const text = [...SETUP_STEPS.flatMap((s) => [s.summary, s.reason ?? '', ...s.examples.map((e) => `${e.say ?? ''} ${e.question}`)]), ...HARD_RULES.map((r) => r.text)];
+    const text = [
+      ...SETUP_STEPS.flatMap((s) => [s.summary, s.reason ?? '', ...s.examples.map((e) => `${e.say ?? ''} ${e.question} ${e.detail ?? ''}`)]),
+      ...HARD_RULES.map((r) => r.text),
+    ];
     // The which-number question for an app names that app's own numbers.
     const metric = SETUP_STEPS.find((s) => s.n === 9);
-    const scanned = text.filter((t) => !metric || (t !== metric.summary && !t.includes('pounds lifted')));
+    const scanned = text.filter((t) => !metric || (t !== metric.summary && !/pounds lifted/i.test(t)));
     expect(scanned.filter((t) => activitiesIn(t).length > 0)).toEqual([]);
     expect(JSON.stringify(SETUP_STEPS)).toContain('moving more and eating better');
     expect(JSON.stringify(SETUP_STEPS)).not.toContain('lifting and eating better');

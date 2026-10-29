@@ -82,6 +82,7 @@ describe('what code does with an answer to a date question', () => {
     kind: 'question',
     chunk: null,
     skipped: null,
+    detail: null,
     say: '',
     question: 'When?',
     topic,

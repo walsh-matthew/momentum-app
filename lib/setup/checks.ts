@@ -26,8 +26,9 @@ import { unsaidActivities } from './activities';
 import { answeredTopics, changedLeafPaths, chunkSlice, freeTextLeaves } from './leaves';
 import { FINAL_MAX_LINES, renderFinal } from './playback';
 import { answerWords, latestAnswer, personWords, type PersonAnswer } from './said';
+import { DATE_TOPICS } from './codeTurns';
 import { ASKED_ONCE_TOPICS, DAY_END_SAY, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
-import { acceptsText, asksForIdeas, asksMeaning, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas, withoutDateWeekdays } from './text';
+import { acceptsText, asksForIdeas, asksMeaning, datesIn, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas, withoutDateWeekdays } from './text';
 import { validateDraft } from './validate';
 
 export interface TurnContext {
@@ -80,6 +81,8 @@ export const VIOLATION_CODES = [
   'draft.rule',
   'plain.lead_in',
   'plain.activity',
+  'plain.question_long',
+  'plain.date_lead_in',
 ] as const;
 export type ViolationCode = (typeof VIOLATION_CODES)[number];
 
@@ -97,7 +100,8 @@ const ASKING_KINDS: readonly TurnKind[] = ['question', 'offer_ideas', 'ideas', '
 // In the day-end question, and only there, Claude may say the two boundaries of the early-day-end rule (MOM-125).
 const DAY_END_BOUNDARY_WORDS = /\b(midnight|6 in the morning|six in the morning)\b/gi;
 
-const authored = (turn: AssistantTurn): string[] => [turn.say, turn.question ?? '', turn.skipped?.line ?? '', ...turn.options];
+// Everything Claude wrote in a turn, the detail line included (MOM-111 round 2, finding 1): every check reads it.
+const authored = (turn: AssistantTurn): string[] => [turn.say, turn.question ?? '', turn.detail ?? '', turn.skipped?.line ?? '', ...turn.options];
 
 // Claude's words as the day/time and number checks should read them: boundary words removed for the day-end question, and a
 // weekday that belongs to a written date ("Tuesday, Oct 27") left out, since it is the date's, not the person's week.
@@ -144,7 +148,7 @@ export function checkOneQuestion(turn: AssistantTurn): Violation[] {
   const marks = authored(turn).join(' ').split('?').length - 1;
   if (marks !== 1) out.push(v('one_question', 'one_question.marks', `The turn has ${marks} question marks; it must have exactly one, in the question.`));
   if (!q.endsWith('?')) out.push(v('one_question', 'one_question.no_mark', 'The question does not end in a question mark.'));
-  if (turn.say.includes('?') || turn.options.some((o) => o.includes('?'))) {
+  if (turn.say.includes('?') || (turn.detail ?? '').includes('?') || turn.options.some((o) => o.includes('?'))) {
     out.push(v('one_question', 'one_question.hidden', 'A question is hiding outside the question field.'));
   }
   if (/[.!]\s+\S/.test(q) || q.includes(';')) out.push(v('one_question', 'one_question.sentences', 'The question is more than one sentence.'));
@@ -439,7 +443,27 @@ export function checkNoNewActivity(turn: AssistantTurn, ctx: TurnContext): Viola
   return out;
 }
 
-export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity] as const;
+// The question is the core ask, shown in bold: about 12 words, with a little room (MOM-111 round 2, finding 1). Examples and
+// the reason belong in the detail line under it.
+export const QUESTION_MAX_WORDS = 14;
+
+export function checkQuestionLength(turn: AssistantTurn): Violation[] {
+  const words = (turn.question ?? '').trim().split(/\s+/).filter(Boolean).length;
+  return ASKING_KINDS.includes(turn.kind) && words > QUESTION_MAX_WORDS
+    ? [v('plain_words', 'plain.question_long', `The question has ${words} words; the core ask is at most about 12, with the rest in the detail line.`)]
+    : [];
+}
+
+// On a date question or a date proposal the date is in the question; a lead-in that says it again is noise (round 2,
+// findings 4 and 9).
+export function checkDateLeadIn(turn: AssistantTurn): Violation[] {
+  if (turn.topic === null || !DATE_TOPICS.has(turn.topic) || !turn.say.trim()) return [];
+  return datesIn(turn.say).length > 0 || /\b(today|tomorrow)\b/i.test(turn.say)
+    ? [v('plain_words', 'plain.date_lead_in', 'The lead-in repeats the date the question shows.')]
+    : [];
+}
+
+export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn] as const;
 
 // ---------------------------------------------------------------------------
 // All of it

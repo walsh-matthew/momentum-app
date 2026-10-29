@@ -17,10 +17,13 @@ const TODAY = '2026-10-27';
 const TODAY_WORDS = 'Tuesday, Oct 27';
 
 // The crowd-out question (step 4), in the words the step's own example uses.
-const PRIORITIES_Q =
-  "Besides this goal, what else in your life matters right now that this plan shouldn't crowd out, like family time, your health, or something you enjoy?";
+const PRIORITIES_Q = "What else matters right now that this shouldn't crowd out?";
+const PRIORITIES_DETAIL = 'Like family time, your health, or something you enjoy. Your plan keeps room for these.';
 const PRIORITIES_SAY = "I'll keep those in mind so this plan doesn't crowd them out.";
-const SHAPE_Q = 'Does this keep going with no end date, run until a set date, or have a deadline it must be done by?';
+const SHAPE_Q = 'Does this keep going, run until a set date, or have a deadline?';
+// The detail lines under a question (MOM-111 round 2, finding 1), in the words the steps' own examples use.
+const IDEA_DETAIL = 'Big or small, in your own words.';
+const SHAPE_DETAIL = 'It decides how your plan is laid out: in stretches that keep going, up to an end date, or back from a deadline.';
 const BLOCK_Q = 'How many weeks should the first stretch run?';
 const FLOOR_Q = 'What is the least you would count as still on track each week?';
 
@@ -54,7 +57,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
   const early = o.weekStartEarly === true;
   const change = o.floor === 'changeAtApproval';
 
-  s.add({ topic: 'idea', question: 'Big or small, what would you like to work on?', reply: o.idea });
+  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: o.idea });
   if (o.goals === 'two') {
     s.add({ topic: 'why', edit: (m) => m.goals.push(goal('g1', 'Get healthy')), question: 'Why does this matter to you?', reply: 'I want more energy.' });
     s.add({
@@ -115,7 +118,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
 
   if (o.priorities) {
     if (o.priorities === 'whatDoYouMean') {
-      s.add({ topic: 'priorities', say: PRIORITIES_SAY, question: PRIORITIES_Q, reply: MEANING_TEXT });
+      s.add({ topic: 'priorities', say: PRIORITIES_SAY, question: PRIORITIES_Q, detail: PRIORITIES_DETAIL, reply: MEANING_TEXT });
       // Asked what it means, Claude explains in plainer words with a few examples, then asks again: a clarification.
       s.add({
         topic: 'priorities',
@@ -124,7 +127,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
         reply: 'Family time and my sleep.',
       });
     } else {
-      s.add({ topic: 'priorities', say: PRIORITIES_SAY, question: PRIORITIES_Q, reply: 'Family time and my sleep.' });
+      s.add({ topic: 'priorities', say: PRIORITIES_SAY, question: PRIORITIES_Q, detail: PRIORITIES_DETAIL, reply: 'Family time and my sleep.' });
     }
   }
 
@@ -136,14 +139,14 @@ function habitCase(o: HabitOptions): ScriptedCase {
     // The first message said where they are with running; the draft has no place for it, so it is skipped in one line.
     skipped: o.longFirst ? { topic: 'starting_point', line: "You told me where you are with running, so I'll skip that." } : undefined,
     question: SHAPE_Q,
+    detail: SHAPE_DETAIL,
     reply: 'It keeps going.',
   });
   s.add({
     kind: 'proposal',
     topic: 'start_date',
     edit: (m) => (goalOf(m, 'g1').shape = 'ongoing'),
-    say: `I would start this today, ${TODAY_WORDS}.`,
-    question: 'Is that start date right?',
+    question: `Start today, ${TODAY_WORDS}?`,
     reply: 'Yes, that works.',
   });
   s.add({
@@ -152,7 +155,9 @@ function habitCase(o: HabitOptions): ScriptedCase {
     accepted: ['goals.g1.startDate'],
     say: 'You can keep going after it.',
     question: BLOCK_Q,
-    reply: 'Ten weeks.',
+    // Not only a length, so Claude takes the turn: a reply of just "Ten weeks" gets code's own proposal of the stretch (round 2,
+    // finding 7), which the stateless fake model of the browser specs cannot follow.
+    reply: 'Ten weeks, and then I will see.',
   });
   if (o.goals === 'two') {
     // The table needs a shape and a start date even for a goal set aside, so setup asks them for it too.
@@ -160,15 +165,14 @@ function habitCase(o: HabitOptions): ScriptedCase {
       topic: 'shape',
       edit: (m) => (goalOf(m, 'g1').blockWeeks = 10),
       said: ['goals.g1.blockWeeks'],
-      question: 'Does cooking keep going with no end date, run until a set date, or have a deadline?',
+      question: 'Does cooking keep going, run until a set date, or have a deadline?',
       reply: 'It keeps going.',
     });
     s.add({
       kind: 'proposal',
       topic: 'start_date',
       edit: (m) => (goalOf(m, 'g2').shape = 'ongoing'),
-      say: `I would start cooking today, ${TODAY_WORDS}.`,
-      question: 'Is that start date right?',
+      question: `Start cooking today, ${TODAY_WORDS}?`,
       reply: 'Yes, that works.',
     });
   }
@@ -208,7 +212,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
         kind: 'offer_ideas',
         topic: 'floor',
         edit: addTarget,
-        question: 'Do you have a number in mind for each week, or would some starting ideas help?',
+        question: 'Do you have a number in mind, or would some starting ideas help?',
         reply: 'Some ideas, please.',
       });
       s.add({
@@ -339,7 +343,7 @@ interface DeadlineOptions {
 
 function deadlineCase(o: DeadlineOptions): ScriptedCase {
   const s = new Script();
-  s.add({ topic: 'idea', question: 'Big or small, what would you like to work on?', reply: o.idea });
+  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: o.idea });
   s.add({ topic: 'why', edit: (m) => m.goals.push(goal('g1', o.goalTitle)), question: 'Why does this matter to you?', reply: 'I promised it to someone.' });
   s.add({
     topic: 'breakup',
@@ -348,7 +352,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
     reply: 'Just the one goal.',
   });
   s.playback('goals');
-  s.add({ topic: 'shape', question: SHAPE_Q, reply: o.shapeReply });
+  s.add({ topic: 'shape', question: SHAPE_Q, detail: SHAPE_DETAIL, reply: o.shapeReply });
   const dateAsked = s.next;
   s.add({
     topic: 'deadline_date',
@@ -373,8 +377,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
       `goals.g1.items.i1.dueDate@${dateAsked}`,
       `goals.g1.items.i1.dateCanMove@${moveAsked}`,
     ],
-    say: `I would start this today, ${TODAY_WORDS}.`,
-    question: 'Is that start date right?',
+    question: `Start today, ${TODAY_WORDS}?`,
     reply: 'Yes, start today.',
   });
   s.add({
@@ -428,7 +431,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
 
 function phoneCase(): ScriptedCase {
   const s = new Script();
-  s.add({ topic: 'idea', question: 'Big or small, what would you like to work on?', reply: 'fitness' });
+  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'fitness' });
   s.add({ topic: 'why', edit: (m) => m.goals.push(goal('g1', 'Fitness')), question: 'Why does this matter to you?', reply: 'health' });
   s.add({
     topic: 'breakup',
@@ -452,24 +455,24 @@ function phoneCase(): ScriptedCase {
   s.add({
     topic: 'parked_return',
     edit: (m) => (goalOf(m, 'g2').state = 'parked'),
-    question: 'When should cooking come back: on a date, when something happens, or only when you ask?',
+    question: 'When should cooking come back?',
+    detail: 'On a date, when something happens, or only when you ask.',
     reply: 'spring',
   });
   s.playback('goals', 'yes', { edit: (m) => (goalOf(m, 'g2').returnWhen = { kind: 'condition', note: 'spring' }) });
-  s.add({ topic: 'priorities', say: PRIORITIES_SAY, question: PRIORITIES_Q, reply: 'family' });
+  s.add({ topic: 'priorities', say: PRIORITIES_SAY, question: PRIORITIES_Q, detail: PRIORITIES_DETAIL, reply: 'family' });
   s.add({
     topic: 'priorities',
     edit: (m) => (m.person.priorities = ['family']),
     question: 'Is there anything else that matters right now?',
     reply: 'no',
   });
-  s.add({ topic: 'shape', question: SHAPE_Q, reply: 'ongoing' });
+  s.add({ topic: 'shape', question: SHAPE_Q, detail: SHAPE_DETAIL, reply: 'ongoing' });
   s.add({
     kind: 'proposal',
     topic: 'start_date',
     edit: (m) => (goalOf(m, 'g1').shape = 'ongoing'),
-    say: `I would start running today, ${TODAY_WORDS}.`,
-    question: 'Is that start date right?',
+    question: `Start running today, ${TODAY_WORDS}?`,
     reply: 'yes',
   });
   s.add({
@@ -485,15 +488,14 @@ function phoneCase(): ScriptedCase {
     topic: 'shape',
     edit: (m) => (goalOf(m, 'g1').blockWeeks = 8),
     said: ['goals.g1.blockWeeks'],
-    question: 'Does cooking keep going with no end date, run until a set date, or have a deadline?',
+    question: 'Does cooking keep going, run until a set date, or have a deadline?',
     reply: 'ongoing',
   });
   s.add({
     kind: 'proposal',
     topic: 'start_date',
     edit: (m) => (goalOf(m, 'g2').shape = 'ongoing'),
-    say: `I would start cooking today, ${TODAY_WORDS}.`,
-    question: 'Is that start date right?',
+    question: `Start cooking today, ${TODAY_WORDS}?`,
     reply: 'yes',
   });
   s.add({

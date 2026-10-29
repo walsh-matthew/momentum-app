@@ -6,7 +6,7 @@
 import { execFileSync } from 'node:child_process';
 import { startFakeAnthropic } from './fakeAnthropic';
 import { FAKE_MODEL_PORT } from './localStack';
-import { e2eCase } from './setupConversation';
+import { fakeScripts } from './setupConversation';
 
 function clearLocalUsageLog(): void {
   const names = execFileSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8' }).split(/\r?\n/);
@@ -17,6 +17,6 @@ function clearLocalUsageLog(): void {
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
   clearLocalUsageLog();
-  const fake = await startFakeAnthropic(FAKE_MODEL_PORT, e2eCase().script);
+  const fake = await startFakeAnthropic(FAKE_MODEL_PORT, fakeScripts());
   return () => fake.close();
 }

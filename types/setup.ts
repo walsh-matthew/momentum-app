@@ -8,8 +8,14 @@
 // Every object is strict, so a stray key such as `score` is rejected instead of ignored (principle 9: Claude never
 // scores). Fields the person has not answered yet are null; "not chosen" is never filled in with a default
 // (principle 1). Whether a draft is complete enough to save is decided by validateDraft(..., 'final'), not here.
+//
+// A key Claude leaves out reads as "not answered" (MOM-111 round 2, B2): every nullable key defaults to null and every list
+// to empty, so a reply that forgets one is not thrown away. Those are the same values the key would have before the person
+// answered, so no answer is ever filled in. The prompt still shows every key as required (lib/setup/schemaText.ts renders
+// the output shape, where a defaulted key is required), and unknown keys are still refused.
 
 import { z } from 'zod';
+import { SUPPORTED_PROVIDER_IDS } from '@/lib/integrations/catalog';
 import {
   BALANCE_MENTIONS,
   CAPACITY_UNITS,
@@ -127,40 +133,43 @@ const ClockTime = z
 const Weekday = z.number().int().min(1).max(7).describe('weekday number from 1 to 7 where Monday is 1 and Sunday is 7');
 const Positive = z.number().positive().max(1_000_000);
 
+// "Not answered" when the key is left out (B2). The value is the one the key holds before the person answers.
+const orNull = <T extends z.ZodType>(schema: T) => schema.nullable().default(null);
+const list = <T extends z.ZodType>(item: T, max: number) => z.array(item).max(max).default([]);
+
 export const PersonSchema = z.strictObject({
   // An IANA name such as 'America/Chicago'. Null until the person says where they are.
-  timeZone: z.string().trim().min(1).max(64).nullable(),
+  timeZone: orNull(z.string().trim().min(1).max(64)),
   // When the person's day ends. After midnight and before 06:00 moves the day boundary; any other time is a
   // check-in time (MOM-125, MOM-108 rule D1).
-  dayEnd: ClockTime.nullable(),
+  dayEnd: orNull(ClockTime),
   // Asked only when a weekly or day-slot target needs it (MOM-125).
-  weekStart: Weekday.nullable(),
-  dayTypes: z
-    .array(
-      z.strictObject({
-        name: Text,
-        capacityUnit: z.enum(CAPACITY_UNITS).nullable(),
-        capacityAmount: z.number().min(0).max(10_000).nullable(),
-      }),
-    )
-    .max(12),
+  weekStart: orNull(Weekday),
+  dayTypes: list(
+    z.strictObject({
+      name: Text,
+      capacityUnit: orNull(z.enum(CAPACITY_UNITS)),
+      capacityAmount: orNull(z.number().min(0).max(10_000)),
+    }),
+    12,
+  ),
   // Life areas the person named as protected, in their words.
-  priorities: z.array(Text).max(12),
+  priorities: list(Text, 12),
   // The planning moment the weekly review runs at.
-  planning: z.strictObject({ weekday: Weekday.nullable(), time: ClockTime.nullable() }),
+  planning: z.strictObject({ weekday: orNull(Weekday), time: orNull(ClockTime) }).default({ weekday: null, time: null }),
 });
 
 // "How Momentum talks to me" (§4.1). Null means not chosen yet; the code supplies the starting value.
 export const SettingsSchema = z.strictObject({
-  tone: z.enum(TONES).nullable(),
-  reminders: z.enum(REMINDER_MODES).nullable(),
-  checkIns: z.enum(CHECK_IN_MODES).nullable(),
-  celebrations: z.enum(CELEBRATION_LEVELS).nullable(),
-  balanceMentions: z.enum(BALANCE_MENTIONS).nullable(),
-  reviewDepth: z.enum(REVIEW_DEPTHS).nullable(),
-  reviewPlanning: z.enum(REVIEW_PLANNING_MODES).nullable(),
+  tone: orNull(z.enum(TONES)),
+  reminders: orNull(z.enum(REMINDER_MODES)),
+  checkIns: orNull(z.enum(CHECK_IN_MODES)),
+  celebrations: orNull(z.enum(CELEBRATION_LEVELS)),
+  balanceMentions: orNull(z.enum(BALANCE_MENTIONS)),
+  reviewDepth: orNull(z.enum(REVIEW_DEPTHS)),
+  reviewPlanning: orNull(z.enum(REVIEW_PLANNING_MODES)),
   // Null: not asked. []: asked, and none. Each is the person's words.
-  quietTimes: z.array(Text).max(12).nullable(),
+  quietTimes: orNull(z.array(Text).max(12)),
 });
 
 const PeriodSchema = z.discriminatedUnion('kind', [
@@ -169,15 +178,23 @@ const PeriodSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('deadline'), dueDate: DateString }),
 ]);
 
+// Only an app Momentum can read (MOM-111 round 2, B1). The first phone run's replies wrote "Hevy" and "apple watch" here,
+// which the old free-text pattern refused as a shape error with no word of why; now the prompt lists the allowed values.
+const ProviderId = z
+  .enum(SUPPORTED_PROVIDER_IDS as [string, ...string[]])
+  .describe(`${SUPPORTED_PROVIDER_IDS.map((p) => JSON.stringify(p)).join(' | ')}, the only apps Momentum can read; for any other app the source is the manual kind`);
+
 const SourceRefSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('manual') }),
   z.strictObject({
     kind: z.literal('synced'),
-    provider: z.string().regex(/^[a-z][a-z0-9_]*$/),
+    provider: ProviderId,
     // Which number a quantity target counts in this app (MOM-111, MOM-109 design review): null until the person
     // answers the metric question, and for a quantity target not bound to an app with more than one metric, or for
     // any other measure. Never worked out from the target's own unit text.
-    metric: z.enum(QUANTITY_METRICS).nullable(),
+    metric: orNull(z.enum(QUANTITY_METRICS)).describe(
+      `null unless this target is a quantity counted in that app, then the person's answer to which number counts, one of ${QUANTITY_METRICS.map((m) => JSON.stringify(m)).join(' | ')}`,
+    ),
   }),
 ]);
 
@@ -186,17 +203,18 @@ export const TargetDraftSchema = z.strictObject({
   title: Text,
   measure: z.enum(MEASURES),
   // The person's own unit text. Required for a quantity, null for every other measure.
-  unit: Text.nullable(),
+  unit: orNull(Text),
   role: z.enum(TARGET_ROLES),
   period: PeriodSchema,
-  floor: Positive.nullable(),
-  aspiration: Positive.nullable(),
-  qualifyingThreshold: z.number().min(0).max(1_000_000).nullable(),
+  floor: orNull(Positive),
+  aspiration: orNull(Positive),
+  qualifyingThreshold: orNull(z.number().min(0).max(1_000_000)),
   carryOver: z.enum(CARRY_OVER_KINDS),
-  completionMode: z.enum(COMPLETION_MODES).nullable(),
-  tone: z.enum(TONES).nullable(),
-  // Where the person says it is tracked (§1.5): their own taps, numbers and timers, or a synced app.
-  sources: z.array(SourceRefSchema).max(4),
+  completionMode: orNull(z.enum(COMPLETION_MODES)),
+  tone: orNull(z.enum(TONES)),
+  // Where the person says it is tracked (§1.5): their own taps, numbers and timers, or a synced app. One target may have
+  // one source for each way it is tracked ("Hevy for lifts, I log my runs"), with no label of which activity each covers.
+  sources: list(SourceRefSchema, 4),
 });
 
 export const WorkItemDraftSchema = z.strictObject({
@@ -204,41 +222,41 @@ export const WorkItemDraftSchema = z.strictObject({
   kind: z.enum(WORK_ITEM_KINDS),
   title: Text,
   // The target the item feeds. Required for a habit.
-  targetKey: Key.nullable(),
+  targetKey: orNull(Key),
   // deadline_task only, and then both are the person's answer: there is no default for whether the date can move.
-  dueDate: DateString.nullable(),
-  dateCanMove: z.boolean().nullable(),
-  estimateMinutes: z.number().int().positive().max(100_000).nullable(),
-  steps: z.array(Text).max(50),
+  dueDate: orNull(DateString),
+  dateCanMove: orNull(z.boolean()),
+  estimateMinutes: orNull(z.number().int().positive().max(100_000)),
+  steps: list(Text, 50),
 });
 
 export const GoalDraftSchema = z.strictObject({
   key: Key,
   title: Text,
-  why: Text.nullable(),
-  startDate: DateString.nullable(),
-  shape: z.enum(GOAL_SHAPES).nullable(),
-  endDate: DateString.nullable(),
-  blockWeeks: z.number().int().positive().max(520).nullable(),
+  why: orNull(Text),
+  startDate: orNull(DateString),
+  shape: orNull(z.enum(GOAL_SHAPES)),
+  endDate: orNull(DateString),
+  blockWeeks: orNull(z.number().int().positive().max(520)),
   state: z.enum(GOAL_STATES),
   // How a parked goal comes back: a date, a season or condition in the person's words, or only when asked.
-  returnWhen: z
-    .discriminatedUnion('kind', [
+  returnWhen: orNull(
+    z.discriminatedUnion('kind', [
       z.strictObject({ kind: z.literal('date'), date: DateString }),
       z.strictObject({ kind: z.literal('condition'), note: Text }),
       z.strictObject({ kind: z.literal('on_request') }),
-    ])
-    .nullable(),
-  completionMode: z.enum(COMPLETION_MODES).nullable(),
-  tone: z.enum(TONES).nullable(),
-  targets: z.array(TargetDraftSchema).max(12),
-  items: z.array(WorkItemDraftSchema).max(40),
+    ]),
+  ),
+  completionMode: orNull(z.enum(COMPLETION_MODES)),
+  tone: orNull(z.enum(TONES)),
+  targets: list(TargetDraftSchema, 12),
+  items: list(WorkItemDraftSchema, 40),
 });
 
 export const SetupModelSchema = z.strictObject({
   person: PersonSchema,
   settings: SettingsSchema,
-  goals: z.array(GoalDraftSchema).max(12),
+  goals: list(GoalDraftSchema, 12),
 });
 
 // ---------------------------------------------------------------------------
@@ -267,9 +285,9 @@ export const PlainWordsSchema = z.strictObject({
 
 export const SetupDraftSchema = z.strictObject({
   model: SetupModelSchema,
-  said: z.array(ProvenanceSchema).max(500),
-  approved: z.array(z.enum(SETUP_CHUNKS)).max(SETUP_CHUNKS.length),
-  plain: z.array(PlainWordsSchema).max(200).default([]),
+  said: list(ProvenanceSchema, 500),
+  approved: list(z.enum(SETUP_CHUNKS), SETUP_CHUNKS.length),
+  plain: list(PlainWordsSchema, 200),
 });
 
 // ---------------------------------------------------------------------------
@@ -279,16 +297,18 @@ export const SetupDraftSchema = z.strictObject({
 export const AssistantTurnSchema = z.strictObject({
   kind: z.enum(TURN_KINDS),
   // The part being played back (kind 'playback' only).
-  chunk: z.enum(SETUP_CHUNKS).nullable(),
+  chunk: orNull(z.enum(SETUP_CHUNKS)),
   // One line saying a question is skipped because it is already answered (rule 5).
-  skipped: z.strictObject({ topic: z.enum(SETUP_TOPICS), line: z.string() }).nullable(),
+  skipped: orNull(z.strictObject({ topic: z.enum(SETUP_TOPICS), line: z.string() })),
   // Words before the question. Never a question itself.
-  say: z.string(),
-  // The one question (rule 1). Null on playback and final turns.
-  question: z.string().nullable(),
-  topic: z.enum(SETUP_TOPICS).nullable(),
+  say: z.string().default(''),
+  // The one question (rule 1): the core ask only, in bold on screen. Null on playback and final turns.
+  question: orNull(z.string()),
+  // The question's examples and its reason, in regular weight under it (MOM-111 round 2, finding 1). Never a question.
+  detail: orNull(z.string()),
+  topic: orNull(z.enum(SETUP_TOPICS)),
   // Starting ideas (kind 'ideas') or interpretations (kind 'interpretations'); the screen numbers them.
-  options: z.array(z.string()).max(8),
+  options: list(z.string(), 8),
   // The whole draft after this turn.
   draft: SetupDraftSchema,
 });
