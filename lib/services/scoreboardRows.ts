@@ -10,9 +10,10 @@
 // waiting for its week start, or as tracked and not counted. A person with only deadline goals is never asked for a
 // week start (§2.2 step 10).
 //
+// The deadline forecast of a deadline task is mapped in lib/services/forecastRows.ts from the days the person set aside; the
+// engine is given its request here and its verdict is copied onto the milestone. A milestone has none.
+//
 // What is not mapped yet, and why (BACKLOG.md, MOM-112):
-// - the deadline forecast: it needs the days the person has set aside, which come with the weekly plan, so a milestone
-//   shows its steps and due date and no verdict, and the engine is given no forecast request;
 // - a step's planned week: no table stores it, so `steps` is empty in the engine call. A step is done when its tick
 //   entry exists and is not hidden; that entry belongs to a checklist target, so the engine raises the step's crossing
 //   from that target. A step of an item that feeds no target cannot be ticked yet (BACKLOG.md, MOM-110), so it shows as
@@ -29,6 +30,7 @@ import {
   specProblem,
 } from '@/lib/engine';
 import { DEFAULT_CELEBRATION, DEFAULT_TONE } from '@/lib/home/defaults';
+import { forecastViews, planForecasts, type ForecastRows } from './forecastRows';
 import type {
   EntryCorrectionRow,
   EntryRow,
@@ -112,6 +114,8 @@ export interface HomeRows {
   entries: EntryRead[];
   corrections: CorrectionRead[];
   snapshots: SnapshotRead[];
+  // The week plan and the deadline tasks' own columns, for the forecast.
+  forecast: ForecastRows;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,14 +308,33 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
 
   const tickedOn = tickedSteps(rows, anchors);
 
-  // The engine is given no steps and no forecast request (see the header).
-  const scoreboard = computeScoreboard({ today, anchors, targets: engineTargets, entries, snapshots, steps: [], forecasts: [] });
+  // Time logged against a target that counts time, in minutes, with the person's hides applied. It is the size of work done
+  // so far for a deadline task whose target counts time; any other target logs none. A step's tick is a tick, not minutes.
+  const timeTargets = new Map(targets.filter((t) => t.measure === 'time').map((t) => [t.id, t.measure]));
+  const stepIdSet = new Set(rows.steps.map((s) => s.id));
+  const loggedMinutes = new Map<string, number>();
+  const timeEntries = rows.entries.filter((e) => !stepIdSet.has(e.source_record_id));
+  for (const e of toScoreboardEntries(timeEntries, rows.corrections, timeTargets)) {
+    if (!e.removed) loggedMinutes.set(e.targetId, (loggedMinutes.get(e.targetId) ?? 0) + e.value);
+  }
+  // Every item of an active goal, habits too: a habit on a day shares that day's time with a deadline task.
+  const things = rows.items
+    .filter((i) => goalById.has(i.goal_id))
+    .map((i) => {
+      const own = stepsOfItem(i.id);
+      return { id: i.id, kind: i.kind, dueOn: i.due_date, targetId: i.target_id, stepCount: own.length, stepsDone: own.filter((s) => tickedOn.has(s.id)).length };
+    });
+  const planned = planForecasts({ today, rows: rows.forecast, things, loggedMinutes });
+
+  // The engine is given no steps (see the header) and a forecast request for each unfinished deadline task.
+  const scoreboard = computeScoreboard({ today, anchors, targets: engineTargets, entries, snapshots, steps: [], forecasts: planned.requests });
+  const forecasts = forecastViews(planned, scoreboard.forecasts);
   const crossings: Crossing[] = scoreboard.crossings;
 
   const targetById = new Map(targets.map((t) => [t.id, t]));
   const stepTitleById = new Map(rows.steps.map((s) => [s.id, s.title]));
 
-  // ---- Milestones: steps done and the due date, no forecast verdict -------------------------------------------
+  // ---- Milestones: steps done and the due date, and a deadline task's forecast ---------------------------------
   const milestoneOf = (item: ItemRead): MilestoneView => {
     const steps = stepsOfItem(item.id).map((s) => ({ id: s.id, title: s.title, done: tickedOn.has(s.id) }));
     const feeding = item.target_id === null ? undefined : targetById.get(item.target_id);
@@ -324,6 +347,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
       dueOn: item.due_date ?? (feeding?.period_kind === 'deadline' ? feeding.due_date : null),
       steps,
       stepsDone: steps.filter((s) => s.done).length,
+      forecast: forecasts.get(item.id) ?? null,
     };
   };
   const milestones = items.map(milestoneOf);

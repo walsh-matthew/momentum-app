@@ -28,6 +28,7 @@ import {
   type StepRead,
   type TargetRead,
 } from '@/lib/services/scoreboardRows';
+import { NO_FORECAST_ROWS } from '@/lib/services/forecastRows';
 import { DEFAULT_CELEBRATION, DEFAULT_TONE } from '@/lib/home/defaults';
 import type { HomeScoreboard, TargetCardView } from '@/types/home';
 
@@ -108,6 +109,7 @@ const rows = (over: Partial<HomeRows> = {}): HomeRows => ({
   entries: [],
   corrections: [],
   snapshots: [],
+  forecast: NO_FORECAST_ROWS,
   ...over,
 });
 
@@ -532,9 +534,10 @@ describe('never assume: a target waits for the anchor it needs, and only that ki
       expect(portfolio).toMatchObject({ dueOn: '2026-11-20', stepsDone: 1, steps: [{ id: 's1', done: true }, { id: 's2', done: false }] });
     });
 
-    it('a milestone has no forecast verdict: it shows steps and the due date only', () => {
-      const m = ready(buildHomeScoreboard(only(), NOW)).goals[0].milestones[0];
-      expect(Object.keys(m).sort()).toEqual(['dueOn', 'goalId', 'goalTitle', 'id', 'kind', 'steps', 'stepsDone', 'title']);
+    it('a milestone has no forecast: it shows steps and the due date only (the forecast is for deadline tasks)', () => {
+      const prep = ready(buildHomeScoreboard(only(), NOW)).goals[0].milestones.find((m) => m.title === 'Prep the talk');
+      expect(prep?.kind).toBe('milestone');
+      expect(prep?.forecast).toBeNull();
     });
   });
 });

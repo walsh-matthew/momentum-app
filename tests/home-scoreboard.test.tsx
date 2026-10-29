@@ -68,6 +68,7 @@ const milestone = (over: Partial<MilestoneView> = {}): MilestoneView => ({
     { id: 's4', title: 'Get two reviews', done: false },
   ],
   stepsDone: 2,
+  forecast: null,
   ...over,
 });
 
