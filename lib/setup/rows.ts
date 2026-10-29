@@ -3,10 +3,15 @@
 // this same function. The rows carry the draft's keys where a database id will be: save_guided_setup() (migration 015)
 // creates the ids and fills goal_id, target_id and work_item_id from the keys, and takes the person's id from the
 // session. toSavePayload() is the shape that function reads. Pure: no database call.
+//
+// Where a value came from (MOM-134): the values the person accepted from a suggestion travel as `startingPoints`, and
+// toSavePayload() nests each one's saved column name under the person, day type, goal, target or work item it belongs to,
+// as a `starting_points` list that migration 017's version of the function marks on the row it has just written.
 
 import type { QuantityMetric, TablesInsert } from '@/types/database.types';
 import type { SetupDraft, Transcript } from '@/types/setup';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
+import { acceptedStartingPoints, type StartingPointMark, type StartingPointSubject } from './startingPoints';
 import { validateDraft, type DraftIssue } from './validate';
 
 type Without<T, K extends string> = Omit<T, K | 'user_id' | 'created_at' | 'updated_at'>;
@@ -31,6 +36,8 @@ export interface SetupRows {
   // The sources the targets name. The person's manual source is created on first use (MOM-110); a synced one exists
   // only when they have connected the app.
   targetSources: { goalKey: string; targetKey: string; source: SourceNeed }[];
+  // The values that came from an accepted suggestion (lib/setup/startingPoints.ts), by the draft's keys.
+  startingPoints: StartingPointMark[];
 }
 
 export type DraftRowsResult = { ok: true; rows: SetupRows } | { ok: false; issues: DraftIssue[] };
@@ -38,15 +45,20 @@ export type DraftRowsResult = { ok: true; rows: SetupRows } | { ok: false; issue
 // What save_guided_setup() takes (migration 015). Nested, with the keys kept, because the function creates the ids and
 // resolves a work item's target by key. There is no user id anywhere in it: the function takes the owner from the session.
 export type SavePayloadSource = { kind: 'manual' } | { kind: 'synced'; provider: string; label: string; metric: QuantityMetric | null };
+// The saved column names on this row whose value came from an accepted suggestion (migration 017). Absent when none did.
+interface WithStartingPoints {
+  starting_points?: string[];
+}
 export interface SavePayload {
-  person: PersonSettingsRow;
-  day_types: DayTypeRow[];
+  person: PersonSettingsRow & WithStartingPoints;
+  day_types: (DayTypeRow & WithStartingPoints)[];
   priorities: PriorityRow[];
-  goals: (GoalRow & {
-    key: string;
-    targets: (TargetRow & { key: string; sources: SavePayloadSource[] })[];
-    items: (WorkItemRow & { key: string; target_key: string | null; steps: StepRow[] })[];
-  })[];
+  goals: (GoalRow &
+    WithStartingPoints & {
+      key: string;
+      targets: (TargetRow & WithStartingPoints & { key: string; sources: SavePayloadSource[] })[];
+      items: (WorkItemRow & WithStartingPoints & { key: string; target_key: string | null; steps: StepRow[] })[];
+    })[];
 }
 
 const asTime = (hhmm: string | null): string | null => (hhmm === null ? null : `${hhmm}:00`);
@@ -83,6 +95,7 @@ export function draftToRows(draft: SetupDraft, transcript: Transcript): DraftRow
     workItems: [],
     steps: [],
     targetSources: [],
+    startingPoints: acceptedStartingPoints(draft),
   };
 
   for (const g of goals) {
@@ -149,20 +162,36 @@ export function draftToRows(draft: SetupDraft, transcript: Transcript): DraftRow
 // The name a synced source is saved under: the catalog's name for the app, else the provider id.
 const providerLabel = (provider: string): string => INTEGRATION_CATALOG.find((e) => e.provider === provider)?.name ?? provider;
 
+// The saved column names marked on one subject, or nothing at all when there are none: a setup with no value taken from a
+// suggestion sends exactly the payload it sent before migration 017, which the function also reads without any list.
+function startingPointsOf(rows: SetupRows, isSubject: (subject: StartingPointSubject) => boolean): WithStartingPoints {
+  const fields = rows.startingPoints.filter((m) => isSubject(m.subject)).map((m) => m.field);
+  return fields.length > 0 ? { starting_points: fields } : {};
+}
+
 // The rows of a validated draft as the one payload the save function takes. Pure.
 export function toSavePayload(rows: SetupRows): SavePayload {
+  const lower = (name: string) => name.toLowerCase();
   return {
-    person: rows.personSettings,
-    day_types: rows.dayTypes,
+    person: { ...rows.personSettings, ...startingPointsOf(rows, (s) => s.kind === 'person') },
+    // Day types that differ only in case share one path, and only the first of them is marked.
+    day_types: rows.dayTypes.map((d, i) => ({
+      ...d,
+      ...(rows.dayTypes.findIndex((other) => lower(other.name) === lower(d.name)) === i
+        ? startingPointsOf(rows, (s) => s.kind === 'day_type' && s.name === lower(d.name))
+        : {}),
+    })),
     priorities: rows.priorities,
     goals: rows.goals.map(({ key, row }) => ({
       key,
       ...row,
+      ...startingPointsOf(rows, (s) => s.kind === 'goal' && s.goalKey === key),
       targets: rows.targets
         .filter((t) => t.goalKey === key)
         .map((t) => ({
           key: t.key,
           ...t.row,
+          ...startingPointsOf(rows, (s) => s.kind === 'target' && s.goalKey === key && s.targetKey === t.key),
           sources: rows.targetSources
             .filter((s) => s.goalKey === key && s.targetKey === t.key)
             .map((s): SavePayloadSource =>
@@ -177,6 +206,7 @@ export function toSavePayload(rows: SetupRows): SavePayload {
           key: i.key,
           target_key: i.targetKey,
           ...i.row,
+          ...startingPointsOf(rows, (s) => s.kind === 'work_item' && s.goalKey === key && s.itemKey === i.key),
           steps: rows.steps.filter((s) => s.goalKey === key && s.itemKey === i.key).map((s) => s.row),
         })),
     })),

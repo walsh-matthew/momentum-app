@@ -25,10 +25,12 @@ import {
 import type { RunSetupTurnArgs, SetupTurnResult } from '@/lib/services/llm';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval } from '@/lib/setup/evals';
-import { toSavePayload, type SetupRows } from '@/lib/setup/rows';
-import { MAX_PERSON_CHARS, type AssistantTurn, type SetupSession } from '@/types/setup';
+import { latestProvenance, provenanceLeaves } from '@/lib/setup/leaves';
+import { draftToRows, toSavePayload, type SetupRows } from '@/lib/setup/rows';
+import { acceptedStartingPoints, startingPointForPath, type StartingPointMark } from '@/lib/setup/startingPoints';
+import { MAX_PERSON_CHARS, type AssistantTurn, type SetupDraft, type SetupSession } from '@/types/setup';
 import { SETUP_CASES } from './setup-evals/cases';
-import { resetFakeSave, fakeSave, rowsOf, seedRow } from './helpers/fakeSetupSave';
+import { createSupabaseServerClient, resetFakeSave, fakeSave, rowsOf, seedRow } from './helpers/fakeSetupSave';
 import { scriptedModel } from './helpers/setupScript';
 
 vi.mock('@/lib/supabase/server', async () => {
@@ -367,6 +369,159 @@ describe('saveApprovedSetup: first setup only', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Where a value came from (MOM-134, migration 017)
+// ---------------------------------------------------------------------------
+
+// The first clean eval conversation whose finished draft satisfies `wanted`.
+async function caseWhere(wanted: (draft: SetupDraft) => boolean) {
+  for (const c of SETUP_CASES.filter((x) => x.expect === 'clean')) {
+    const report = await runSetupEval(c, scriptedModel(c.script));
+    if (!report.finished || report.finalIssues === null || report.finalIssues.length > 0) continue;
+    if (wanted(report.draft)) return { script: c.script, transcript: report.transcript, draft: report.draft };
+  }
+  throw new Error('no clean case matches');
+}
+
+// A mark as "kind | what it belongs to | column": the draft's title or name for a goal, target, item or day type, so the
+// saved row and the draft's own mark can be compared without knowing the database ids.
+const draftMarkKey = (draft: SetupDraft, mark: StartingPointMark): string => {
+  const { subject } = mark;
+  const goal = 'goalKey' in subject ? draft.model.goals.find((g) => g.key === subject.goalKey) : undefined;
+  const title =
+    subject.kind === 'person'
+      ? ''
+      : subject.kind === 'day_type'
+        ? draft.model.person.dayTypes.find((d) => d.name.toLowerCase() === subject.name)?.name
+        : subject.kind === 'goal'
+          ? goal?.title
+          : subject.kind === 'target'
+            ? goal?.targets.find((t) => t.key === subject.targetKey)?.title
+            : goal?.items.find((i) => i.key === subject.itemKey)?.title;
+  return `${subject.kind} | ${title} | ${mark.field}`;
+};
+const savedMarkKey = (row: Record<string, unknown>): string => {
+  const byId = (table: 'person_day_types' | 'goals' | 'targets' | 'work_items', id: unknown) => rowsOf(table).find((r) => r.id === id);
+  const title =
+    row.subject_kind === 'person'
+      ? ''
+      : row.subject_kind === 'day_type'
+        ? byId('person_day_types', row.day_type_id)?.name
+        : byId(row.subject_kind === 'goal' ? 'goals' : row.subject_kind === 'target' ? 'targets' : 'work_items', row.goal_id ?? row.target_id ?? row.work_item_id)?.title;
+  return `${row.subject_kind} | ${title} | ${row.field}`;
+};
+
+describe('saveApprovedSetup: values taken from a suggestion are stored as starting points', () => {
+  it('marks each value the person accepted, on the row it was saved to, and marks no value the person said', async () => {
+    const full = await caseWhere((d) => acceptedStartingPoints(d).length > 0);
+    const expected = acceptedStartingPoints(full.draft).map((m) => draftMarkKey(full.draft, m)).sort();
+    expect(expected.length).toBeGreaterThan(0);
+    expect(expected.every((k) => !k.includes('undefined'))).toBe(true);
+
+    const result = await saveApprovedSetup(completeSession(full));
+    expect(result.ok).toBe(true);
+
+    const marks = rowsOf('starting_points', ME);
+    expect(marks.map(savedMarkKey).sort()).toEqual(expected);
+    // Every mark is a question yet to be asked.
+    expect(marks.every((m) => m.answered_at === null && m.outcome === null)).toBe(true);
+
+    // A value the person said is saved and has no mark. The first expectation keeps this from passing on an empty set.
+    const said = provenanceLeaves(full.draft.model)
+      .filter((l) => latestProvenance(full.draft.said, l.path)?.how === 'said')
+      .flatMap((l) => {
+        const mark = startingPointForPath(l.path);
+        return mark ? [draftMarkKey(full.draft, mark)] : [];
+      });
+    expect(said.length).toBeGreaterThan(0);
+    for (const key of said) expect(marks.map(savedMarkKey), key).not.toContain(key);
+  });
+
+  it('writes the marks in the same save as everything else, in the caller\'s name, and leaves another person\'s alone', async () => {
+    const full = await caseWhere((d) => acceptedStartingPoints(d).length > 0);
+    const theirs = seedRow('starting_points', { user_id: OTHER, subject_kind: 'person', field: 'day_end', answered_at: null, outcome: null });
+    expect((await saveApprovedSetup(completeSession(full))).ok).toBe(true);
+    expect(fakeSave.rpcCalls).toHaveLength(1);
+    expect(rowsOf('starting_points', OTHER)).toEqual([theirs]);
+    expect(rowsOf('starting_points', ME).length).toBe(acceptedStartingPoints(full.draft).length);
+    expect(JSON.stringify(fakeSave.rpcCalls[0].args)).not.toMatch(/user_id|userId/);
+  });
+
+  it('keeps nothing of a save that fails part-way, marks included', async () => {
+    const full = await caseWhere((d) => acceptedStartingPoints(d).length > 0);
+    fakeSave.failAfterWrites = 3;
+    expect((await saveApprovedSetup(completeSession(full))).ok).toBe(false);
+    expect(rowsOf('starting_points', ME)).toEqual([]);
+    fakeSave.failAfterWrites = null;
+    expect((await saveApprovedSetup(completeSession(full))).ok).toBe(true);
+    expect(rowsOf('starting_points', ME).length).toBeGreaterThan(0);
+  });
+
+  it('a payload with no starting_points saves exactly as it did before migration 017', async () => {
+    // The app from before 017 sends no starting_points key at all. Send that payload for a full setup, then the same setup
+    // with its marks, and compare: every row is the same, and the older payload simply has no marks.
+    const full = await fullCase();
+    const rows = draftToRows(full.draft, full.transcript);
+    if (!rows.ok) throw new Error('the case should be saveable');
+    const older = toSavePayload({ ...rows.rows, startingPoints: [] });
+    expect(JSON.stringify(older)).not.toContain('starting_points');
+
+    const client = await createSupabaseServerClient();
+    const saved = await client.rpc('save_guided_setup', { p_payload: older });
+    expect(saved.error).toBeNull();
+    const goals = full.draft.model.goals;
+    expect(saved.data).toEqual({
+      goals: goals.length,
+      targets: goals.flatMap((g) => g.targets).length,
+      work_items: goals.flatMap((g) => g.items).length,
+      steps: goals.flatMap((g) => g.items).reduce((n, i) => n + i.steps.length, 0),
+      bindings: goals.flatMap((g) => g.targets).reduce((n, t) => n + t.sources.length, 0),
+    });
+    expect(rowsOf('starting_points', ME)).toEqual([]);
+    const olderCounts = countsOf(ME);
+
+    resetFakeSave({ id: ME });
+    expect((await saveApprovedSetup(completeSession(full))).ok).toBe(true);
+    expect(countsOf(ME)).toEqual(olderCounts);
+    expect(rowsOf('starting_points', ME).length).toBeGreaterThan(0);
+  });
+
+  it('a draft with no accepted value at all sends no starting_points key and stores none', async () => {
+    // A parked goal with no values has nothing to accept, so nothing is marked and the payload is the one from before 017.
+    const draft = emptyDraft();
+    draft.model.goals.push({
+      key: 'later', title: 'Learn piano', why: null, startDate: null, shape: null, endDate: null, blockWeeks: null, state: 'parked',
+      returnWhen: { kind: 'on_request' }, completionMode: null, tone: null, targets: [], items: [],
+    });
+    const session: SetupSession = {
+      transcript: [{ role: 'assistant', turn: { kind: 'final', chunk: null, skipped: null, say: '', question: null, topic: null, options: [], draft } }],
+      draft,
+      spentTokens: 0,
+    };
+    expect(acceptedStartingPoints(draft)).toEqual([]);
+    expect(await saveApprovedSetup(session, true)).toEqual({ ok: true, data: { goals: 1, targets: 0 } });
+    expect(JSON.stringify(fakeSave.rpcCalls[0].args)).not.toContain('starting_points');
+    expect(rowsOf('starting_points', ME)).toEqual([]);
+  });
+
+  it('refuses a mark on a field setup cannot record, a repeated mark and a list that is not a list, and keeps nothing', async () => {
+    const full = await fullCase();
+    const rows = draftToRows(full.draft, full.transcript);
+    if (!rows.ok) throw new Error('the case should be saveable');
+    const send = async (change: (p: ReturnType<typeof toSavePayload>) => void) => {
+      const payload = structuredClone(toSavePayload({ ...rows.rows, startingPoints: [] }));
+      change(payload);
+      return createSupabaseServerClient().then((c) => c.rpc('save_guided_setup', { p_payload: payload }));
+    };
+    expect((await send((p) => (p.goals[0].starting_points = ['title']))).error).toEqual({ code: '23514' });
+    expect((await send((p) => (p.goals[0].starting_points = ['start_date', 'start_date']))).error).toEqual({ code: '23505' });
+    expect((await send((p) => (p.person.starting_points = ['floor']))).error).toEqual({ code: '23514' });
+    expect((await send((p) => ((p.goals[0] as { starting_points?: unknown }).starting_points = 'start_date'))).error).toEqual({ code: '22023' });
+    expect(rowsOf('starting_points', ME)).toEqual([]);
+    expect(countsOf(ME).goals).toBe(0);
+  });
+});
+
 describe('saveApprovedSetup: one person never writes another\'s rows', () => {
   it('leaves another person\'s rows alone, and one person\'s setup is not blocked by another\'s goals', async () => {
     const full = await fullCase();
@@ -427,10 +582,11 @@ describe('saveApprovedSetup: parked goals and incomplete drafts', () => {
 // The payload and the SQL read the same keys
 // ---------------------------------------------------------------------------
 
-describe('the payload and migrations 015 and 016 agree', () => {
-  // 016 redefines save_guided_setup (CREATE OR REPLACE) to also read "metric"; 015's own file is untouched, but the
-  // function it created is superseded, so both files together say what the deployed function actually reads.
-  const sql = ['015_save_guided_setup.sql', '016_quantity_metric.sql']
+describe('the payload and migrations 015, 016 and 017 agree', () => {
+  // 016 redefines save_guided_setup (CREATE OR REPLACE) to also read "metric", and 017 to also read "starting_points";
+  // 015's and 016's own files are untouched, but the function they created is superseded, so the files together say what
+  // the deployed function actually reads.
+  const sql = ['015_save_guided_setup.sql', '016_quantity_metric.sql', '017_starting_points.sql']
     .map((f) => readFileSync(join(process.cwd(), 'supabase', 'migrations', f), 'utf8').replace(/--.*$/gm, ''))
     .join('\n');
 
@@ -456,6 +612,14 @@ describe('the payload and migrations 015 and 016 agree', () => {
     targetSources: [
       { goalKey: 'g', targetKey: 't', source: { kind: 'manual' } },
       { goalKey: 'g', targetKey: 't', source: { kind: 'synced', provider: 'hevy', metric: 'volume_lbs' } },
+    ],
+    // One mark on each kind of row, so every place the app can send "starting_points" is in the payload below.
+    startingPoints: [
+      { subject: { kind: 'person' }, field: 'day_end' },
+      { subject: { kind: 'day_type', name: 'work day' }, field: 'capacity_amount' },
+      { subject: { kind: 'goal', goalKey: 'g' }, field: 'start_date' },
+      { subject: { kind: 'target', goalKey: 'g', targetKey: 't' }, field: 'floor' },
+      { subject: { kind: 'work_item', goalKey: 'g', itemKey: 'i' }, field: 'due_date' },
     ],
   };
 

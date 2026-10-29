@@ -1,12 +1,15 @@
 // An in-memory stand-in for the signed-in Supabase client, as guided setup's save uses it (MOM-111): the session, a count of
-// the person's goals, and the save_guided_setup() function of migration 015, written in TypeScript. Like
-// tests/helpers/fakeLlmUsage.ts for reserve_llm_call(), it follows the SQL statement by statement, and a test in
-// tests/setup-service.test.ts reads migration 015 and fails when the keys the SQL reads and the keys the app sends differ,
-// so the two cannot drift apart unseen. What the real function does inside the database (constraints, row level security,
-// the rollback) is covered by supabase/verify/015_save_guided_setup.sql.
+// the person's goals, and the save_guided_setup() function of migrations 015, 016 and 017 (the deployed one is 017's),
+// written in TypeScript. Like tests/helpers/fakeLlmUsage.ts for reserve_llm_call(), it follows the SQL statement by
+// statement, and a test in tests/setup-service.test.ts reads those migrations and fails when the keys the SQL reads and the
+// keys the app sends differ, so the two cannot drift apart unseen. What the real function does inside the database
+// (constraints, row level security, the rollback) is covered by supabase/verify/015_save_guided_setup.sql and
+// supabase/verify/017_starting_points.sql.
 //
 // The one property modelled here is the one the service depends on: the function is ONE transaction. It works on a copy of
 // the tables and replaces them only when it reaches the end, so an error part-way leaves the tables as they were.
+
+import { STARTING_POINT_FIELDS, type StartingPointKind } from '@/types/database.types';
 
 type Row = Record<string, unknown> & { id: string; user_id: string };
 const TABLES = [
@@ -19,6 +22,7 @@ const TABLES = [
   'work_item_steps',
   'sources',
   'target_sources',
+  'starting_points',
 ] as const;
 type TableName = (typeof TABLES)[number];
 type Tables = Record<TableName, Row[]>;
@@ -75,6 +79,22 @@ function saveGuidedSetup(payload: unknown): { data: unknown; error: null } | { d
     working[table].push(full);
     return full;
   };
+  // 017: one starting_points row for each saved column named in `subject.starting_points`. The CHECK (only the fields setup
+  // can record, for the kind) and the unique index (one mark per saved value) are enforced as the database does.
+  const mark = (subject: Json, kind: StartingPointKind, ids: Record<string, string>): void => {
+    const list = subject.starting_points;
+    if (list === undefined) return;
+    if (!Array.isArray(list)) throw new DbError('22023');
+    const subjectId = Object.values(ids)[0] ?? uid;
+    for (const field of list) {
+      if (!(STARTING_POINT_FIELDS[kind] as readonly unknown[]).includes(field)) throw new DbError('23514');
+      const taken = working.starting_points.some(
+        (r) => r.subject_kind === kind && r.field === field && (r.day_type_id ?? r.goal_id ?? r.target_id ?? r.work_item_id ?? uid) === subjectId,
+      );
+      if (taken) throw new DbError('23505');
+      write('starting_points', { subject_kind: kind, day_type_id: null, goal_id: null, target_id: null, work_item_id: null, ...ids, field, answered_at: null, outcome: null });
+    }
+  };
 
   try {
     const p = payload as Json;
@@ -104,9 +124,12 @@ function saveGuidedSetup(payload: unknown): { data: unknown; error: null } | { d
       planning_weekday: person.planning_weekday ?? null,
       planning_time: person.planning_time ?? null,
     });
-    // 2. day types, 3. priorities
+    // 017: the person's own facts that came from an accepted suggestion
+    mark(person, 'person', {});
+    // 2. day types (one at a time since 017, to mark each), 3. priorities
     for (const d of asArray(p.day_types)) {
-      write('person_day_types', { name: d.name, capacity_unit: d.capacity_unit ?? null, capacity_amount: d.capacity_amount ?? null });
+      const dayType = write('person_day_types', { name: d.name, capacity_unit: d.capacity_unit ?? null, capacity_amount: d.capacity_amount ?? null });
+      mark(d, 'day_type', { day_type_id: dayType.id });
     }
     for (const pr of asArray(p.priorities)) write('person_priorities', { label: pr.label, sort_order: pr.sort_order });
 
@@ -129,6 +152,7 @@ function saveGuidedSetup(payload: unknown): { data: unknown; error: null } | { d
         completion_mode: g.completion_mode ?? null,
         tone: g.tone ?? null,
       });
+      mark(g, 'goal', { goal_id: goal.id });
       const targetIds = new Map<string, string>();
       for (const t of asArray(g.targets)) {
         const target = write('targets', {
@@ -148,6 +172,7 @@ function saveGuidedSetup(payload: unknown): { data: unknown; error: null } | { d
           tone: t.tone ?? null,
         });
         targetIds.set(String(t.key), target.id);
+        mark(t, 'target', { target_id: target.id });
         for (const s of asArray(t.sources)) {
           let sourceId: string;
           if (s.kind === 'manual') {
@@ -184,6 +209,7 @@ function saveGuidedSetup(payload: unknown): { data: unknown; error: null } | { d
           date_can_move: i.date_can_move ?? null,
           estimate_minutes: i.estimate_minutes ?? null,
         });
+        mark(i, 'work_item', { work_item_id: item.id });
         for (const s of asArray(i.steps)) write('work_item_steps', { work_item_id: item.id, title: s.title, sort_order: s.sort_order ?? 0 });
       }
     }

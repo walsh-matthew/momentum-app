@@ -61,6 +61,12 @@ export const STORED_GROUPS: readonly StoredGroup[] = [
     tables: ['period_snapshots'],
   },
   {
+    id: 'starting_points',
+    words:
+      'Which setup values you took from a suggestion instead of saying them yourself, so your first weekly review can ask whether they are still right. It holds which value, never what you said.',
+    tables: ['starting_points'],
+  },
+  {
     id: 'plan',
     words: "Your current plan's tasks, and where you have moved them.",
     tables: ['micro_tasks', 'task_rebalance_history'],

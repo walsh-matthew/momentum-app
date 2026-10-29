@@ -121,7 +121,15 @@ allow_list (rel, role, privs) as (values
   -- Append-only: the person's session writes a snapshot before a re-baseline; nobody changes or deletes one.
   ('period_snapshots',        'anon',          ''),
   ('period_snapshots',        'authenticated', 'SELECT,INSERT'),
-  ('period_snapshots',        'service_role',  '')
+  ('period_snapshots',        'service_role',  ''),
+
+  -- Setup values taken from a suggestion (017, MOM-134): the save writes them in the person's session, the first weekly
+  -- review reads them. The person may also update answered_at and outcome, but that is a COLUMN privilege, which this
+  -- table-level check does not see, so UPDATE is not listed; supabase/verify/017_starting_points.sql checks the columns.
+  -- Nobody deletes one.
+  ('starting_points',         'anon',          ''),
+  ('starting_points',         'authenticated', 'SELECT,INSERT'),
+  ('starting_points',         'service_role',  '')
 ),
 roles (role) as (values ('anon'), ('authenticated'), ('service_role')),
 dml (ord, priv) as (values (1, 'SELECT'), (2, 'INSERT'), (3, 'UPDATE'), (4, 'DELETE')),
