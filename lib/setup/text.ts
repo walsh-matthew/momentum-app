@@ -140,6 +140,29 @@ export function acceptsText(text: string): boolean {
   return /\b(yes|yeah|yep|yup|sure|ok|okay|correct|right|exactly|good|great|fine|perfect|works|agreed|please|go ahead|sounds|option \d|number \d|first|second|third|fourth|that one)\b/.test(t);
 }
 
+// At a playback, the person says nothing needs to change. The whole message has to say it ("don't change the goals, but add
+// one" is a change), so a message with more in it than these phrases does not count.
+const NO_CHANGE = [
+  /^(nothing|none|nope,? nothing)$/,
+  /^(no|not any) (more )?changes?( needed| to make)?$/,
+  /^(there is |there's )?nothing (needs? )?to (change|fix|add)$/,
+  /^nothing (needs|needed) (to be )?(change[sd]?|fixed)$/,
+  /^i (do not|don't|dont) (want|need) to (change|fix) (anything|a thing)$/,
+  /^i (do not|don't|dont) want (any )?changes?$/,
+  /^(leave|keep) (it|them|this|that) (as is|as it is|alone|the same)$/,
+  /^(it|that|this) (is|looks|'s) (fine|good|right) as (is|it is)$/,
+];
+
+export function declinesChange(text: string): boolean {
+  const t = text
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[.!,\s]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return NO_CHANGE.some((re) => re.test(t));
+}
+
 // The person asked for starting ideas.
 export function wantsIdeas(text: string): boolean {
   const t = text.toLowerCase();
