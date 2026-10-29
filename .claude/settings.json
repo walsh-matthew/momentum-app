@@ -8,7 +8,8 @@
       "Bash(npm run build)",
       "Bash(npm run plan *)",
       "Bash(npm run plan:check *)",
-      "Bash(npx supabase migration list *)"
+      "Bash(npx supabase migration list *)",
+      "Bash(npm run stack:status)"
     ],
     "ask": [
       "Bash(git push *)",
@@ -17,6 +18,10 @@
       "Bash(vercel env *)",
       "Bash(npx vercel env *)",
       "Bash(gh pr merge *)"
+    ],
+    "deny": [
+      "Bash(supabase status*)",
+      "Bash(npx supabase status*)"
     ]
   }
 }
