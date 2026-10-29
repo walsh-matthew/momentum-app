@@ -33,6 +33,9 @@ export interface Violation {
   message: string;
 }
 
+// Topics that shape the list of goals: a second question on one, right after the answer, carries it on (MOM-111).
+const FOLLOW_UP_TOPICS: ReadonlySet<string | null> = new Set(['breakup', 'idea']);
+
 const ASKING_KINDS: readonly TurnKind[] = ['question', 'offer_ideas', 'ideas', 'interpretations', 'proposal'];
 
 // In the day-end question, and only there, Claude may say the two boundaries of the early-day-end rule (MOM-125).
@@ -174,11 +177,16 @@ export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violat
     }
   });
   const prev = lastAssistant(ctx);
-  // Clarifying the same topic (offered ideas, interpretations) is not asking it again.
+  // Clarifying the same topic (offered ideas, interpretations) is not asking it again. Nor is carrying on a topic about
+  // the goals themselves: a question on it straight after the person's reply, such as naming the goals once they say
+  // "2 goals". A person fact (time zone, tone) asked again straight after its answer is still a repeat.
   const clarifying =
     turn.kind === 'ideas' ||
     turn.kind === 'interpretations' ||
-    (prev !== null && prev.topic === turn.topic && ['offer_ideas', 'interpretations', 'ideas'].includes(prev.kind));
+    (prev !== null &&
+      prev.topic === turn.topic &&
+      (['offer_ideas', 'interpretations', 'ideas'].includes(prev.kind) ||
+        (prev.kind === 'question' && FOLLOW_UP_TOPICS.has(prev.topic) && ctx.transcript[ctx.transcript.length - 2]?.role === 'assistant' && ctx.transcript[ctx.transcript.length - 1]?.role === 'person')));
   // Only the person's own facts are asked once; a goal's shape, dates and targets are asked again for the next goal.
   if (turn.topic && turn.question && ASKED_ONCE_TOPICS.has(turn.topic) && answered.has(turn.topic) && !clarifying) {
     out.push(v('skip_answered', `"${turn.topic}" is already answered; skip it in one line instead of asking again.`));

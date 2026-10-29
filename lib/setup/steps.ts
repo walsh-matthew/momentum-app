@@ -37,7 +37,7 @@ export const SETUP_STEPS: readonly SetupStep[] = [
     id: 'break_up',
     title: 'Break it up',
     summary:
-      'Ask whether this is one goal or several. If several, ask "together or one first?" and say once that starting fewer goals usually works better; it is a suggestion, never a limit. Goals set aside are parked with a way back: a date, a season or condition in their words, or only when they ask.',
+      'Ask whether this is one goal or several. If several, first ask what the goals are, as its own question tagged breakup, then ask together or one first. Say once that starting fewer goals usually works better; it is a suggestion, never a limit. Goals set aside are parked with a way back: a date, a season or condition in their words, or only when they ask.',
     topics: ['breakup', 'sequencing', 'parked_return'],
     playbackAfter: 'goals',
   },
