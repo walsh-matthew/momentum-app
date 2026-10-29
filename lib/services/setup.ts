@@ -6,8 +6,8 @@
 //
 // A turn: runSetupTurn() (lib/services/llm.ts) applies the setup budget and limits and makes the one Claude call. Its answer
 // is then checked here, by code, before anyone sees it: it must parse as a turn, and checkTurn() must find no hard rule
-// broken and the draft valid. A reply that fails is thrown away, counted, and asked for again (up to twice more); the person
-// never sees it. Three unusable replies in a row end in a plain "try again" and nothing is lost. The count of thrown-away
+// broken and the draft valid. A reply that fails is thrown away, counted, and asked for again (up to twice more, but not a
+// third time when the second broke the same rules as the first: it is the same call again); the person never sees it. Three unusable replies in a row end in a plain "try again" and nothing is lost. The count of thrown-away
 // replies is returned and logged by category and rule name only, never with any text (the usage log marks a call 'ok' when
 // the API answered, even if the answer then fails the schema, so it cannot show this).
 //
@@ -108,6 +108,7 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
 
   let spentTokens = session.spentTokens;
   let rejected = 0;
+  let lastRules: string | null = null;
   for (let attempt = 0; attempt <= MAX_REPLY_RETRIES; attempt++) {
     const answer = await runTurn({
       userId: user.data.userId,
@@ -129,18 +130,24 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
     if (!result.ok) {
       rejected += 1;
       console.warn('[setup] a reply was thrown away', { category: 'output' });
+      lastRules = null;
       continue;
     }
     const turn = AssistantTurnSchema.safeParse(result.raw);
     if (!turn.success) {
       rejected += 1;
       console.warn('[setup] a reply was thrown away', { category: 'schema' });
+      lastRules = null;
       continue;
     }
     const violations = checkTurn(turn.data, { transcript: session.transcript, prevDraft: session.draft });
     if (violations.length > 0) {
       rejected += 1;
-      console.warn('[setup] a reply was thrown away', { category: 'rules', rules: ruleNames(violations) });
+      const rules = ruleNames(violations);
+      console.warn('[setup] a reply was thrown away', { category: 'rules', rules });
+      // The same input broke the same rules twice: a third try is the same call again, so stop and spend nothing more.
+      if (rules.join() === lastRules) break;
+      lastRules = rules.join();
       continue;
     }
     return { ok: true, data: { kind: 'turn', turn: turn.data, spentTokens, rejected } };

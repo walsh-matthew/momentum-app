@@ -187,6 +187,39 @@ describe('playback is written by code, and the latest answer wins', () => {
   });
 });
 
+describe('changing your mind about changing something (production, 2026-10-29)', () => {
+  it('lets the person go back from the change box at a playback, sending nothing and asking Claude nothing', async () => {
+    const turn = script.find((t) => t.kind === 'playback' && t.chunk === 'targets') as AssistantTurn;
+    actions.ask.mockResolvedValueOnce(turnView(turn));
+    await start();
+    await screen.findByRole('heading', { name: /what counts: is this right\?/i });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
+    expect(screen.getByLabelText('What should change?')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'half typed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Never mind' }));
+
+    expect(screen.queryByLabelText('What should change?')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Yes, that is right' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Change something' })).toBeTruthy();
+    expect(actions.ask).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the person go back from the change box at the final confirmation too', async () => {
+    actions.ask.mockResolvedValueOnce(turnView(script[firstOf('final')]));
+    await start();
+    await screen.findByRole('heading', { name: 'Ready to save?' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Never mind' }));
+
+    expect(screen.queryByLabelText('What should change?')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save my setup' })).toBeTruthy();
+    expect(actions.ask).toHaveBeenCalledTimes(1);
+    expect(actions.save).not.toHaveBeenCalled();
+  });
+});
+
 describe('nothing is saved until the person taps Save', () => {
   const finalIndex = () => firstOf('final');
 

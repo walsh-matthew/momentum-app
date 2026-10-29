@@ -34,7 +34,12 @@ export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: Playba
         ))}
       </ul>
       {changing ? (
-        <AnswerBox label="What should change?" submitLabel="Send the change" busy={busy} onSubmit={onChange} />
+        <div className="space-y-2">
+          <AnswerBox label="What should change?" submitLabel="Send the change" busy={busy} onSubmit={onChange} />
+          <Button variant="ghost" disabled={busy} onClick={() => setChanging(false)}>
+            Never mind
+          </Button>
+        </div>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button size="lg" disabled={busy} onClick={() => onApprove(APPROVE_TEXT)} className="w-full sm:w-auto">

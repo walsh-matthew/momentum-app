@@ -21,6 +21,7 @@ import {
   dateIsIn,
   datesIn,
   dayTimeWords,
+  declinesChange,
   numbersIn,
   sentencesOf,
   timesIn,
@@ -292,6 +293,63 @@ describe('rule 7: play back in short chunks; the latest answer wins', () => {
     expect(checkChunkedPlayback(turn({ draft: approved }), ctx(history))).toEqual([]);
     expect(checkChunkedPlayback(turn({ draft: approved }), ctx([asked(), said('Yes')]))).toHaveLength(1);
     expect(checkChunkedPlayback(turn({ draft: approved }), ctx([history[0], said('Actually, change it')]))).toHaveLength(1);
+  });
+
+  describe('a person who decides to change nothing (production, 2026-10-29)', () => {
+    const goalsPlayback = () => asked({ kind: 'playback', chunk: 'goals', question: null, topic: null });
+    const approvedGoals = () => {
+      const d = emptyDraft();
+      d.approved = ['goals'];
+      return d;
+    };
+
+    it('approves the part when the person says there is no change, straight after its playback', () => {
+      for (const text of ['nothing', 'No changes', "I don't want to change anything", 'Leave it as is']) {
+        expect(checkChunkedPlayback(turn({ draft: approvedGoals() }), ctx([goalsPlayback(), said(text)])), text).toEqual([]);
+      }
+    });
+
+    it('approves the part after one clarifying question about that same playback', () => {
+      const history: Transcript = [
+        goalsPlayback(),
+        said('nothing'),
+        asked({ question: 'Do you want to keep this part exactly as it is?', topic: null }),
+        said("I don't want to change anything"),
+      ];
+      expect(checkChunkedPlayback(turn({ draft: approvedGoals() }), ctx(history))).toEqual([]);
+      // The same stuck session, whichever part it was stuck on.
+      for (const chunk of ['goals', 'targets', 'planning', 'talk'] as const) {
+        const d = emptyDraft();
+        d.approved = [chunk];
+        const stuck: Transcript = [asked({ kind: 'playback', chunk, question: null, topic: null }), ...history.slice(1)];
+        expect(checkChunkedPlayback(turn({ draft: d }), ctx(stuck)), chunk).toEqual([]);
+      }
+    });
+
+    it('reads only a whole message as "no change"', () => {
+      for (const t of ['nothing', 'Nothing.', 'No changes!', "I don't want to change anything", 'I don’t want to change anything', 'leave it as is']) {
+        expect(declinesChange(t), t).toBe(true);
+      }
+      for (const t of ['no', 'yes', "Don't change the goals, but add one", 'nothing is right about it', 'change nothing but the name', '']) {
+        expect(declinesChange(t), t).toBe(false);
+      }
+    });
+
+    it('still approves nothing the person did not see played back and agree to', () => {
+      const keep = said("I don't want to change anything");
+      // No playback before it.
+      expect(checkChunkedPlayback(turn({ draft: approvedGoals() }), ctx([asked(), keep]))).toHaveLength(1);
+      // The playback was of another part.
+      const other = asked({ kind: 'playback', chunk: 'targets', question: null, topic: null });
+      expect(checkChunkedPlayback(turn({ draft: approvedGoals() }), ctx([other, keep]))).toHaveLength(1);
+      // A real change is not a "no change", even with the same words in it.
+      const wants = said("Don't change the goals, but add a goal for sleep");
+      expect(checkChunkedPlayback(turn({ draft: approvedGoals() }), ctx([goalsPlayback(), wants]))).toHaveLength(1);
+      expect(checkChunkedPlayback(turn({ draft: approvedGoals() }), ctx([goalsPlayback(), said('No, that is wrong')]))).toHaveLength(1);
+      // A change in between means the clarifying question is no longer about the playback as shown.
+      const history: Transcript = [goalsPlayback(), said('Make it Run more'), asked({ topic: null }), said("I don't want to change anything")];
+      expect(checkChunkedPlayback(turn({ draft: approvedGoals() }), ctx(history))).toHaveLength(1);
+    });
   });
 
   it('wants a part played back again when it changes after approval', () => {

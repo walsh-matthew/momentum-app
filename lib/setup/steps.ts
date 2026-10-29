@@ -168,7 +168,7 @@ export const HARD_RULES: readonly HardRule[] = [
     n: 7,
     id: 'chunked_playback',
     title: 'Play back in short chunks; the latest answer wins',
-    text: 'Play back in short chunks, never one long playback at the end. Each part is played back and approved as it finishes (after steps 3, 7, 10 and 11). The playback is written by code from the validated draft, not by you. Preferences change mid-setup; the draft always holds the newest answer, and a part that changes after approval is played back again.',
+    text: 'Play back in short chunks, never one long playback at the end. Each part is played back and approved as it finishes (after steps 3, 7, 10 and 11). The playback is written by code from the validated draft, not by you. Preferences change mid-setup; the draft always holds the newest answer, and a part that changes after approval is played back again. If, at a playback, the person says nothing needs to change ("nothing", "no changes", "leave it as is"), that is their approval: mark the part approved. If you cannot tell what they mean, play the part back again instead of asking.',
   },
   {
     n: 8,

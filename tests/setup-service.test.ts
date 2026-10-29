@@ -179,6 +179,21 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     expect(rowsOf('goals')).toEqual([]);
   });
 
+  it('stops after two replies in a row that broke the same rules, since a third is the same call again', async () => {
+    const full = await fullCase();
+    const stub = stubTurn([{ raw: badQuestion(full.script[2]) }, { raw: badQuestion(full.script[2]) }, { raw: full.script[2] }]);
+    const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    expect(stub.calls).toHaveLength(2);
+    expect(result).toEqual({ ok: true, data: { kind: 'failed', message: SETUP_FAILURE_MESSAGES.unusable, rejected: 2 } });
+  });
+
+  it('keeps all three tries when the rejections differ', async () => {
+    const full = await fullCase();
+    const stub = stubTurn([{ raw: badQuestion(full.script[2]) }, { raw: {} }, { raw: badQuestion(full.script[2]) }]);
+    await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    expect(stub.calls).toHaveLength(3);
+  });
+
   it('counts a reply Claude could not complete as unusable and asks again', async () => {
     const full = await fullCase();
     const stub = stubTurn([{ reason: 'bad_output' }, { raw: full.script[2] }]);

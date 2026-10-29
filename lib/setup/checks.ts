@@ -9,6 +9,7 @@ import {
   SETUP_CHUNKS,
   type AssistantTurn,
   type HardRuleId,
+  type SetupChunk,
   type SetupDraft,
   type Transcript,
   type TurnKind,
@@ -16,7 +17,7 @@ import {
 import { answeredTopics, changedLeafPaths, chunkSlice } from './leaves';
 import { FINAL_MAX_LINES, renderFinal } from './playback';
 import { ASKED_ONCE_TOPICS } from './steps';
-import { acceptsText, dayTimeWords, numbersIn, sentencesOf, wantsIdeas } from './text';
+import { acceptsText, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas } from './text';
 import { validateDraft } from './validate';
 
 export interface TurnContext {
@@ -221,12 +222,32 @@ export function checkNumberedInterpretations(turn: AssistantTurn, ctx: TurnConte
 // Rule 7: play back in short chunks; the latest answer wins
 // ---------------------------------------------------------------------------
 
+// A part may become approved only if the person saw its playback and agreed. The newest playback must be that part's, a yes
+// (or "no change") must follow it, and anything between (a "nothing", Claude asking what they meant) must leave the model
+// as the playback showed it and the person's words as "no change". A real change in between breaks the chain.
+function approvalFollowsPlayback(ctx: TurnContext, chunk: SetupChunk): boolean {
+  const t = ctx.transcript;
+  let at = -1;
+  for (let i = t.length - 1; i >= 0; i--) {
+    const m = t[i];
+    if (m.role === 'assistant' && m.turn.kind === 'playback') {
+      at = i;
+      break;
+    }
+  }
+  const shown = at >= 0 ? t[at] : null;
+  if (shown?.role !== 'assistant' || shown.turn.chunk !== chunk) return false;
+  const after = t.slice(at + 1);
+  const last = after[after.length - 1];
+  if (last?.role !== 'person') return false;
+  if (!acceptsText(last.text) && !declinesChange(last.text)) return false;
+  return after.slice(0, -1).every((m) => (m.role === 'person' ? declinesChange(m.text) : sameJson(m.turn.draft.model, shown.turn.draft.model)));
+}
+
 export function checkChunkedPlayback(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out: Violation[] = [];
   const next = turn.draft;
   const prev = ctx.prevDraft;
-  const person = lastPerson(ctx);
-  const assistantPrev = lastAssistant(ctx);
 
   if (turn.kind === 'playback' || turn.kind === 'final') {
     if (turn.say !== '' || turn.question !== null || turn.options.length > 0 || turn.skipped !== null) {
@@ -249,8 +270,7 @@ export function checkChunkedPlayback(turn: AssistantTurn, ctx: TurnContext): Vio
 
   for (const chunk of next.approved) {
     if (!prev.approved.includes(chunk)) {
-      const played = assistantPrev?.kind === 'playback' && assistantPrev.chunk === chunk;
-      if (!played || !person || !acceptsText(person.text)) {
+      if (!approvalFollowsPlayback(ctx, chunk)) {
         out.push(v('chunked_playback', `"${chunk}" was marked approved without being played back and accepted.`));
       }
     } else if (!sameJson(chunkSlice(prev.model, chunk), chunkSlice(next.model, chunk))) {
