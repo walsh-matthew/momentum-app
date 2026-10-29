@@ -4,12 +4,18 @@
 // conversation and sends all of it with each turn, so everything arriving here is untrusted: it is parsed against the
 // schemas in types/setup.ts, bounded in size, and the person is the signed-in user, never a field of the request.
 //
-// A turn: runSetupTurn() (lib/services/llm.ts) applies the setup budget and limits and makes the one Claude call. Its answer
-// is then checked here, by code, before anyone sees it: it must parse as a turn, and checkTurn() must find no hard rule
-// broken and the draft valid. A reply that fails is thrown away, counted, and asked for again (up to twice more, but not a
-// third time when the second broke the same rules as the first: it is the same call again); the person never sees it. Three unusable replies in a row end in a plain "try again" and nothing is lost. The count of thrown-away
-// replies is returned and logged by category, rule name and topic name only, never with any text (the usage log marks a call 'ok' when
-// the API answered, even if the answer then fails the schema, so it cannot show this).
+// A turn: when the person's answer to a date question is only a relative date ("Monday"), code answers it itself with no
+// call (lib/setup/codeTurns.ts, MOM-111 finding 8); otherwise runSetupTurn() (lib/services/llm.ts) applies the setup budget
+// and limits and makes the one Claude call, with any date code read passed in as a hint. Its answer is then checked here, by
+// code, before anyone sees it: it must parse as a turn, and checkTurn() must find no hard rule broken and the draft valid.
+// A reply that fails is thrown away, counted, and asked for again (up to twice more), and each retry is told in fixed words
+// which rule failed and what to do instead (lib/setup/feedback.ts, MOM-111 root cause A): the same input used to bring back
+// the same mistake. It stops early when a retry breaks the same rules at the same paths as the one before. A reply that
+// breaks only the plain-words checks gets one retry and is then shown, with its rule names logged (MOM-111 addition a): only
+// the hard rules and the draft rules can end in "try again". Three unusable replies in a row end in a plain "try again" and
+// nothing is lost. The count of thrown-away replies is returned and logged by category, rule name, check code, topic name and
+// draft path only, never with any text or value (the usage log marks a call 'ok' when the API answered, even if the answer
+// then fails the schema, so it cannot show this).
 //
 // The save: FIRST SETUP ONLY. It validates the draft in 'final' mode, turns it into the payload save_guided_setup() reads
 // (migration 015) and makes that one call, which is one database transaction: everything the person approved, or nothing.
@@ -19,8 +25,12 @@
 import 'server-only';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { checkTurn, type Violation } from '@/lib/setup/checks';
+import { checkTurn, onlyPlainWords, type Violation } from '@/lib/setup/checks';
+import { dateStep } from '@/lib/setup/codeTurns';
+import { SHAPE_FEEDBACK, failingPaths, retryFeedback } from '@/lib/setup/feedback';
+import { shownModel } from '@/lib/setup/paraphrase';
 import { spokenTimes } from '@/lib/setup/playback';
+import { personToday } from '@/lib/setup/relativeDates';
 import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
 import { draftToRows, toSavePayload } from '@/lib/setup/rows';
 import { validateDraft } from '@/lib/setup/validate';
@@ -88,14 +98,18 @@ const withAllApproved = (session: SetupSession): SetupSession => ({
 
 // The playback here is written on the server, so a clock time uses the locale the browser sent; without one, the time reads
 // as the person gave it (lib/setup/playback.ts).
-function quickPathView(session: SetupSession, reason: QuickPathReason, message: string, locale: string | undefined): SetupTurnView {
+function quickPathView(session: SetupSession, reason: QuickPathReason, message: string, locale: string | undefined, today: string | undefined): SetupTurnView {
   const shown = withAllApproved(session);
   const validation = validateDraft(shown.draft, shown.transcript, 'final');
   return {
     kind: 'quick_path',
     reason,
     message,
-    sections: quickPathSections(session.draft.model, { locale, spokenTime: spokenTimes(session.draft, session.transcript) }),
+    sections: quickPathSections(shownModel(session.draft, session.transcript), {
+      locale,
+      spokenTime: spokenTimes(session.draft, session.transcript),
+      today: today ?? null,
+    }),
     missing: describeMissing(session.draft.model, validation.issues),
     canSave: validation.ok,
   };
@@ -114,18 +128,36 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
   if (!user.ok) return user;
   const runTurn = deps.runTurn ?? runSetupTurn;
 
+  const context = { transcript: session.transcript, prevDraft: session.draft };
+  // The person's own today: their time zone's date once setup knows it, else their device's (MOM-111 finding 8).
+  const personDay = personToday(session.draft.model.person.timeZone, today, new Date());
+
+  // An answer that is only a relative date ("Monday") is answered by code, with no call: the date as a proposal, or the
+  // question again for a vague one. The turn is checked like any other; one that failed would go to Claude instead.
+  const step = dateStep(session.transcript, session.draft, personDay);
+  if (step?.kind === 'turn' && checkTurn(step.turn, context).length === 0) {
+    return { ok: true, data: { kind: 'turn', turn: step.turn, spentTokens: session.spentTokens, rejected: 0 } };
+  }
+  const dateHint = step?.kind === 'hint' ? step.hint : undefined;
+
   let spentTokens = session.spentTokens;
   let rejected = 0;
-  let lastRules: string | null = null;
+  // Why the last try was thrown away, in code's own words, sent with the next one (MOM-111 root cause A).
+  let feedback: string[] | undefined;
+  // The plain-words checks get one retry; after it, a reply that breaks only them is shown (MOM-111 addition a).
+  let plainRetried = false;
+  let lastSignature: string | null = null;
   for (let attempt = 0; attempt <= MAX_REPLY_RETRIES; attempt++) {
     const answer = await runTurn({
       userId: user.data.userId,
       transcript: session.transcript,
       draft: session.draft,
       spentTokens,
-      today,
+      today: personDay,
+      retryFeedback: feedback,
+      dateHint,
     });
-    if (answer.kind === 'quick_path') return { ok: true, data: quickPathView(session, answer.reason, answer.message, locale) };
+    if (answer.kind === 'quick_path') return { ok: true, data: quickPathView(session, answer.reason, answer.message, locale, personDay) };
     if (answer.kind === 'wait') return { ok: true, data: { kind: 'wait', message: answer.message, retryAfterSeconds: answer.retryAfterSeconds } };
 
     // The tokens of every call count against the setup budget, a thrown-away reply as much as a kept one.
@@ -138,28 +170,50 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
     if (!result.ok) {
       rejected += 1;
       console.warn('[setup] a reply was thrown away', { category: 'output' });
-      lastRules = null;
+      feedback = [SHAPE_FEEDBACK];
+      lastSignature = null;
       continue;
     }
     const turn = AssistantTurnSchema.safeParse(result.raw);
     if (!turn.success) {
       rejected += 1;
       console.warn('[setup] a reply was thrown away', { category: 'schema' });
-      lastRules = null;
+      feedback = [SHAPE_FEEDBACK];
+      lastSignature = null;
       continue;
     }
-    const violations = checkTurn(turn.data, { transcript: session.transcript, prevDraft: session.draft });
-    if (violations.length > 0) {
-      rejected += 1;
-      const rules = ruleNames(violations);
-      // The turn's topic and the topic it skipped are names from SETUP_TOPICS (the schema allows nothing else), never text.
-      console.warn('[setup] a reply was thrown away', { category: 'rules', rules, topic: turn.data.topic, skippedTopic: turn.data.skipped?.topic ?? null });
-      // The same input broke the same rules twice: a third try is the same call again, so stop and spend nothing more.
-      if (rules.join() === lastRules) break;
-      lastRules = rules.join();
+    const violations = checkTurn(turn.data, context);
+    if (violations.length === 0) return { ok: true, data: { kind: 'turn', turn: turn.data, spentTokens, rejected } };
+
+    const rules = ruleNames(violations);
+    const plainOnly = onlyPlainWords(violations);
+    // Names only: rule names and the codes in lib/setup/checks.ts, both fixed lists, never text.
+    const codes = [...new Set(violations.map((x) => x.code))].sort();
+    if (plainOnly && (plainRetried || attempt === MAX_REPLY_RETRIES)) {
+      console.warn('[setup] a reply was shown after its plain-words retry', { category: 'plain_words', rules, codes });
+      return { ok: true, data: { kind: 'turn', turn: turn.data, spentTokens, rejected } };
+    }
+    rejected += 1;
+    // The turn's topic and the topic it skipped are names from SETUP_TOPICS (the schema allows nothing else), never text.
+    // Paths are the draft's keys and field names, never values (lib/setup/feedback.ts).
+    console.warn('[setup] a reply was thrown away', {
+      category: 'rules',
+      rules,
+      codes,
+      paths: failingPaths(violations),
+      topic: turn.data.topic,
+      skippedTopic: turn.data.skipped?.topic ?? null,
+    });
+    feedback = retryFeedback(violations);
+    if (plainOnly) {
+      plainRetried = true;
       continue;
     }
-    return { ok: true, data: { kind: 'turn', turn: turn.data, spentTokens, rejected } };
+    // The same rules failed at the same paths twice, feedback and all: a third try would be the same call again, so stop and
+    // spend nothing more.
+    const signature = `${codes.join()}|${failingPaths(violations).join()}`;
+    if (signature === lastSignature) break;
+    lastSignature = signature;
   }
   return { ok: true, data: { kind: 'failed', message: SETUP_FAILURE_MESSAGES.unusable, rejected } };
 }

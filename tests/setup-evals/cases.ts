@@ -13,6 +13,8 @@ import { Script, goal, goalOf, item, target, targetOf } from '../helpers/setupSc
 export type ScriptedCase = SetupEvalCase & { script: AssistantTurn[] };
 
 const TODAY = '2026-10-27';
+// The same date the way setup says it (MOM-111 finding 7): never as YYYY-MM-DD on screen.
+const TODAY_WORDS = 'Tuesday, Oct 27';
 
 // The crowd-out question (step 4), in the words the step's own example uses.
 const PRIORITIES_Q =
@@ -140,7 +142,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
     kind: 'proposal',
     topic: 'start_date',
     edit: (m) => (goalOf(m, 'g1').shape = 'ongoing'),
-    say: `I would start this today, ${TODAY}.`,
+    say: `I would start this today, ${TODAY_WORDS}.`,
     question: 'Is that start date right?',
     reply: 'Yes, that works.',
   });
@@ -165,7 +167,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
       kind: 'proposal',
       topic: 'start_date',
       edit: (m) => (goalOf(m, 'g2').shape = 'ongoing'),
-      say: `I would start cooking today, ${TODAY}.`,
+      say: `I would start cooking today, ${TODAY_WORDS}.`,
       question: 'Is that start date right?',
       reply: 'Yes, that works.',
     });
@@ -371,7 +373,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
       `goals.g1.items.i1.dueDate@${dateAsked}`,
       `goals.g1.items.i1.dateCanMove@${moveAsked}`,
     ],
-    say: `I would start this today, ${TODAY}.`,
+    say: `I would start this today, ${TODAY_WORDS}.`,
     question: 'Is that start date right?',
     reply: 'Yes, start today.',
   });
@@ -466,7 +468,7 @@ function phoneCase(): ScriptedCase {
     kind: 'proposal',
     topic: 'start_date',
     edit: (m) => (goalOf(m, 'g1').shape = 'ongoing'),
-    say: `I would start running today, ${TODAY}.`,
+    say: `I would start running today, ${TODAY_WORDS}.`,
     question: 'Is that start date right?',
     reply: 'yes',
   });
@@ -490,7 +492,7 @@ function phoneCase(): ScriptedCase {
     kind: 'proposal',
     topic: 'start_date',
     edit: (m) => (goalOf(m, 'g2').shape = 'ongoing'),
-    say: `I would start cooking today, ${TODAY}.`,
+    say: `I would start cooking today, ${TODAY_WORDS}.`,
     question: 'Is that start date right?',
     reply: 'yes',
   });

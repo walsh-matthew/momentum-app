@@ -1,11 +1,14 @@
 import type { CelebrationLevel } from '@/types/database.types';
 import type { HomeHero } from '@/types/home';
+import type { LocalDate } from '@/types/scoreboard';
 import { MilestoneRow } from './MilestoneRow';
 import { WeekHero } from './WeekHero';
 
 interface HomeHeroCardProps {
   hero: HomeHero;
   celebration: CelebrationLevel;
+  // The person's today, for the due dates in the deadlines list (MOM-111 finding 7).
+  today?: LocalDate | null;
 }
 
 // The card at the top of home. Which one depends on what the person has set up, never on a guess:
@@ -13,7 +16,7 @@ interface HomeHeroCardProps {
 // - a prompt for the week start, only when they have a weekly or day-slot target and have not set it;
 // - their milestones, when they have no weekly or day-slot target at all. Such a person is never asked for a week start
 //   (docs/DOMAIN_MODEL.md §2.2 step 10).
-export function HomeHeroCard({ hero, celebration }: HomeHeroCardProps) {
+export function HomeHeroCard({ hero, celebration, today = null }: HomeHeroCardProps) {
   if (hero.kind === 'week') return <WeekHero hero={hero} celebration={celebration} />;
 
   if (hero.kind === 'needs_week_start') {
@@ -35,7 +38,7 @@ export function HomeHeroCard({ hero, celebration }: HomeHeroCardProps) {
       <div className="min-w-0 flex-1">
         <p className="eyebrow">Your deadlines</p>
         {hero.items.map((m) => (
-          <MilestoneRow key={m.id} milestone={m} showSteps={false} showGoal />
+          <MilestoneRow key={m.id} milestone={m} showSteps={false} showGoal today={today} />
         ))}
       </div>
     </section>

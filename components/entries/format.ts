@@ -1,32 +1,24 @@
+import { casualDateLabel, dateInZone } from '@/lib/dates/casual';
 import type { LoggedEntry } from '@/types/entries';
 
-// An instant as the person's own wall clock, in their own time zone ("Tue, Oct 27, 8:15 AM PDT"). With no zone
-// set there is no wall clock to show, and none is assumed.
-export function formatEntryTime(instant: string, timeZone: string | null): string {
+// An instant as the person's own wall clock, in their own time zone ("Today, 8:15 AM PDT", "Tue, Oct 27, 8:15 AM PDT"). The
+// day goes through the app's one date formatter (lib/dates/casual.ts, MOM-111 finding 7). With no zone set there is no wall
+// clock to show, and none is assumed. `today` is the person's own date.
+export function formatEntryTime(instant: string, timeZone: string | null, today: string | null = null): string {
   if (timeZone === null) return '';
   const date = new Date(instant);
   if (Number.isNaN(date.getTime())) return '';
-  try {
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    }).format(date);
-  } catch {
-    return '';
-  }
+  const day = dateInZone(timeZone, date);
+  if (day === null) return '';
+  const clock = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(date);
+  return `${casualDateLabel(day, today, { weekday: 'short' })}, ${clock}`;
 }
 
-// A day the person chose ("Tue, Oct 27"). The entry's stored time on that day is a stand-in, so only the day is shown.
-// The date is read as a calendar date, so no time zone moves it.
-export function formatChosenDay(date: string): string {
-  const day = new Date(`${date}T12:00:00Z`);
-  if (Number.isNaN(day.getTime())) return '';
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(day);
+// A day the person chose ("Yesterday", "Tue, Oct 27"). The entry's stored time on that day is a stand-in, so only the day
+// is shown. The date is read as a calendar date, so no time zone moves it.
+export function formatChosenDay(date: string, today: string | null = null): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(`${date}T12:00:00Z`).getTime())) return '';
+  return casualDateLabel(date, today, { weekday: 'short' });
 }
 
 // What one entry added, in the person's terms: "+1", "12 km", "25 min", or the step that was ticked.

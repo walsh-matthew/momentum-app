@@ -183,8 +183,10 @@ describe('rule 4: offer the choice before examples', () => {
     expect(checkChoiceBeforeExamples(ideas, ctx([asked({ kind: 'offer_ideas', topic: 'floor' }), said('Some ideas please')]))).toEqual([]);
   });
 
-  it('stops ideas with no offer, and ideas the person did not ask for', () => {
-    expect(checkChoiceBeforeExamples(ideas, ctx([asked(), said('Some ideas please')]))).toHaveLength(1);
+  it('stops ideas the person did not ask for, with or without an offer', () => {
+    expect(checkChoiceBeforeExamples(ideas, ctx([asked(), said('Three a week')]))).toHaveLength(1);
+    // A plain yes means ideas only as the answer to the offer.
+    expect(checkChoiceBeforeExamples(ideas, ctx([asked(), said('Yes')]))).toHaveLength(1);
     expect(checkChoiceBeforeExamples(ideas, ctx([asked({ kind: 'offer_ideas', topic: 'floor' }), said('I have my own answer')]))).toHaveLength(1);
   });
 
@@ -339,7 +341,7 @@ describe('rule 5: skip what is already answered', () => {
 
   it('tells Claude in step 3 to ask what the goals are, as its own breakup question, before together or one first', () => {
     const step = SETUP_STEPS.find((x) => x.n === 3);
-    expect(step?.summary).toContain('If several, first ask what the goals are, as its own question tagged breakup, then ask whether to start them together or one first.');
+    expect(step?.summary).toContain('If several, first ask what the goals are, as its own question tagged breakup, then ask whether to start them together or one first');
   });
 
   it('still stops the same topic asked again after the conversation has moved on', () => {

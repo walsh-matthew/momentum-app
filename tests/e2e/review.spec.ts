@@ -120,7 +120,8 @@ test.describe('the other situations a person can be in (390px)', () => {
     await notice.getByRole('link', { name: 'See it' }).click();
     await expect(page).toHaveURL(/\/review$/);
 
-    await expect(page.getByText(`You finished this review on ${formatDay(seed.today)}. It stays as it was said.`)).toBeVisible();
+    // Finished today, so the app's one casual date formatter says "today" (MOM-111 finding 7).
+    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
     // The record says one workout, partway; two are logged now. The card is the record's, never the live week's.
     const goal = page.getByRole('region', { name: REVIEW_TITLES.goal });
     await expect(goal.getByText('Partway · 1 to floor')).toBeVisible();

@@ -5,6 +5,7 @@
 
 import { AssistantTurnSchema, type AssistantTurn, type HardRuleId, type SetupDraft, type Transcript } from '@/types/setup';
 import { checkTurn, type Violation } from './checks';
+import { dateStep } from './codeTurns';
 import { emptyDraft } from './draft';
 import { validateDraft, type DraftIssue } from './validate';
 
@@ -22,11 +23,15 @@ export interface SetupEvalCase {
   person: PersonLine[];
   // 'clean': no turn violates anything and the final draft validates. Otherwise the exact violations that must be found.
   expect: 'clean' | { violations: { turn: number; rule: Violation['rule'] }[] };
+  // The person's today, for a case where code answers a relative date itself (lib/setup/codeTurns.ts, MOM-111 finding 8).
+  today?: string;
 }
 
 export interface SetupModelInput {
   transcript: Transcript;
   draft: SetupDraft;
+  // What code read a relative date in the person's newest message as (lib/setup/codeTurns.ts), as the app sends it.
+  dateHint?: string;
 }
 export type SetupModelFn = (input: SetupModelInput) => AssistantTurn | Promise<AssistantTurn>;
 
@@ -34,6 +39,8 @@ export interface TurnReport {
   index: number;
   turn: AssistantTurn;
   violations: Violation[];
+  // Written by code, not the model: the person's answer was only a relative date (MOM-111 finding 8).
+  byCode: boolean;
 }
 
 export interface EvalReport {
@@ -58,6 +65,10 @@ export interface RunSetupEvalOptions {
   // questions come in a fixed order. A live model asks in its own order, so the live run answers by what the question is
   // about instead (lib/ai/setupLive.ts). Return null when the person has nothing more to say.
   reply?: (turn: AssistantTurn, index: number) => PersonLine | null;
+  // The person's today, YYYY-MM-DD. With it, an answer that is only a relative date is answered by code, exactly as the app
+  // does (lib/setup/codeTurns.ts), and the model is not asked; a scripted model still has a turn at that position, which is
+  // skipped. Without it, every turn is the model's.
+  today?: string;
 }
 
 export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, options: RunSetupEvalOptions = {}): Promise<EvalReport> {
@@ -78,14 +89,16 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
   };
 
   for (let index = 0; index < MAX_TURNS; index++) {
-    const raw = await model({ transcript: [...transcript], draft });
+    const step = dateStep(transcript, draft, options.today ?? c.today);
+    const byCode = step?.kind === 'turn';
+    const raw = step?.kind === 'turn' ? step.turn : await model({ transcript: [...transcript], draft, dateHint: step?.kind === 'hint' ? step.hint : undefined });
     const parsed = AssistantTurnSchema.safeParse(raw);
     if (!parsed.success) {
       report.malformed = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
       break;
     }
     const turn = parsed.data;
-    turns.push({ index, turn, violations: checkTurn(turn, { transcript: [...transcript], prevDraft: draft, personFits }) });
+    turns.push({ index, turn, violations: checkTurn(turn, { transcript: [...transcript], prevDraft: draft, personFits }), byCode });
     transcript.push({ role: 'assistant', turn });
     draft = turn.draft;
     report.draft = draft;

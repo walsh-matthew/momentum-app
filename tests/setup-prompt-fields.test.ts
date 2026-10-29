@@ -88,6 +88,14 @@ const draft: SetupDraft = {
     { path: 'goals.a.blockWeeks', turn: 3, how: 'accepted' },
   ],
   approved: ['goals', 'targets'],
+  plain: [{ path: 'goals.a.why', text: 'I want to feel strong' }],
+};
+
+// The two notes code adds (MOM-111): retry feedback, in code's own words, and a date hint.
+const extras = {
+  today: '2026-10-29',
+  retryFeedback: ['Make the question one sentence.'],
+  dateHint: 'Date note from code: "Monday" in the person\'s newest message is 2026-11-02.',
 };
 
 const turn = (over: Partial<AssistantTurn>): AssistantTurn => ({
@@ -111,12 +119,18 @@ const transcript: Transcript = [
 
 describe('what one setup call sends Claude (MOM-111 block 3)', () => {
   it('sends exactly the fields the privacy notice lists', () => {
-    const facts = setupPromptFacts(transcript, draft, '2026-10-29');
+    const facts = setupPromptFacts(transcript, draft, extras);
     expect(fieldPaths(facts)).toEqual(fieldList(PROMPTS.setup.sends));
   });
 
   it('never sends a goal id, a task id or an email address', () => {
-    const facts = setupPromptFacts(transcript, draft, '2026-10-29');
+    const facts = setupPromptFacts(transcript, draft, extras);
     expect(JSON.stringify(facts)).not.toMatch(/@|user_id|userId/);
+  });
+
+  it('leaves the notes out when there are none', () => {
+    const facts = setupPromptFacts(transcript, draft, { today: '2026-10-29', retryFeedback: [] });
+    expect(facts).not.toHaveProperty('retryFeedback');
+    expect(facts).not.toHaveProperty('dateHint');
   });
 });

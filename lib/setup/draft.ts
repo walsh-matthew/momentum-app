@@ -28,5 +28,6 @@ export function emptyDraft(): SetupDraft {
     },
     said: [],
     approved: [],
+    plain: [],
   };
 }

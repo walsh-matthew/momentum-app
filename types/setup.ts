@@ -255,10 +255,21 @@ export const ProvenanceSchema = z.strictObject({
   how: z.enum(['said', 'accepted']),
 });
 
+// Claude's clean version of the person's own words for one free-text value (MOM-111 finding 11): grammar, slang and
+// voice-to-text fixed ("wanna" to "want to"), in the person's own voice. `path` names the value by a path in
+// lib/setup/leaves.ts PLAIN_PATH_FORMS. Code checks it adds nothing the person did not say (lib/setup/paraphrase.ts); one
+// that passes is what the playback shows and, once approved, what is saved (owner decision 1, 2026-10-29). One that fails
+// is ignored, and the playback restates the person's own words.
+export const PlainWordsSchema = z.strictObject({
+  path: z.string().min(1).max(200),
+  text: Text,
+});
+
 export const SetupDraftSchema = z.strictObject({
   model: SetupModelSchema,
   said: z.array(ProvenanceSchema).max(500),
   approved: z.array(z.enum(SETUP_CHUNKS)).max(SETUP_CHUNKS.length),
+  plain: z.array(PlainWordsSchema).max(200).default([]),
 });
 
 // ---------------------------------------------------------------------------
@@ -290,6 +301,7 @@ export type TargetDraft = z.infer<typeof TargetDraftSchema>;
 export type WorkItemDraft = z.infer<typeof WorkItemDraftSchema>;
 export type Provenance = z.infer<typeof ProvenanceSchema>;
 export type SetupDraft = z.infer<typeof SetupDraftSchema>;
+export type PlainWords = z.infer<typeof PlainWordsSchema>;
 export type AssistantTurn = z.infer<typeof AssistantTurnSchema>;
 
 // What has been said so far. A person's message is their own words; an assistant message is Claude's turn.

@@ -4,17 +4,21 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { askSetupTurn, saveSetup } from '@/app/actions/setup';
 import { Button } from '@/components/ui/button';
+import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
-import { awaitsClaude, newSession, withAssistantTurn, withPersonMessage } from '@/lib/setup/session';
+import { awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer } from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
 import type { SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { FinalCard } from './FinalCard';
 import { PlaybackCard } from './PlaybackCard';
 import { QuestionCard } from './QuestionCard';
 import { QuickPathCard } from './QuickPathCard';
+import { RetryNotice } from './RetryNotice';
 import { clearStoredSession, loadStoredSession, storeSession } from './setupStorage';
 
 const NETWORK_ERROR = 'Could not reach the server. What you have said is kept. Try again.';
+// After a reload (a phone can drop a background tab while Claude thinks), the answer is still there, waiting for a reply.
+const STILL_WAITING = 'Your answer is kept. It has not had a reply yet.';
 
 // The date on this device, as YYYY-MM-DD. Sent with each request as a suggestion for a start date (the server does not
 // know the person's time zone before setup has asked for it).
@@ -40,7 +44,13 @@ function lastAssistantTurn(session: SetupSession): AssistantTurn | null {
   return null;
 }
 
-type Phase = 'loading' | 'intro' | 'resume' | 'running' | 'saved';
+// The person's last answer, when they spoke last and nothing has replied yet.
+function unansweredText(session: SetupSession): string | null {
+  const last = session.transcript[session.transcript.length - 1];
+  return last?.role === 'person' ? last.text : null;
+}
+
+type Phase = 'loading' | 'intro' | 'running' | 'saved';
 
 interface SetupConversationProps {
   // The signed-in person's id (their own, from the server's session). It only names this tab's copy of their setup in
@@ -51,6 +61,11 @@ interface SetupConversationProps {
 // The guided setup conversation (MOM-111, docs/DOMAIN_MODEL.md §2): one question on screen at a time. The conversation and
 // the draft live in this component (and this tab's session storage); nothing is stored on the server before the person
 // saves. Claude is asked only when the person taps: never on page load.
+//
+// The question never leaves the screen while its answer is waiting (MOM-111 finding 10). In Matt's phone run the screen went
+// back to "You have a setup in progress" mid-setup: a phone drops a background tab while Claude thinks, the page reloads,
+// and the old resume screen stood between the person and their question. A reload now opens straight on the question, with
+// the answer still waiting and a way to send it again or change it; a reply that does not come shows the same.
 export function SetupConversation({ userId }: SetupConversationProps) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [session, setSession] = useState<SetupSession>(newSession);
@@ -60,13 +75,17 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<SetupSaved | null>(null);
+  // The answer put back in the box by "Change my answer".
+  const [draftAnswer, setDraftAnswer] = useState<string | undefined>(undefined);
+  // "Start again" asks first: on a phone a stray tap would otherwise clear a long conversation.
+  const [confirmStartOver, setConfirmStartOver] = useState(false);
 
   // Read this tab's stored conversation after the first render, so the server and the browser render the same thing first.
   useEffect(() => {
     const stored = loadStoredSession(userId);
     if (stored) {
       setSession(stored);
-      setPhase('resume');
+      setPhase('running');
     } else {
       setPhase('intro');
     }
@@ -103,9 +122,21 @@ export function SetupConversation({ userId }: SetupConversationProps) {
 
   const answer = (text: string) => {
     const next = withPersonMessage(session, text);
+    setDraftAnswer(undefined);
     setSession(next);
     storeSession(userId, next);
     void ask(next);
+  };
+
+  // "Change my answer": the last answer goes back in the box, and the question is asked as it was.
+  const changeAnswer = () => {
+    const taken = withoutLastAnswer(session);
+    if (!taken) return;
+    setSession(taken.session);
+    storeSession(userId, taken.session);
+    setDraftAnswer(taken.text);
+    setView(null);
+    setError(null);
   };
 
   const save = async (quickPath: boolean) => {
@@ -132,6 +163,8 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     setSession(newSession());
     setView(null);
     setError(null);
+    setDraftAnswer(undefined);
+    setConfirmStartOver(false);
     setPhase('intro');
   };
 
@@ -186,25 +219,6 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     );
   }
 
-  if (phase === 'resume') {
-    return (
-      <section aria-labelledby="setup-resume" className="channel-card space-y-4 p-4">
-        <h2 id="setup-resume" className="text-lg font-semibold tracking-[-0.02em]">
-          You have a setup in progress
-        </h2>
-        <p className="text-base">It is kept in this browser tab only, and nothing has been saved. Pick up where you left off, or start again.</p>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button size="lg" onClick={() => setPhase('running')} className="w-full sm:w-auto">
-            Continue
-          </Button>
-          <Button size="lg" variant="outline" onClick={startOver} className="w-full sm:w-auto">
-            Start again
-          </Button>
-        </div>
-      </section>
-    );
-  }
-
   // The quick path: Claude is no longer used for this setup.
   if (view?.kind === 'quick_path') {
     return (
@@ -223,37 +237,40 @@ export function SetupConversation({ userId }: SetupConversationProps) {
 
   const turn = lastAssistantTurn(session);
   const waiting = awaitsClaude(session);
+  const failed = Boolean(error || view);
+  const retry = () => void ask(session);
 
-  // The conversation is waiting on Claude and nothing is running: the first reply never came, a reply was unusable, or the
-  // tab was resumed after the person had answered. Asking again is the person's tap.
-  if (waiting && !busy) {
-    const message = error ?? (view ? view.message : 'Ready when you are.');
+  // Nothing has been asked yet and no reply came (the very first one): there is no question to stay on.
+  if (turn === null) {
+    if (busy) {
+      return (
+        <p role="status" className="text-base text-muted">
+          Starting…
+        </p>
+      );
+    }
     return (
       <section aria-labelledby="setup-retry" className="channel-card space-y-4 p-4">
         <h2 id="setup-retry" className="text-lg font-semibold tracking-[-0.02em]">
-          {error || view ? 'That did not come through' : 'Continue your setup'}
+          That did not come through
         </h2>
-        <p role={error || view ? 'alert' : undefined} className="text-base">
-          {message}
-        </p>
-        <Button size="lg" onClick={() => void ask(session)} className="w-full sm:w-auto">
-          {error || view ? 'Try again' : 'Continue'}
-        </Button>
+        <RetryNotice message={error ?? view?.message ?? STILL_WAITING} failed={failed} onRetry={retry} />
       </section>
     );
   }
 
-  if (turn === null) {
-    return (
-      <p role="status" className="text-base text-muted">
-        Starting…
-      </p>
-    );
-  }
+  // The person's answer waiting on a reply, and, when nothing is running, what they can do about it.
+  const pending = waiting ? unansweredText(session) : null;
+  const notice =
+    waiting && !busy ? (
+      <RetryNotice message={error ?? view?.message ?? STILL_WAITING} failed={failed} onRetry={retry} onChangeAnswer={changeAnswer} />
+    ) : null;
+  const today = localDate();
+  const playbackOptions = { locale: browserLocale(), spokenTime: spokenTimes(turn.draft, session.transcript), today };
 
   return (
     <div className="space-y-3">
-      {error && (
+      {error && !waiting && (
         <p role="alert" className="text-sm text-danger">
           {error}
         </p>
@@ -261,20 +278,54 @@ export function SetupConversation({ userId }: SetupConversationProps) {
       {turn.kind === 'playback' && turn.chunk !== null ? (
         <PlaybackCard
           chunk={turn.chunk}
-          lines={renderPlayback(turn.draft.model, turn.chunk, { locale: browserLocale(), spokenTime: spokenTimes(turn.draft, session.transcript) })}
-          busy={busy}
+          lines={renderPlayback(shownModel(turn.draft, session.transcript), turn.chunk, playbackOptions)}
+          busy={busy || waiting}
           onApprove={answer}
           onChange={answer}
         />
       ) : turn.kind === 'final' ? (
-        <FinalCard lines={renderFinal(turn.draft.model)} saving={saving || busy} error={null} onSave={() => void save(false)} onChange={answer} />
+        <FinalCard
+          lines={renderFinal(shownModel(turn.draft, session.transcript))}
+          saving={saving || busy || waiting}
+          error={null}
+          onSave={() => void save(false)}
+          onChange={answer}
+        />
       ) : (
-        <QuestionCard turn={turn} busy={busy} onAnswer={answer} />
+        <QuestionCard turn={turn} busy={busy} onAnswer={answer} today={today} pending={pending} notice={notice} initialText={draftAnswer} />
       )}
-      {busy && (
-        <p role="status" className="text-sm text-muted">
-          Thinking…
-        </p>
+      {/* A question card shows these itself, under the answer it is waiting on. */}
+      {(turn.kind === 'playback' || turn.kind === 'final') && (
+        <>
+          {busy && (
+            <p role="status" className="text-sm text-muted">
+              Thinking…
+            </p>
+          )}
+          {notice}
+        </>
+      )}
+      {confirmStartOver ? (
+        <div className="space-y-2">
+          <p className="text-sm">Start again? What you have said so far will be cleared.</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={startOver} className="w-full sm:w-auto">
+              Yes, start again
+            </Button>
+            <Button variant="outline" onClick={() => setConfirmStartOver(false)} className="w-full sm:w-auto">
+              Keep going
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirmStartOver(true)}
+          disabled={busy}
+          className="text-sm text-muted underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+        >
+          Start again
+        </button>
       )}
     </div>
   );

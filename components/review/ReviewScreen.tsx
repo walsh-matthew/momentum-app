@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { formatDay } from '@/components/home/wording';
 import type { WeeklyReviewFacts } from '@/types/review';
 import { ChangesSince, RecapBody } from './RecapBody';
-import { closedEarlyLine, closedEarlyReviewedLine, fullWeekdayName, weekLabel } from './wording';
+import { closedEarlyLine, closedEarlyReviewedLine, finishedWhen, fullWeekdayName, weekLabel } from './wording';
 
 interface ReviewScreenProps {
   facts: WeeklyReviewFacts;
@@ -62,35 +61,35 @@ export function ReviewScreen({ facts }: ReviewScreenProps) {
           {facts.last && (
             <section aria-label="Your last review">
               <h2 className="section-title">Your last review</h2>
-              <p className="eyebrow">{weekLabel(facts.last.window)}</p>
-              <p className="home-note">You finished it on {formatDay(facts.last.finishedOn)}.</p>
-              <RecapBody recap={facts.last.recap} tone={facts.tone} />
+              <p className="eyebrow">{weekLabel(facts.last.window, facts.today)}</p>
+              <p className="home-note">You finished it {finishedWhen(facts.last.finishedOn, facts.today)}.</p>
+              <RecapBody recap={facts.last.recap} tone={facts.tone} today={facts.today} />
             </section>
           )}
-          <ChangesSince changes={facts.changes} />
+          <ChangesSince changes={facts.changes} today={facts.today} />
         </>
       );
     case 'reviewed':
       return (
         <>
           <section aria-label="This week's review">
-            <p className="eyebrow">{weekLabel(facts.review.window)}</p>
-            <p className="home-notice">You finished this review on {formatDay(facts.review.finishedOn)}. It stays as it was said.</p>
+            <p className="eyebrow">{weekLabel(facts.review.window, facts.today)}</p>
+            <p className="home-notice">You finished this review {finishedWhen(facts.review.finishedOn, facts.today)}. It stays as it was said.</p>
             {facts.review.recap.closedEarly && <p className="home-note">{closedEarlyReviewedLine(facts.review.window)}</p>}
-            <RecapBody recap={facts.review.recap} tone={facts.tone} />
+            <RecapBody recap={facts.review.recap} tone={facts.tone} today={facts.today} />
           </section>
-          <ChangesSince changes={facts.changes} />
+          <ChangesSince changes={facts.changes} today={facts.today} />
         </>
       );
     case 'ready':
       return (
         <>
           <section aria-label="This week's recap">
-            <p className="eyebrow">{weekLabel(facts.window)}</p>
+            <p className="eyebrow">{weekLabel(facts.window, facts.today)}</p>
             {facts.recap.closedEarly && <p className="home-notice">{closedEarlyLine(facts.window.end)}</p>}
-            <RecapBody recap={facts.recap} tone={facts.tone} />
+            <RecapBody recap={facts.recap} tone={facts.tone} today={facts.today} />
           </section>
-          <ChangesSince changes={facts.changes} />
+          <ChangesSince changes={facts.changes} today={facts.today} />
         </>
       );
   }

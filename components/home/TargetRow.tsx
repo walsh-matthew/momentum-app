@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Tone } from '@/types/database.types';
 import type { TargetCardView } from '@/types/home';
+import type { LocalDate } from '@/types/scoreboard';
 import { formatNumber, levelChip, levelsText, patternLine, slotDaysText, toAspirationLine, toSettledAspirationLine, trendText } from './wording';
 
 interface TargetRowProps {
@@ -11,15 +12,17 @@ interface TargetRowProps {
   settled?: boolean;
   // Shown at the end of a counted target, inside its card (the recap's crossings).
   children?: ReactNode;
+  // The person's today, for the dates in its chip and levels (MOM-111 finding 7).
+  today?: LocalDate | null;
 }
 
 const CHIP_CLASS = { accent: 'chip chip-accent', warn: 'chip chip-warn', dashed: 'chip chip-dashed', plain: 'chip' } as const;
 
 // One target on its goal's card. Every number is the engine's, and the chip always says the level in words. A target
 // that is not graded never shows a level word or a holding or slipping line, whatever level the engine's result holds.
-export function TargetRow({ card, tone, settled = false, children }: TargetRowProps) {
-  const chip = levelChip(card);
-  const levels = levelsText(card);
+export function TargetRow({ card, tone, settled = false, children, today = null }: TargetRowProps) {
+  const chip = levelChip(card, today);
+  const levels = levelsText(card, today);
   const head = (
     <div className="home-target-row">
       <h4>{card.title}</h4>

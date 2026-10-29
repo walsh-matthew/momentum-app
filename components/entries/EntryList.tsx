@@ -9,18 +9,21 @@ interface EntryListProps {
   entries: LoggedEntry[];
   // The person's own time zone, for the times shown. Null when none is set.
   timeZone: string | null;
+  // The person's own today, so a day reads "Today" or "Yesterday" (MOM-111 finding 7). Null when it is not known.
+  today?: string | null;
 }
 
 interface EntryRowProps {
   entry: LoggedEntry;
   timeZone: string | null;
+  today: string | null;
 }
 
 // One entry. Remove hides it and keeps it here, struck through, with a way back: nothing is deleted. An entry on a
 // day the person chose shows the day only, and one that falls before its goal's start says it is not counted.
-function EntryRow({ entry, timeZone }: EntryRowProps) {
+function EntryRow({ entry, timeZone, today }: EntryRowProps) {
   const { pending, error, run } = useEntryAction();
-  const when = entry.chosenDay ? `${formatChosenDay(entry.chosenDay)} · the day you chose` : formatEntryTime(entry.occurredAt, timeZone);
+  const when = entry.chosenDay ? `${formatChosenDay(entry.chosenDay, today)} · the day you chose` : formatEntryTime(entry.occurredAt, timeZone, today);
 
   return (
     <li className="rounded-2xl border border-border bg-secondary p-4">
@@ -53,14 +56,14 @@ function EntryRow({ entry, timeZone }: EntryRowProps) {
 }
 
 // The person's latest manual entries, newest first, removed ones included so they can be restored.
-export function EntryList({ entries, timeZone }: EntryListProps) {
+export function EntryList({ entries, timeZone, today = null }: EntryListProps) {
   if (entries.length === 0) {
     return <p className="text-sm text-muted">Nothing logged yet.</p>;
   }
   return (
     <ul className="space-y-2">
       {entries.map((entry) => (
-        <EntryRow key={entry.id} entry={entry} timeZone={timeZone} />
+        <EntryRow key={entry.id} entry={entry} timeZone={timeZone} today={today} />
       ))}
     </ul>
   );

@@ -61,7 +61,7 @@ export function ManualEntryPanel({ panel }: ManualEntryPanelProps) {
         <h2 id="recent-entries" className="section-title mb-3">
           Recent entries
         </h2>
-        <EntryList entries={panel.recent} timeZone={panel.timeZone} />
+        <EntryList entries={panel.recent} timeZone={panel.timeZone} today={panel.days?.[0]?.date ?? null} />
       </section>
     </div>
   );

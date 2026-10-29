@@ -82,7 +82,7 @@ export function PlanScreen({ plan }: PlanScreenProps) {
                         <h4>{item.title}</h4>
                         <div className="plan-chips">
                           {item.movedFromLastWeek && <span className="chip chip-warn">{LEFT_OVER}</span>}
-                          {itemChips(item).map((chip) => (
+                          {itemChips(item, plan.today).map((chip) => (
                             <span key={chip} className="chip">
                               {chip}
                             </span>
@@ -107,7 +107,7 @@ export function PlanScreen({ plan }: PlanScreenProps) {
                                 type="button"
                                 className="plan-day"
                                 aria-pressed={on}
-                                aria-label={dayButtonLabel(item.title, day.date)}
+                                aria-label={dayButtonLabel(item.title, day.date, plan.today)}
                                 data-today={day.isToday ? 'true' : undefined}
                                 disabled={pending || day.isPast}
                                 onClick={() => run(() => (on ? unplanItem(item.id, day.date) : planItem(item.id, day.date)))}
@@ -144,9 +144,9 @@ export function PlanScreen({ plan }: PlanScreenProps) {
               {plan.days.map((day) => (
                 <li key={day.date}>
                   <label>
-                    <span>{formatDay(day.date)}</span>
+                    <span>{formatDay(day.date, plan.today, { relative: false })}</span>
                     <select
-                      aria-label={kindSelectLabel(day.date)}
+                      aria-label={kindSelectLabel(day.date, plan.today)}
                       value={day.dayTypeId ?? ''}
                       disabled={pending || day.isPast}
                       onChange={(event) => {

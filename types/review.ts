@@ -73,12 +73,14 @@ export type WeeklyReviewFacts =
   | { state: 'needs_planning_setup' }
   // The anchors are set, but today is not the person's planning day: nothing to review yet. The last finished review,
   // if there is one, is still there to read, with anything a later entry changed since.
-  | { state: 'not_due'; tone: Tone; planningWeekday: Weekday; last: StoredReview | null; changes: RecapChange[] }
+  // `today` in each of the states below is the person's own date, so a date on screen reads the casual way (MOM-111 finding 7).
+  | { state: 'not_due'; tone: Tone; today: LocalDate; planningWeekday: Weekday; last: StoredReview | null; changes: RecapChange[] }
   // Today is the planning day and this week's review is already finished: the record as it was said, and the changes since.
-  | { state: 'reviewed'; tone: Tone; review: StoredReview; changes: RecapChange[] }
+  | { state: 'reviewed'; tone: Tone; today: LocalDate; review: StoredReview; changes: RecapChange[] }
   | {
       state: 'ready';
       tone: Tone;
+      today: LocalDate;
       window: ReviewWindow;
       targets: Layer1TargetFact[];
       // Layer 1 as the screen shows it, and as a finished review would store it.

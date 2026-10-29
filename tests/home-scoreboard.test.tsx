@@ -326,7 +326,7 @@ describe('patterns follow the person’s tone, and only a graded target has one'
 
 describe('a milestone shows its steps and due date, never a forecast verdict', () => {
   it('lists the steps with done and to do in words, and the steps done', () => {
-    render(<MilestoneRow milestone={milestone()} />);
+    render(<MilestoneRow milestone={milestone()} today="2026-10-29" />);
     expect(screen.getByRole('heading', { name: 'Portfolio ready' })).toBeTruthy();
     expect(screen.getByText('Due Fri, Nov 20')).toBeTruthy();
     expect(screen.getByText(/^2 of 4/)).toBeTruthy();
@@ -365,8 +365,12 @@ describe('a goal card', () => {
     render(<TargetRow card={{ ...base, status: 'not_counted' }} tone="middle" />);
     expect(screen.getByText('Tracked, not counted yet')).toBeTruthy();
     cleanup();
-    render(<TargetRow card={{ ...base, status: 'not_started', startsOn: '2026-11-09' }} tone="middle" />);
+    render(<TargetRow card={{ ...base, status: 'not_started', startsOn: '2026-11-09' }} tone="middle" today="2026-10-29" />);
     expect(screen.getByText('Starts Mon, Nov 9')).toBeTruthy();
+    cleanup();
+    // MOM-111 finding 7: the one casual date formatter says tomorrow, and the year only when it is not this year.
+    render(<TargetRow card={{ ...base, status: 'not_started', startsOn: '2026-10-30' }} tone="middle" today="2026-10-29" />);
+    expect(screen.getByText('Starts tomorrow')).toBeTruthy();
   });
 });
 
@@ -415,7 +419,12 @@ describe('wording helpers', () => {
     expect(formatNumber(15)).toBe('15');
     expect(formatNumber(8.5)).toBe('8.5');
     expect(formatNumber(2.04)).toBe('2');
-    expect(formatDay('2026-11-01')).toBe('Sun, Nov 1');
+    expect(formatDay('2026-11-01', '2026-10-29')).toBe('Sun, Nov 1');
+    expect(formatDay('2027-01-04', '2026-10-29')).toBe('Mon, Jan 4, 2027');
+    expect(formatDay('2026-10-29', '2026-10-29')).toBe('today');
+    expect(formatDay('2026-10-29', '2026-10-29', { relative: false })).toBe('Thu, Oct 29');
+    // Without the person's today, the year is always shown.
+    expect(formatDay('2026-11-01', null)).toBe('Sun, Nov 1, 2026');
   });
 
   it('writes a headline for each kind of crossing', () => {

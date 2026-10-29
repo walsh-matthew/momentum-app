@@ -131,6 +131,12 @@ export function dayTimeWords(text: string): string[] {
   return out;
 }
 
+// A weekday that names a calendar date ("Tuesday, Oct 27", "Monday, November 2, 2026") is the date's own weekday, not a day
+// of the person's week, so rule 2 does not read it as one (MOM-111 finding 7: dates are written the casual way, weekday
+// first). A weekday on its own ("Mondays", "on Tuesday") is still a day word.
+const DATE_WEEKDAY = new RegExp(`\\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun),?\\s+(?=(?:${MONTH_ALT})\\.?\\s+\\d{1,2}\\b)`, 'gi');
+export const withoutDateWeekdays = (text: string): string => text.replace(DATE_WEEKDAY, '');
+
 // Sentences, split after . ! or ?
 export const sentencesOf = (text: string): string[] =>
   text
@@ -176,9 +182,21 @@ export function asksMeaning(text: string): boolean {
   return /\b(what do you mean|what does .+ mean|what is that|what's that|mean by|meaning|not sure what you mean|(don't|dont|do not) (understand|get it|follow)|confused|explain|like what|huh)\b/.test(t);
 }
 
-// The person asked for starting ideas.
+const DECLINES_IDEAS = /\b(in mind|my own|own answer|no thanks|nope|i know)\b/;
+
+// The person asked, in so many words, for ideas or a recommendation ("any recommendations?", "what do you suggest?", "some
+// examples would help"). This counts wherever they say it: after the offer of ideas, as a tapped "starting ideas" option, or
+// unprompted in any answer (MOM-111 root cause B).
+export function asksForIdeas(text: string): boolean {
+  const t = text.toLowerCase().replace(/[’‘]/g, "'");
+  if (DECLINES_IDEAS.test(t)) return false;
+  return /\b(ideas?|examples?|suggest\w*|recommend\w*|advice|advise|starting points?|what would you do|what do you think)\b/.test(t);
+}
+
+// The person's answer to the offer "Do you have something in mind, or would some starting ideas help?": the words above, or
+// a plain yes. A plain yes means ideas only as the answer to that offer.
 export function wantsIdeas(text: string): boolean {
   const t = text.toLowerCase();
-  if (/\b(in mind|my own|own answer|no thanks|nope|i know)\b/.test(t)) return false;
-  return /\b(ideas?|examples?|suggest\w*|help|yes|yeah|sure|please)\b/.test(t);
+  if (DECLINES_IDEAS.test(t)) return false;
+  return asksForIdeas(t) || /\b(help|yes|yeah|sure|please)\b/.test(t);
 }

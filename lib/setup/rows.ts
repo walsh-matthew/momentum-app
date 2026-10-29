@@ -11,6 +11,7 @@
 import type { QuantityMetric, TablesInsert } from '@/types/database.types';
 import type { SetupDraft, Transcript } from '@/types/setup';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
+import { shownModel } from './paraphrase';
 import { acceptedStartingPoints, type StartingPointMark, type StartingPointSubject } from './startingPoints';
 import { validateDraft, type DraftIssue } from './validate';
 
@@ -67,7 +68,10 @@ export function draftToRows(draft: SetupDraft, transcript: Transcript): DraftRow
   const validation = validateDraft(draft, transcript, 'final');
   if (!validation.ok) return { ok: false, issues: validation.issues };
 
-  const { person, settings, goals } = draft.model;
+  // What the person approved: the playback showed Claude's clean version of their words where it passed the check, so that
+  // is what is saved (MOM-111 finding 11, owner decision 1). Their raw words stay only in the conversation, which is not
+  // stored.
+  const { person, settings, goals } = shownModel(draft, transcript);
   const rows: SetupRows = {
     personSettings: {
       time_zone: person.timeZone,

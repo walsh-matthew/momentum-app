@@ -154,7 +154,7 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
   const reviews = readReviews(rows.reviews, anchors);
   const tone = rows.settings?.tone ?? DEFAULT_TONE;
   // Not the planning day and nothing finished before: nothing to show, so nothing is computed.
-  if (window === null && reviews.length === 0) return { state: 'not_due', tone, planningWeekday, last: null, changes: [] };
+  if (window === null && reviews.length === 0) return { state: 'not_due', tone, today, planningWeekday, last: null, changes: [] };
 
   const targets = rows.targets.filter((t) => goalById.has(t.goal_id)).sort(byCreated);
   const stepIdsOfTarget = (targetId: string) => {
@@ -192,10 +192,10 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
   });
 
   const changes = changesSince(scoreboard, reviews);
-  if (window === null) return { state: 'not_due', tone, planningWeekday, last: reviews[0] ?? null, changes };
+  if (window === null) return { state: 'not_due', tone, today, planningWeekday, last: reviews[0] ?? null, changes };
 
   const finished = reviews.find((r) => r.window.start === window.start);
-  if (finished) return { state: 'reviewed', tone, review: finished, changes };
+  if (finished) return { state: 'reviewed', tone, today, review: finished, changes };
 
   const priorities: PriorityLine[] = rows.priorities.map((p) => ({ id: p.id, label: p.label }));
   const facts = buildLayer1Facts(scoreboard, window);
@@ -204,6 +204,7 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
   return {
     state: 'ready',
     tone,
+    today,
     window,
     targets: facts,
     recap: buildStoredRecap({

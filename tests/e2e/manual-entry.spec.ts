@@ -40,8 +40,9 @@ async function chooseDay(page: Page, title: string, which: RegExp | 'oldest'): P
   return label;
 }
 
-// "Oct 27" from "Yesterday, Oct 27" or "Tue, Oct 21".
-const dateOf = (label: string) => label.split(', ')[1];
+// How the recent list shows the day picked as `label` ("Yesterday, Oct 27" or "Tue, Oct 21"): through the app's one casual
+// date formatter (MOM-111 finding 7), yesterday is "Yesterday", any other day its date.
+const dateOf = (label: string) => (label.startsWith('Yesterday') ? 'Yesterday' : label.split(', ')[1]);
 
 for (const [name, width] of Object.entries(WIDTHS)) {
   test.describe(`at ${width}px (${name})`, () => {

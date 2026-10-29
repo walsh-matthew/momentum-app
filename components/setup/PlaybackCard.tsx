@@ -35,14 +35,16 @@ export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: Playba
         ))}
       </ul>
       {changing ? (
-        <AnswerBox
-          label={CHANGE_PROMPT}
-          placeholder={CHANGE_PROMPT}
-          submitLabel="Send the change"
-          busy={busy}
-          onSubmit={onChange}
-          secondary={{ label: KEEP_IT, onClick: () => onApprove(APPROVE_TEXT) }}
-        />
+        <div className="space-y-2">
+          <p className="text-base font-medium">{CHANGE_PROMPT}</p>
+          <AnswerBox
+            label={CHANGE_PROMPT}
+            submitLabel="Send the change"
+            busy={busy}
+            onSubmit={onChange}
+            secondary={{ label: KEEP_IT, onClick: () => onApprove(APPROVE_TEXT) }}
+          />
+        </div>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button size="lg" disabled={busy} onClick={() => onApprove(APPROVE_TEXT)} className="w-full sm:w-auto">

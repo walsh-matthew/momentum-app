@@ -11,8 +11,15 @@ const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'F
 export const fullWeekdayName = (weekday: number): string => WEEKDAY_FULL[weekday] ?? '';
 export const fullDayName = (day: LocalDate): string => WEEKDAY_FULL[new Date(`${day}T00:00:00Z`).getUTCDay()];
 
-// "Mon, Oct 19 to Sun, Oct 25".
-export const weekLabel = (window: { start: LocalDate; end: LocalDate }): string => `${formatDay(window.start)} to ${formatDay(window.end)}`;
+// When a review was finished: "today", "yesterday", or "on Thu, Oct 29".
+export function finishedWhen(day: LocalDate, today: LocalDate | null): string {
+  const words = formatDay(day, today);
+  return words === 'today' || words === 'yesterday' ? words : `on ${words}`;
+}
+
+// "Mon, Oct 19 to Sun, Oct 25", the year only when it is not this year.
+export const weekLabel = (window: { start: LocalDate; end: LocalDate }, today: LocalDate | null = null): string =>
+  `${formatDay(window.start, today, { relative: false })} to ${formatDay(window.end, today, { relative: false })}`;
 
 // Said when the review closes the week early (the planning day is the week's own last day, RAID I-11): the week is counted
 // through today, so an entry logged later today is not in this recap. It shows under "Since this recap" once the review
@@ -39,8 +46,8 @@ export function changeLine(change: RecapChange): string {
   return `${change.title}: it now reads ${formatNumber(change.now.counted)}${unit} (${levelWords(change.now)}). The recap said ${formatNumber(change.said.counted)}${unit} (${levelWords(change.said)}). An entry logged later for a day in that week changed it.`;
 }
 
-export function crossingLine(crossing: RecapCrossing): string {
-  const day = formatDay(crossing.on);
+export function crossingLine(crossing: RecapCrossing, today: LocalDate | null = null): string {
+  const day = formatDay(crossing.on, today, { relative: false });
   switch (crossing.kind) {
     case 'floor':
       return `Reached your floor on ${day}`;
