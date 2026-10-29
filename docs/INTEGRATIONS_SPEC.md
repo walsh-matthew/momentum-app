@@ -123,6 +123,16 @@ All provider adapters must output data adhering to this standardized interface i
 
 **Hevy key form (MOM-62).** A Server Action (`saveHevyApiKey`) passes the pasted key to `saveApiKey()`. The key is checked for shape only; it goes into a password field, is not echoed or kept in client state, and the form returns only a message. Calling Hevy to confirm the key works (for example `GET /v1/user/info`) is not built yet; see `BACKLOG.md`.
 
+### D. The person's own tracker sheet (planned: MOM-117 Google, MOM-136 OneDrive)
+
+Not built. Decided 2026-10-29, with the product rules in `docs/DOMAIN_MODEL.md` §1.5 and §4.3. The sheet source is the same for any provider: a sheet with a header row and records. Each provider only adds an adapter that outputs the same records.
+
+* **Choosing the file.** The person picks the sheet in the provider's own file picker. For Google, Momentum asks only for `https://www.googleapis.com/auth/drive.file`, which Google lists as non-sensitive and recommended. It reaches only files the person opens with the app or picks in the Picker, and files the app creates. Momentum never asks for `drive` or `drive.readonly`. Those are restricted scopes: they need restricted-scope verification, plus a security assessment when the data is stored on a server ([Choose Google Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), checked 2026-10-29). The scope joins the existing Google connect flow above, whose scope check must then accept it. Still to check before building: reading a picked sheet's cell values under `drive.file`.
+* **Reading.** Reads happen when the person opens Momentum, before the weekly review, and on Refresh, and nothing reads in the background. The Sheets API allows 300 read requests per minute per project and 60 per minute per user per project, with no daily cap. A request over the limit gets `429`, so retry with exponential backoff ([Sheets API usage limits](https://developers.google.com/sheets/api/limits), checked 2026-10-29).
+* **Change alerts are deferred.** Drive can watch a single file (`files.watch`), but a watch on a file lasts at most one day (86,400 seconds) and is not renewed by Google. The alert carries no content (only that the file changed), so the sheet must still be read, and the callback must be HTTPS ([Drive push notifications](https://developers.google.com/workspace/drive/api/guides/push), checked 2026-10-29). Microsoft Graph supports change alerts on OneDrive drive items for personal and work or school accounts ([Graph change notifications](https://learn.microsoft.com/graph/api/resources/webhooks), checked 2026-10-29). How long a drive-item subscription lasts is unverified. If alerts are added later, they share the webhook and renewal plumbing planned under "Webhook endpoints" below.
+* **What is stored.** Only the counted cells, each row's date or week number, and a row reference that corrections key to. Never other columns, and never a copy of the sheet. The privacy notice changes in the same build.
+* **OneDrive (MOM-136).** It uses the Microsoft file picker and the narrowest Graph permission that reaches only picked or app-created files. The exact permission, the workbook read limits and personal-account support are unverified, and get checked and cited before building.
+
 ---
 
 ## 4. Phase 1 vs. Phase 2 Scope Boundary

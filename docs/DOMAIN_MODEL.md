@@ -71,11 +71,15 @@ Every target names who is responsible for knowing whether it happened.
 
 | Source type | Examples | Who confirms | What Momentum asks |
 | --- | --- | --- | --- |
-| Synced | Hevy, calendar busy/free, a tracker sheet in the person's own Drive | The source | Only about connection health, never "did you work out?" |
+| Synced | Hevy, calendar busy/free, a tracker sheet in the person's own Google Drive or OneDrive | The source | Only about connection health, never "did you work out?" |
 | Manual | Tap, one number, start/stop timer, checklist tick | The person; the entry is the confirmation | Check-ins only as the person set them (never, end of their day, end of their week) |
 
 - **The person's word beats any source.** A manual entry or correction always wins over a sync.
-- **Bring your own tracker:** if the person already keeps a sheet, it is the source of truth. Momentum reads raw rows by header, flags header drift, and writes only additively with a preview. This is the first build after the thin slice (MOM-117): the bridge for anything no app with an API tracks well.
+- **Bring your own tracker:** if the person already keeps a sheet, it is the source of truth. Momentum reads raw rows by header, flags header drift, and writes only additively with a preview. This is the first build after the thin slice (MOM-117): the bridge for anything no app with an API tracks well. Both Google Drive and OneDrive are needed: Google comes first (MOM-117) and OneDrive/Excel follows (MOM-136), and the sheet source is the same for any provider.
+  - **The person picks the file.** They choose it in the provider's own file picker, never by pasting a link, so Momentum can see only the files they pick or that Momentum created, never their whole Drive.
+  - **Sheets come in every shape.** Momentum reads the header row, Claude proposes which columns count in plain words, the person confirms, and the engine counts. The mapping follows header names, not column letters. It covers which tab, which header row, and a date or a week number for each counted row. A renamed header is flagged once, and its column stops counting until the person re-confirms. Only the named columns count (for example Actual, not Plan), and totals and formula rows are never read.
+  - **Read when the person looks.** Momentum reads the sheet when the person opens it, before the weekly review, and when they tap Refresh, and it shows when it last read. There is no background read until a review is ever found running on stale numbers.
+  - **Keep only what counts.** Momentum stores the counted cells, each row's date and a row reference (so corrections survive the next read). It never stores other columns or a copy of the sheet.
 - **Missing integration:** suggest a bridge (for example Strava for watch runs), offer "request this integration", fall back to manual.
 - **Inference is labelled.** Anything Momentum guesses (a calendar event counting as a meetup) shows what it counted and has one-tap undo.
 
@@ -227,7 +231,7 @@ If the right answer depends on the person, it is a setting with a sensible defau
 
 Momentum does not edit the person's documents, write resumes, or coach focus and getting started. Those stay in the person's own tools; Momentum tracks the progress signals they produce. This avoids drift toward recreating a general assistant or a notes app.
 
-**The one exception is templates Momentum creates** (for example a starter tracker, a saved-postings folder or a prep sheet). Momentum can change those as the person's needs grow, such as adding a column when they need to store more. It changes them only additively, with a preview and the person's OK, and never removes their columns or data. Templates arrive with the sheet source (MOM-117).
+**The one exception is templates Momentum creates** (for example a starter tracker, a saved-postings folder or a prep sheet). Momentum can change those as the person's needs grow, such as adding a column when they need to store more. It changes them only additively, with a preview and the person's OK, and never removes their columns or data. Templates arrive with the sheet source (MOM-117). Momentum creates them in the person's own Drive (or OneDrive), in a "Momentum" folder the person owns. Momentum never deletes them, and they stay the person's if they leave.
 
 ## Change log
 
@@ -236,3 +240,4 @@ Momentum does not edit the person's documents, write resumes, or coach focus and
 | 2026-10-26 | File created from the approved design pass (sections 1 to 4). Supersedes the product rules in `NINETY_DAY_PLAN_CONTEXT.md` and five rules in `INTEGRATIONS_SPEC.md`. | Tabletop walk-throughs of fitness, career, two setup runs and a balance week showed the old career-only, checkbox, 13-week model did not fit real goals. See the design record. | MOM-106 |
 | 2026-10-27 | §2.2 step 10 now asks the day end (once, on the first goal, no default), explains the early day end (after midnight, before 06:00, moves the day boundary) versus a check-in time (boundary stays at midnight), and asks the week start only when the first weekly or day-slot target needs it. | The scoreboard engine refuses to compute without a day end and a week start for weekly periods, and setup builds from this section. | MOM-125 |
 | 2026-10-27 | §2.2 step 9 is now one question: "Where do you track this now, if anywhere?" (was "Are you already tracking this? Where?"). | The old wording was two asks, which setup's first hard rule (one single-part question per turn) forbids; MOM-111's first block found it. | MOM-111 |
+| 2026-10-29 | §1.5 bring your own tracker names Google Drive and OneDrive (Google first, the same source for both) and adds four rules: the person picks the file, mapping follows headers and fits any sheet shape, reads happen when the person looks, and only counted cells are kept. §4.3 says where Momentum's templates live. | Owner design pass on the sheet source, 2026-10-29. Both stores are common in households like the owner's; the narrow file permission keeps the privacy ask and the provider review small. | MOM-117, MOM-136 |
