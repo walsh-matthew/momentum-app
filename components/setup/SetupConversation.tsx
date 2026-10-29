@@ -2,21 +2,24 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { askSetupTurn, saveSetup } from '@/app/actions/setup';
 import { Button } from '@/components/ui/button';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
-import { awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer } from '@/lib/setup/session';
+import { UNREACHABLE_MESSAGE, awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer } from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
 import type { SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { FinalCard } from './FinalCard';
 import { PlaybackCard } from './PlaybackCard';
 import { QuestionCard } from './QuestionCard';
 import { QuickPathCard } from './QuickPathCard';
-import { RetryNotice } from './RetryNotice';
+import { RetryNotice, type RetryKind } from './RetryNotice';
+import { SetupButton } from './SetupButton';
 import { clearStoredSession, loadStoredSession, storeSession } from './setupStorage';
 
-const NETWORK_ERROR = 'Could not reach the server. What you have said is kept. Try again.';
+// A request that never reached the server, or ran out of time on the way (MOM-111 round 2, finding 12).
+const NETWORK_ERROR = UNREACHABLE_MESSAGE;
 // After a reload (a phone can drop a background tab while Claude thinks), the answer is still there, waiting for a reply.
 const STILL_WAITING = 'Your answer is kept. It has not had a reply yet.';
 
@@ -77,6 +80,8 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   const [saved, setSaved] = useState<SetupSaved | null>(null);
   // The answer put back in the box by "Change my answer".
   const [draftAnswer, setDraftAnswer] = useState<string | undefined>(undefined);
+  // Why the last request produced no turn, for the error card's words and main button (MOM-111 round 2, findings 12, 14).
+  const [errorKind, setErrorKind] = useState<RetryKind>('unreachable');
   // "Start again" asks first: on a phone a stray tap would otherwise clear a long conversation.
   const [confirmStartOver, setConfirmStartOver] = useState(false);
 
@@ -98,6 +103,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     try {
       const result = await askSetupTurn({ ...next, today: localDate(), locale: browserLocale() });
       if (!result.ok) {
+        setErrorKind('unreachable');
         setError(result.error);
       } else if (result.data.kind === 'turn') {
         const updated = withAssistantTurn(next, result.data.turn, result.data.spentTokens);
@@ -107,6 +113,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         setView(result.data);
       }
     } catch {
+      setErrorKind('unreachable');
       setError(NETWORK_ERROR);
     } finally {
       setBusy(false);
@@ -128,15 +135,18 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     void ask(next);
   };
 
-  // "Change my answer": the last answer goes back in the box, and the question is asked as it was.
+  // "Change my answer": the last answer goes back in the box, selected, and the question is asked as it was. The change is
+  // committed inside the tap (flushSync), so the box can take focus there and a phone shows its keyboard (round 2, finding 13).
   const changeAnswer = () => {
     const taken = withoutLastAnswer(session);
     if (!taken) return;
-    setSession(taken.session);
+    flushSync(() => {
+      setSession(taken.session);
+      setDraftAnswer(taken.text);
+      setView(null);
+      setError(null);
+    });
     storeSession(userId, taken.session);
-    setDraftAnswer(taken.text);
-    setView(null);
-    setError(null);
   };
 
   const save = async (quickPath: boolean) => {
@@ -237,8 +247,11 @@ export function SetupConversation({ userId }: SetupConversationProps) {
 
   const turn = lastAssistantTurn(session);
   const waiting = awaitsClaude(session);
-  const failed = Boolean(error || view);
   const retry = () => void ask(session);
+  // Which error card: the server's reason for a failed turn, "couldn't reach" for a wait or a request that never got an
+  // answer, and "waiting" after a reload, when nothing went wrong (round 2, findings 12 and 14).
+  const kind: RetryKind = view?.kind === 'failed' ? view.reason : view?.kind === 'wait' ? 'unreachable' : error ? errorKind : 'waiting';
+  const noticeMessage = error ?? view?.message ?? STILL_WAITING;
 
   // Nothing has been asked yet and no reply came (the very first one): there is no question to stay on.
   if (turn === null) {
@@ -254,7 +267,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         <h2 id="setup-retry" className="text-lg font-semibold tracking-[-0.02em]">
           That did not come through
         </h2>
-        <RetryNotice message={error ?? view?.message ?? STILL_WAITING} failed={failed} onRetry={retry} />
+        <RetryNotice kind={kind} message={noticeMessage} onRetry={retry} />
       </section>
     );
   }
@@ -263,7 +276,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   const pending = waiting ? unansweredText(session) : null;
   const notice =
     waiting && !busy ? (
-      <RetryNotice message={error ?? view?.message ?? STILL_WAITING} failed={failed} onRetry={retry} onChangeAnswer={changeAnswer} />
+      <RetryNotice kind={kind} message={noticeMessage} onRetry={retry} onChangeAnswer={changeAnswer} />
     ) : null;
   const today = localDate();
   const playbackOptions = { locale: browserLocale(), spokenTime: spokenTimes(turn.draft, session.transcript), today };
@@ -292,7 +305,17 @@ export function SetupConversation({ userId }: SetupConversationProps) {
           onChange={answer}
         />
       ) : (
-        <QuestionCard turn={turn} busy={busy} onAnswer={answer} today={today} pending={pending} notice={notice} initialText={draftAnswer} />
+        // Keyed so "Change my answer" opens the card afresh, with the old answer in the box.
+        <QuestionCard
+          key={`${session.transcript.length}:${draftAnswer === undefined ? '' : 'edit'}`}
+          turn={turn}
+          busy={busy}
+          onAnswer={answer}
+          today={today}
+          pending={pending}
+          notice={notice}
+          initialText={draftAnswer}
+        />
       )}
       {/* A question card shows these itself, under the answer it is waiting on. */}
       {(turn.kind === 'playback' || turn.kind === 'final') && (
@@ -309,12 +332,12 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         <div className="space-y-2">
           <p className="text-sm">Start again? What you have said so far will be cleared.</p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" onClick={startOver} className="w-full sm:w-auto">
+            <SetupButton tone="second" onClick={startOver}>
               Yes, start again
-            </Button>
-            <Button variant="outline" onClick={() => setConfirmStartOver(false)} className="w-full sm:w-auto">
+            </SetupButton>
+            <SetupButton tone="main" onClick={() => setConfirmStartOver(false)}>
               Keep going
-            </Button>
+            </SetupButton>
           </div>
         </div>
       ) : (

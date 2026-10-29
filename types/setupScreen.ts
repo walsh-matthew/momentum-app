@@ -25,8 +25,12 @@ export type SetupTurnView =
   | { kind: 'quick_path'; reason: QuickPathReason; message: string; sections: PlaybackSection[]; missing: string[]; canSave: boolean }
   // Two requests landed within a second of each other: ask again.
   | { kind: 'wait'; message: string; retryAfterSeconds: number }
-  // Claude could not give a usable reply. What the person said is kept; they can try again.
-  | { kind: 'failed'; message: string; rejected: number };
+  // Claude could not give a usable reply. What the person said is kept; they can try again. `reason` picks the card's words
+  // and its main button (MOM-111 round 2, findings 12 and 14): 'stuck' (replies thrown away, or no time left for another
+  // try) leads with "Change my answer"; 'unreachable' (Claude busy or not reached) leads with "Try again".
+  | { kind: 'failed'; reason: SetupFailedReason; message: string; rejected: number };
+
+export type SetupFailedReason = 'stuck' | 'unreachable' | 'not_configured';
 
 export interface SetupSaved {
   goals: number;

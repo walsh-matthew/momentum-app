@@ -91,9 +91,10 @@ const draft: SetupDraft = {
   plain: [{ path: 'goals.a.why', text: 'I want to feel strong' }],
 };
 
-// The two notes code adds (MOM-111): retry feedback, in code's own words, and a date hint.
+// The notes code adds (MOM-111): retry feedback, in code's own words, a date hint, and (round 2) a source note.
 const extras = {
   today: '2026-10-29',
+  sourceNote: 'Source note from code: "heavy" means the app Hevy.',
   retryFeedback: ['Make the question one sentence.'],
   dateHint: 'Date note from code: "Monday" in the person\'s newest message is 2026-11-02.',
 };
@@ -104,6 +105,7 @@ const turn = (over: Partial<AssistantTurn>): AssistantTurn => ({
   skipped: { topic: 'idea', line: "You told me the idea, so I'll skip that." },
   say: 'Thanks.',
   question: 'What else matters to you?',
+  detail: 'Like family time.',
   topic: 'priorities',
   options: [],
   draft,
@@ -132,5 +134,6 @@ describe('what one setup call sends Claude (MOM-111 block 3)', () => {
     const facts = setupPromptFacts(transcript, draft, { today: '2026-10-29', retryFeedback: [] });
     expect(facts).not.toHaveProperty('retryFeedback');
     expect(facts).not.toHaveProperty('dateHint');
+    expect(facts).not.toHaveProperty('sourceNote');
   });
 });

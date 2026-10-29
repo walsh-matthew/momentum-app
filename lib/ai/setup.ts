@@ -12,8 +12,9 @@
 // the real API (no live call has been approved). Whether to move to it is for the live-run block.
 //
 // What it sends: only what the person typed in this setup, Claude's own earlier turns, the current draft once, the date on
-// their device as a suggested start date, and two notes written by code (MOM-111): why a previous try at this turn was
-// thrown away, and what a relative date in their newest message works out to. No other goals, tasks, ids or email. Pinned field by field in
+// their device as a suggested start date, and notes written by code (MOM-111): why a previous try at this turn was thrown
+// away (with the paths it failed at, round 2), what a relative date or a length of time they said works out to, and which
+// app they named for tracking. No other goals, tasks, ids or email. Pinned field by field in
 // `lib/config/privacy.ts`'s `PROMPTS.setup`, against `setupPromptFacts()` below (MOM-111 block 3, MOM-102).
 //
 // Since MOM-128 it is called through runSetupTurn() in lib/services/llm.ts, which counts the call, applies the setup limits
@@ -23,7 +24,7 @@ import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAnthropicApiKey } from '@/lib/config/env';
 import { casualDate } from '@/lib/dates/casual';
-import { RETRY_HEADER } from '@/lib/setup/feedback';
+import { RETRY_HEADER, type OutputProblem } from '@/lib/setup/feedback';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import type { AssistantTurn, SetupDraft, Transcript } from '@/types/setup';
 import { readUsage, type ModelUsage } from './usage';
@@ -34,14 +35,17 @@ export const SETUP_MODEL = 'claude-opus-5-5';
 
 // Output includes the model's thinking, and the reply carries the whole draft, so leave room.
 const MAX_OUTPUT_TOKENS = 16000;
-const REQUEST_TIMEOUT_MS = 60_000;
+// The longest one call may take when the caller gives no time left (MOM-111 round 2, C). The setup service passes the time
+// its turn has left instead, so a call never runs past the server's limit.
+export const REQUEST_TIMEOUT_MS = 150_000;
 
 // Why a model answer was not used. The caller turns each into a plain-words message.
 export type ModelSetupFailure = 'not_configured' | 'refused' | 'rate_limited' | 'unavailable' | 'bad_output';
 
 export type ModelSetupResult =
   | { ok: true; raw: unknown; model: string; usage: ModelUsage | null }
-  | { ok: false; reason: ModelSetupFailure; usage?: ModelUsage | null };
+  // `problem`, on bad_output only: which way the answer could not be read (MOM-111 round 2, A).
+  | { ok: false; reason: ModelSetupFailure; usage?: ModelUsage | null; problem?: OutputProblem };
 
 export interface ModelSetupDeps {
   // Swappable in tests so no network call is made.
@@ -73,9 +77,12 @@ export interface SetupPromptFacts {
   // Why the previous try at this same turn was thrown away, in fixed words written by code (lib/setup/feedback.ts): no
   // person text, no value (MOM-111 root cause A). Absent on a first try.
   retryFeedback?: string[];
-  // What code read a relative date in the person's newest message as (lib/setup/codeTurns.ts, MOM-111 finding 8). Absent
-  // when there is none.
+  // What code read a relative date or a length of time in the person's words as (lib/setup/codeTurns.ts, MOM-111 finding 8
+  // and round 2 finding 7). Absent when there is none.
   dateHint?: string;
+  // Which app code read in the person's answer to the source question (lib/setup/sources.ts, MOM-111 round 2): "Heavy" is
+  // Hevy, and an app Momentum cannot read yet. Absent when there is none.
+  sourceNote?: string;
 }
 
 // The extras one turn can carry besides the conversation itself.
@@ -83,6 +90,7 @@ export interface SetupTurnExtras {
   today?: string;
   retryFeedback?: string[];
   dateHint?: string;
+  sourceNote?: string;
 }
 
 export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, extras: SetupTurnExtras = {}): SetupPromptFacts {
@@ -99,6 +107,7 @@ export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, extr
   if (extras.today !== undefined) facts.today = extras.today;
   if (extras.retryFeedback && extras.retryFeedback.length > 0) facts.retryFeedback = extras.retryFeedback;
   if (extras.dateHint) facts.dateHint = extras.dateHint;
+  if (extras.sourceNote) facts.sourceNote = extras.sourceNote;
   return facts;
 }
 
@@ -128,6 +137,7 @@ export function buildSetupMessages(transcript: Transcript, draft: SetupDraft, ex
   const current = `Current draft, to start from:\n${JSON.stringify(facts.draft)}${suggestion}`;
   const extraBlocks: Anthropic.TextBlockParam[] = [];
   if (facts.dateHint) extraBlocks.push({ type: 'text', text: facts.dateHint });
+  if (facts.sourceNote) extraBlocks.push({ type: 'text', text: facts.sourceNote });
   if (facts.retryFeedback) extraBlocks.push({ type: 'text', text: [RETRY_HEADER, ...facts.retryFeedback.map((line) => `- ${line}`)].join('\n') });
   const last = messages[messages.length - 1];
   if (last.role === 'user' && typeof last.content === 'string') {
@@ -151,14 +161,17 @@ function extractJson(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-// Asks Claude for the next turn. Returns the model's raw JSON, parsed but otherwise untouched.
+// Asks Claude for the next turn. Returns the model's raw JSON, parsed but otherwise untouched. `timeoutMs` is how long this
+// one call may take; the SDK does not retry on its own, because a hidden retry could double the call's time without the
+// setup service knowing (MOM-111 round 2, C). The service decides whether there is time for another try.
 export async function requestSetupTurnFromModel(
-  input: { transcript: Transcript; draft: SetupDraft } & SetupTurnExtras,
+  input: { transcript: Transcript; draft: SetupDraft; timeoutMs?: number } & SetupTurnExtras,
   deps: ModelSetupDeps = {},
 ): Promise<ModelSetupResult> {
+  const timeout = Math.max(1_000, Math.min(input.timeoutMs ?? REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS));
   let client: Pick<Anthropic, 'messages'>;
   try {
-    client = deps.client ?? new Anthropic({ apiKey: getAnthropicApiKey(), timeout: REQUEST_TIMEOUT_MS, maxRetries: 1 });
+    client = deps.client ?? new Anthropic({ apiKey: getAnthropicApiKey(), maxRetries: 0 });
   } catch {
     // ANTHROPIC_API_KEY is not set in this environment.
     return { ok: false, reason: 'not_configured' };
@@ -166,13 +179,21 @@ export async function requestSetupTurnFromModel(
 
   let response: Anthropic.Message;
   try {
-    response = await client.messages.create({
-      model: deps.model ?? SETUP_MODEL,
-      max_tokens: MAX_OUTPUT_TOKENS,
-      output_config: { effort: 'medium' },
-      system: SETUP_SYSTEM_PROMPT,
-      messages: buildSetupMessages(input.transcript, input.draft, { today: input.today, retryFeedback: input.retryFeedback, dateHint: input.dateHint }),
-    });
+    response = await client.messages.create(
+      {
+        model: deps.model ?? SETUP_MODEL,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        output_config: { effort: 'medium' },
+        system: SETUP_SYSTEM_PROMPT,
+        messages: buildSetupMessages(input.transcript, input.draft, {
+          today: input.today,
+          retryFeedback: input.retryFeedback,
+          dateHint: input.dateHint,
+          sourceNote: input.sourceNote,
+        }),
+      },
+      { timeout, maxRetries: 0 },
+    );
   } catch (error) {
     // Most specific first. Log the kind of failure, never the message body or anything about the key.
     if (error instanceof Anthropic.RateLimitError) return { ok: false, reason: 'rate_limited' };
@@ -192,13 +213,13 @@ export async function requestSetupTurnFromModel(
 
   // Check the stop reason before reading content. A refusal (HTTP 200) carries no usable answer.
   if (response.stop_reason === 'refusal') return { ok: false, reason: 'refused', usage };
-  if (response.stop_reason === 'max_tokens') return { ok: false, reason: 'bad_output', usage };
+  if (response.stop_reason === 'max_tokens') return { ok: false, reason: 'bad_output', usage, problem: 'max_tokens' };
 
   const text = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
-  if (!text) return { ok: false, reason: 'bad_output', usage };
+  if (!text) return { ok: false, reason: 'bad_output', usage, problem: 'no_text' };
   try {
     return { ok: true, raw: extractJson(text.text), model: response.model, usage };
   } catch {
-    return { ok: false, reason: 'bad_output', usage };
+    return { ok: false, reason: 'bad_output', usage, problem: 'not_json' };
   }
 }

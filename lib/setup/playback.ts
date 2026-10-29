@@ -28,9 +28,14 @@ export interface PlaybackOptions {
   today?: string | null;
 }
 
-// A date in the playback: "Thursday, Nov 5", spelled, so it is never read in the wrong order. "today" and "tomorrow" are
-// left out, because the date sits inside a sentence ("It comes back on today" would not read).
-const dateWords = (iso: string, options: PlaybackOptions): string => casualDate(iso, options.today ?? null, { relative: false });
+// A date in the playback, the one way the app writes dates (MOM-111 round 2, finding 3): "today" or "tomorrow" on their own,
+// otherwise "Thursday, Nov 5", spelled, so it is never read in the wrong order.
+const dateWords = (iso: string, options: PlaybackOptions): string => casualDate(iso, options.today ?? null);
+// "on Thursday, Nov 5", or "today" alone ("comes back on today" does not read).
+const onDate = (iso: string, options: PlaybackOptions): string => {
+  const words = dateWords(iso, options);
+  return /^(today|tomorrow|yesterday)$/.test(words) ? words : `on ${words}`;
+};
 
 // "21:00" in the person's locale ("9:00 PM" in en-US, "21:00" in de-DE). Null when there is no locale, or it is not one.
 function localClock(hhmm: string, locale: string | null | undefined): string | null {
@@ -128,7 +133,7 @@ function describeReturn(g: GoalDraft, options: PlaybackOptions): string {
   if (!g.returnWhen) return 'When it comes back is not set yet.';
   switch (g.returnWhen.kind) {
     case 'date':
-      return `It comes back on ${dateWords(g.returnWhen.date, options)}.`;
+      return `It comes back ${onDate(g.returnWhen.date, options)}.`;
     case 'condition': {
       const note = trimmed(g.returnWhen.note);
       const restated = RETURN_START.test(note) ? restate(note, 'item') : null;

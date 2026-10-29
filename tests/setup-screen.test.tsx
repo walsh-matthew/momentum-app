@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SetupConversation } from '@/components/setup/SetupConversation';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
-import { APPROVE_TEXT, MEANING_LINK, MEANING_TEXT, setupStorageKey } from '@/lib/setup/session';
+import { APPROVE_TEXT, MEANING_LINK, MEANING_TEXT, STUCK_MESSAGE, setupStorageKey } from '@/lib/setup/session';
 import { runSetupEval } from '@/lib/setup/evals';
 import type { AssistantTurn, SetupSession, Transcript } from '@/types/setup';
 import type { SetupTurnView } from '@/types/setupScreen';
@@ -368,9 +368,32 @@ describe('when a turn does not come', () => {
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     answerWith('Run more');
-    expect((await screen.findByRole('alert')).textContent).toMatch(/Could not reach the server/);
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    // MOM-111 round 2, findings 12 and 14: what happened in plain words, and Try again as the main button.
+    expect((await screen.findByRole('alert')).textContent).toBe("We couldn't reach Momentum just now. Your answer is safe.");
+    expect(screen.getByRole('button', { name: 'Try again' }).getAttribute('data-tone')).toBe('main');
+    expect(screen.getByRole('button', { name: 'Change my answer' }).getAttribute('data-tone')).toBe('second');
     expect(JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null').transcript.at(-1)).toEqual({ role: 'person', text: 'Run more' });
+  });
+
+  it('after stuck replies, asks for it another way, with Change my answer as the main button', async () => {
+    actions.ask
+      .mockResolvedValueOnce(turnView(script[0]))
+      .mockResolvedValueOnce({ ok: true, data: { kind: 'failed', reason: 'stuck', message: STUCK_MESSAGE, rejected: 3 } });
+    await start();
+    await screen.findByRole('heading', { name: script[0].question ?? '' });
+    answerWith('Run more');
+    expect((await screen.findByRole('alert')).textContent).toBe('I got stuck on that one. Could you say it another way?');
+    const change = screen.getByRole('button', { name: 'Change my answer' });
+    expect(change.getAttribute('data-tone')).toBe('main');
+    expect(screen.getByRole('button', { name: 'Try again' }).getAttribute('data-tone')).toBe('second');
+    // Round 2, finding 13: the old answer comes back in the box, selected and focused, with a small clear button.
+    fireEvent.click(change);
+    const box = screen.getByLabelText('Your answer') as HTMLTextAreaElement;
+    expect(box.value).toBe('Run more');
+    expect(document.activeElement).toBe(box);
+    expect([box.selectionStart, box.selectionEnd]).toEqual([0, 'Run more'.length]);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear answer' }));
+    expect(box.value).toBe('');
   });
 
   it('shows the wait, not a fall-back, when two requests landed together', async () => {

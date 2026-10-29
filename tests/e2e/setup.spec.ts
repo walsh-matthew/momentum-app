@@ -18,10 +18,11 @@
 import type { Locator, Page } from '@playwright/test';
 import { MACHINE_DATE } from '@/lib/dates/casual';
 import { runSetupEval } from '@/lib/setup/evals';
-import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, SETUP_STORAGE_PREFIX } from '@/lib/setup/session';
+import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, TYPE_INSTEAD } from '@/lib/setup/session';
 import { acceptsText } from '@/lib/setup/text';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
+import { elementsOffScreen } from './support/setupCards';
 import { e2eCase } from './support/setupConversation';
 import { scriptedModel } from '../helpers/setupScript';
 
@@ -42,6 +43,8 @@ async function cardIsReadable(page: Page, width: number): Promise<void> {
   if (width < 600) {
     const scrolls = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(scrolls, 'nothing scrolls sideways on a phone').toBe(false);
+    // Every element on the card, not only the page (MOM-111 round 2, finding 5).
+    expect(await elementsOffScreen(page), 'nothing on the card sits past the screen edge').toEqual([]);
   }
   const text = (await page.locator('main').textContent()) ?? '';
   expect(text, 'no date on screen as YYYY-MM-DD').not.toMatch(MACHINE_DATE);
@@ -164,17 +167,28 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           }
         } else {
           expect(card.id, `turn ${k} should be a question`).toBe('setup-question');
-          // The answer box, Send and "Not sure what I mean?" are on every question, in that order, inside the screen's width.
-          await inView(page, page.getByLabel('Your answer'));
+          // "Not sure what I mean?" is on every question, inside the screen's width.
           await inView(page, page.getByRole('button', { name: MEANING_LINK }));
-          const boxY = (await page.getByLabel('Your answer').boundingBox())?.y ?? 0;
-          const sendY = (await page.getByRole('button', { name: 'Send' }).boundingBox())?.y ?? 0;
-          const helpY = (await page.getByRole('button', { name: MEANING_LINK }).boundingBox())?.y ?? 0;
-          expect(boxY < sendY && sendY < helpY, 'box, then Send, then the help link').toBe(true);
+          const yes = page.getByRole('button', { name: 'Yes', exact: true });
+          if ((await page.getByLabel('Your answer').count()) > 0) {
+            // A plain question: the answer box, Send and the help link, in that order.
+            await inView(page, page.getByLabel('Your answer'));
+            const boxY = (await page.getByLabel('Your answer').boundingBox())?.y ?? 0;
+            const sendY = (await page.getByRole('button', { name: 'Send' }).boundingBox())?.y ?? 0;
+            const helpY = (await page.getByRole('button', { name: MEANING_LINK }).boundingBox())?.y ?? 0;
+            expect(boxY < sendY && sendY < helpY, 'box, then Send, then the help link').toBe(true);
+          } else {
+            // A proposal or a date question (MOM-111 round 2, findings 4, 8 and 9): Yes or "Pick a date" leads, and the box
+            // opens from a small "Type it instead" link.
+            await inView(page, page.getByRole('button', { name: TYPE_INSTEAD }));
+          }
           if (line === MEANING_TEXT) {
             askedMeaning = true;
             await page.getByRole('button', { name: MEANING_LINK }).click();
+          } else if (line === PROPOSAL_YES_TEXT && (await yes.count()) > 0) {
+            await yes.click();
           } else {
+            if ((await page.getByLabel('Your answer').count()) === 0) await page.getByRole('button', { name: TYPE_INSTEAD }).click();
             await page.getByLabel('Your answer').fill(line);
             await page.getByRole('button', { name: 'Send' }).click();
           }

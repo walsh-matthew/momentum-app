@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { flushSync } from 'react-dom';
 import { CHANGE_PROMPT, KEEP_IT } from '@/lib/setup/session';
 import { AnswerBox } from './AnswerBox';
+import { SetupButton } from './SetupButton';
 
 interface FinalCardProps {
   // The few lines confirming the whole, written by code (renderFinal in lib/setup/playback.ts).
@@ -43,17 +44,18 @@ export function FinalCard({ lines, saving, error, onSave, onChange }: FinalCardP
             submitLabel="Send the change"
             busy={saving}
             onSubmit={onChange}
+            focusOnOpen
             secondary={{ label: KEEP_IT, onClick: () => setChanging(false) }}
           />
         </div>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button size="lg" disabled={saving} onClick={onSave} className="w-full sm:w-auto">
+          <SetupButton tone="main" disabled={saving} onClick={onSave}>
             {saving ? 'Saving…' : 'Save my setup'}
-          </Button>
-          <Button size="lg" variant="outline" disabled={saving} onClick={() => setChanging(true)} className="w-full sm:w-auto">
+          </SetupButton>
+          <SetupButton tone="second" disabled={saving} onClick={() => flushSync(() => setChanging(true))}>
             Change something
-          </Button>
+          </SetupButton>
         </div>
       )}
     </section>

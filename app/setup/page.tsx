@@ -6,6 +6,9 @@ import { getSetupStart } from '@/lib/services/setup';
 
 // Reads the signed-in user's session and rows, so this page renders per request.
 export const dynamic = 'force-dynamic';
+// The setup turn's Server Action runs under this page's limit (MOM-111 round 2, C). It is set here, not left to the platform
+// default, because lib/services/setup.ts plans each turn inside it (SETUP_TURN_BUDGET_MS) and stops retrying before it.
+export const maxDuration = 300;
 
 // Guided setup (MOM-111): the conversation that turns an idea into goals, targets and sources. proxy.ts sends a signed-out
 // visitor to /login before this renders; the redirect below is the same safe default as the other pages'. It is not in the

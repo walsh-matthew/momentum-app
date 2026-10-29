@@ -32,7 +32,7 @@ import {
 import type { AssistantTurn, SetupDraft, Transcript } from '@/types/setup';
 
 function turn(over: Partial<AssistantTurn> = {}): AssistantTurn {
-  return { kind: 'question', chunk: null, skipped: null, say: '', question: 'What would you like to work on?', topic: 'idea', options: [], draft: emptyDraft(), ...over };
+  return { kind: 'question', chunk: null, skipped: null, detail: null, say: '', question: 'What would you like to work on?', topic: 'idea', options: [], draft: emptyDraft(), ...over };
 }
 const asked = (over: Partial<AssistantTurn> = {}): Transcript[number] => ({ role: 'assistant', turn: turn(over) });
 const said = (text: string): Transcript[number] => ({ role: 'person', text });

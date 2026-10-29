@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { SetupButton } from './SetupButton';
 import type { PlaybackSection } from '@/types/setupScreen';
 
 interface QuickPathCardProps {
@@ -55,12 +55,12 @@ export function QuickPathCard({ message, sections, missing, canSave, saving, err
         </p>
       )}
       <div className="flex flex-col gap-2 sm:flex-row">
-        <Button size="lg" disabled={!canSave || saving} onClick={onSave} className="w-full sm:w-auto">
+        <SetupButton tone="main" disabled={!canSave || saving} onClick={onSave}>
           {saving ? 'Saving…' : 'Save what I have'}
-        </Button>
-        <Button size="lg" variant="outline" disabled={saving} onClick={onStartOver} className="w-full sm:w-auto">
+        </SetupButton>
+        <SetupButton tone="second" disabled={saving} onClick={onStartOver}>
           Start again
-        </Button>
+        </SetupButton>
       </div>
     </section>
   );

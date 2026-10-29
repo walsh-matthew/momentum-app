@@ -208,6 +208,7 @@ describe('answering a live model by what it asked about', () => {
     kind: 'question',
     chunk: null,
     skipped: null,
+    detail: null,
     say: '',
     question: 'Q?',
     topic: null,

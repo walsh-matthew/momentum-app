@@ -173,10 +173,20 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     const stub = stubTurn([{ raw: { kind: 'question' } }, { raw: badQuestion(full.script[2]) }, { raw: full.script[2] }]);
     await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
     expect(warn.mock.calls).toEqual([
-      ['[setup] a reply was thrown away', { category: 'schema' }],
+      // MOM-111 round 2, A: the shape issues by path and zod code, never a value.
+      ['[setup] a reply was thrown away', { category: 'schema', issues: [{ path: 'draft', code: 'invalid_type' }], attempt: 0, ms: expect.any(Number) }],
       [
         '[setup] a reply was thrown away',
-        { category: 'rules', rules: ['one_question'], codes: ['one_question.joined'], paths: [], topic: badQuestion(full.script[2]).topic, skippedTopic: null },
+        {
+          category: 'rules',
+          rules: ['one_question'],
+          codes: ['one_question.joined'],
+          paths: [],
+          topic: badQuestion(full.script[2]).topic,
+          skippedTopic: null,
+          attempt: 1,
+          ms: expect.any(Number),
+        },
       ],
     ]);
     // Names from the fixed topic list, or null: never text.
@@ -196,7 +206,7 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     const result = await takeSetupTurn(session, { runTurn: stub.run });
     expect(MAX_REPLY_RETRIES).toBe(2);
     expect(stub.calls).toHaveLength(3);
-    expect(result).toEqual({ ok: true, data: { kind: 'failed', message: SETUP_FAILURE_MESSAGES.unusable, rejected: 3 } });
+    expect(result).toEqual({ ok: true, data: { kind: 'failed', reason: 'stuck', message: SETUP_FAILURE_MESSAGES.unusable, rejected: 3 } });
     // The conversation is the browser's, and nothing was stored, so nothing is lost on the server's side either.
     expect(fakeSave.rpcCalls).toEqual([]);
     expect(rowsOf('goals')).toEqual([]);
@@ -207,7 +217,7 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     const stub = stubTurn([{ raw: badQuestion(full.script[2]) }, { raw: badQuestion(full.script[2]) }, { raw: full.script[2] }]);
     const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
     expect(stub.calls).toHaveLength(2);
-    expect(result).toEqual({ ok: true, data: { kind: 'failed', message: SETUP_FAILURE_MESSAGES.unusable, rejected: 2 } });
+    expect(result).toEqual({ ok: true, data: { kind: 'failed', reason: 'stuck', message: SETUP_FAILURE_MESSAGES.unusable, rejected: 2 } });
   });
 
   it('keeps all three tries when the rejections differ', async () => {
@@ -222,14 +232,20 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     const stub = stubTurn([{ reason: 'bad_output' }, { raw: full.script[2] }]);
     const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', rejected: 1 } });
-    expect(warn).toHaveBeenCalledWith('[setup] a reply was thrown away', { category: 'output' });
+    expect(warn).toHaveBeenCalledWith('[setup] a reply was thrown away', { category: 'output', problem: 'not_json', attempt: 0, ms: expect.any(Number) });
   });
 
-  it.each(['refused', 'rate_limited', 'unavailable', 'not_configured'] as const)('does not retry when Claude says %s', async (reason) => {
+  // MOM-111 round 2, findings 12 and 14: the reason picks the error card's words and its main button.
+  it.each([
+    ['refused', 'stuck'],
+    ['rate_limited', 'unreachable'],
+    ['unavailable', 'unreachable'],
+    ['not_configured', 'not_configured'],
+  ] as const)('does not retry when Claude says %s, and says why: %s', async (reason, why) => {
     const full = await fullCase();
     const stub = stubTurn([{ reason }]);
     const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
-    expect(result).toEqual({ ok: true, data: { kind: 'failed', message: SETUP_FAILURE_MESSAGES[reason], rejected: 0 } });
+    expect(result).toEqual({ ok: true, data: { kind: 'failed', reason: why, message: SETUP_FAILURE_MESSAGES[reason], rejected: 0 } });
     expect(stub.calls).toHaveLength(1);
   });
 });
@@ -325,6 +341,7 @@ describe('takeSetupTurn: relative dates', () => {
     kind: 'question',
     chunk: null,
     skipped: null,
+    detail: null,
     say: '',
     question: 'When would you like to start?',
     topic: 'start_date',
@@ -654,7 +671,7 @@ describe('saveApprovedSetup: values taken from a suggestion are stored as starti
       returnWhen: { kind: 'on_request' }, completionMode: null, tone: null, targets: [], items: [],
     });
     const session: SetupSession = {
-      transcript: [{ role: 'assistant', turn: { kind: 'final', chunk: null, skipped: null, say: '', question: null, topic: null, options: [], draft } }],
+      transcript: [{ role: 'assistant', turn: { kind: 'final', chunk: null, skipped: null, detail: null, say: '', question: null, topic: null, options: [], draft } }],
       draft,
       spentTokens: 0,
     };
@@ -707,7 +724,7 @@ describe('saveApprovedSetup: parked goals and incomplete drafts', () => {
       key: 'later', title: 'Learn piano', why: null, startDate: null, shape: null, endDate: null, blockWeeks: null, state: 'parked',
       returnWhen: { kind: 'on_request' }, completionMode: null, tone: null, targets: [], items: [],
     });
-    return { transcript: [{ role: 'assistant', turn: { kind: 'final', chunk: null, skipped: null, say: '', question: null, topic: null, options: [], draft } }], draft, spentTokens: 0 };
+    return { transcript: [{ role: 'assistant', turn: { kind: 'final', chunk: null, skipped: null, detail: null, say: '', question: null, topic: null, options: [], draft } }], draft, spentTokens: 0 };
   };
 
   it('saves a parked goal with no shape and no start date (from the quick path, which approves every part shown)', async () => {

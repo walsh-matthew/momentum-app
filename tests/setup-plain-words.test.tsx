@@ -48,19 +48,27 @@ describe('the glossary check itself', () => {
 describe('the step summaries and the prompt', () => {
   it.each(SETUP_STEPS.map((s) => [s.n, s] as const))('step %i says what every internal word means', (_n, step) => {
     expect(unexplainedTerms(step.summary)).toEqual([]);
-    for (const e of step.examples) expect(unexplainedTerms(`${e.say ?? ''} ${e.question}`)).toEqual([]);
+    for (const e of step.examples) expect(unexplainedTerms(`${e.say ?? ''} ${e.question} ${e.detail ?? ''}`)).toEqual([]);
   });
 
-  // A reason goes after the ask, in the question, only where it is not plain (MOM-111 finding 4): a step whose question says
-  // what it is for on its own has none.
-  it.each(SETUP_STEPS.filter((s) => s.reason !== null).map((s) => [s.n, s] as const))('step %i carries a short reason to put after the ask', (_n, step) => {
+  // A reason goes in the detail line under the question, only where it is not plain (MOM-111 finding 4; round 2 finding 1):
+  // a step whose question says what it is for on its own has none.
+  it.each(SETUP_STEPS.filter((s) => s.reason !== null).map((s) => [s.n, s] as const))('step %i carries a short reason for the detail line', (_n, step) => {
     const reason = step.reason ?? '';
-    expect(reason.split(' ').length).toBeLessThanOrEqual(12);
+    expect(reason.split(' ').length).toBeLessThanOrEqual(20);
     expect(unexplainedTerms(reason)).toEqual([]);
     // A reason never names a day, a time or a number the person has not said.
     expect(dayTimeWords(reason)).toEqual([]);
     expect(numbersIn(reason, { skipOne: true })).toEqual([]);
-    expect(SETUP_SYSTEM_PROMPT).toContain(`Where the reason is not plain, add it after the ask, for example "${reason}".`);
+    expect(SETUP_SYSTEM_PROMPT).toContain(`Where the reason is not plain, put it in "detail", for example "${reason}"`);
+  });
+
+  // Round 2 finding 10: a reason says what we will do with the answer, never that people often miss it, and no question in a
+  // step's examples hides a second question in its detail.
+  it.each(SETUP_STEPS.map((s) => [s.n, s] as const))('step %i gives reasons that say what the answer is for', (_n, step) => {
+    const texts = [step.reason ?? '', step.summary, ...step.examples.map((e) => e.detail ?? '')];
+    for (const t of texts) expect(t).not.toMatch(/people often|often miss|people usually forget/i);
+    for (const e of step.examples) expect(e.detail ?? '').not.toContain('?');
   });
 
   it('gives most steps a reason, and never tells Claude to say it in a lead-in', () => {

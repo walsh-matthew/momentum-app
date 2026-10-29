@@ -19,6 +19,9 @@ export interface IntegrationCatalogEntry {
   // What a quantity target bound to this app can count (MOM-111, MOM-109 design review). Omitted (or empty) when
   // the app has nothing to choose between, as with Google Calendar's one boolean metric.
   quantityMetrics?: readonly QuantityMetricOption[];
+  // How people say or voice-type the app's name, lowercase, so setup knows which app they mean (MOM-111 round 2: "Heavy"
+  // for Hevy, from voice-to-text). Read only where the person is answering where they track something.
+  spokenNames: readonly string[];
 }
 
 export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
@@ -33,12 +36,14 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
       { id: 'sets', label: 'sets' },
       { id: 'minutes', label: 'minutes' },
     ],
+    spokenNames: ['hevy', 'heavy', 'hevvy', 'hevey', 'heavey'],
   },
   {
     provider: 'google_calendar',
     name: 'Google Calendar',
     description: 'Count finished focus blocks and events toward your career goals.',
     authType: 'oauth2',
+    spokenNames: ['google calendar', 'google calender', 'gcal', 'my calendar', 'my calender'],
   },
 ];
 

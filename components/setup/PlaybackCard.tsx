@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { flushSync } from 'react-dom';
 import { CHUNK_TITLES } from '@/lib/setup/quickPath';
 import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT } from '@/lib/setup/session';
 import type { SetupChunk } from '@/types/setup';
 import { AnswerBox } from './AnswerBox';
+import { SetupButton } from './SetupButton';
 
 interface PlaybackCardProps {
   chunk: SetupChunk;
@@ -42,17 +43,18 @@ export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: Playba
             submitLabel="Send the change"
             busy={busy}
             onSubmit={onChange}
+            focusOnOpen
             secondary={{ label: KEEP_IT, onClick: () => onApprove(APPROVE_TEXT) }}
           />
         </div>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button size="lg" disabled={busy} onClick={() => onApprove(APPROVE_TEXT)} className="w-full sm:w-auto">
+          <SetupButton tone="main" disabled={busy} onClick={() => onApprove(APPROVE_TEXT)}>
             {busy ? 'Thinking…' : 'Yes, that is right'}
-          </Button>
-          <Button size="lg" variant="outline" disabled={busy} onClick={() => setChanging(true)} className="w-full sm:w-auto">
+          </SetupButton>
+          <SetupButton tone="second" disabled={busy} onClick={() => flushSync(() => setChanging(true))}>
             Change something
-          </Button>
+          </SetupButton>
         </div>
       )}
     </section>

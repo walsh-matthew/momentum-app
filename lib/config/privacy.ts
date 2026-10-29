@@ -165,6 +165,7 @@ export const PROMPTS = {
       { field: 'assistantTurns.skipped.line', words: 'its own earlier turns in this setup' },
       { field: 'assistantTurns.say', words: 'its own earlier turns in this setup' },
       { field: 'assistantTurns.question', words: 'its own earlier turns in this setup' },
+      { field: 'assistantTurns.detail', words: 'its own earlier turns in this setup' },
       { field: 'assistantTurns.topic', words: 'its own earlier turns in this setup' },
       { field: 'assistantTurns.options', words: 'its own earlier turns in this setup' },
       {
@@ -232,10 +233,11 @@ export const PROMPTS = {
       { field: 'draft.plain.path', words: "Claude's tidied-up wording of what you've said, for you to approve" },
       { field: 'draft.plain.text', words: "Claude's tidied-up wording of what you've said, for you to approve" },
       { field: 'today', words: "today's date on your device, as a suggested start date" },
-      // MOM-111: two notes written by code, never anything new from the person: why its last try at a turn was not used, in
-      // fixed words, and the date a day you named ("Monday") works out to.
-      { field: 'retryFeedback', words: 'when its last try at a reply was not usable, which setup rule it broke' },
-      { field: 'dateHint', words: 'the date a day you named (like "Monday") works out to' },
+      // MOM-111: notes written by code, never anything new from the person: why its last try at a turn was not used, in fixed
+      // words; the date a day or a length of time you named works out to; and which app you named for tracking.
+      { field: 'retryFeedback', words: 'when its last try at a reply was not usable, which setup rule it broke and where' },
+      { field: 'dateHint', words: 'the date a day or a length of time you named (like "Monday" or "two months") works out to' },
+      { field: 'sourceNote', words: 'which app you named for tracking (like Hevy), and whether Momentum can read it yet' },
     ],
     leavesOut: 'other saved goals or tasks, their ids, or your email',
     note: null,

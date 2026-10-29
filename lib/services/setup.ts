@@ -17,6 +17,14 @@
 // draft path only, never with any text or value (the usage log marks a call 'ok' when the API answered, even if the answer
 // then fails the schema, so it cannot show this).
 //
+// MOM-111 round 2, from the owner's second phone run, where every reply at "where do you track it" was thrown away:
+// - A: a reply that breaks the shape is logged by its zod issue paths and codes, and its retry hears each path and what the
+//   schema needs there (lib/setup/feedback.ts shapeFeedback); an unusable answer says whether it was cut off, had no text,
+//   or was not JSON.
+// - C: a turn has a time budget inside the page's maxDuration (app/setup/page.tsx). Each call may take only the time left,
+//   and another try starts only when one can fit; otherwise the turn ends in the stuck-reply card, never a network error.
+// - A failed turn says why ('stuck', 'unreachable', 'not_configured'), so the error card picks its words and main button.
+//
 // The save: FIRST SETUP ONLY. It validates the draft in 'final' mode, turns it into the payload save_guided_setup() reads
 // (migration 015) and makes that one call, which is one database transaction: everything the person approved, or nothing.
 // If the person already has a goal the function refuses and nothing is written. Adding a goal after the first setup is a
@@ -27,11 +35,13 @@ import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, onlyPlainWords, type Violation } from '@/lib/setup/checks';
 import { dateStep } from '@/lib/setup/codeTurns';
-import { SHAPE_FEEDBACK, failingPaths, retryFeedback } from '@/lib/setup/feedback';
+import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog } from '@/lib/setup/feedback';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { spokenTimes } from '@/lib/setup/playback';
 import { personToday } from '@/lib/setup/relativeDates';
 import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
+import { STUCK_MESSAGE, UNREACHABLE_MESSAGE } from '@/lib/setup/session';
+import { sourceNote } from '@/lib/setup/sources';
 import { draftToRows, toSavePayload } from '@/lib/setup/rows';
 import { validateDraft } from '@/lib/setup/validate';
 import type { Json } from '@/types/database.types';
@@ -43,12 +53,21 @@ import {
   SuggestedDateSchema,
   type SetupSession,
 } from '@/types/setup';
-import type { QuickPathReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import type { QuickPathReason, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { runSetupTurn } from './llm';
 import type { ServiceResult } from './result';
 
 // A reply that is not usable is asked for again this many times before the person is told to try again.
 export const MAX_REPLY_RETRIES = 2;
+
+// The time one turn may take on the server (MOM-111 round 2, C). app/setup/page.tsx sets maxDuration to 300 seconds, and the
+// Server Action runs under it; this leaves room for the sign-in check, parsing and the answer itself. In the second phone run
+// a turn ran past the server's limit and the person saw "Could not reach the server" instead of a card.
+export const SETUP_TURN_BUDGET_MS = 270_000;
+// Another try is started only when the time left can fit one: at least this long, or as long as the longest call so far.
+export const MIN_CALL_MS = 75_000;
+// Kept back from each call's timeout, so the turn can still answer after the call gives up.
+const CALL_MARGIN_MS = 5_000;
 
 // "MS001": migration 015 raises it when the person already has a goal.
 export const ALREADY_SET_UP_CODE = 'MS001';
@@ -58,13 +77,30 @@ const SIGN_IN = 'Sign in to set up your goals.';
 const BAD_REQUEST = 'That setup could not be read. Start again. Nothing was saved.';
 const SAVE_FAILED = 'Could not save your setup. Nothing was saved.';
 
+// What the error card says, by why no reply came (MOM-111 round 2, findings 12 and 14): the words live in lib/setup/session.ts
+// so the screen says the same for a request that never reached the server.
 export const SETUP_FAILURE_MESSAGES = {
   not_configured: "Claude isn't set up on the server yet, so setup can't go on. Nothing was saved.",
-  refused: "Claude couldn't help with that. Try saying it another way. What you've said so far is kept.",
-  rate_limited: "Claude is busy right now. Try again in a moment. What you've said so far is kept.",
-  unavailable: "Claude couldn't be reached. Try again in a moment. What you've said so far is kept.",
-  unusable: "I couldn't put together a good reply just now. What you've said so far is kept; please try again.",
+  refused: STUCK_MESSAGE,
+  rate_limited: UNREACHABLE_MESSAGE,
+  unavailable: UNREACHABLE_MESSAGE,
+  unusable: STUCK_MESSAGE,
 } as const;
+
+const FAILURE_REASONS: Record<keyof typeof SETUP_FAILURE_MESSAGES, SetupFailedReason> = {
+  not_configured: 'not_configured',
+  refused: 'stuck',
+  rate_limited: 'unreachable',
+  unavailable: 'unreachable',
+  unusable: 'stuck',
+};
+
+const failed = (why: keyof typeof SETUP_FAILURE_MESSAGES, rejected: number): SetupTurnView => ({
+  kind: 'failed',
+  reason: FAILURE_REASONS[why],
+  message: SETUP_FAILURE_MESSAGES[why],
+  rejected,
+});
 
 // A locale that is not one is dropped, never a reason to refuse the turn: the playback then shows times as the person gave them.
 const TurnRequestSchema = SetupSessionSchema.extend({
@@ -78,6 +114,8 @@ type RunSetupTurnFn = typeof runSetupTurn;
 export interface SetupDeps {
   // Swappable in tests so no network call is made.
   runTurn?: RunSetupTurnFn;
+  // The clock the turn's time budget is read from. Swappable in tests.
+  nowMs?: () => number;
 }
 
 async function signedInUserId(): Promise<ServiceResult<{ userId: string; supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> }>> {
@@ -117,6 +155,9 @@ function quickPathView(session: SetupSession, reason: QuickPathReason, message: 
 
 // The next turn of Claude's, checked. `raw` is the conversation so far, as the browser sent it.
 export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise<ServiceResult<SetupTurnView>> {
+  const nowMs = deps.nowMs ?? Date.now;
+  // The budget starts when the request does, before the sign-in check.
+  const deadlineMs = nowMs() + SETUP_TURN_BUDGET_MS;
   const parsed = TurnRequestSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: BAD_REQUEST };
   const { today, locale, ...session } = parsed.data;
@@ -126,19 +167,39 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
 
   const user = await signedInUserId();
   if (!user.ok) return user;
+  return { ok: true, data: await runCheckedTurn({ userId: user.data.userId, session, today, locale, deadlineMs }, deps) };
+}
+
+export interface CheckedTurnInput {
+  // From the verified session (or, in the live eval, the throwaway account it made). Never from a request.
+  userId: string;
+  session: SetupSession;
+  today?: string;
+  locale?: string;
+  // When the turn must have answered by, on the deps clock.
+  deadlineMs: number;
+}
+
+// One turn for a person already known: code's own date and length turns, then Claude, checked, with retries told what went
+// wrong, inside the turn's time budget. The live eval calls this directly, so it runs exactly what the app runs.
+export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = {}): Promise<SetupTurnView> {
+  const { session, today, locale, deadlineMs } = input;
   const runTurn = deps.runTurn ?? runSetupTurn;
+  const nowMs = deps.nowMs ?? Date.now;
 
   const context = { transcript: session.transcript, prevDraft: session.draft };
   // The person's own today: their time zone's date once setup knows it, else their device's (MOM-111 finding 8).
-  const personDay = personToday(session.draft.model.person.timeZone, today, new Date());
+  const personDay = personToday(session.draft.model.person.timeZone, today, new Date(nowMs()));
 
-  // An answer that is only a relative date ("Monday") is answered by code, with no call: the date as a proposal, or the
-  // question again for a vague one. The turn is checked like any other; one that failed would go to Claude instead.
+  // An answer that is only a relative date ("Monday") or a length of time ("two months") is answered by code, with no call:
+  // the date as a proposal, or the question again for a vague one. The turn is checked like any other; one that failed
+  // would go to Claude instead.
   const step = dateStep(session.transcript, session.draft, personDay);
   if (step?.kind === 'turn' && checkTurn(step.turn, context).length === 0) {
-    return { ok: true, data: { kind: 'turn', turn: step.turn, spentTokens: session.spentTokens, rejected: 0 } };
+    return { kind: 'turn', turn: step.turn, spentTokens: session.spentTokens, rejected: 0 };
   }
   const dateHint = step?.kind === 'hint' ? step.hint : undefined;
+  const note = sourceNote(session.transcript);
 
   let spentTokens = session.spentTokens;
   let rejected = 0;
@@ -147,43 +208,58 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
   // The plain-words checks get one retry; after it, a reply that breaks only them is shown (MOM-111 addition a).
   let plainRetried = false;
   let lastSignature: string | null = null;
+  let longestCallMs = 0;
   for (let attempt = 0; attempt <= MAX_REPLY_RETRIES; attempt++) {
+    const remaining = deadlineMs - nowMs();
+    // A try that cannot finish before the server's limit would end in a network error, not a card: stop here instead.
+    if (attempt > 0 && remaining < Math.max(MIN_CALL_MS, longestCallMs)) {
+      console.warn('[setup] no time left for another try', { attempt, rejected, remainingMs: Math.max(0, Math.round(remaining)), longestCallMs });
+      break;
+    }
+    const started = nowMs();
     const answer = await runTurn({
-      userId: user.data.userId,
+      userId: input.userId,
       transcript: session.transcript,
       draft: session.draft,
       spentTokens,
       today: personDay,
       retryFeedback: feedback,
       dateHint,
+      sourceNote: note,
+      timeoutMs: Math.max(1_000, remaining - CALL_MARGIN_MS),
     });
-    if (answer.kind === 'quick_path') return { ok: true, data: quickPathView(session, answer.reason, answer.message, locale, personDay) };
-    if (answer.kind === 'wait') return { ok: true, data: { kind: 'wait', message: answer.message, retryAfterSeconds: answer.retryAfterSeconds } };
+    const ms = Math.round(nowMs() - started);
+    longestCallMs = Math.max(longestCallMs, ms);
+    if (answer.kind === 'quick_path') return quickPathView(session, answer.reason, answer.message, locale, personDay);
+    if (answer.kind === 'wait') return { kind: 'wait', message: answer.message, retryAfterSeconds: answer.retryAfterSeconds };
 
     // The tokens of every call count against the setup budget, a thrown-away reply as much as a kept one.
     spentTokens = answer.spentTokens;
     const result = answer.result;
-    if (!result.ok && result.reason !== 'bad_output') {
-      return { ok: true, data: { kind: 'failed', message: SETUP_FAILURE_MESSAGES[result.reason], rejected } };
-    }
+    if (!result.ok && result.reason !== 'bad_output') return failed(result.reason, rejected);
 
     if (!result.ok) {
       rejected += 1;
-      console.warn('[setup] a reply was thrown away', { category: 'output' });
-      feedback = [SHAPE_FEEDBACK];
+      // Which way the answer could not be read: cut off at the length limit, no text, or not JSON (round 2, A).
+      const problem = result.problem ?? 'not_json';
+      console.warn('[setup] a reply was thrown away', { category: 'output', problem, attempt, ms });
+      feedback = [OUTPUT_FEEDBACK[problem]];
       lastSignature = null;
       continue;
     }
     const turn = AssistantTurnSchema.safeParse(result.raw);
     if (!turn.success) {
       rejected += 1;
-      console.warn('[setup] a reply was thrown away', { category: 'schema' });
-      feedback = [SHAPE_FEEDBACK];
-      lastSignature = null;
+      // Paths and zod's issue codes only, never a value (round 2, A). The retry hears each path and what goes there.
+      console.warn('[setup] a reply was thrown away', { category: 'schema', issues: shapeIssuesForLog(turn.error.issues), attempt, ms });
+      feedback = shapeFeedback(turn.error.issues);
+      const signature = `schema|${shapeIssuesForLog(turn.error.issues).map((i) => `${i.code}@${i.path}`).join()}`;
+      if (signature === lastSignature) break;
+      lastSignature = signature;
       continue;
     }
     const violations = checkTurn(turn.data, context);
-    if (violations.length === 0) return { ok: true, data: { kind: 'turn', turn: turn.data, spentTokens, rejected } };
+    if (violations.length === 0) return { kind: 'turn', turn: turn.data, spentTokens, rejected };
 
     const rules = ruleNames(violations);
     const plainOnly = onlyPlainWords(violations);
@@ -191,7 +267,7 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
     const codes = [...new Set(violations.map((x) => x.code))].sort();
     if (plainOnly && (plainRetried || attempt === MAX_REPLY_RETRIES)) {
       console.warn('[setup] a reply was shown after its plain-words retry', { category: 'plain_words', rules, codes });
-      return { ok: true, data: { kind: 'turn', turn: turn.data, spentTokens, rejected } };
+      return { kind: 'turn', turn: turn.data, spentTokens, rejected };
     }
     rejected += 1;
     // The turn's topic and the topic it skipped are names from SETUP_TOPICS (the schema allows nothing else), never text.
@@ -203,6 +279,8 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
       paths: failingPaths(violations),
       topic: turn.data.topic,
       skippedTopic: turn.data.skipped?.topic ?? null,
+      attempt,
+      ms,
     });
     feedback = retryFeedback(violations);
     if (plainOnly) {
@@ -215,7 +293,7 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
     if (signature === lastSignature) break;
     lastSignature = signature;
   }
-  return { ok: true, data: { kind: 'failed', message: SETUP_FAILURE_MESSAGES.unusable, rejected } };
+  return failed('unusable', rejected);
 }
 
 // Has the signed-in person already set up? The screen shows that instead of a second conversation.

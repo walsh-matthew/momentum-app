@@ -14,7 +14,7 @@ import { MACHINE_DATE } from '@/lib/dates/casual';
 import { emptyDraft } from '@/lib/setup/draft';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
 import { quickPathSections } from '@/lib/setup/quickPath';
-import { MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT } from '@/lib/setup/session';
+import { MEANING_LINK, MEANING_TEXT, PICK_DATE, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import { SETUP_CHUNKS, type AssistantTurn, type TurnKind } from '@/types/setup';
 import { goal, item, target } from './helpers/setupScript';
 
@@ -26,6 +26,7 @@ const turn = (over: Partial<AssistantTurn> = {}): AssistantTurn => ({
   kind: 'question',
   chunk: null,
   skipped: null,
+  detail: null,
   say: 'Got it, one goal.',
   question: 'Does this keep going with no end date?',
   topic: 'shape',
@@ -44,6 +45,8 @@ const ascending = (xs: number[]) => xs.every((x, i) => i === 0 || x > xs[i - 1])
 describe('the question card, on every kind of asking turn (findings 1 to 3)', () => {
   it.each(KINDS)('a %s: lead-in, question, answers, box, Send, then the small help link', (kind) => {
     render(<QuestionCard turn={forKind(kind)} busy={false} onAnswer={() => {}} today={TODAY} />);
+    // A proposal opens its box from a small link, so Yes stays the one main button (round 2, finding 8).
+    if (kind === 'proposal') fireEvent.click(screen.getByRole('button', { name: TYPE_INSTEAD }));
     const lead = screen.getByText('Got it, one goal.');
     const question = screen.getByRole('heading', { name: 'Does this keep going with no end date?' });
     const box = screen.getByLabelText('Your answer');
@@ -111,26 +114,26 @@ describe('a proposal (finding 8)', () => {
     render(<QuestionCard turn={turn({ kind: 'proposal', topic: 'start_date', say: '', question: 'Start Monday, Nov 9?', options: ['Today, Monday, Nov 2'] })} busy={false} onAnswer={onAnswer} today="2026-11-02" />);
     const yes = screen.getByRole('button', { name: 'Yes' });
     expect(yes.className).toContain('bg-primary');
-    const today = screen.getByRole('button', { name: 'Today, Monday, Nov 2' });
+    // Today's date shows as "Today" alone (round 2, finding 3); the tap still sends the date written out.
+    const today = screen.getByRole('button', { name: 'Today' });
     expect(today.className).not.toContain('bg-primary');
     fireEvent.click(yes);
     fireEvent.click(today);
     expect(onAnswer.mock.calls).toEqual([[PROPOSAL_YES_TEXT], ['Today, Monday, Nov 2']]);
   });
 
-  it.each(['start_date', 'end_date', 'deadline_date', 'parked_return'] as const)('a %s question has a date picker that sends an exact, spelled date', (topic) => {
+  it.each(['start_date', 'end_date', 'deadline_date', 'parked_return'] as const)('a %s question opens the picker in place, and picking a date answers it', (topic) => {
     const onAnswer = vi.fn();
     render(<QuestionCard turn={turn({ topic, question: 'Which day would you like?' })} busy={false} onAnswer={onAnswer} today={TODAY} />);
-    const use = screen.getByRole('button', { name: 'Use this date' }) as HTMLButtonElement;
-    expect(use.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText('Or pick a date'), { target: { value: '2026-11-12' } });
-    fireEvent.click(use);
+    expect(screen.queryByRole('button', { name: 'Use this date' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: PICK_DATE }));
+    fireEvent.change(screen.getByLabelText(PICK_DATE), { target: { value: '2026-11-12' } });
     expect(onAnswer).toHaveBeenCalledWith('Thursday, November 12, 2026');
   });
 
   it('no other question has a date picker', () => {
     render(<QuestionCard turn={turn({ topic: 'floor' })} busy={false} onAnswer={() => {}} today={TODAY} />);
-    expect(screen.queryByLabelText('Or pick a date')).toBeNull();
+    expect(screen.queryByRole('button', { name: PICK_DATE })).toBeNull();
   });
 });
 
@@ -165,7 +168,9 @@ describe('no date reaches a setup screen as YYYY-MM-DD (finding 7)', () => {
         />,
       );
       expect(container.textContent).not.toMatch(MACHINE_DATE);
-      expect(container.textContent).toContain('Thursday, Oct 29');
+      // Today's date reads "today" alone (round 2, finding 3); another day keeps its weekday.
+      expect(container.textContent).toContain('Start today?');
+      expect(container.textContent).toContain('Monday, Nov 2');
       cleanup();
     }
   });

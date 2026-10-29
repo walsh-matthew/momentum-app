@@ -52,19 +52,65 @@ export function casualDateLabel(iso: string, today: string | null, options: Casu
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-// A date written for a machine or spelled in full ("2026-10-29", "October 29, 2026") anywhere in a text, rewritten the casual
-// way. Used on Claude's words in setup, which may echo a date as it was given. Relative words are left out, because the date
-// sits inside Claude's own sentence ("Start on today?" would not read).
-const MONTH_ALT = MONTHS_LONG.join('|');
-// One pass over both forms, so a date already rewritten is never read a second time.
-const WRITTEN_DATE = new RegExp(`\\b(\\d{4})-(\\d{2})-(\\d{2})\\b|\\b(${MONTH_ALT}) (\\d{1,2}), (\\d{4})\\b`, 'g');
+// A date written anywhere in a text, rewritten the one casual way (MOM-111 finding 7, round 2 finding 3): "today" and
+// "tomorrow" on their own, and the weekday with the date for any other day ("Monday, Nov 2"). Used on every word a setup card
+// shows, Claude's and code's. It reads a date written for a machine ("2026-10-29"), spelled in full ("October 29, 2026") or
+// short ("Oct 29", "Thursday, Oct 29"), with any "today, " or "tomorrow, " in front of it, so "Start today, Thursday, Oct 29?"
+// shows as "Start today?". The text a turn keeps still has the date written out: the check that the person accepted a
+// suggested date reads it there (lib/setup/validate.ts). Month and weekday names are matched with their capital letter, so
+// "may" the word is never read as a month. A date with no year is read as the one nearest the person's today.
+const MONTH_ALT = [...MONTHS_LONG, ...MONTHS_SHORT, 'Sept'].join('|');
+const WEEKDAY_ALT = [...WEEKDAYS_LONG, ...WEEKDAYS_SHORT].join('|');
+// One pass over every form, so a date already rewritten is never read a second time.
+const WRITTEN_DATE = new RegExp(
+  `(\\b[Oo]n )?(?:\\b([Tt]oday|[Tt]omorrow),? )?(?:\\b(?:${WEEKDAY_ALT}),? )?(?:\\b(\\d{4})-(\\d{2})-(\\d{2})\\b|\\b(${MONTH_ALT})\\.? (\\d{1,2})(?:st|nd|rd|th)?\\b(?:,? (\\d{4})\\b)?)`,
+  'g',
+);
+
+const monthIndex = (name: string): number => {
+  const n = name === 'Sept' ? 'Sep' : name;
+  const long = MONTHS_LONG.indexOf(n as (typeof MONTHS_LONG)[number]);
+  return long >= 0 ? long : MONTHS_SHORT.indexOf(n as (typeof MONTHS_SHORT)[number]);
+};
+
+// The year that puts a month and day nearest `today`.
+function nearestYear(month: number, day: number, today: string | null): number | null {
+  const now = today ? parts(today) : null;
+  if (!now) return null;
+  let best: { year: number; gap: number } | null = null;
+  for (const year of [now.y - 1, now.y, now.y + 1]) {
+    const ms = Date.UTC(year, month - 1, day);
+    const gap = Math.abs(ms - now.ms);
+    if (best === null || gap < best.gap) best = { year, gap };
+  }
+  return best?.year ?? null;
+}
+
 export function casualText(text: string, today: string | null): string {
-  return text.replace(WRITTEN_DATE, (whole, y: string, m: string, d: string, month: string, day: string, year: string) => {
-    const candidate = y
-      ? `${y}-${m}-${d}`
-      : `${year}-${String(MONTHS_LONG.indexOf(month as (typeof MONTHS_LONG)[number]) + 1).padStart(2, '0')}-${day.padStart(2, '0')}`;
-    return parts(candidate) ? casualDate(candidate, today, { relative: false }) : whole;
-  });
+  return text.replace(
+    WRITTEN_DATE,
+    (whole, on: string | undefined, rel: string | undefined, y: string, m: string, d: string, month: string, day: string, year: string, offset: number) => {
+      let candidate: string;
+      if (y) candidate = `${y}-${m}-${d}`;
+      else {
+        const mi = monthIndex(month) + 1;
+        const yy = year ? Number(year) : nearestYear(mi, Number(day), today);
+        if (yy === null) return whole;
+        candidate = `${yy}-${String(mi).padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+      if (!parts(candidate)) return whole;
+      const words = casualDate(candidate, today);
+      const relative = words === 'today' || words === 'tomorrow' || words === 'yesterday';
+      // "on today" does not read; "on Monday, Nov 2" does.
+      const lead = on && !relative ? on : '';
+      // "Today" starting a line or an option keeps its capital.
+      const capital = relative && (rel?.[0] === 'T' || on?.[0] === 'O' || offset === 0);
+      // A "today, " in front of a date that is not the person's today was wrong; the date is what counts, so it shows alone.
+      const firstWord = capital || (!relative && offset === 0);
+      const shown = firstWord ? words.charAt(0).toUpperCase() + words.slice(1) : words;
+      return `${lead}${shown}`;
+    },
+  );
 }
 
 // The calendar date an instant falls on in a time zone, YYYY-MM-DD, or null when the zone is not one.
