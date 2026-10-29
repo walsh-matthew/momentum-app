@@ -253,3 +253,32 @@ export interface Scoreboard {
   movedSteps: MovedStep[];
   forecasts: DeadlineForecast[];
 }
+
+// ---------------------------------------------------------------------------
+// The weekly review (docs/DOMAIN_MODEL.md §3, lib/engine/review.ts)
+// ---------------------------------------------------------------------------
+
+export interface ReviewWindow {
+  start: LocalDate;
+  end: LocalDate;
+}
+
+// One target's layer 1 facts for the reviewed week: the period that closed then, what crossed in it, its pattern
+// streaks as of then (both directions), and an outcome target's trend. A target with no period closing in the
+// reviewed week (a deadline target whose period runs longer) has none and is left out.
+export interface Layer1TargetFact {
+  targetId: string;
+  result: TargetResult;
+  crossings: Crossing[];
+  patterns: Pattern[];
+  trend: Trend | null;
+}
+
+// The one adjustment layer 3 raises (§3.2), picked by selectLayerThreeAdjustment. Only the three triggers buildable
+// from the engine's own facts are built yet: a deadline forecast that no longer fits, a slipping pattern, and an
+// aspiration hit repeatedly. The other three in §3.2 (a repeated priority exception, a goal clash, "still right for
+// you?" on a setup suggestion) need data Momentum does not capture anywhere yet (BACKLOG.md, MOM-108/MOM-113).
+export type LayerThreeAdjustment =
+  | { kind: 'deadline_forecast'; itemId: string; verdict: DeadlineForecast['verdict']; options: DeadlineForecast['options'] }
+  | { kind: 'slipping_check_in'; targetId: string; periods: number }
+  | { kind: 'rebaseline'; targetId: string; periods: number };

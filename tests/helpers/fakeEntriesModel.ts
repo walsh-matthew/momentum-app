@@ -21,6 +21,7 @@ export const newId = () => crypto.randomUUID();
 
 type TableName =
   | 'person_settings'
+  | 'person_priorities'
   | 'goals'
   | 'targets'
   | 'work_items'
@@ -33,6 +34,7 @@ type TableName =
 // What the authenticated role may do on each table (migration 013, section 7).
 const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'delete'>> = {
   person_settings: new Set(['select']),
+  person_priorities: new Set(['select', 'insert', 'update', 'delete']),
   goals: new Set(['select']),
   targets: new Set(['select']),
   work_items: new Set(['select']),
@@ -65,6 +67,7 @@ export const ENFORCED_CONSTRAINTS = [
 export const gm = {
   tables: {
     person_settings: [] as Row[],
+    person_priorities: [] as Row[],
     goals: [] as Row[],
     targets: [] as Row[],
     work_items: [] as Row[],

@@ -128,8 +128,9 @@ function dayEndMinutes(time: string | null): number | null {
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
 
-// Each anchor is the person's own or null. Nothing is filled in.
-export function toAnchors(settings: SettingsRead | null): TimeAnchors {
+// Each anchor is the person's own or null. Nothing is filled in. Takes only the three day-anchor columns, so a
+// caller that reads a different slice of person_settings (lib/services/review.ts) can reuse it too.
+export function toAnchors(settings: Pick<SettingsRead, 'time_zone' | 'week_start' | 'day_end'> | null): TimeAnchors {
   const zone = settings?.time_zone ?? null;
   return {
     timeZone: zone === null || zone.trim() === '' ? null : zone,
