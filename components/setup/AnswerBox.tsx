@@ -13,11 +13,13 @@ interface AnswerBoxProps {
   onSubmit: (text: string) => void;
   // Tapping this instead of typing sends a fixed answer (for example "Yes, use that").
   quickAnswers?: { label: string; text: string }[];
+  // A second button beside the send button, the same size (for example "Keep it as it is" in the change box).
+  secondary?: { label: string; onClick: () => void };
 }
 
 // A text box and a send button, for any card that takes the person's own words. The text is sent as typed, trimmed, and the
 // box empties after it is sent.
-export function AnswerBox({ label, submitLabel, placeholder, busy, onSubmit, quickAnswers = [] }: AnswerBoxProps) {
+export function AnswerBox({ label, submitLabel, placeholder, busy, onSubmit, quickAnswers = [], secondary }: AnswerBoxProps) {
   const [text, setText] = useState('');
   const ready = text.trim().length > 0 && !busy;
 
@@ -49,9 +51,16 @@ export function AnswerBox({ label, submitLabel, placeholder, busy, onSubmit, qui
         onChange={(event) => setText(event.target.value)}
         className="min-h-24 w-full rounded-2xl border border-border bg-secondary px-4 py-3 text-base text-foreground placeholder:text-muted disabled:opacity-60"
       />
-      <Button type="submit" size="lg" disabled={!ready} className="w-full sm:w-auto">
-        {busy ? 'Thinking…' : submitLabel}
-      </Button>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button type="submit" size="lg" disabled={!ready} className="w-full sm:w-auto">
+          {busy ? 'Thinking…' : submitLabel}
+        </Button>
+        {secondary && (
+          <Button type="button" size="lg" variant="outline" disabled={busy} onClick={secondary.onClick} className="w-full sm:w-auto">
+            {secondary.label}
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

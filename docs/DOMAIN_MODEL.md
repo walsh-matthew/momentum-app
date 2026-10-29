@@ -122,18 +122,25 @@ Setup is a short guided conversation that turns a vague idea into the structure 
 1. **One question per turn, single-part, plain words.**
 2. **Never assume anything about the person's life,** in questions, playbacks or examples. No days, times, week starts, "evenings", "weekends", "any three".
 3. **Never announce a reminder, check-in or nudge.** Ask whether they want one.
-4. **Offer the choice before examples:** "Do you have something in mind, or would some starting ideas help?" A suggestion the person takes is marked as a starting point and checked at the first weekly review.
-5. **Skip what is already answered.** If an earlier answer or a person fact covers a question, say so in one line ("You told me your week starts Monday, so I'll skip that") and move on.
+4. **Offer the choice before suggestions.** Before a list of suggested goals, numbers or steps, ask "Do you have something in mind, or would some starting ideas help?", and give the list only if they want it. When the question is about the goal itself or a number, it carries no examples, because an example there plants the answer. A few short examples inside any other question are fine ("never tried it, dabbled a little, or done it before?"), and so is explaining a question with examples when the person asks what it means. Rule 2 applies to every example. A suggestion the person takes is marked as a starting point and checked at the first weekly review.
+5. **Skip what is already answered.** If an earlier answer or a person fact covers a question, say so in one line ("You told me your week starts Monday, so I'll skip that") and move on. A question on the same topic straight after the person's reply is a follow-up or a clarification, not a repeat; asking a topic again after the conversation has moved on is a repeat.
 6. **When an answer doesn't fit, offer numbered interpretations** instead of guessing.
 7. **Play back in short chunks, latest answer wins.** Each part is played back and approved as it finishes, never one long playback at the end. Preferences change mid-setup; the playback reflects the newest one.
 8. **Claude does no math and sets no score.** It proposes structure; the engine validates it.
+
+**Plain language (applies to every rule above).** The person may never have set up anything like this before, so setup has to be as clear as the two tabletop runs it was designed from.
+
+- **Questions are in everyday words, with a reason.** A word the model uses (protected, priorities, floor, aspiration, target, effort, outcome, block and the like) is said only with what it means in the same sentence, or not at all. Each question says in a few words why it asks or what the answer is for ("that's the date we'll plan back from"), and where it helps it carries a few short examples (rule 4).
+- **Playback is restated, not parroted.** Code restates the person's words in the second person ("because you want to stay healthy for your family"), grouped by part. It changes only the voice, so the person still approves exactly what is saved. Words it cannot restate safely are shown as said, in quotes.
+- **Every change has a way out.** Wherever the person can change something, a button just as easy to reach as the change itself lets them keep it as it is.
+- **"What do you mean?" is always answered,** in plainer words with a few examples, and setup carries on from there. No check refuses that answer.
 
 ### 2.2 The conversation, in order
 
 1. **The idea,** in their words.
 2. **Why** it matters to them.
 3. **Break it up:** is this one goal or several? If several, together or one first? Others are parked with a return condition (date, season or condition, or only when asked).
-4. **What else matters:** protected priorities, before any detailed planning.
+4. **What else matters:** besides this goal, what else in their life matters right now that the plan shouldn't crowd out (saved as protected priorities), asked in those words with a few examples and, once known, what the goal will take from their week. Before any detailed planning.
 5. **Starting point:** where they are now. This often surfaces a natural first milestone.
 6. **Shape and timeframe:** ongoing (first block length), end date, or deadline. Always ask for the exact date; never infer a week. For a deadline, ask as a separate question whether the date can move.
 7. **What counts:** effort and outcome targets, the floor, and an aspiration if they want one. No forced failure-rate guesses.
@@ -147,7 +154,7 @@ Setup is a short guided conversation that turns a vague idea into the structure 
 
 ### 2.3 How saving works
 
-- Claude fills a draft object that must pass the same schema validation as the saved model. The playback is rendered from that validated draft, not from Claude's own summary, so what the person approves is exactly what gets saved.
+- Claude fills a draft object that must pass the same schema validation as the saved model. The playback is rendered from that validated draft, not from Claude's own summary, and restated in the second person by code (§2.1 plain language), so what the person approves is exactly what gets saved.
 - A quick path exists: accept sensible defaults and refine later. Every default is visible and editable.
 - Nothing a person said is lost if validation fails; Claude asks one clarifying question instead.
 - There is no turn cap in the prompt. Setup has its own cost budget per setup, in turns and tokens, set from measured eval runs (`LLM_GOVERNANCE.md` once re-baselined). When the budget runs out, setup fails closed: it plays back what was collected, offers the quick path, and saves nothing unapproved.
@@ -242,3 +249,5 @@ Momentum does not edit the person's documents, write resumes, or coach focus and
 | 2026-10-27 | §2.2 step 9 is now one question: "Where do you track this now, if anywhere?" (was "Are you already tracking this? Where?"). | The old wording was two asks, which setup's first hard rule (one single-part question per turn) forbids; MOM-111's first block found it. | MOM-111 |
 | 2026-10-29 | §1.5 bring your own tracker names Google Drive and OneDrive (Google first, the same source for both) and adds four rules: the person picks the file, mapping follows headers and fits any sheet shape, reads happen when the person looks, and only counted cells are kept. §4.3 says where Momentum's templates live. | Owner design pass on the sheet source, 2026-10-29. Both stores are common in households like the owner's; the narrow file permission keeps the privacy ask and the provider review small. | MOM-117, MOM-136 |
 | 2026-10-29 | §3 says what the review does when the planning day is the week's own last day: it counts the week through that day and says so, and anything logged later that day shows under "Since this recap". | The engine calls a week open until the day after it ends, so a recap on the last day would have missed a slipping pattern ending that week until the next cycle. Counting the week through that day fixes it without changing the engine, and a later entry is shown against the stored recap in words, never by rewriting it. | MOM-113 |
+| 2026-10-29 | §2.1 rule 4 narrowed from every example to lists of suggestions: a question about the goal itself or a number still carries no examples, but short examples inside any other question, and examples that explain a question the person asked about, are allowed. Rule 5 says a same-topic question straight after the reply is a follow-up, not a repeat. | The tabletop testers found short examples clarifying (run 2: examples unblocked the tester). In production the ban on every example, with the skip rule, left "what do you mean?" with no allowed answer: seven replies were thrown away and setup ended at Try again. | MOM-111 |
+| 2026-10-29 | §2.1 adds the plain-language principle (everyday words with a reason and examples, playback restated not parroted, a way out of every change, "what do you mean?" always answered). §2.2 step 4 asks in those words. §2.3 says the playback is restated in the second person. | The owner's live setup on a phone: "what needs protecting" was not understood, the playback pasted the person's words back as typed, and the only way out of a change was a small link. The build had turned the tabletops' judgment into hard rules and terse step summaries. | MOM-111 |

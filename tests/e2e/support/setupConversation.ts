@@ -5,7 +5,7 @@
 
 import { SETUP_CASES, type ScriptedCase } from '../../setup-evals/cases';
 
-export const E2E_CASE_ID = 'run-b-habit-ideas';
+export const E2E_CASE_ID = 'run-i-what-do-you-mean-protected';
 
 export function e2eCase(): ScriptedCase {
   const found = SETUP_CASES.find((c) => c.id === E2E_CASE_ID);

@@ -8,7 +8,7 @@
 // is then checked here, by code, before anyone sees it: it must parse as a turn, and checkTurn() must find no hard rule
 // broken and the draft valid. A reply that fails is thrown away, counted, and asked for again (up to twice more, but not a
 // third time when the second broke the same rules as the first: it is the same call again); the person never sees it. Three unusable replies in a row end in a plain "try again" and nothing is lost. The count of thrown-away
-// replies is returned and logged by category and rule name only, never with any text (the usage log marks a call 'ok' when
+// replies is returned and logged by category, rule name and topic name only, never with any text (the usage log marks a call 'ok' when
 // the API answered, even if the answer then fails the schema, so it cannot show this).
 //
 // The save: FIRST SETUP ONLY. It validates the draft in 'final' mode, turns it into the payload save_guided_setup() reads
@@ -20,12 +20,14 @@ import 'server-only';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, type Violation } from '@/lib/setup/checks';
+import { spokenTimes } from '@/lib/setup/playback';
 import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
 import { draftToRows, toSavePayload } from '@/lib/setup/rows';
 import { validateDraft } from '@/lib/setup/validate';
 import type { Json } from '@/types/database.types';
 import {
   AssistantTurnSchema,
+  PersonLocaleSchema,
   SETUP_CHUNKS,
   SetupSessionSchema,
   SuggestedDateSchema,
@@ -54,7 +56,11 @@ export const SETUP_FAILURE_MESSAGES = {
   unusable: "I couldn't put together a good reply just now. What you've said so far is kept; please try again.",
 } as const;
 
-const TurnRequestSchema = SetupSessionSchema.extend({ today: SuggestedDateSchema.optional() });
+// A locale that is not one is dropped, never a reason to refuse the turn: the playback then shows times as the person gave them.
+const TurnRequestSchema = SetupSessionSchema.extend({
+  today: SuggestedDateSchema.optional(),
+  locale: PersonLocaleSchema.optional().catch(undefined),
+});
 
 const SavedCountsSchema = z.object({ goals: z.number().int(), targets: z.number().int() });
 
@@ -80,14 +86,16 @@ const withAllApproved = (session: SetupSession): SetupSession => ({
   draft: { ...session.draft, approved: [...SETUP_CHUNKS] },
 });
 
-function quickPathView(session: SetupSession, reason: QuickPathReason, message: string): SetupTurnView {
+// The playback here is written on the server, so a clock time uses the locale the browser sent; without one, the time reads
+// as the person gave it (lib/setup/playback.ts).
+function quickPathView(session: SetupSession, reason: QuickPathReason, message: string, locale: string | undefined): SetupTurnView {
   const shown = withAllApproved(session);
   const validation = validateDraft(shown.draft, shown.transcript, 'final');
   return {
     kind: 'quick_path',
     reason,
     message,
-    sections: quickPathSections(session.draft.model),
+    sections: quickPathSections(session.draft.model, { locale, spokenTime: spokenTimes(session.draft, session.transcript) }),
     missing: describeMissing(session.draft.model, validation.issues),
     canSave: validation.ok,
   };
@@ -97,7 +105,7 @@ function quickPathView(session: SetupSession, reason: QuickPathReason, message: 
 export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise<ServiceResult<SetupTurnView>> {
   const parsed = TurnRequestSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: BAD_REQUEST };
-  const { today, ...session } = parsed.data;
+  const { today, locale, ...session } = parsed.data;
   const last = session.transcript[session.transcript.length - 1];
   // Claude speaks first, and then only after the person has: anything else has nothing to answer.
   if (last !== undefined && last.role !== 'person') return { ok: false, error: BAD_REQUEST };
@@ -117,7 +125,7 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
       spentTokens,
       today,
     });
-    if (answer.kind === 'quick_path') return { ok: true, data: quickPathView(session, answer.reason, answer.message) };
+    if (answer.kind === 'quick_path') return { ok: true, data: quickPathView(session, answer.reason, answer.message, locale) };
     if (answer.kind === 'wait') return { ok: true, data: { kind: 'wait', message: answer.message, retryAfterSeconds: answer.retryAfterSeconds } };
 
     // The tokens of every call count against the setup budget, a thrown-away reply as much as a kept one.
@@ -144,7 +152,8 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
     if (violations.length > 0) {
       rejected += 1;
       const rules = ruleNames(violations);
-      console.warn('[setup] a reply was thrown away', { category: 'rules', rules });
+      // The turn's topic and the topic it skipped are names from SETUP_TOPICS (the schema allows nothing else), never text.
+      console.warn('[setup] a reply was thrown away', { category: 'rules', rules, topic: turn.data.topic, skippedTopic: turn.data.skipped?.topic ?? null });
       // The same input broke the same rules twice: a third try is the same call again, so stop and spend nothing more.
       if (rules.join() === lastRules) break;
       lastRules = rules.join();

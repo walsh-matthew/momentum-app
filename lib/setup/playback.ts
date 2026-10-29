@@ -1,128 +1,248 @@
 // Playback is written by code from the validated draft, never by Claude (docs/DOMAIN_MODEL.md §2.3, hard rule 7): what the
-// person approves is exactly what gets saved. Each approved part (chunk) gets a few plain lines; the final confirmation
-// is a few lines for the whole. Only fields that are set appear; nothing is filled in. Pure.
+// person approves is exactly what gets saved. Each approved part (chunk) gets a few plain lines, in the second person and
+// in everyday words: the person's own words are restated ("because you want to stay healthy for your family"), never pasted
+// back, and anything that cannot be restated is shown as said, in quotes (lib/setup/restate.ts, MOM-111). The final
+// confirmation is a few lines for the whole. Only fields that are set appear; nothing is filled in. Pure.
 
-import type { GoalDraft, SetupChunk, SetupModel, TargetDraft } from '@/types/setup';
+import { EARLY_DAY_END_LIMIT } from '@/lib/engine/constants';
+import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
+import type { GoalDraft, SetupChunk, SetupDraft, SetupModel, TargetDraft, Transcript } from '@/types/setup';
+import { asSaid, itemOf, listOf, restate, titleOf, trimmed } from './restate';
+import { minutesOfClock, timePhrasesIn } from './text';
 
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const weekdayName = (n: number): string => WEEKDAY_NAMES[n - 1] ?? String(n);
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// The clock times the playback shows, by the path they are saved under.
+export type ClockPath = 'person.dayEnd' | 'person.planning.time';
+
+export interface PlaybackOptions {
+  // The person's locale (their browser's, sent with each turn), so a time reads the way they write times. Without a usable
+  // one, a time is shown as the person gave it.
+  locale?: string | null;
+  // The person's own words for the time saved at this path ("9 at night"), when they said one (spokenTimes below).
+  spokenTime?: (path: ClockPath) => string | null;
+}
+
+// "2027-06-14" as "June 14, 2027". Spelled out, the same everywhere: a date is never read in the wrong order.
+export function spelledDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  return `${MONTH_NAMES[Number(m[2]) - 1] ?? m[2]} ${Number(m[3])}, ${m[1]}`;
+}
+
+// "21:00" in the person's locale ("9:00 PM" in en-US, "21:00" in de-DE). Null when there is no locale, or it is not one.
+function localClock(hhmm: string, locale: string | null | undefined): string | null {
+  if (!locale) return null;
+  try {
+    const minutes = minutesOfClock(hhmm);
+    // Some ICU versions put a narrow no-break space before "PM"; a plain space reads the same and matches everywhere.
+    return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })
+      .format(Date.UTC(2000, 0, 1, Math.floor(minutes / 60), minutes % 60))
+      .replace(/[  ]/g, ' ');
+  } catch {
+    return null;
+  }
+}
+
+function clock(hhmm: string, path: ClockPath, options: PlaybackOptions): string {
+  return localClock(hhmm, options.locale) ?? options.spokenTime?.(path) ?? hhmm;
+}
+
+// Where the person gave each clock time, in their own words: the message their `said` entry points at, and the words in it
+// that name the saved time. A time they accepted from a suggestion, or that cannot be found, has none.
+export function spokenTimes(draft: SetupDraft, transcript: Transcript): (path: ClockPath) => string | null {
+  const values: Record<ClockPath, string | null> = { 'person.dayEnd': draft.model.person.dayEnd, 'person.planning.time': draft.model.person.planning.time };
+  return (path) => {
+    const value = values[path];
+    const entry = draft.said.filter((s) => s.path === path && s.how === 'said').sort((a, b) => b.turn - a.turn)[0];
+    const message = entry ? transcript[entry.turn] : undefined;
+    if (!value || message?.role !== 'person') return null;
+    return timePhrasesIn(message.text).find((p) => p.minutes === minutesOfClock(value))?.said ?? null;
+  };
+}
+
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 function describePeriod(t: TargetDraft): string {
   switch (t.period.kind) {
     case 'weekly':
       return 'each week';
     case 'day_slots':
-      return `on ${t.period.weekdays.map(weekdayName).join(', ')}`;
+      return `each week on ${listOf(t.period.weekdays.map(weekdayName))}`;
     case 'deadline':
-      return `by ${t.period.dueDate}`;
+      return `by ${spelledDate(t.period.dueDate)}`;
   }
 }
 
-function describeMeasure(t: TargetDraft): string {
+// An amount of what the target counts: "2", "5000 pounds", "90 minutes", "3 items".
+function amount(t: TargetDraft, n: number): string {
   switch (t.measure) {
     case 'count':
-      return 'a count';
+      return String(n);
     case 'quantity':
-      return `a number of ${t.unit}`;
+      return `${n} ${t.unit ? itemOf(t.unit) : ''}`.trim();
     case 'time':
-      return 'time in minutes';
+      return plural(n, 'minute', 'minutes');
     case 'checklist':
-      return 'a checklist';
+      return plural(n, 'item', 'items');
   }
 }
 
 function describeTarget(t: TargetDraft): string {
-  const levels = [
-    t.floor !== null ? `at least ${t.floor}` : null,
-    t.aspiration !== null ? `aiming for ${t.aspiration}` : null,
-    t.qualifyingThreshold !== null ? `counting entries of ${t.qualifyingThreshold} or more` : null,
-  ].filter((x): x is string => x !== null);
-  const role = t.role === 'effort' ? 'effort' : 'outcome, shown and not judged';
-  return `${t.title}: ${describeMeasure(t)} ${describePeriod(t)} (${role})${levels.length ? `, ${levels.join(', ')}` : ''}.`;
+  const title = titleOf(t.title);
+  const period = describePeriod(t);
+  let line: string;
+  if (t.floor !== null) {
+    line = `${title}: at least ${amount(t, t.floor)} ${period}${t.aspiration !== null ? `, aiming for ${amount(t, t.aspiration)}` : ''}.`;
+  } else if (t.measure === 'checklist') {
+    line = `${title}: a checklist to work through ${period}.`;
+  } else {
+    line = `${title}: counted ${period}${t.aspiration !== null ? `, aiming for ${amount(t, t.aspiration)}` : ''}.`;
+  }
+  if (t.role === 'outcome') line += " It isn't fully in your hands, so it's shown to you, never judged.";
+  if (t.qualifyingThreshold !== null) line += ` Only entries of ${amount(t, t.qualifyingThreshold)} or more count.`;
+  return line;
 }
 
 function describeShape(g: GoalDraft): string {
-  const start = g.startDate ? `, starting ${g.startDate}` : '';
+  const title = titleOf(g.title);
+  const start = g.startDate ? `, starting ${spelledDate(g.startDate)}` : '';
   switch (g.shape) {
     case 'ongoing':
-      return `ongoing${g.blockWeeks !== null ? `, first block of ${g.blockWeeks} weeks` : ''}${start}`;
+      return `${title} keeps going${start}${g.blockWeeks !== null ? `, with a first stretch of ${plural(g.blockWeeks, 'week', 'weeks')}` : ''}.`;
     case 'finite':
-      return `until ${g.endDate ?? 'a date not set yet'}${start}`;
+      return `${title} runs until ${g.endDate ? spelledDate(g.endDate) : 'a date not set yet'}${start}.`;
     case 'project':
-      return `a project${g.endDate ? ` with a deadline of ${g.endDate}` : ''}${start}`;
+      return g.endDate ? `${title} has a deadline of ${spelledDate(g.endDate)}${start}.` : `${title} runs until it's done${start}.`;
     case null:
-      return `shape not set yet${start}`;
+      return `${title}: how long it runs isn't set yet${start}.`;
   }
 }
 
+// When a goal set aside comes back. A condition in the person's words reads after "It comes back" when it starts like one
+// ("in the spring", "when my knee heals"); otherwise it is shown as said.
+const RETURN_START = /^(in|when|after|once|on|at|by|next|before|if|until|around|this|after)\b/i;
 function describeReturn(g: GoalDraft): string {
-  if (!g.returnWhen) return 'a way back is not set yet';
+  if (!g.returnWhen) return 'When it comes back is not set yet.';
   switch (g.returnWhen.kind) {
     case 'date':
-      return `comes back on ${g.returnWhen.date}`;
-    case 'condition':
-      return `comes back ${g.returnWhen.note}`;
+      return `It comes back on ${spelledDate(g.returnWhen.date)}.`;
+    case 'condition': {
+      const note = trimmed(g.returnWhen.note);
+      const restated = RETURN_START.test(note) ? restate(note, 'item') : null;
+      return restated ? `It comes back ${restated}.` : `It comes back, in your words: ${asSaid(g.returnWhen.note)}`;
+    }
     case 'on_request':
-      return 'comes back only when you ask';
+      return 'It comes back when you ask.';
   }
 }
 
-export function renderPlayback(model: SetupModel, chunk: SetupChunk): string[] {
+function describeGoal(g: GoalDraft): string {
+  const title = titleOf(g.title);
+  if (!g.why) return `Goal: ${title}.`;
+  const why = restate(g.why, 'clause');
+  return why ? `Goal: ${title}, because ${why}.` : `Goal: ${title}. Why, in your words: ${asSaid(g.why)}`;
+}
+
+const PROVIDER_NAMES = new Map(INTEGRATION_CATALOG.map((e) => [e.provider as string, e.name]));
+const SOURCE_WORDS = (t: TargetDraft): string =>
+  t.sources.length === 0
+    ? "where you track it isn't set yet"
+    : listOf(t.sources.map((s) => (s.kind === 'manual' ? 'you log it yourself' : `read from ${PROVIDER_NAMES.get(s.provider) ?? s.provider}`)));
+
+const TONE_LINES = { gentle: 'Momentum talks to you gently.', middle: 'Momentum talks to you plainly, neither soft nor blunt.', direct: 'Momentum talks to you directly.' } as const;
+const REMINDER_LINES = { off: 'No reminders.', tied_to_plan: 'Reminders only on the days you plan to do something.' } as const;
+const CHECK_IN_LINES = {
+  never: "Momentum doesn't ask how it went for the things you log yourself.",
+  end_of_day: 'At the end of your day, Momentum asks how it went for the things you log yourself.',
+  end_of_week: 'At the end of your week, Momentum asks how it went for the things you log yourself.',
+} as const;
+const CELEBRATION_LINES = { low_key: 'Wins get a low-key celebration.', medium: 'Wins get a medium-sized celebration.', big: 'Wins get a big celebration.' } as const;
+const BALANCE_LINES = {
+  weekly_planning: 'When one goal is taking time from the rest, Momentum mentions it when you plan your week.',
+  near_deadlines: 'When one goal is taking time from the rest, Momentum mentions it only near a deadline.',
+  leave_to_me: 'Momentum leaves the balance between your goals to you.',
+} as const;
+const REVIEW_DEPTH_LINES = {
+  recap_only: 'Your weekly look-back: a short recap only.',
+  recap_offer: 'Your weekly look-back: a short recap, with an offer to go deeper.',
+  full: 'Your weekly look-back: a recap and a few questions on what worked.',
+} as const;
+const REVIEW_PLANNING_LINES = {
+  one_sitting: 'You look back on your week and plan the next one in one sitting.',
+  separate: 'You look back on your week and plan the next one separately.',
+} as const;
+
+export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: PlaybackOptions = {}): string[] {
   const lines: string[] = [];
+  const active = model.goals.filter((x) => x.state === 'active');
   switch (chunk) {
     case 'goals':
       for (const g of model.goals) {
-        lines.push(
-          g.state === 'active'
-            ? `Goal: ${g.title}${g.why ? `, because ${g.why}` : ''}.`
-            : `Set aside: ${g.title}; ${describeReturn(g)}.`,
-        );
+        lines.push(g.state === 'active' ? describeGoal(g) : `Set aside for now: ${titleOf(g.title)}. ${describeReturn(g)}`);
       }
       break;
     case 'targets':
-      if (model.person.priorities.length > 0) lines.push(`Protected: ${model.person.priorities.join(', ')}.`);
-      for (const g of model.goals.filter((x) => x.state === 'active')) {
-        lines.push(`${g.title}: ${describeShape(g)}.`);
+      if (model.person.priorities.length > 0) {
+        lines.push(
+          `Besides your goals, what matters to you: ${listOf(model.person.priorities.map(itemOf))}. I'll keep these in mind so the plan doesn't crowd them out.`,
+        );
+      }
+      for (const g of active) {
+        lines.push(describeShape(g));
         for (const t of g.targets) lines.push(`  ${describeTarget(t)}`);
       }
       break;
     case 'planning': {
       const p = model.person;
-      if (p.timeZone) lines.push(`Time zone: ${p.timeZone}.`);
-      if (p.dayEnd) lines.push(`Your day ends at ${p.dayEnd}.`);
-      if (p.weekStart !== null) lines.push(`Your week starts on ${weekdayName(p.weekStart)}.`);
-      for (const d of p.dayTypes) {
-        lines.push(`Day type: ${d.name}${d.capacityAmount !== null ? ` (${d.capacityAmount} ${d.capacityUnit})` : ''}.`);
-      }
-      if (p.planning.weekday !== null || p.planning.time !== null) {
+      if (p.timeZone) lines.push(`You're in the ${p.timeZone} time zone.`);
+      if (p.dayEnd) {
+        const at = clock(p.dayEnd, 'person.dayEnd', options);
+        const m = minutesOfClock(p.dayEnd);
         lines.push(
-          `You plan your week${p.planning.weekday !== null ? ` on ${weekdayName(p.planning.weekday)}` : ''}${p.planning.time ? ` at ${p.planning.time}` : ''}.`,
+          m > 0 && m < EARLY_DAY_END_LIMIT
+            ? `Your day ends at ${at}, so anything you log before then counts toward the day before.`
+            : `Your day ends at ${at}, the time you check in; your day still runs from midnight to midnight.`,
         );
       }
-      for (const g of model.goals.filter((x) => x.state === 'active')) {
+      if (p.weekStart !== null) lines.push(`Your week starts on ${weekdayName(p.weekStart)}.`);
+      if (p.dayTypes.length > 0) {
+        const kinds = p.dayTypes.map((d) => `${itemOf(d.name)}${d.capacityAmount !== null ? ` (${d.capacityAmount} ${d.capacityUnit ?? ''})`.replace(' )', ')') : ''}`);
+        lines.push(`Your kinds of days: ${listOf(kinds)}.`);
+      }
+      if (p.planning.weekday !== null || p.planning.time !== null) {
+        const on = p.planning.weekday !== null ? ` on ${weekdayName(p.planning.weekday)}` : '';
+        const at = p.planning.time ? ` at ${clock(p.planning.time, 'person.planning.time', options)}` : '';
+        lines.push(`You'll plan your week${on}${at}.`);
+      }
+      for (const g of active) {
         for (const i of g.items) {
-          const when = i.dueDate ? `, due ${i.dueDate}, and the date ${i.dateCanMove ? 'can' : 'cannot'} move` : '';
-          lines.push(`${i.kind === 'deadline_task' ? 'Deadline task' : i.kind === 'habit' ? 'Habit' : 'Milestone'}: ${i.title}${when}.`);
+          const title = titleOf(i.title);
+          if (i.kind === 'deadline_task') {
+            const move = i.dateCanMove === null ? '' : i.dateCanMove ? ' The date can move.' : " The date can't move.";
+            lines.push(i.dueDate ? `Due by ${spelledDate(i.dueDate)}: ${title}.${move}` : `${title}: its date isn't set yet.`);
+          } else {
+            lines.push(`${i.kind === 'habit' ? 'Habit' : 'A step along the way'}: ${title}.`);
+          }
         }
-        for (const t of g.targets) {
-          lines.push(`${t.title} is tracked ${t.sources.map((s) => (s.kind === 'manual' ? 'by you, by hand' : `in ${s.provider}`)).join(' and ') || 'nowhere yet'}.`);
-        }
+        for (const t of g.targets) lines.push(`${titleOf(t.title)}: ${SOURCE_WORDS(t)}.`);
       }
       break;
     }
     case 'talk': {
       const s = model.settings;
-      const chosen: [string, string | null][] = [
-        ['Tone', s.tone],
-        ['Reminders', s.reminders === 'tied_to_plan' ? 'tied to the days you plan' : s.reminders],
-        ['Check-ins for manual targets', s.checkIns?.replaceAll('_', ' ') ?? null],
-        ['Celebrations', s.celebrations?.replaceAll('_', ' ') ?? null],
-        ['Balance mentions', s.balanceMentions?.replaceAll('_', ' ') ?? null],
-        ['Review depth', s.reviewDepth?.replaceAll('_', ' ') ?? null],
-        ['Review and planning', s.reviewPlanning?.replaceAll('_', ' ') ?? null],
-        ['Quiet times', s.quietTimes === null ? null : s.quietTimes.length === 0 ? 'none' : s.quietTimes.join(', ')],
-      ];
-      for (const [label, value] of chosen) if (value !== null) lines.push(`${label}: ${value}.`);
+      if (s.tone) lines.push(TONE_LINES[s.tone]);
+      if (s.reminders) lines.push(REMINDER_LINES[s.reminders]);
+      if (s.checkIns) lines.push(CHECK_IN_LINES[s.checkIns]);
+      if (s.celebrations) lines.push(CELEBRATION_LINES[s.celebrations]);
+      if (s.balanceMentions) lines.push(BALANCE_LINES[s.balanceMentions]);
+      if (s.reviewDepth) lines.push(REVIEW_DEPTH_LINES[s.reviewDepth]);
+      if (s.reviewPlanning) lines.push(REVIEW_PLANNING_LINES[s.reviewPlanning]);
+      if (s.quietTimes !== null) {
+        lines.push(s.quietTimes.length === 0 ? 'No quiet times.' : `Quiet times, when Momentum stays silent: ${listOf(s.quietTimes.map(itemOf))}.`);
+      }
       break;
     }
   }
@@ -135,10 +255,10 @@ export const FINAL_MAX_LINES = 6;
 export function renderFinal(model: SetupModel): string[] {
   const active = model.goals.filter((g) => g.state === 'active');
   const shown = active.slice(0, FINAL_MAX_LINES - 2);
-  const lines = shown.map((g) => `${g.title}: ${g.targets.length} ${g.targets.length === 1 ? 'target' : 'targets'}.`);
+  const lines = shown.map((g) => `${titleOf(g.title)}: ${plural(g.targets.length, 'thing', 'things')} you'll count.`);
   if (active.length > shown.length) lines.push(`And ${active.length - shown.length} more.`);
   const parked = model.goals.length - active.length;
-  if (parked > 0) lines.push(`${parked} set aside with a way back.`);
+  if (parked > 0) lines.push(`${plural(parked, 'goal', 'goals')} set aside for now, with a way back.`);
   lines.push('Everything can be changed on your settings page.');
   return lines.slice(0, FINAL_MAX_LINES);
 }

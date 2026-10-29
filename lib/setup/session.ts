@@ -10,6 +10,15 @@ import { SetupSessionSchema, type AssistantTurn, type SetupSession } from '@/typ
 // follows a playback and a message that accepts it (lib/setup/text.ts acceptsText).
 export const APPROVE_TEXT = 'Yes, that is right.';
 
+// The change box on a playback and on the final confirmation: what it asks, and its way out (MOM-111). On a playback the
+// way out approves the part as shown; on the final confirmation it only closes the box.
+export const CHANGE_PROMPT = 'What would you like to change?';
+export const KEEP_IT = 'Keep it as it is';
+
+// The question card's button for a person who is not sure what a question means. It sends this sentence as their answer,
+// and Claude explains the question in plainer words (lib/setup/text.ts asksMeaning).
+export const MEANING_TEXT = 'What do you mean?';
+
 // The key under which the browser tab keeps the conversation in progress (components/setup/setupStorage.ts). It carries the
 // signed-in person's id, so a different person who signs in in the same tab is never offered, or sent on with, someone else's
 // half-finished setup.

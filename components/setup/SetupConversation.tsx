@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { askSetupTurn, saveSetup } from '@/app/actions/setup';
 import { Button } from '@/components/ui/button';
-import { renderFinal, renderPlayback } from '@/lib/setup/playback';
+import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { awaitsClaude, newSession, withAssistantTurn, withPersonMessage } from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
 import type { SetupSaved, SetupTurnView } from '@/types/setupScreen';
@@ -22,6 +22,13 @@ function localDate(): string {
   const now = new Date();
   const two = (n: number) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+}
+
+// The browser's locale, so a clock time in the playback reads the way the person writes times. This screen renders only
+// after it has mounted (phase 'loading' renders nothing), so the server never needs it; it is sent with each turn for the
+// quick path, which the server writes.
+function browserLocale(): string | undefined {
+  return typeof navigator === 'undefined' ? undefined : navigator.language || undefined;
 }
 
 // Claude's newest turn anywhere in the conversation, or null before it has spoken.
@@ -70,7 +77,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     setError(null);
     setView(null);
     try {
-      const result = await askSetupTurn({ ...next, today: localDate() });
+      const result = await askSetupTurn({ ...next, today: localDate(), locale: browserLocale() });
       if (!result.ok) {
         setError(result.error);
       } else if (result.data.kind === 'turn') {
@@ -137,8 +144,8 @@ export function SetupConversation({ userId }: SetupConversationProps) {
           Your setup is saved
         </h2>
         <p className="text-base">
-          {saved.goals} {saved.goals === 1 ? 'goal' : 'goals'} and {saved.targets} {saved.targets === 1 ? 'target' : 'targets'} are
-          ready. You can log against them now.
+          {saved.goals} {saved.goals === 1 ? 'goal' : 'goals'} and {saved.targets} {saved.targets === 1 ? 'thing' : 'things'} to
+          count are ready. You can log your progress now.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Link href="/log" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground">
@@ -159,7 +166,8 @@ export function SetupConversation({ userId }: SetupConversationProps) {
           Let&apos;s set up your goals
         </h2>
         <p className="text-base">
-          A short conversation with Claude, one question at a time. Nothing is saved until you approve it at the end. What you
+          A short conversation with Claude, one question at a time. If a question isn&apos;t clear, just ask what it means. Nothing
+          is saved until you approve it at the end. What you
           type is sent to Claude (Anthropic); the{' '}
           <Link href="/privacy" className="underline underline-offset-2">
             privacy notice
@@ -253,7 +261,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
       {turn.kind === 'playback' && turn.chunk !== null ? (
         <PlaybackCard
           chunk={turn.chunk}
-          lines={renderPlayback(turn.draft.model, turn.chunk)}
+          lines={renderPlayback(turn.draft.model, turn.chunk, { locale: browserLocale(), spokenTime: spokenTimes(turn.draft, session.transcript) })}
           busy={busy}
           onApprove={answer}
           onChange={answer}

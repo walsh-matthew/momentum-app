@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { CHANGE_PROMPT, KEEP_IT } from '@/lib/setup/session';
 import { AnswerBox } from './AnswerBox';
 
 interface FinalCardProps {
@@ -14,6 +15,7 @@ interface FinalCardProps {
 }
 
 // The last confirmation. Nothing has been saved until the person taps Save; every part was already approved on its own.
+// "Keep it as it is" only closes the change box: saving still takes its own tap.
 export function FinalCard({ lines, saving, error, onSave, onChange }: FinalCardProps) {
   const [changing, setChanging] = useState(false);
 
@@ -34,12 +36,14 @@ export function FinalCard({ lines, saving, error, onSave, onChange }: FinalCardP
         </p>
       )}
       {changing ? (
-        <div className="space-y-2">
-          <AnswerBox label="What should change?" submitLabel="Send the change" busy={saving} onSubmit={onChange} />
-          <Button variant="ghost" disabled={saving} onClick={() => setChanging(false)}>
-            Never mind
-          </Button>
-        </div>
+        <AnswerBox
+          label={CHANGE_PROMPT}
+          placeholder={CHANGE_PROMPT}
+          submitLabel="Send the change"
+          busy={saving}
+          onSubmit={onChange}
+          secondary={{ label: KEEP_IT, onClick: () => setChanging(false) }}
+        />
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button size="lg" disabled={saving} onClick={onSave} className="w-full sm:w-auto">

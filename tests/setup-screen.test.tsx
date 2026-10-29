@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SetupConversation } from '@/components/setup/SetupConversation';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
-import { APPROVE_TEXT, setupStorageKey } from '@/lib/setup/session';
+import { APPROVE_TEXT, MEANING_TEXT, setupStorageKey } from '@/lib/setup/session';
 import { runSetupEval } from '@/lib/setup/evals';
 import type { AssistantTurn, SetupSession, Transcript } from '@/types/setup';
 import type { SetupTurnView } from '@/types/setupScreen';
@@ -151,7 +151,7 @@ describe('playback is written by code, and the latest answer wins', () => {
     const turn = script[at];
     actions.ask.mockResolvedValueOnce(turnView(turn)).mockResolvedValueOnce(turnView(script[at + 1]));
     await start();
-    await screen.findByRole('heading', { name: /what counts: is this right\?/i });
+    await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
     // Every line of the playback is the code's rendering of the validated draft.
     for (const line of renderPlayback(turn.draft.model, 'targets')) {
       expect(screen.getByText(line.trim(), { exact: false })).toBeTruthy();
@@ -174,11 +174,11 @@ describe('playback is written by code, and the latest answer wins', () => {
 
     actions.ask.mockResolvedValueOnce(turnView(first)).mockResolvedValueOnce(turnView(changed));
     await start();
-    await screen.findByRole('heading', { name: /what counts: is this right\?/i });
+    await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
     expect(screen.getByText(`at least ${oldFloor}`, { exact: false })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
-    fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: `Make it ${newFloor} instead` } });
+    fireEvent.change(screen.getByLabelText('What would you like to change?'), { target: { value: `Make it ${newFloor} instead` } });
     fireEvent.click(screen.getByRole('button', { name: 'Send the change' }));
 
     await waitFor(() => expect(screen.getByText(`at least ${newFloor}`, { exact: false })).toBeTruthy());
@@ -188,35 +188,73 @@ describe('playback is written by code, and the latest answer wins', () => {
 });
 
 describe('changing your mind about changing something (production, 2026-10-29)', () => {
-  it('lets the person go back from the change box at a playback, sending nothing and asking Claude nothing', async () => {
-    const turn = script.find((t) => t.kind === 'playback' && t.chunk === 'targets') as AssistantTurn;
-    actions.ask.mockResolvedValueOnce(turnView(turn));
+  it('at a playback, "Keep it as it is" sits beside "Send the change" and approves the part in one tap', async () => {
+    const at = script.findIndex((t) => t.kind === 'playback' && t.chunk === 'targets');
+    actions.ask.mockResolvedValueOnce(turnView(script[at])).mockResolvedValueOnce(turnView(script[at + 1]));
     await start();
-    await screen.findByRole('heading', { name: /what counts: is this right\?/i });
+    await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
 
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
-    expect(screen.getByLabelText('What should change?')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'half typed' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Never mind' }));
+    const box = screen.getByLabelText('What would you like to change?') as HTMLTextAreaElement;
+    expect(box.placeholder).toBe('What would you like to change?');
+    const send = screen.getByRole('button', { name: 'Send the change' });
+    const keep = screen.getByRole('button', { name: 'Keep it as it is' });
+    // The same row, the same size: a real button, not a small link.
+    expect(keep.parentElement).toBe(send.parentElement);
+    expect(keep.className).toContain('min-h-12');
+    expect(send.className).toContain('min-h-12');
+    fireEvent.change(box, { target: { value: 'half typed' } });
+    fireEvent.click(keep);
 
-    expect(screen.queryByLabelText('What should change?')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Yes, that is right' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Change something' })).toBeTruthy();
-    expect(actions.ask).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(actions.ask).toHaveBeenCalledTimes(2));
+    // The half-typed change is not sent; the person's yes is.
+    expect(sent(1).transcript.at(-1)).toEqual({ role: 'person', text: APPROVE_TEXT });
   });
 
-  it('lets the person go back from the change box at the final confirmation too', async () => {
+  it('at the final confirmation, "Keep it as it is" only closes the box: saving still takes its own tap', async () => {
     actions.ask.mockResolvedValueOnce(turnView(script[firstOf('final')]));
     await start();
     await screen.findByRole('heading', { name: 'Ready to save?' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Never mind' }));
+    expect((screen.getByLabelText('What would you like to change?') as HTMLTextAreaElement).placeholder).toBe('What would you like to change?');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it as it is' }));
 
-    expect(screen.queryByLabelText('What should change?')).toBeNull();
+    expect(screen.queryByLabelText('What would you like to change?')).toBeNull();
     expect(screen.getByRole('button', { name: 'Save my setup' })).toBeTruthy();
     expect(actions.ask).toHaveBeenCalledTimes(1);
     expect(actions.save).not.toHaveBeenCalled();
+  });
+
+  it('a typed "no change" in the change box is still sent as the person typed it', async () => {
+    const at = script.findIndex((t) => t.kind === 'playback' && t.chunk === 'targets');
+    actions.ask.mockResolvedValueOnce(turnView(script[at])).mockResolvedValueOnce(turnView(script[at + 1]));
+    await start();
+    await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
+    fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
+    fireEvent.change(screen.getByLabelText('What would you like to change?'), { target: { value: 'No changes' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send the change' }));
+    await waitFor(() => expect(actions.ask).toHaveBeenCalledTimes(2));
+    expect(sent(1).transcript.at(-1)).toEqual({ role: 'person', text: 'No changes' });
+  });
+});
+
+describe('asking what a question means (MOM-111)', () => {
+  it('offers "What do you mean?" on every question and sends it as the person\'s answer', async () => {
+    actions.ask.mockResolvedValueOnce(turnView(script[0])).mockResolvedValueOnce(turnView(script[1]));
+    await start();
+    await screen.findByRole('heading', { name: script[0].question ?? '' });
+    expect((screen.getByLabelText('Your answer') as HTMLTextAreaElement).placeholder).toBe('Type your answer, or ask what I mean');
+    fireEvent.click(screen.getByRole('button', { name: MEANING_TEXT }));
+    await waitFor(() => expect(actions.ask).toHaveBeenCalledTimes(2));
+    expect(sent(1).transcript.at(-1)).toEqual({ role: 'person', text: MEANING_TEXT });
+  });
+
+  it('sends the browser\'s locale with each turn, for the times in a playback the server writes', async () => {
+    actions.ask.mockResolvedValueOnce(turnView(script[0]));
+    await start();
+    await screen.findByRole('heading', { name: script[0].question ?? '' });
+    expect((sent() as SetupSession & { locale?: string }).locale).toBe(navigator.language);
   });
 });
 
@@ -246,7 +284,7 @@ describe('nothing is saved until the person taps Save', () => {
     const [session, quickPath] = actions.save.mock.calls[0];
     expect(quickPath).toBe(false);
     expect(session.transcript.at(-1)).toMatchObject({ role: 'assistant', turn: { kind: 'final' } });
-    expect(screen.getByText(/2 goals and 3 targets are ready/)).toBeTruthy();
+    expect(screen.getByText(/2 goals and 3 things to count are ready/)).toBeTruthy();
     expect(window.sessionStorage.getItem(KEY)).toBeNull();
   });
 
@@ -315,7 +353,7 @@ describe('when a turn does not come', () => {
 describe('the quick path', () => {
   const sections = (['goals', 'targets', 'planning', 'talk'] as const).map((chunk, i) => ({
     chunk,
-    title: ['Your goals', 'What counts', 'Planning', 'How Momentum talks to you'][i],
+    title: ['Your goals', "What you'll count", 'Your days and weeks', 'How Momentum talks to you'][i],
     lines: [`A line for ${chunk}.`],
   }));
   const quick = (over: Partial<Extract<SetupTurnView, { kind: 'quick_path' }>> = {}): { ok: true; data: SetupTurnView } => ({
@@ -328,7 +366,7 @@ describe('the quick path', () => {
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     answerWith('Run more');
-    await screen.findByRole('heading', { name: 'Finish with the quick path' });
+    await screen.findByRole('heading', { name: 'Finish without more questions' });
   }
 
   it('shows the message, every part collected, and saves only on a tap, as the approval of what is shown', async () => {

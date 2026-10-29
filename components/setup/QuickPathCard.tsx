@@ -24,7 +24,7 @@ export function QuickPathCard({ message, sections, missing, canSave, saving, err
   return (
     <section aria-labelledby="setup-quick-path" className="channel-card space-y-4 p-4">
       <h2 id="setup-quick-path" className="text-lg font-semibold leading-snug tracking-[-0.02em]">
-        Finish with the quick path
+        Finish without more questions
       </h2>
       <p className="text-base">{message}</p>
       {sections.map((section) => (

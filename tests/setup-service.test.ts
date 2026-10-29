@@ -28,7 +28,7 @@ import { runSetupEval } from '@/lib/setup/evals';
 import { latestProvenance, provenanceLeaves } from '@/lib/setup/leaves';
 import { draftToRows, toSavePayload, type SetupRows } from '@/lib/setup/rows';
 import { acceptedStartingPoints, startingPointForPath, type StartingPointMark } from '@/lib/setup/startingPoints';
-import { MAX_PERSON_CHARS, type AssistantTurn, type SetupDraft, type SetupSession } from '@/types/setup';
+import { MAX_PERSON_CHARS, SETUP_TOPICS, type AssistantTurn, type SetupDraft, type SetupSession } from '@/types/setup';
 import { SETUP_CASES } from './setup-evals/cases';
 import { createSupabaseServerClient, resetFakeSave, fakeSave, rowsOf, seedRow } from './helpers/fakeSetupSave';
 import { scriptedModel } from './helpers/setupScript';
@@ -141,6 +141,15 @@ describe('takeSetupTurn: what it accepts', () => {
     const result = await takeSetupTurn({ transcript: [], draft: emptyDraft(), spentTokens: 0 }, { runTurn: stub.run });
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn' } });
   });
+
+  it('takes the browser\'s locale with a turn, and drops one that is not a locale instead of refusing the turn (MOM-111)', async () => {
+    const full = await fullCase();
+    for (const locale of ['en-US', 'not a locale!', 'x'.repeat(80)]) {
+      const stub = stubTurn([{ raw: full.script[0] }]);
+      const result = await takeSetupTurn({ transcript: [], draft: emptyDraft(), spentTokens: 0, locale }, { runTurn: stub.run });
+      expect(result, locale).toMatchObject({ ok: true, data: { kind: 'turn' } });
+    }
+  });
 });
 
 describe('takeSetupTurn: replies that are thrown away', () => {
@@ -157,14 +166,21 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     expect(stub.calls.map((c) => c.spentTokens)).toEqual([0, 1000, 2000]);
   });
 
-  it('logs the category and rule names only, never any of the reply', async () => {
+  it('logs the category, rule names and topic names only, never any of the reply', async () => {
     const full = await fullCase();
     const stub = stubTurn([{ raw: { kind: 'question' } }, { raw: badQuestion(full.script[2]) }, { raw: full.script[2] }]);
     await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
     expect(warn.mock.calls).toEqual([
       ['[setup] a reply was thrown away', { category: 'schema' }],
-      ['[setup] a reply was thrown away', { category: 'rules', rules: ['one_question'] }],
+      ['[setup] a reply was thrown away', { category: 'rules', rules: ['one_question'], topic: badQuestion(full.script[2]).topic, skippedTopic: null }],
     ]);
+    // Names from the fixed topic list, or null: never text.
+    for (const [, fields] of warn.mock.calls) {
+      for (const key of ['topic', 'skippedTopic'] as const) {
+        const value = (fields as Record<string, unknown>)[key];
+        if (value !== undefined && value !== null) expect(SETUP_TOPICS).toContain(value);
+      }
+    }
     expect(JSON.stringify(warn.mock.calls)).not.toContain('how often');
   });
 

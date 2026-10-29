@@ -331,3 +331,7 @@ export type SetupSession = z.infer<typeof SetupSessionSchema>;
 
 // The date on the person's device, which the browser sends as a suggestion for a start date.
 export const SuggestedDateSchema = DateString;
+
+// The person's locale as their browser reports it ("en-US"), which the browser sends so a clock time in the playback reads
+// the way they write times. Only its shape is checked here; a value Intl cannot use is ignored by the playback.
+export const PersonLocaleSchema = z.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,4}$/).max(35);

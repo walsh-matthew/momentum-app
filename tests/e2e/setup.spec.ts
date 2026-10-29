@@ -5,6 +5,8 @@
 // - nothing asks Claude until Start is tapped, and the device's date goes with the request as a suggestion;
 // - one question is on screen at a time (and at 390px nothing scrolls sideways);
 // - a part is played back and approved with a tap, and the conversation survives a reload in the same tab;
+// - (MOM-111) "Keep it as it is" in the change box approves a part, "What do you mean?" sends that question, and the answer
+//   box and both buttons sit inside the screen at each width;
 // - nothing is saved before Save: the log page still has no targets at the final confirmation;
 // - after Save the goal's targets are there to log against, the tab's copy is gone, and a second setup is refused.
 // The scripted model is written for a fixed order, so the spec answers exactly the scripted lines. The spacing limit
@@ -12,7 +14,7 @@
 
 import type { Locator, Page } from '@playwright/test';
 import { runSetupEval } from '@/lib/setup/evals';
-import { APPROVE_TEXT, SETUP_STORAGE_PREFIX } from '@/lib/setup/session';
+import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_TEXT, SETUP_STORAGE_PREFIX } from '@/lib/setup/session';
 import { acceptsText } from '@/lib/setup/text';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
@@ -41,6 +43,15 @@ const storedCopies = (page: Page) =>
   page.evaluate((prefix) => Object.keys(window.sessionStorage).filter((k) => k.startsWith(prefix)).length, SETUP_STORAGE_PREFIX);
 
 const cardOf = (page: Page): Locator => page.locator(CARD).first();
+
+// Visible, and inside the screen's width (at 390px nothing may sit off to the side).
+async function inView(page: Page, locator: Locator): Promise<void> {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  const width = page.viewportSize()?.width ?? 0;
+  expect(box, 'the element has a box').not.toBeNull();
+  if (box) expect(box.x + box.width, 'the element fits the screen width').toBeLessThanOrEqual(width + 1);
+}
 const headingOf = async (page: Page): Promise<string> => ((await cardOf(page).textContent()) ?? '').trim();
 
 // The next card after `previous` (the heading of the one just answered): waits for a different heading, and gets past the
@@ -89,6 +100,8 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       let card = await nextCard(page, null);
       const lines = scripted.person;
       let reloaded = false;
+      let keptAsIs = false;
+      let askedMeaning = false;
 
       for (let k = 0; k < lines.length; k++) {
         // One question on screen, and (on a phone) no sideways scroll.
@@ -116,14 +129,36 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           // The Approve button sends its own sentence; the scripted person's "yes" must be an acceptance too.
           expect(acceptsText(line), 'the scripted person approves a playback').toBe(true);
           expect(acceptsText(APPROVE_TEXT)).toBe(true);
-          await page.getByRole('button', { name: 'Yes, that is right' }).click();
+          if (!keptAsIs) {
+            // The first playback: the person opens the change box, then decides nothing needs to change (MOM-111). The way out
+            // is a real button beside "Send the change", and it approves the part in one tap.
+            keptAsIs = true;
+            await page.getByRole('button', { name: 'Change something' }).click();
+            await expect(page.getByLabel(CHANGE_PROMPT)).toHaveAttribute('placeholder', CHANGE_PROMPT);
+            await expect(page.getByRole('button', { name: 'Send the change' })).toBeVisible();
+            await inView(page, page.getByRole('button', { name: KEEP_IT }));
+            await page.getByRole('button', { name: KEEP_IT }).click();
+          } else {
+            await page.getByRole('button', { name: 'Yes, that is right' }).click();
+          }
         } else {
           expect(card.id, `turn ${k} should be a question`).toBe('setup-question');
-          await page.getByLabel('Your answer').fill(line);
-          await page.getByRole('button', { name: 'Send' }).click();
+          // The answer box and "What do you mean?" are on every question, inside the screen's width.
+          await inView(page, page.getByLabel('Your answer'));
+          await inView(page, page.getByRole('button', { name: MEANING_TEXT }));
+          if (line === MEANING_TEXT) {
+            askedMeaning = true;
+            await page.getByRole('button', { name: MEANING_TEXT }).click();
+          } else {
+            await page.getByLabel('Your answer').fill(line);
+            await page.getByRole('button', { name: 'Send' }).click();
+          }
         }
         card = await nextCard(page, card.heading);
       }
+
+      expect(keptAsIs, 'a playback was approved with "Keep it as it is"').toBe(true);
+      expect(askedMeaning, 'the person asked "What do you mean?" with its button').toBe(true);
 
       // The final confirmation: nothing is saved yet.
       expect(card.id).toBe('setup-final');

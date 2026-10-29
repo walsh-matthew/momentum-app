@@ -73,28 +73,33 @@ export function dateIsIn(iso: string, mentioned: MentionedDate[]): boolean {
 
 const h12 = (h: number, pm: boolean): number => (pm ? (h === 12 ? 12 : h + 12) : h === 12 ? 0 : h);
 
-// Clock times in a text as minutes after midnight: 9pm, 2:30 am, 9 in the evening, 11 at night, 21:00, midnight, noon.
-export function timesIn(text: string): number[] {
+// Clock times in a text, each with the words that said it: 9pm, 2:30 am, 9 in the evening, 11 at night, 21:00, midnight,
+// noon. `minutes` is minutes after midnight; `said` is the person's own words for it, as typed.
+export function timePhrasesIn(text: string): { minutes: number; said: string }[] {
   const t = text.toLowerCase();
-  const out: number[] = [];
+  const out: { minutes: number; said: string }[] = [];
   const minutes = (h: number, mm: string | undefined) => h * 60 + (mm ? Number(mm) : 0);
+  const said = (m: RegExpMatchArray) => text.slice(m.index ?? 0, (m.index ?? 0) + m[0].length).trim();
   for (const m of t.matchAll(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)(?![a-z])/g)) {
     const h = Number(m[1]);
-    if (h >= 1 && h <= 12) out.push(minutes(h12(h, m[3].startsWith('p')), m[2]));
+    if (h >= 1 && h <= 12) out.push({ minutes: minutes(h12(h, m[3].startsWith('p')), m[2]), said: said(m) });
   }
   for (const m of t.matchAll(/\b(\d{1,2})(?::(\d{2}))?\s+in the (morning|afternoon|evening)\b/g)) {
     const h = Number(m[1]);
-    if (h >= 1 && h <= 12) out.push(minutes(h12(h, m[3] !== 'morning'), m[2]));
+    if (h >= 1 && h <= 12) out.push({ minutes: minutes(h12(h, m[3] !== 'morning'), m[2]), said: said(m) });
   }
   for (const m of t.matchAll(/\b(\d{1,2})(?::(\d{2}))?\s+at night\b/g)) {
     const h = Number(m[1]);
-    if (h >= 1 && h <= 12) out.push(minutes(h >= 6 ? h12(h, true) : h12(h, false), m[2]));
+    if (h >= 1 && h <= 12) out.push({ minutes: minutes(h >= 6 ? h12(h, true) : h12(h, false), m[2]), said: said(m) });
   }
-  for (const m of t.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)) out.push(Number(m[1]) * 60 + Number(m[2]));
-  if (/\bmidnight\b/.test(t)) out.push(0);
-  if (/\bnoon\b/.test(t)) out.push(720);
+  for (const m of t.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)) out.push({ minutes: Number(m[1]) * 60 + Number(m[2]), said: said(m) });
+  for (const m of t.matchAll(/\bmidnight\b/g)) out.push({ minutes: 0, said: said(m) });
+  for (const m of t.matchAll(/\bnoon\b/g)) out.push({ minutes: 720, said: said(m) });
   return out;
 }
+
+// Clock times in a text as minutes after midnight.
+export const timesIn = (text: string): number[] => timePhrasesIn(text).map((p) => p.minutes);
 
 export const minutesOfClock = (hhmm: string): number => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 
@@ -161,6 +166,14 @@ export function declinesChange(text: string): boolean {
     .replace(/\s+/g, ' ')
     .trim();
   return NO_CHANGE.some((re) => re.test(t));
+}
+
+// The person asked what a question means ("what do you mean?", "I don't understand", "like what?"). Errs towards yes: it only
+// lets the next turn explain with examples (rule 4), and anything they ask back is a question about the question.
+export function asksMeaning(text: string): boolean {
+  const t = text.toLowerCase().replace(/[’‘]/g, "'");
+  if (t.includes('?')) return true;
+  return /\b(what do you mean|what does .+ mean|what is that|what's that|mean by|meaning|not sure what you mean|(don't|dont|do not) (understand|get it|follow)|confused|explain|like what|huh)\b/.test(t);
 }
 
 // The person asked for starting ideas.

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CHUNK_TITLES } from '@/lib/setup/quickPath';
-import { APPROVE_TEXT } from '@/lib/setup/session';
+import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT } from '@/lib/setup/session';
 import type { SetupChunk } from '@/types/setup';
 import { AnswerBox } from './AnswerBox';
 
@@ -18,13 +18,14 @@ interface PlaybackCardProps {
 
 // One part of the setup, played back for the person to approve before the next begins (docs/DOMAIN_MODEL.md §2.1 rule 7).
 // Approving sends their "yes"; changing sends what they type, and the part is played back again from the newest draft.
+// Once the change box is open, "Keep it as it is" is the way out: it approves the part as shown, in one tap (MOM-111).
 export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: PlaybackCardProps) {
   const [changing, setChanging] = useState(false);
 
   return (
     <section aria-labelledby="setup-playback" className="channel-card space-y-4 p-4">
       <h2 id="setup-playback" className="text-lg font-semibold leading-snug tracking-[-0.02em]">
-        {CHUNK_TITLES[chunk]}: is this right?
+        {CHUNK_TITLES[chunk]}: did I get this right?
       </h2>
       <ul className="space-y-2 text-base">
         {lines.map((line, index) => (
@@ -34,12 +35,14 @@ export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: Playba
         ))}
       </ul>
       {changing ? (
-        <div className="space-y-2">
-          <AnswerBox label="What should change?" submitLabel="Send the change" busy={busy} onSubmit={onChange} />
-          <Button variant="ghost" disabled={busy} onClick={() => setChanging(false)}>
-            Never mind
-          </Button>
-        </div>
+        <AnswerBox
+          label={CHANGE_PROMPT}
+          placeholder={CHANGE_PROMPT}
+          submitLabel="Send the change"
+          busy={busy}
+          onSubmit={onChange}
+          secondary={{ label: KEEP_IT, onClick: () => onApprove(APPROVE_TEXT) }}
+        />
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button size="lg" disabled={busy} onClick={() => onApprove(APPROVE_TEXT)} className="w-full sm:w-auto">
