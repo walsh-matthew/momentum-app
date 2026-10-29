@@ -987,6 +987,110 @@ describe('migration 018 stores a finished weekly review once and never changes i
   });
 });
 
+describe('migration 019 stores the person\'s own week plan: picks of items for days, and the kind of each date (MOM-112)', () => {
+  const sql = sqlOf('019');
+  const table = (name: string) => new RegExp(`create table public\\.${name} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1] ?? '';
+  const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '019_week_plan.sql'), 'utf8');
+
+  it('adds two tables and changes no applied table, and leaves every earlier migration as it was', () => {
+    for (const earlier of ['001', '013', '014', '015', '016', '017', '018']) expect(sqlOf(earlier), earlier).not.toMatch(/week_plan/);
+    // The only alter statements are the new tables' own row level security.
+    const altered = [...sql.matchAll(/alter table public\.([a-z_]+)\s+(add|drop|alter|enable)\s+(\w+)/gi)].map((m) => `${m[1]} ${m[2]} ${m[3]}`.toLowerCase());
+    expect(altered).toEqual(['week_plan_picks enable row', 'week_plan_day_types enable row']);
+    // The key a day kind points at is already there (017), so 019 does not add it.
+    expect(sqlOf('017')).toMatch(/add constraint person_day_types_id_user_unique unique \(id, user_id\)/);
+    expect(sql).not.toMatch(/person_day_types_id_user_unique/);
+  });
+
+  it('points a pick at the person\'s own work item, once per item and day, and removes it with the item', () => {
+    const picks = table('week_plan_picks');
+    expect(picks).toMatch(/user_id\s+uuid not null references public\.users \(id\) on delete cascade/);
+    expect(picks).toMatch(/plan_date\s+date not null/);
+    expect(picks).toMatch(/foreign key \(work_item_id, user_id\)\s+references public\.work_items \(id, user_id\) on delete cascade/);
+    expect(picks).toMatch(/constraint week_plan_picks_item_day_unique unique \(work_item_id, plan_date\)/);
+  });
+
+  it('points a date\'s kind at the person\'s own day type, one kind per date, and removes it with the day type', () => {
+    const kinds = table('week_plan_day_types');
+    expect(kinds).toMatch(/user_id\s+uuid not null references public\.users \(id\) on delete cascade/);
+    expect(kinds).toMatch(/foreign key \(day_type_id, user_id\)\s+references public\.person_day_types \(id, user_id\) on delete cascade/);
+    expect(kinds).toMatch(/constraint week_plan_day_types_user_day_unique unique \(user_id, plan_date\)/);
+    expect(sql).toMatch(/create trigger week_plan_day_types_set_updated_at before update on public\.week_plan_day_types\s+for each row execute function public\.set_updated_at\(\)/);
+  });
+
+  it('stores no time of day, no slot and no capacity: a pick is an item on a date', () => {
+    for (const name of ['week_plan_picks', 'week_plan_day_types']) {
+      const columns = [...table(name).matchAll(/^\s{2}([a-z_]+)\s+(?:uuid|date|timestamptz|text|time|numeric|integer)\b/gm)].map((m) => m[1]);
+      expect(columns, name).not.toEqual([]);
+      for (const column of columns) expect(column, name).not.toMatch(/time|hour|minute|slot|capacity|start|end/);
+    }
+  });
+
+  it('turns row level security on, takes every default privilege back, and grants only what is approved', () => {
+    expect(sql).toMatch(/alter table public\.week_plan_picks\s+enable row level security/);
+    expect(sql).toMatch(/alter table public\.week_plan_day_types\s+enable row level security/);
+    expect(sql).toMatch(/revoke all on table public\.week_plan_picks, public\.week_plan_day_types from anon, authenticated, service_role/);
+    const grants = [...sql.matchAll(/grant ([a-z, ()_]+) on table public\.(week_plan_[a-z_]+) to ([a-z_]+)/g)].map((m) => `${m[2]} ${m[3]}: ${m[1]}`);
+    // A date's kind can change, but only its day_type_id: the update grant is on that column, never on the table.
+    expect(grants).toEqual([
+      'week_plan_picks authenticated: select, insert, delete',
+      'week_plan_day_types authenticated: select, insert, delete',
+      'week_plan_day_types authenticated: update (day_type_id)',
+    ]);
+    expect(sql).not.toMatch(/grant [^;]*\b(truncate|references|trigger|all)\b[^;]*on table public\.week_plan/i);
+  });
+
+  it('creates no function and changes no function\'s privileges: the updated_at trigger reuses set_updated_at from 001', () => {
+    expect(sql).not.toMatch(/create (or replace )?function/i);
+    expect(sql).not.toMatch(/(grant|revoke) execute/i);
+    expect(sqlOf('001')).toMatch(/create or replace function public\.set_updated_at\(\)/);
+    // With no new function there is nothing for an API role to execute (012's rule); the verify script checks it.
+    expect(verify).toMatch(/The trigger runs the existing public\.set_updated_at, and no function of its own was created/);
+  });
+
+  it('has owner-only policies: none for a pick\'s update, and every policy keyed to the signed-in person', () => {
+    const policies = [...sql.matchAll(/create policy "([^"]+)" on public\.(week_plan_[a-z_]+)\s+for (select|insert|update|delete|all)/g)].map((m) => `${m[1]} ${m[3]}`);
+    expect(policies).toEqual([
+      'week_plan_picks_select_own select',
+      'week_plan_picks_insert_own insert',
+      'week_plan_picks_delete_own delete',
+      'week_plan_day_types_select_own select',
+      'week_plan_day_types_insert_own insert',
+      'week_plan_day_types_update_own update',
+      'week_plan_day_types_delete_own delete',
+    ]);
+    expect([...sql.matchAll(/\(select auth\.uid\(\)\) = user_id/g)]).toHaveLength(8);
+  });
+
+  it('is checked by a verify script with checks that fail without the keys, the grants and the policies', () => {
+    expect(verify).toMatch(/The same item on the same day twice is refused by the unique key/);
+    expect(verify).toMatch(/A pick of another person''s item is refused by the composite foreign key/);
+    expect(verify).toMatch(/A pick cannot be edited, only added and removed/);
+    expect(verify).toMatch(/A second kind for the same date is refused by the unique key/);
+    expect(verify).toMatch(/A signed-in person may update only the day_type_id of a day kind/);
+    expect(verify).toMatch(/Updating the date of a day kind is refused/);
+    expect(verify).toMatch(/Updating the owner of a day kind is refused/);
+    expect(verify).toMatch(/A kind that points at another person''s day type is refused by the composite foreign key/);
+    expect(verify).toMatch(/Deleting an item removes its picks/);
+    expect(verify).toMatch(/Deleting a day type removes the kinds that used it/);
+    expect(verify).toMatch(/person_day_types has the unique key on \(id, user_id\)/);
+  });
+
+  it('leaves nothing behind on production: one block that always rolls back, then checks that run after it', () => {
+    expect(verify).toMatch(/raise exception 'mom112_rollback'/);
+    expect(verify.indexOf("raise exception 'mom112_rollback'")).toBeLessThan(verify.indexOf('The rollback left no throwaway account behind'));
+    expect(verify).toMatch(/The rollback left no throwaway account behind/);
+    expect(verify).toMatch(/The rollback left no row for either of them in any table the script wrote to/);
+    for (const t of ['users', 'week_plan_picks', 'week_plan_day_types', 'person_day_types', 'work_items', 'goals']) {
+      expect(verify, t).toMatch(new RegExp(`from public\\.${t} where (user_)?id in \\(a, b\\)|from public\\.${t} where user_id in \\(a, b\\)`));
+    }
+    // Every write is a throwaway account's own, in the one inner block before the handler.
+    const block = verify.slice(verify.indexOf('begin\n    insert into auth.users'), verify.indexOf("exception when others then\n    if sqlerrm"));
+    expect(block.match(/insert into auth\.users/g)).toHaveLength(1);
+    expect(verify.slice(0, verify.indexOf('begin\n    insert into auth.users'))).not.toMatch(/\b(insert into|update|delete from)\s+(public|auth)\./i);
+  });
+});
+
 describe('the grants allow-list covers the goal model tables (supabase/verify/900_table_grants.sql)', () => {
   const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8').replace(/--.*$/gm, '');
   const entry = (table: string, role: string) => new RegExp(`\\('${table}',\\s+'${role}',\\s+'([A-Z,]*)'\\)`).exec(allow)?.[1];
@@ -1009,6 +1113,10 @@ describe('the grants allow-list covers the goal model tables (supabase/verify/90
     ['starting_points', 'SELECT,INSERT', ''],
     // 018: a finished review is written once and never changed.
     ['weekly_reviews', 'SELECT,INSERT', ''],
+    // 019: a pick is added and removed, never edited. A date's kind can be changed, but UPDATE of day_type_id is a column
+    // privilege, so the table-level check lists SELECT, INSERT and DELETE only.
+    ['week_plan_picks', 'SELECT,INSERT,DELETE', ''],
+    ['week_plan_day_types', 'SELECT,INSERT,DELETE', ''],
   ])('%s: anon nothing, authenticated %s, service_role %s', (table, authenticated, service) => {
     expect(entry(table, 'anon')).toBe('');
     expect(entry(table, 'authenticated')).toBe(authenticated);

@@ -228,6 +228,24 @@ export function toScoreboardEntries(
   });
 }
 
+// A step is done when its tick exists and is not hidden, as in the log panel. The step row's own marker is not read. Each
+// done step is mapped to its first tick: the instant, and the person's own day it falls on. Shared with the week plan
+// (lib/plan/weekPlan.ts), so both say "done" the same way. Needs the time zone and day end in `anchors`.
+export function tickedSteps(
+  rows: { steps: Pick<StepRead, 'id'>[]; entries: Pick<EntryRead, 'source_id' | 'source_record_id' | 'occurred_at'>[]; corrections: CorrectionRead[] },
+  anchors: TimeAnchors,
+): Map<string, { at: string; day: string }> {
+  const hidden = new Set(rows.corrections.filter((c) => c.action === 'hide').map((c) => correctionKey(c.source_id, c.source_record_id)));
+  const allStepIds = new Set(rows.steps.map((s) => s.id));
+  const tickedOn = new Map<string, { at: string; day: string }>();
+  for (const e of rows.entries) {
+    if (!allStepIds.has(e.source_record_id) || hidden.has(correctionKey(e.source_id, e.source_record_id))) continue;
+    const seen = tickedOn.get(e.source_record_id);
+    if (!seen || e.occurred_at < seen.at) tickedOn.set(e.source_record_id, { at: e.occurred_at, day: localDay(e.occurred_at, anchors) });
+  }
+  return tickedOn;
+}
+
 // ---------------------------------------------------------------------------
 // The view
 // ---------------------------------------------------------------------------
@@ -284,15 +302,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
   const entries = toScoreboardEntries(rows.entries, rows.corrections, measureOf);
   const snapshots = rows.snapshots.filter((s) => engineIds.has(s.target_id)).map((s) => toSnapshot(s, stepIdsByTarget.get(s.target_id) ?? []));
 
-  // A step is done when its tick exists and is not hidden, as in the log panel. The step row's own marker is not read.
-  const hidden = new Set(rows.corrections.filter((c) => c.action === 'hide').map((c) => correctionKey(c.source_id, c.source_record_id)));
-  const allStepIds = new Set(rows.steps.map((s) => s.id));
-  const tickedOn = new Map<string, { at: string; day: string }>();
-  for (const e of rows.entries) {
-    if (!allStepIds.has(e.source_record_id) || hidden.has(correctionKey(e.source_id, e.source_record_id))) continue;
-    const seen = tickedOn.get(e.source_record_id);
-    if (!seen || e.occurred_at < seen.at) tickedOn.set(e.source_record_id, { at: e.occurred_at, day: localDay(e.occurred_at, anchors) });
-  }
+  const tickedOn = tickedSteps(rows, anchors);
 
   // The engine is given no steps and no forecast request (see the header).
   const scoreboard = computeScoreboard({ today, anchors, targets: engineTargets, entries, snapshots, steps: [], forecasts: [] });
