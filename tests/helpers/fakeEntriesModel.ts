@@ -12,8 +12,11 @@
 // - the CHECK, unique and composite foreign key constraints of entries, entry_corrections, sources and steps,
 // - weekly_reviews (migration 018): select and insert only, one record per person and week, its CHECKs, and the trigger
 //   that sets finished_at whatever an insert sends.
-// ENFORCED_CONSTRAINTS and ENFORCED_REVIEW_CONSTRAINTS list every name it enforces; tests/fake-entries-model.test.ts checks
-// each one exists in the SQL.
+// - the week plan (migration 019): a pick is selected, inserted and deleted and never updated; a date's kind can also be
+//   updated, but only its day_type_id (a column grant); a pick is once per item and date, a kind once per person and date,
+//   and each points at the same person's own item or day type.
+// ENFORCED_CONSTRAINTS, ENFORCED_REVIEW_CONSTRAINTS and ENFORCED_PLAN_CONSTRAINTS list every name it enforces;
+// tests/fake-entries-model.test.ts checks each one exists in the SQL.
 
 import { REVIEW_ADJUSTMENT_KINDS, REVIEW_ADJUSTMENT_OUTCOMES } from '@/types/database.types';
 
@@ -27,6 +30,7 @@ export const newId = () => crypto.randomUUID();
 type TableName =
   | 'person_settings'
   | 'person_priorities'
+  | 'person_day_types'
   | 'goals'
   | 'targets'
   | 'work_items'
@@ -35,12 +39,15 @@ type TableName =
   | 'entries'
   | 'entry_corrections'
   | 'period_snapshots'
-  | 'weekly_reviews';
+  | 'weekly_reviews'
+  | 'week_plan_picks'
+  | 'week_plan_day_types';
 
 // What the authenticated role may do on each table (migration 013, section 7).
 const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'delete'>> = {
   person_settings: new Set(['select']),
   person_priorities: new Set(['select', 'insert', 'update', 'delete']),
+  person_day_types: new Set(['select']),
   goals: new Set(['select']),
   targets: new Set(['select']),
   work_items: new Set(['select']),
@@ -51,6 +58,9 @@ const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'de
   period_snapshots: new Set(['select']),
   // 018: append-only. No update and no delete grant for the person.
   weekly_reviews: new Set(['select', 'insert']),
+  // 019: a pick is added and removed, never edited. A date's kind can be updated, but only day_type_id (see run()).
+  week_plan_picks: new Set(['select', 'insert', 'delete']),
+  week_plan_day_types: new Set(['select', 'insert', 'update', 'delete']),
 };
 
 export const ENFORCED_CONSTRAINTS = [
@@ -83,10 +93,19 @@ export const ENFORCED_REVIEW_CONSTRAINTS = [
   'weekly_reviews_user_week_unique',
 ] as const;
 
+// Migration 019's constraints the fake enforces; the names are checked against the SQL.
+export const ENFORCED_PLAN_CONSTRAINTS = [
+  'week_plan_picks_work_item_fk',
+  'week_plan_picks_item_day_unique',
+  'week_plan_day_types_day_type_fk',
+  'week_plan_day_types_user_day_unique',
+] as const;
+
 export const gm = {
   tables: {
     person_settings: [] as Row[],
     person_priorities: [] as Row[],
+    person_day_types: [] as Row[],
     goals: [] as Row[],
     targets: [] as Row[],
     work_items: [] as Row[],
@@ -96,6 +115,8 @@ export const gm = {
     entry_corrections: [] as Row[],
     period_snapshots: [] as Row[],
     weekly_reviews: [] as Row[],
+    week_plan_picks: [] as Row[],
+    week_plan_day_types: [] as Row[],
   } satisfies Record<TableName, Row[]>,
   user: null as { id: string } | null,
   rls: true,
@@ -253,6 +274,12 @@ function uniqueViolation(table: TableName, row: Row, self: Row | null): Violatio
   if (table === 'weekly_reviews' && clash((r) => r.user_id === row.user_id && r.week_start === row.week_start)) {
     return { code: '23505', name: 'weekly_reviews_user_week_unique' };
   }
+  if (table === 'week_plan_picks' && clash((r) => r.work_item_id === row.work_item_id && r.plan_date === row.plan_date)) {
+    return { code: '23505', name: 'week_plan_picks_item_day_unique' };
+  }
+  if (table === 'week_plan_day_types' && clash((r) => r.user_id === row.user_id && r.plan_date === row.plan_date)) {
+    return { code: '23505', name: 'week_plan_day_types_user_day_unique' };
+  }
   return null;
 }
 
@@ -266,6 +293,12 @@ function foreignKeyViolation(table: TableName, row: Row): Violation | null {
   }
   if (table === 'entry_corrections' && !owned('sources', row.source_id, row.user_id)) {
     return { code: '23503', name: 'entry_corrections_source_fk' };
+  }
+  if (table === 'week_plan_picks' && !owned('work_items', row.work_item_id, row.user_id)) {
+    return { code: '23503', name: 'week_plan_picks_work_item_fk' };
+  }
+  if (table === 'week_plan_day_types' && !owned('person_day_types', row.day_type_id, row.user_id)) {
+    return { code: '23503', name: 'week_plan_day_types_day_type_fk' };
   }
   return null;
 }
@@ -338,6 +371,15 @@ class Query implements PromiseLike<Result> {
   }
   in(column: string, values: unknown[]) {
     this.filters.push((r) => values.includes(r[column]));
+    return this;
+  }
+  // ISO dates and instants compare as text, which is how the database orders them.
+  gte(column: string, value: string) {
+    this.filters.push((r) => (r[column] as string) >= value);
+    return this;
+  }
+  lte(column: string, value: string) {
+    this.filters.push((r) => (r[column] as string) <= value);
     return this;
   }
   order(column: string, options: { ascending?: boolean } = {}) {
@@ -460,6 +502,10 @@ class Query implements PromiseLike<Result> {
 
     const rows = this.matched();
     if (this.op === 'update') {
+      // 019: UPDATE on a day kind is granted for day_type_id alone, so a statement that sets any other column is refused.
+      if (this.table === 'week_plan_day_types' && Object.keys(this.payload as Row).some((column) => column !== 'day_type_id')) {
+        return failure('42501', 'permission denied for table week_plan_day_types');
+      }
       for (const row of rows) {
         const next = { ...row, ...(this.payload as Row), updated_at: stamp() };
         const violation = checkViolation(this.table, next) ?? uniqueViolation(this.table, next, row) ?? foreignKeyViolation(this.table, next);

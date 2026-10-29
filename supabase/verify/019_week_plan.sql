@@ -184,8 +184,8 @@ begin
     s := pg_temp.mom112_do(format($q$insert into public.week_plan_picks (user_id, work_item_id, plan_date) values (%L, %L, '2026-11-04')$q$, b, item_b));
     res := res || pg_temp.mom112_c('Writing a pick in another person''s name is refused by row level security', s = '42501', s);
 
-    select id into pick_a1 from public.week_plan_picks where work_item_id = item_a1 and plan_date = '2026-11-02';
-    select id into pick_a2 from public.week_plan_picks where work_item_id = item_a1 and plan_date = '2026-11-03';
+    select id into pick_a1 from public.week_plan_picks where user_id = a and work_item_id = item_a1 and plan_date = '2026-11-02';
+    select id into pick_a2 from public.week_plan_picks where user_id = a and work_item_id = item_a1 and plan_date = '2026-11-03';
 
     s := pg_temp.mom112_do(format($q$update public.week_plan_picks set plan_date = '2026-11-09' where id = %L$q$, pick_a1));
     res := res || pg_temp.mom112_c('A pick cannot be edited, only added and removed', s = '42501', s);
@@ -228,7 +228,7 @@ begin
     s := pg_temp.mom112_do(format($q$insert into public.week_plan_day_types (user_id, plan_date, day_type_id) values (%L, '2026-11-02', %L)$q$, a, dt_a2));
     res := res || pg_temp.mom112_c('A second kind for the same date is refused by the unique key', s = '23505', s);
 
-    select id into kind_a1 from public.week_plan_day_types where plan_date = '2026-11-02';
+    select id into kind_a1 from public.week_plan_day_types where user_id = a and plan_date = '2026-11-02';
     s := pg_temp.mom112_do(format($q$update public.week_plan_day_types set day_type_id = %L where id = %L$q$, dt_a2, kind_a1));
     select count(*) into v from public.week_plan_day_types where id = kind_a1 and day_type_id = dt_a2;
     res := res || pg_temp.mom112_c('The kind of a date can be changed', s = 'ok:1' and v = 1, format('%s, %s', s, v));

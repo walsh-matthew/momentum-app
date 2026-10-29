@@ -18,6 +18,7 @@ import { resolveChannel } from '@/lib/utils/channelViews';
 import { ALL_CHANNELS, type ChannelViews } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { HomeScoreboard } from '@/types/home';
+import type { HomePlanView } from '@/types/plan';
 import type { GoalProgress } from '@/types/progress';
 import type { TaskMoveChains } from '@/types/rebalance';
 import type { ReviewPrompt } from '@/types/review';
@@ -36,6 +37,9 @@ interface AppShellProps {
   // The goal model's week hero and goal scoreboards (MOM-112), shown above the feed. undefined shows nothing (signed
   // out); null means they could not be read, which is said in words and is not the same as having no goals.
   home?: HomeScoreboard | null;
+  // What the person put on today and what is left over from last week (MOM-112 block 2), shown after the hero. undefined or
+  // null shows nothing.
+  plan?: HomePlanView | null;
   // The one line about the weekly review on the person's planning day (MOM-113). undefined or none shows nothing.
   reviewPrompt?: ReviewPrompt;
 }
@@ -48,7 +52,7 @@ interface AppShellProps {
 // rendered per request, so that hook has the same value on the server and in the browser's first render: a
 // reload or a shared link lands on the right channel with no flash and no hydration mismatch. The server
 // never uses the parameter to load or filter anything; it only chooses among the user's own views below.
-export function AppShell({ views, connectedApps, moveChains, progress = [], userEmail = null, home, reviewPrompt }: AppShellProps) {
+export function AppShell({ views, connectedApps, moveChains, progress = [], userEmail = null, home, plan, reviewPrompt }: AppShellProps) {
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
   // The one goal wizard, opened from the sidebar, the banner and the empty states' call to action.
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -97,7 +101,7 @@ export function AppShell({ views, connectedApps, moveChains, progress = [], user
               actionsDisabled={loadFailed}
             />
             {reviewPrompt !== undefined && <ReviewNotice prompt={reviewPrompt} />}
-            {home !== undefined && <HomeScoreboardSection home={home} />}
+            {home !== undefined && <HomeScoreboardSection home={home} plan={plan} />}
             <MainFeed
               feedState={channel.feedState}
               feed={channel.feed}

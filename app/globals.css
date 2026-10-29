@@ -666,6 +666,225 @@ button:disabled {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+/* ---- The week plan and the "Your plan" card (MOM-112 block 2) --------------------------------------------------------
+   The person's own choice of which things to do on which days. A day is a button of at least 44px, seven to a row, so a
+   phone shows the whole week without sideways scroll. Reuses the home card surfaces and chips. */
+
+.plan-screen {
+  display: grid;
+  gap: 18px;
+}
+.plan-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 14px;
+}
+.plan-window h2 {
+  font-size: 16px;
+  letter-spacing: -0.035em;
+}
+.plan-weeks {
+  display: flex;
+  gap: 16px;
+}
+.plan-weeks a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--lime);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.plan-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.plan-section > h2 {
+  font-size: 15px;
+  letter-spacing: -0.03em;
+}
+.plan-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.plan-error {
+  border: 1px solid rgb(244 128 120 / 40%);
+  border-radius: 12px;
+  background: rgb(244 128 120 / 9%);
+  padding: 10px 12px;
+  color: var(--danger);
+  font-size: 13px;
+}
+.plan-goal {
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 20px;
+  background: var(--surface-soft);
+  padding: 14px;
+}
+.plan-goal h3 {
+  font-size: 16px;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+.plan-row {
+  margin-top: 10px;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  padding: 12px 0 4px;
+}
+.plan-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+.plan-row-head h4 {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.plan-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.plan-set-days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
+.plan-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+/* On a phone the card's padding and the gaps are tightened so seven days still make 44px each (390px wide: 342px of card,
+   24px of gaps, 45px a day). */
+@media (max-width: 480px) {
+  .plan-goal {
+    padding: 12px 8px;
+  }
+  .plan-days {
+    gap: 4px;
+  }
+}
+.plan-day {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 11px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.plan-day span:first-child {
+  color: var(--muted);
+}
+.plan-day span:last-child {
+  font-size: 14px;
+  font-weight: 600;
+}
+.plan-day[data-today='true'] {
+  border-color: rgb(198 243 109 / 45%);
+}
+.plan-day[aria-pressed='true'] {
+  border-color: rgb(198 243 109 / 60%);
+  background: rgb(198 243 109 / 14%);
+  color: var(--lime);
+}
+.plan-day[aria-pressed='true'] span:first-child {
+  color: inherit;
+}
+/* A day that has passed is clearly quieter than one the person can still choose. */
+.plan-day:disabled {
+  border-color: rgb(255 255 255 / 8%);
+  opacity: 0.38;
+}
+.plan-row .plan-note {
+  margin-top: 8px;
+}
+.plan-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-self: start;
+  border: 1px solid rgb(198 243 109 / 35%);
+  border-radius: 999px;
+  background: rgb(198 243 109 / 9%);
+  padding: 0 16px;
+  color: var(--lime);
+  font-size: 13px;
+  font-weight: 600;
+}
+.plan-button:disabled {
+  opacity: 0.55;
+}
+.plan-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-kinds label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.plan-kinds select {
+  min-width: 0;
+  max-width: 55%;
+  min-height: 44px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  padding: 0 10px;
+  color: var(--foreground);
+  font-size: 13px;
+}
+.plan-card-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-card-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.plan-card-list small {
+  color: var(--muted);
+  font-size: 12px;
+}
 .home-steps {
   display: flex;
   flex-direction: column;

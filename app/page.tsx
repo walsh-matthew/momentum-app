@@ -3,6 +3,7 @@ import { getCurrentUser, type SessionUser } from '@/lib/services/auth';
 import { listConnectedApps } from '@/lib/services/integrations';
 import { getReviewPrompt } from '@/lib/services/reviewRecords';
 import { getHomeScoreboard } from '@/lib/services/scoreboard';
+import { getHomePlan } from '@/lib/services/weekPlan';
 import { getPlanSnapshot, type PlanSnapshot } from '@/lib/services/tasks';
 import { buildChannelViews } from '@/lib/utils/channelViews';
 import { summarizeActiveGoalProgress } from '@/lib/utils/progress';
@@ -10,6 +11,7 @@ import { groupMovesByTask } from '@/lib/utils/rebalance';
 import { LOAD_FAILED_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { HomeScoreboard } from '@/types/home';
+import type { HomePlanView } from '@/types/plan';
 import type { ReviewPrompt } from '@/types/review';
 
 // Reads the signed-in user's session, so this page renders per request.
@@ -62,6 +64,17 @@ async function loadHome(): Promise<HomeScoreboard | null> {
   }
 }
 
+// What the person put on today and what is left over from last week (MOM-112 block 2), read on its own for the same reason.
+// null means it could not be read; the card then shows nothing, and the rest of the page is untouched.
+async function loadPlan(): Promise<HomePlanView | null> {
+  try {
+    const result = await getHomePlan();
+    return result.ok ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
 // The one line about the weekly review (MOM-113), read on its own so a failure here never touches the rest of the page.
 // getReviewPrompt already answers "none" for a read that fails; the catch covers a throw (for example no Supabase env vars).
 async function loadReviewPrompt(): Promise<ReviewPrompt> {
@@ -78,7 +91,13 @@ export default async function HomePage() {
   if (user === null) {
     return <AppShell views={SIGNED_OUT_CHANNEL_VIEWS} connectedApps={[]} moveChains={{}} />;
   }
-  const [snapshot, connectedApps, home, reviewPrompt] = await Promise.all([loadSnapshot(), loadConnectedApps(), loadHome(), loadReviewPrompt()]);
+  const [snapshot, connectedApps, home, plan, reviewPrompt] = await Promise.all([
+    loadSnapshot(),
+    loadConnectedApps(),
+    loadHome(),
+    loadPlan(),
+    loadReviewPrompt(),
+  ]);
   // One view per active goal plus "all channels": its feed, velocity and rule-based rebalance proposal, each
   // from that goal's own tasks and start date. The sidebar switches between them in the browser, so no
   // selection is sent to the server and the server never trusts one.
@@ -97,6 +116,7 @@ export default async function HomePage() {
       progress={progress}
       userEmail={user.email}
       home={home}
+      plan={plan}
       reviewPrompt={reviewPrompt}
     />
   );

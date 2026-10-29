@@ -462,6 +462,27 @@ export type WeeklyReviewRow = {
   finished_at: string;
 };
 
+// The week plan (migration 019, MOM-112): the person's own choice of which work items to do on which of their dates, and
+// which of their own day types a date is. A pick is an item on a date, never a time or a slot (docs/DOMAIN_MODEL.md §1.4,
+// §4.2 principle 12).
+export type WeekPlanPickRow = {
+  id: string;
+  user_id: string;
+  work_item_id: string;
+  // The person's own calendar date (YYYY-MM-DD) in their own time zone.
+  plan_date: string;
+  created_at: string;
+};
+
+export type WeekPlanDayTypeRow = {
+  id: string;
+  user_id: string;
+  plan_date: string;
+  day_type_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 // ---------------------------------------------------------------------------
 // Database (supabase-js generic)
 // ---------------------------------------------------------------------------
@@ -1428,6 +1449,65 @@ export type Database = {
           },
         ];
       };
+      // Migration 019: a pick is added and removed, never edited (no update grant).
+      week_plan_picks: {
+        Row: WeekPlanPickRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          work_item_id: string;
+          plan_date: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: 'week_plan_picks_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'week_plan_picks_work_item_fk';
+            columns: ['work_item_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'work_items';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      // Migration 019: a date's kind can change, but only its day_type_id (a column grant): never its date or owner.
+      week_plan_day_types: {
+        Row: WeekPlanDayTypeRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          plan_date: string;
+          day_type_id: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          day_type_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'week_plan_day_types_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'week_plan_day_types_day_type_fk';
+            columns: ['day_type_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'person_day_types';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     // handle_new_user and the other trigger functions are not executable by anon, authenticated or service_role
@@ -1529,6 +1609,8 @@ export type EntryCorrection = Tables<'entry_corrections'>;
 export type PeriodSnapshot = Tables<'period_snapshots'>;
 export type StartingPoint = Tables<'starting_points'>;
 export type WeeklyReview = Tables<'weekly_reviews'>;
+export type WeekPlanPick = Tables<'week_plan_picks'>;
+export type WeekPlanDayType = Tables<'week_plan_day_types'>;
 
 export type GoalChannelInsert = TablesInsert<'goal_channels'>;
 export type GoalChannelUpdate = TablesUpdate<'goal_channels'>;
