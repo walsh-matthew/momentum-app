@@ -227,7 +227,7 @@ export type SetupQuickPathReason = 'over_turns' | 'over_tokens' | 'shared_cap' |
 // What the person is offered: what they have said so far (played back by code from the validated draft), then the quick
 // path, which is sensible defaults they can see and change. Nothing is saved until they approve (DOMAIN_MODEL §2.3).
 const QUICK_PATH_OFFER =
-  'Here is what you have told me so far. You can check it and finish with the quick path: sensible defaults you can change later. Nothing is saved until you approve it.';
+  'Here is what you have told me so far. You can check it and save it now; anything not set yet starts from a sensible default you can change later. Nothing is saved until you approve it.';
 
 export const SETUP_QUICK_PATH_MESSAGES: Record<SetupQuickPathReason, string> = {
   over_turns: `This setup has used its share of Claude's time. ${QUICK_PATH_OFFER}`,

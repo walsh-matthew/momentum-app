@@ -254,7 +254,9 @@ describe('going over the per-setup budget', () => {
 
   it('says what happened in plain words and offers the quick path with nothing saved', () => {
     for (const message of Object.values(SETUP_QUICK_PATH_MESSAGES)) {
-      expect(message).toMatch(/quick path/);
+      // In everyday words (MOM-111): the person is offered to save now, with defaults they can change, not "the quick path".
+      expect(message).toMatch(/save it now; anything not set yet starts from a sensible default you can change later/);
+      expect(message).not.toMatch(/quick path/);
       expect(message).toMatch(/Nothing is saved until you approve it/);
       expect(message).toMatch(/what you have told me so far/);
     }

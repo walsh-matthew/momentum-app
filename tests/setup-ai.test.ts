@@ -204,7 +204,7 @@ describe('the prompt', () => {
     }
     expect(SETUP_STEPS).toHaveLength(12);
     expect(SETUP_SYSTEM_PROMPT).toMatch(/day end, once, on the first goal only, never assumed/);
-    expect(SETUP_SYSTEM_PROMPT).toMatch(/only when a weekly or day-slot target needs it/);
+    expect(SETUP_SYSTEM_PROMPT).toMatch(/only when a weekly or day-slot target \(something counted each week or on set days\) needs it/);
     expect(SETUP_SYSTEM_PROMPT).toMatch(/"midnight" and "6 in the morning" and no other clock time/);
   });
 

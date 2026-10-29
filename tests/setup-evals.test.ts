@@ -4,6 +4,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runSetupEval, violationsOf, type EvalReport, type SetupEvalCase } from '@/lib/setup/evals';
+import { renderPlayback } from '@/lib/setup/playback';
+import { unexplainedTerms } from '@/lib/setup/plainWords';
+import { MEANING_TEXT } from '@/lib/setup/session';
 import { HARD_RULES } from '@/lib/setup/steps';
 import { HARD_RULE_IDS, type AssistantTurn } from '@/types/setup';
 import { scriptedModel } from './helpers/setupScript';
@@ -28,9 +31,9 @@ const byId = (id: string): ScriptedCase => {
 };
 
 describe('the eval set', () => {
-  it('has sixteen cases: eight full conversations and one fixture per hard rule', () => {
-    expect(SETUP_CASES).toHaveLength(16);
-    expect(SETUP_CASES.filter((c) => c.expect === 'clean')).toHaveLength(8);
+  it('has twenty cases: twelve full conversations and one fixture per hard rule', () => {
+    expect(SETUP_CASES).toHaveLength(20);
+    expect(SETUP_CASES.filter((c) => c.expect === 'clean')).toHaveLength(12);
     expect(SETUP_CASES.filter((c) => c.expect !== 'clean').map((c) => c.rules[0]).sort()).toEqual([...HARD_RULE_IDS].sort());
   });
 
@@ -56,6 +59,67 @@ describe('the eval set', () => {
   it('has no personal detail in a case: no email, phone number or street address', () => {
     const everything = SETUP_CASES.flatMap((c) => [c.title, ...c.person.map((p) => p.say)]).join('\n');
     expect(everything).not.toMatch(/@|\b\d{3}[-. ]\d{3,4}[-. ]\d{4}\b|\bstreet\b|\bavenue\b/i);
+  });
+});
+
+describe('setup clarity (MOM-111): the cases from the owner\'s live setup', () => {
+  const clean = SETUP_CASES.filter((c) => c.expect === 'clean');
+
+  it('asks every scripted question in everyday words: no internal word goes unexplained', () => {
+    const words = clean.flatMap((c) => c.script.flatMap((t) => [t.say, t.question ?? '', t.skipped?.line ?? '', ...t.options]));
+    expect(words.flatMap(unexplainedTerms)).toEqual([]);
+  });
+
+  it('"what do you mean?" on the crowd-out question: Claude explains with examples, and setup carries on to the save', async () => {
+    const c = byId('run-i-what-do-you-mean-protected');
+    const report = await run(c);
+    const asked = report.turns.findIndex((t) => t.turn.topic === 'priorities');
+    expect(c.person[asked].say).toBe(MEANING_TEXT);
+    const explained = report.turns[asked + 1].turn;
+    expect(explained.topic).toBe('priorities');
+    expect(explained.say).toMatch(/for example/);
+    expect(report.turns[asked + 1].violations).toEqual([]);
+    expect(report.finished).toBe(true);
+    expect(report.finalIssues).toEqual([]);
+    expect(renderPlayback(report.draft.model, 'targets')[0]).toContain('Family time and your sleep');
+  });
+
+  it('"what do you mean?" on a person fact (the day end): explained, not a repeat, and setup carries on', async () => {
+    const c = byId('run-j-what-do-you-mean-day-end');
+    const report = await run(c);
+    const asked = report.turns.findIndex((t) => t.turn.topic === 'day_end');
+    expect(c.person[asked].say).toBe(MEANING_TEXT);
+    expect(report.turns[asked + 1].turn.topic).toBe('day_end');
+    expect(report.turns[asked + 1].violations).toEqual([]);
+    expect(report.draft.model.person.dayEnd).toBe('21:00');
+    expect(report.finished).toBe(true);
+  });
+
+  it('a long first message (on a computer): the why is recorded from it, and the why and the starting point are skipped in one line each', async () => {
+    const c = byId('run-k-long-first-message');
+    const report = await run(c);
+    expect(c.person[0].say.split(' ').length).toBeGreaterThan(15);
+    expect(report.draft.model.goals[0].why).toBe('it clears my head');
+    const skipped = report.turns.flatMap((t) => (t.turn.skipped ? [t.turn.skipped] : []));
+    expect(skipped.map((x) => x.topic)).toEqual(['why', 'starting_point']);
+    for (const x of skipped) expect(x.line.split(/[.!?]\s/).length).toBe(1);
+    // Neither is asked.
+    expect(report.turns.filter((t) => t.turn.topic === 'why' || t.turn.topic === 'starting_point')).toEqual([]);
+    expect(report.finished).toBe(true);
+  });
+
+  it('one-word answers (on a phone): follow-ups on the same topic carry it on, and setup finishes', async () => {
+    const c = byId('run-l-one-word-answers');
+    const report = await run(c);
+    for (const line of c.person) expect(line.say.split(' ').length, line.say).toBeLessThanOrEqual(2);
+    expect(c.person.map((p) => p.say)).toEqual(expect.arrayContaining(['family', '2 goals', 'no']));
+    // A question straight after the reply on the same topic, more than once: "2 goals" then "What are the goals?", and so on.
+    const followUps = report.turns.filter((t, i) => i > 0 && t.turn.topic !== null && t.turn.topic === report.turns[i - 1].turn.topic);
+    expect(followUps.map((t) => t.turn.topic)).toEqual(['breakup', 'sequencing', 'priorities']);
+    expect(report.finished).toBe(true);
+    expect(report.finalIssues).toEqual([]);
+    // "spring" cannot be restated after "It comes back", so it is shown as said.
+    expect(renderPlayback(report.draft.model, 'goals')).toContain('Set aside for now: Cooking. It comes back, in your words: "spring"');
   });
 });
 

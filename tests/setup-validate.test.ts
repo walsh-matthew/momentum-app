@@ -376,14 +376,14 @@ async function finishedArgs(id: string): Promise<[SetupDraft, Transcript]> {
 }
 
 describe('playback is rendered from the draft', () => {
-  it('renders only what is set, in plain words, for each part', async () => {
+  it('renders only what is set, in plain words and the second person, for each part', async () => {
     const { draft } = await finished('run-b-habit-ideas');
     const lines = (c: (typeof SETUP_CHUNKS)[number]) => renderPlayback(draft.model, c).join('\n');
-    expect(lines('goals')).toBe('Goal: Run more, because it clears my head.');
-    expect(lines('targets')).toContain('Sessions: a count each week (effort), at least 3.');
-    expect(lines('planning')).toContain('Your day ends at 21:00.');
+    expect(lines('goals')).toBe('Goal: Run more, because it clears your head.');
+    expect(lines('targets')).toContain('Sessions: at least 3 each week.');
+    expect(lines('planning')).toContain('Your day ends at 21:00, the time you check in; your day still runs from midnight to midnight.');
     expect(lines('planning')).toContain('Your week starts on Monday.');
-    expect(lines('talk')).toContain('Tone: gentle.');
+    expect(lines('talk')).toContain('Momentum talks to you gently.');
   });
 
   it('keeps the final confirmation to a few lines however many goals there are', async () => {

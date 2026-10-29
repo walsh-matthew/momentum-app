@@ -4,19 +4,19 @@
 
 import { SETUP_CHUNKS, type SetupChunk, type SetupModel } from '@/types/setup';
 import type { PlaybackSection } from '@/types/setupScreen';
-import { renderPlayback } from './playback';
+import { renderPlayback, type PlaybackOptions } from './playback';
 import type { DraftIssue } from './validate';
 
 export const CHUNK_TITLES: Record<SetupChunk, string> = {
   goals: 'Your goals',
-  targets: 'What counts',
-  planning: 'Planning',
+  targets: "What you'll count",
+  planning: 'Your days and weeks',
   talk: 'How Momentum talks to you',
 };
 
 // Every part, in the order setup plays them back.
-export function quickPathSections(model: SetupModel): PlaybackSection[] {
-  return SETUP_CHUNKS.map((chunk) => ({ chunk, title: CHUNK_TITLES[chunk], lines: renderPlayback(model, chunk) }));
+export function quickPathSections(model: SetupModel, options: PlaybackOptions = {}): PlaybackSection[] {
+  return SETUP_CHUNKS.map((chunk) => ({ chunk, title: CHUNK_TITLES[chunk], lines: renderPlayback(model, chunk, options) }));
 }
 
 const FALLBACK = 'Something in your answers needs another look.';
@@ -45,7 +45,7 @@ function describeIssue(model: SetupModel, issue: DraftIssue): string | null {
     const goalName = goal ? `"${goal.title}"` : 'a goal';
     if (parts[2] === 'targets' && parts.length >= 5) {
       const target = goal?.targets.find((t) => t.key === parts[3]);
-      const name = target ? `"${target.title}"` : 'a target';
+      const name = target ? `"${target.title}"` : 'something you count';
       switch (parts[4]) {
         case 'floor':
           return `The least you aim for with ${name}.`;
@@ -59,7 +59,7 @@ function describeIssue(model: SetupModel, issue: DraftIssue): string | null {
     }
     if (parts[2] === 'items' && parts.length >= 5) {
       const item = goal?.items.find((i) => i.key === parts[3]);
-      const name = item ? `"${item.title}"` : 'a work item';
+      const name = item ? `"${item.title}"` : 'a step';
       switch (parts[4]) {
         case 'dueDate':
           return `The date for ${name}.`;
@@ -75,13 +75,13 @@ function describeIssue(model: SetupModel, issue: DraftIssue): string | null {
       case 'startDate':
         return `A start date for ${goalName}.`;
       case 'shape':
-        return `Whether ${goalName} is ongoing, has an end date, or is a project.`;
+        return `Whether ${goalName} keeps going, has an end date, or has a deadline.`;
       case 'endDate':
         return `The end date for ${goalName}.`;
       case 'blockWeeks':
-        return `How long the first block of ${goalName} is.`;
+        return `How many weeks the first stretch of ${goalName} runs.`;
       case 'targets':
-        return `At least one target for ${goalName}.`;
+        return `At least one thing to count for ${goalName}.`;
       case 'returnWhen':
         return `When ${goalName} comes back.`;
       default:

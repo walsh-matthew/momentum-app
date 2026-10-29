@@ -6,7 +6,7 @@
 import { AssistantTurnSchema, SetupDraftSchema } from '@/types/setup';
 import { PROVENANCE_PATH_FORMS } from './leaves';
 import { renderSchema } from './schemaText';
-import { HARD_RULES, SETUP_STEPS } from './steps';
+import { HARD_RULES, PLAIN_WORDS, SETUP_STEPS, type SetupStep } from './steps';
 
 // The exact shape of a reply and of the draft inside it, written from the same zod schemas the validator uses
 // (lib/setup/schemaText.ts), so the prompt cannot name a field the validator does not know or leave one out. The first
@@ -15,8 +15,16 @@ export const REPLY_SHAPE_TEXT = renderSchema(AssistantTurnSchema, { draft: 'Draf
 export const DRAFT_SHAPE_TEXT = renderSchema(SetupDraftSchema);
 const pathFormsText = PROVENANCE_PATH_FORMS.map((f) => `- ${f}`).join('\n');
 
-const stepsText = SETUP_STEPS.map((s) => `${s.n}. ${s.title}. ${s.summary}`).join('\n');
+// A step as the prompt states it: what to ask, why it asks (in words Claude can say), and example questions in the plain
+// style (MOM-111).
+const stepText = (s: SetupStep): string => {
+  const reason = s.reason ? ` Say why in a few words, for example: "${s.reason}".` : '';
+  const examples = s.examples.length ? ` Example questions: ${s.examples.map((e) => `"${e.say ? `${e.say} ` : ''}${e.question}"`).join(' ')}` : '';
+  return `${s.n}. ${s.title}. ${s.summary}${reason}${examples}`;
+};
+const stepsText = SETUP_STEPS.map(stepText).join('\n');
 const rulesText = HARD_RULES.map((r) => `${r.n}. ${r.text}`).join('\n');
+const plainText = PLAIN_WORDS.map((line) => `- ${line}`).join('\n');
 
 export const SETUP_SYSTEM_PROMPT = `You guide one person through setting up their goals in Momentum, one question at a time. Setup turns a vague idea into a structured draft. Nothing is saved until the person gives final approval, and code (not you) checks and plays back the draft.
 
@@ -25,6 +33,9 @@ ${stepsText}
 
 Hard rules. Every one is checked automatically on every turn you write:
 ${rulesText}
+
+Plain words. The person has to understand every question you ask:
+${plainText}
 
 How you reply. Every reply is one JSON object and nothing else, with exactly these keys:
 - "kind": "question" for an ordinary question; "offer_ideas" for the offer "Do you have something in mind, or would some starting ideas help?"; "ideas" for starting ideas, only after they asked for them; "interpretations" when an answer did not fit; "proposal" to show a visible default for them to accept (such as today as the start date); "playback" when a part is done (set "chunk"); "final" when all four parts are approved.

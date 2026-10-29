@@ -237,8 +237,8 @@ describe('a synced source is never shown as connected', () => {
     const target = model.goals.flatMap((g) => g.targets)[0];
     target.sources = [{ kind: 'synced', provider: 'hevy', metric: 'volume_lbs' }, { kind: 'manual' }];
     const lines = [...quickPathSections(model).flatMap((s) => s.lines)];
-    const tracked = lines.find((l) => l.startsWith(`${target.title} is tracked`));
-    expect(tracked).toBe(`${target.title} is tracked in hevy and by you, by hand.`);
+    const tracked = lines.find((l) => l.startsWith(`${target.title}: read from`));
+    expect(tracked).toBe(`${target.title}: read from Hevy and you log it yourself.`);
     for (const line of lines) expect(line).not.toMatch(/connect|synced|syncing|linked/i);
   });
 

@@ -18,6 +18,7 @@ import { emptyDraft } from '@/lib/setup/draft';
 import { SETUP_STEPS } from '@/lib/setup/steps';
 import {
   acceptsText,
+  asksMeaning,
   dateIsIn,
   datesIn,
   dayTimeWords,
@@ -193,8 +194,70 @@ describe('rule 4: offer the choice before examples', () => {
     expect(checkChoiceBeforeExamples({ ...offer, say: 'For example, 3 a week.' }, ctx()).length).toBeGreaterThan(0);
   });
 
-  it('stops an example slipped into an ordinary question', () => {
-    expect(checkChoiceBeforeExamples(turn({ question: 'What counts, such as sessions or miles?' }), ctx())).toHaveLength(1);
+  it('stops examples in a question about the goal itself or a number, where an example plants the answer', () => {
+    expect(checkChoiceBeforeExamples(turn({ topic: 'idea', question: 'What would you like to work on, for example running or reading?' }), ctx())).toHaveLength(1);
+    expect(checkChoiceBeforeExamples(turn({ topic: 'floor', question: 'What is the least, such as a few sessions?' }), ctx())).toHaveLength(1);
+    expect(checkChoiceBeforeExamples(turn({ topic: 'aspiration', say: 'For example, a little more than the least.', question: 'What are you hoping for?' }), ctx())).toHaveLength(1);
+  });
+
+  // MOM-111: rule 4 narrowed. A few short examples inside any other question are fine; they are what made the tabletops clear.
+  it.each(['priorities', 'starting_point', 'breakup', 'target', 'role', 'day_types', 'expansion', 'tone'] as const)(
+    'lets a few short examples through in a "%s" question',
+    (topic) => {
+      expect(checkChoiceBeforeExamples(turn({ topic, question: 'What else matters to you, for example family time or your health?' }), ctx())).toEqual([]);
+    },
+  );
+
+  it('lets any question be explained with examples once the person asks what it means, on its own topic only', () => {
+    const history: Transcript = [asked({ topic: 'floor', question: 'What is the least you would count as still on track?' }), said('What do you mean?')];
+    const explained = turn({ topic: 'floor', say: 'I mean the smallest amount that still feels like progress, for example a short session.', question: 'What is the least that would still feel like progress?' });
+    expect(checkChoiceBeforeExamples(explained, ctx(history))).toEqual([]);
+    // Not after an ordinary answer: "I don't know" gets the offer of ideas, not a list slipped into the question.
+    expect(checkChoiceBeforeExamples(explained, ctx([history[0], said("I'm not really certain")]))).toHaveLength(1);
+    // Not on another topic.
+    expect(checkChoiceBeforeExamples({ ...explained, topic: 'aspiration' }, ctx(history))).toHaveLength(1);
+  });
+
+  it('still needs the offer before a list of ideas, whatever the topic', () => {
+    expect(checkChoiceBeforeExamples(turn({ kind: 'ideas', topic: 'priorities', options: ['Family', 'Sleep'], question: 'Which of these?' }), ctx([asked(), said('Family')]))).toHaveLength(1);
+  });
+
+  it('still applies rule 2 to an example: no day or time the person did not say', () => {
+    const t = turn({ topic: 'priorities', question: 'What else matters to you, like your weekends or your evenings?' });
+    expect(checkChoiceBeforeExamples(t, ctx())).toEqual([]);
+    expect(rules(checkAssumeNothing(t, ctx([said('Running.')])))).toEqual(['assume_nothing', 'assume_nothing']);
+  });
+});
+
+describe('the person asking what a question means', () => {
+  it.each(['What do you mean?', 'what does protected mean', "I don't understand", 'not sure what you mean', 'like what', 'Can you explain'])('reads "%s" as asking', (text) => {
+    expect(asksMeaning(text)).toBe(true);
+  });
+  it.each(['Family', '2 goals', 'no', "I'm not really certain", 'Gentle, please.'])('does not read "%s" as asking', (text) => {
+    expect(asksMeaning(text)).toBe(false);
+  });
+});
+
+describe('every example question in a step summary passes the hard rules on its own topic', () => {
+  const examples = SETUP_STEPS.flatMap((s) => s.examples.map((e) => ({ step: s.n, ...e })));
+
+  it('has examples for every step that asks something', () => {
+    for (const s of SETUP_STEPS) expect(s.examples.length > 0, `step ${s.n}`).toBe(s.n !== 12);
+  });
+
+  it.each(examples)('step $step, $topic: "$question"', (e) => {
+    const t = turn({ topic: e.topic, say: e.say ?? '', question: e.question });
+    // Asked fresh, before the person has said anything: no day, time or number of theirs to lean on.
+    const c = ctx([asked({ topic: null, question: 'Big or small, what would you like to work on?' }), said('Something.')]);
+    const found = [
+      ...checkOneQuestion(t),
+      ...checkAssumeNothing(t, c),
+      ...checkNoAnnouncedReminder(t),
+      ...checkChoiceBeforeExamples(t, c),
+      ...checkNoMath(t, c),
+    ];
+    expect(found.map((v) => `${v.rule}: ${v.message}`)).toEqual([]);
+    expect(e.topic === null || SETUP_STEPS.find((s) => s.n === e.step)?.topics.includes(e.topic)).toBe(true);
   });
 });
 
@@ -207,8 +270,51 @@ describe('rule 5: skip what is already answered', () => {
 
   it('stops asking a person fact that is already in the draft or was already asked', () => {
     expect(rules(checkSkipAnswered(turn({ topic: 'time_zone', question: 'Which time zone are you in?' }), ctx([], { prevDraft: answered })))).toEqual(['skip_answered']);
-    const history: Transcript = [asked({ topic: 'tone', question: 'How direct?' }), said('Gentle.')];
+    const history: Transcript = [
+      asked({ topic: 'tone', question: 'How direct?' }),
+      said('Gentle.'),
+      asked({ topic: 'reminders', question: 'Reminders?' }),
+      said('No.'),
+    ];
     expect(rules(checkSkipAnswered(turn({ topic: 'tone', question: 'How direct would you like me to be?' }), ctx(history)))).toEqual(['skip_answered']);
+  });
+
+  // MOM-111: a person fact asked twice in a row stays rare. A follow-up straight after the reply passes only while the reply
+  // has not settled it: once this turn records the fact, asking it again is a repeat.
+  it('stops a one-value person fact asked again straight after the turn recorded it', () => {
+    const history: Transcript = [asked({ topic: 'tone', question: 'How direct?' }), said('Gentle.')];
+    const recorded = emptyDraft();
+    recorded.model.settings.tone = 'gentle';
+    expect(rules(checkSkipAnswered(turn({ topic: 'tone', question: 'How direct would you like me to be?', draft: recorded }), ctx(history)))).toEqual(['skip_answered']);
+  });
+
+  it('lets a one-value person fact be explained after "what do you mean?", while the draft still lacks it', () => {
+    const history: Transcript = [asked({ topic: 'day_end', question: 'When does your day end?' }), said('What do you mean?')];
+    expect(checkSkipAnswered(turn({ topic: 'day_end', say: 'I mean when you usually wrap up.', question: 'When do you usually wrap up for the day?' }), ctx(history))).toEqual([]);
+  });
+
+  it.each(['priorities', 'day_types', 'quiet_times', 'capacity', 'idea', 'breakup'] as const)(
+    'lets a follow-up on "%s" through straight after the reply, even once the draft holds an answer',
+    (topic) => {
+      const history: Transcript = [asked({ topic, question: 'What else matters to you?' }), said('Family')];
+      const recorded = emptyDraft();
+      recorded.model.person.priorities = ['Family'];
+      expect(checkSkipAnswered(turn({ topic, question: 'Is there anything else?', draft: recorded }), ctx(history))).toEqual([]);
+    },
+  );
+
+  it('lets a skip through for what this turn records from the newest message, and for a topic the draft has no place for', () => {
+    const history: Transcript = [asked({ topic: 'idea' }), said('Run more, because it clears my head. I ran in college.')];
+    const recorded = emptyDraft();
+    recorded.model.goals.push({ key: 'g1', title: 'Run more', why: 'it clears my head', startDate: null, shape: null, endDate: null, blockWeeks: null, state: 'active', returnWhen: null, completionMode: null, tone: null, targets: [], items: [] });
+    const skipWhy = turn({ topic: 'breakup', question: 'Is this one goal?', skipped: { topic: 'why', line: 'You told me why it matters, so I will skip that.' }, draft: recorded });
+    expect(checkSkipAnswered(skipWhy, ctx(history))).toEqual([]);
+    const skipStart = turn({ topic: 'shape', question: 'Does it keep going?', skipped: { topic: 'starting_point', line: 'You told me where you are with it, so I will skip that.' }, draft: recorded });
+    expect(checkSkipAnswered(skipStart, ctx(history))).toEqual([]);
+    // Before the person has said anything, there is nothing to skip.
+    expect(checkSkipAnswered(skipStart, ctx([]))).toHaveLength(1);
+    // A why this turn did not record cannot be skipped.
+    expect(checkSkipAnswered({ ...skipWhy, draft: emptyDraft() }, ctx(history))).toHaveLength(1);
   });
 
   it('asks a goal\'s own questions again for the next goal', () => {
@@ -233,7 +339,7 @@ describe('rule 5: skip what is already answered', () => {
 
   it('tells Claude in step 3 to ask what the goals are, as its own breakup question, before together or one first', () => {
     const step = SETUP_STEPS.find((x) => x.n === 3);
-    expect(step?.summary).toContain('If several, first ask what the goals are, as its own question tagged breakup, then ask together or one first.');
+    expect(step?.summary).toContain('If several, first ask what the goals are, as its own question tagged breakup, then ask whether to start them together or one first.');
   });
 
   it('still stops the same topic asked again after the conversation has moved on', () => {
@@ -327,7 +433,7 @@ describe('rule 7: play back in short chunks; the latest answer wins', () => {
     });
 
     it('reads only a whole message as "no change"', () => {
-      for (const t of ['nothing', 'Nothing.', 'No changes!', "I don't want to change anything", 'I don’t want to change anything', 'leave it as is']) {
+      for (const t of ['nothing', 'Nothing.', 'No changes!', "I don't want to change anything", 'I don’t want to change anything', 'leave it as is', 'Keep it as it is.']) {
         expect(declinesChange(t), t).toBe(true);
       }
       for (const t of ['no', 'yes', "Don't change the goals, but add one", 'nothing is right about it', 'change nothing but the name', '']) {

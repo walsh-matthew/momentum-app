@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { MEANING_TEXT } from '@/lib/setup/session';
 import type { AssistantTurn } from '@/types/setup';
 import { AnswerBox } from './AnswerBox';
 
@@ -15,12 +16,14 @@ interface QuestionCardProps {
 // them; the rule checks read them like any other answer.
 const OFFER_IDEAS_YES = [{ label: 'Some ideas, please', text: 'Yes, some starting ideas would help.' }];
 const PROPOSAL_YES = [{ label: 'Yes, use that', text: 'Yes, that works.' }];
+// On every question: a person who is not sure what it means can ask, and Claude explains it in plainer words (MOM-111).
+const ASK_MEANING = { label: MEANING_TEXT, text: MEANING_TEXT };
 
 // One question, and nothing else on screen (docs/DOMAIN_MODEL.md §2.1 rule 1). Claude's words come from the validated turn;
 // the numbered choices of an `ideas` or `interpretations` turn are numbered here, and tapping one sends "Option N".
 export function QuestionCard({ turn, busy, onAnswer }: QuestionCardProps) {
   const numbered = turn.kind === 'ideas' || turn.kind === 'interpretations';
-  const quickAnswers = turn.kind === 'offer_ideas' ? OFFER_IDEAS_YES : turn.kind === 'proposal' ? PROPOSAL_YES : [];
+  const quickAnswers = [...(turn.kind === 'offer_ideas' ? OFFER_IDEAS_YES : turn.kind === 'proposal' ? PROPOSAL_YES : []), ASK_MEANING];
 
   return (
     <section aria-labelledby="setup-question" className="channel-card space-y-4 p-4">
@@ -50,7 +53,7 @@ export function QuestionCard({ turn, busy, onAnswer }: QuestionCardProps) {
       <AnswerBox
         label="Your answer"
         submitLabel="Send"
-        placeholder={numbered ? 'Or say it in your own words' : undefined}
+        placeholder={numbered ? 'Or say it in your own words' : 'Type your answer, or ask what I mean'}
         busy={busy}
         onSubmit={onAnswer}
         quickAnswers={quickAnswers}

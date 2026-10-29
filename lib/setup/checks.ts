@@ -16,8 +16,8 @@ import {
 } from '@/types/setup';
 import { answeredTopics, changedLeafPaths, chunkSlice } from './leaves';
 import { FINAL_MAX_LINES, renderFinal } from './playback';
-import { ASKED_ONCE_TOPICS } from './steps';
-import { acceptsText, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas } from './text';
+import { ASKED_ONCE_TOPICS, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
+import { acceptsText, asksMeaning, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas } from './text';
 import { validateDraft } from './validate';
 
 export interface TurnContext {
@@ -33,9 +33,6 @@ export interface Violation {
   rule: HardRuleId | 'draft';
   message: string;
 }
-
-// Topics that shape the list of goals: a second question on one, right after the answer, carries it on (MOM-111).
-const FOLLOW_UP_TOPICS: ReadonlySet<string | null> = new Set(['breakup', 'idea']);
 
 const ASKING_KINDS: readonly TurnKind[] = ['question', 'offer_ideas', 'ideas', 'interpretations', 'proposal'];
 
@@ -158,8 +155,15 @@ export function checkChoiceBeforeExamples(turn: AssistantTurn, ctx: TurnContext)
     if (turn.options.length > 0 || EXAMPLE_MARKERS.test(authored(turn).join(' '))) {
       out.push(v('choice_before_examples', 'The offer already contains examples.'));
     }
-  } else if (EXAMPLE_MARKERS.test(authored(turn).join(' '))) {
-    out.push(v('choice_before_examples', 'An example was given outside an ideas turn.'));
+  } else if (
+    turn.topic !== null &&
+    SUGGESTION_TOPICS.has(turn.topic) &&
+    EXAMPLE_MARKERS.test(authored(turn).join(' ')) &&
+    !(person && asksMeaning(person.text) && prev?.topic === turn.topic)
+  ) {
+    // Only where an example would plant the answer (the goal itself, a number). Short examples in any other question are
+    // fine, and so is explaining any question with examples once the person asks what it means (MOM-111).
+    out.push(v('choice_before_examples', `Examples in a "${turn.topic}" question need "something in mind, or some ideas?" first.`));
   }
   return out;
 }
@@ -178,22 +182,26 @@ export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violat
     }
   });
   const prev = lastAssistant(ctx);
-  // Clarifying the same topic (offered ideas, interpretations) is not asking it again. Nor is carrying on a topic about
-  // the goals themselves: a question on it straight after the person's reply, such as naming the goals once they say
-  // "2 goals". A person fact (time zone, tone) asked again straight after its answer is still a repeat.
-  const clarifying =
-    turn.kind === 'ideas' ||
-    turn.kind === 'interpretations' ||
-    (prev !== null &&
-      prev.topic === turn.topic &&
-      (['offer_ideas', 'interpretations', 'ideas'].includes(prev.kind) ||
-        (prev.kind === 'question' && FOLLOW_UP_TOPICS.has(prev.topic) && ctx.transcript[ctx.transcript.length - 2]?.role === 'assistant' && ctx.transcript[ctx.transcript.length - 1]?.role === 'person')));
+  const t = ctx.transcript;
+  // A question on the topic Claude just asked, straight after the person's reply, carries it on or clarifies it ("2 goals",
+  // then "What are the goals?"; "What do you mean?", then the question explained): not a repeat, for every topic. The one
+  // exception is a person fact with one value that this turn has already recorded from the reply: asking it again is a
+  // repeat. Asking a topic again after the conversation has moved on is still refused (MOM-111).
+  const followsReply = prev !== null && prev.topic === turn.topic && t[t.length - 1]?.role === 'person' && t[t.length - 2]?.role === 'assistant';
+  const settled = turn.topic !== null && SINGLE_VALUE_FACTS.has(turn.topic) && answeredTopics(turn.draft.model).has(turn.topic);
+  const clarifying = turn.kind === 'ideas' || turn.kind === 'interpretations' || (followsReply && !settled);
   // Only the person's own facts are asked once; a goal's shape, dates and targets are asked again for the next goal.
   if (turn.topic && turn.question && ASKED_ONCE_TOPICS.has(turn.topic) && answered.has(turn.topic) && !clarifying) {
     out.push(v('skip_answered', `"${turn.topic}" is already answered; skip it in one line instead of asking again.`));
   }
   if (turn.skipped) {
-    if (!answered.has(turn.skipped.topic)) out.push(v('skip_answered', `Skipped "${turn.skipped.topic}", which has not been answered.`));
+    // What this turn records from the person's newest message counts too (a long first message that already says why), and
+    // so does a topic the draft has no place for, once the person has said anything.
+    const skippable =
+      answered.has(turn.skipped.topic) ||
+      answeredTopics(turn.draft.model).has(turn.skipped.topic) ||
+      (UNRECORDED_TOPICS.has(turn.skipped.topic) && personTexts(ctx).length > 0);
+    if (!skippable) out.push(v('skip_answered', `Skipped "${turn.skipped.topic}", which has not been answered.`));
     if (sentencesOf(turn.skipped.line).length !== 1 || turn.skipped.line.length > 160) {
       out.push(v('skip_answered', 'The skip notice must be one short line.'));
     }
