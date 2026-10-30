@@ -130,8 +130,8 @@ describe('finding 1: one bold line on every card, and nothing heavier', () => {
 describe('finding 2: a card of options leads with one short line in code\'s words', () => {
   it.each([
     // The wording fix after round 3c: the number question in everyday words.
-    ['the workout case', E2E_CASE_ID, 'How many runs makes a week count, even a hard one?'],
-    ['the reading case', READING_CASE_ID, 'How many pages makes a week count, even a hard one?'],
+    ['the workout case', E2E_CASE_ID, 'How many runs make a week count, even a hard one?'],
+    ['the reading case', READING_CASE_ID, 'How many pages make a week count, even a hard one?'],
   ])('%s: the lead asks the number question, then "Pick one or write your own.", then the detail and the ideas', (_name, id, lead) => {
     const t = ideasTurnOf(id);
     expect(optionsLead(t, TODAY)).toBe(lead);
@@ -188,7 +188,7 @@ describe('finding 2: a card of options leads with one short line in code\'s word
       { title: 'Learn Spanish', targets: [target('t2', 'Spanish lessons')] },
     ]);
     expect(optionsLead(turn({ kind: 'ideas', draft: d }), TODAY, ['I want to take Spanish lessons.'])).toBe(
-      'For Learn Spanish, how many Spanish lessons makes a week count, even a hard one?',
+      'For Learn Spanish, how many Spanish lessons make a week count, even a hard one?',
     );
   });
 
@@ -197,7 +197,7 @@ describe('finding 2: a card of options leads with one short line in code\'s word
     expect(optionsLead(turn({ kind: 'ideas', topic: 'aspiration', draft: d }), TODAY)).toBe('How many pages a week are you hoping for?');
     expect(optionsLead(turn({ kind: 'ideas', topic: 'target', draft: d }), TODAY)).toBe('Some ways to count your progress on Read more books');
     expect(optionsLead(turn({ kind: 'ideas', topic: 'idea' }), TODAY)).toBe('Some goal ideas to start from');
-    expect(optionsLead(turn({ kind: 'interpretations', topic: 'floor', draft: d }), TODAY)).toBe('How many pages makes a week count, even a hard one?');
+    expect(optionsLead(turn({ kind: 'interpretations', topic: 'floor', draft: d }), TODAY)).toBe('How many pages make a week count, even a hard one?');
     expect(optionsLead(turn({ kind: 'interpretations', topic: 'day_end' }), TODAY)).toBe('A few ways to read your answer about when your day ends');
   });
 

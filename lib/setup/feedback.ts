@@ -66,7 +66,7 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
   'plain.date_asks':
     'A question that asks for a date shows no date in "question" or "detail". When a date is known, show it as a "proposal" they accept with Yes instead.',
   'plain.jargon':
-    'Never write "fewest", "floor", "aspiration" or "baseline" (unless the person said the word): say what the number is for in everyday words ("How many pages makes a week count, even a hard one?").',
+    'Never write "fewest", "floor", "aspiration" or "baseline" (unless the person said the word): say what the number is for in everyday words ("How many pages make a week count, even a hard one?").',
   'plain.unquoted_source':
     'Never point at an earlier answer by name ("where you are now", "your baseline", "from what you said"). Quote the fact in the person\'s own words ("You said you read about 50 pages a week now."), or leave it out; the "detail" of starting ideas is that quote or null.',
   'plain.options_say':
