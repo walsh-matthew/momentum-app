@@ -736,7 +736,13 @@ describe('the source: no way to complete a task, no unmetered model call, no con
   });
 
   it('llm.ts writes one table, with one update, and only the four result fields', () => {
-    expect([...llm.matchAll(/\.from\('([a-z_]+)'\)/g)].map((m) => m[1])).toEqual(['llm_usage_logs', 'llm_usage_logs']);
+    // The finishing update, the person's own usage read, and (MOM-113) the weekly review's count of a person's calls.
+    expect([...llm.matchAll(/\.from\('([a-z_]+)'\)/g)].map((m) => m[1])).toEqual(['llm_usage_logs', 'llm_usage_logs', 'llm_usage_logs']);
+    // That count reads the ids of one person's own rows for one feature and nothing else: no content column exists to read.
+    const count = /countReviewCalls[\s\S]*?\.limit\(100\)/.exec(llm)![0];
+    expect(count).toContain(".select('id')");
+    expect(count).toContain(".eq('user_id', userId)");
+    expect(count).toContain(".eq('feature', 'weekly_review')");
     expect([...llm.matchAll(/\.update\(/g)]).toHaveLength(1);
     expect([...llm.matchAll(/\.(insert|upsert|delete)\(/g)]).toHaveLength(0);
     const patch = /\.update\(\{([\s\S]*?)\}\)/.exec(llm)![1];
