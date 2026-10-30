@@ -242,8 +242,11 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
   return { seen, errorsShown: errorsShown && stuckShown, ideasLead, ideasDetail };
 }
 
-test.describe('at 390px (phone)', () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+// SETUP_SHOT_WIDTH takes the same screenshots at another width (1280 for the desktop set, MOM-30); the checks run there too.
+const SHOT_WIDTH = Number(process.env.SETUP_SHOT_WIDTH) || 390;
+
+test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
+  test.use({ viewport: { width: SHOT_WIDTH, height: SHOT_WIDTH === 390 ? 844 : 900 } });
 
   test('every kind of setup card, and every error card in place, fits the screen and is saved as a screenshot', async ({ page }) => {
     test.setTimeout(420_000);

@@ -20,8 +20,8 @@ import {
 // anyone's age or household.
 
 const LINK_CLASS = 'underline underline-offset-2 hover:text-foreground';
-const SECTION_CLASS = 'flex flex-col gap-2';
-const H2_CLASS = 'text-base font-semibold tracking-[-0.02em]';
+const SECTION_CLASS = 'channel-card flex flex-col gap-2 p-4';
+const H2_CLASS = 'card-title';
 const LIST_CLASS = 'ml-5 list-disc space-y-1';
 
 export function PrivacyNotice() {

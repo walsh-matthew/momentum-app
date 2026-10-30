@@ -17,7 +17,7 @@ export function ConnectionStatusError({ onRetry }: ConnectionStatusErrorProps) {
   const router = useRouter();
   return (
     <section aria-labelledby="connection-status-error-heading" role="alert" className="channel-card p-6">
-      <h2 id="connection-status-error-heading" className="section-title">
+      <h2 id="connection-status-error-heading" className="card-title">
         We couldn&apos;t load connection status
       </h2>
       <p className="mt-2 text-sm text-muted">

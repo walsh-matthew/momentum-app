@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
-/* The wireframe design system, dark only (MOM-76). Source: the v0 wireframe's app/globals.css.
-   There is no light palette and no theme toggle; a matching light palette that follows the device is MOM-30.
+/* The wireframe design system (MOM-76), dark by default, with a matching light palette that follows the device (MOM-30).
+   Source: the v0 wireframe's app/globals.css. Every colour is a token; the light values are in the blocks under :root.
 
    Token names. This repo's names are kept, mapped onto the wireframe palette, so existing classes keep working:
      background / foreground  page and text
@@ -12,7 +12,7 @@
    The wireframe's own names (card, primary, destructive, ...) are defined too, for the shadcn Button. */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
   --background: oklch(0.13 0.009 155);
   --foreground: oklch(0.96 0.012 110);
   --panel: oklch(0.18 0.011 155);
@@ -38,6 +38,236 @@
   --streak: #f4c27e;
   /* Error text. The wireframe has no error state; this is a light red that holds 4.5:1 on every surface above. */
   --danger: oklch(0.78 0.13 25);
+
+  /* Colour channels (MOM-30). A translucent colour is written rgb(var(--ink) / 8%), so it keeps its own alpha in both
+     themes and only the colour changes. The dark values are the literals the stylesheet had before the light palette. */
+  --ink: 255 255 255;
+  --lime-rgb: 198 243 109;
+  --amber-rgb: 244 194 126;
+  --red-rgb: 244 128 120;
+  --blue-rgb: 158 182 255;
+  --blue2-rgb: 111 163 255;
+  --glow-rgb: 192 235 117;
+  --shell-glow-rgb: 169 206 114;
+  --shadow-rgb: 0 0 0;
+  --header-rgb: 17 21 19;
+  --chip-rgb: 12 16 14;
+  /* How strong a glow is (1 in dark), and the least alpha an interactive control's border may have (0 in dark; light raises
+     it so the border reaches 3:1). */
+  --glow: 1;
+  --ctl-min: 0%;
+  /* One surface for every card and section block (MOM-30): the same fill, border and shadow on every screen. */
+  --card-fill: oklch(0.275 0.012 155);
+  --card-line: oklch(1 0 0 / 16%);
+  --card-shadow: inset 0 1px oklch(1 0 0 / 5%);
+  /* A tappable answer is the accent as a tinted fill and a border, deeper on hover and while pressed; an answer box is a plain field
+     sunk into the card (MOM-30, round 3). Percentages are how much of the accent shows. */
+  --choice-line: 45%;
+  --choice-tint: 12%;
+  --choice-hover: 20%;
+  --choice-press: 30%;
+  --field-fill: oklch(0.13 0.009 155);
+  --field-shadow: inset 0 1px 3px oklch(0 0 0 / 45%);
+  /* The accent fill on hover: 85% of it over what is behind in dark (what hover:bg-primary/85 was), a little deeper in light. */
+  --hover-primary: 85%;
+  --hover-base: transparent;
+
+  /* Text on a surface, by role. */
+  --text-bright-1: #dce4d9;
+  --text-bright-2: #e0e6df;
+  --text-bright-3: #e5e9e1;
+  --text-bright-4: #eef4e3;
+  --text-bright-5: #f0f3eb;
+  --text-soft-1: #d3d8cf;
+  --text-soft-2: #d3dad4;
+  --text-soft-3: #c0c8c1;
+  --text-soft-4: #b9c2bb;
+  --text-soft-5: #b0b9b2;
+  --text-dim-1: #a9b3ab;
+  --text-dim-2: #a2ada5;
+  --text-dim-3: #98a39b;
+  --text-lime-1: #d3e3bb;
+  --text-lime-2: #c1d79c;
+  /* Text on the lime fill (the accent). */
+  --on-lime-1: #1c2514;
+  --on-lime-2: #1a2412;
+  /* Small graphics: icons, the tick on a progress bar, the toggle and the sync dot. */
+  --icon-dim: #909b93;
+  --icon-lime: #a9c77c;
+  --icon-blue: #9bbcff;
+  --tick: #e8efe3;
+  --toggle-track: #2a312d;
+  --toggle-knob: #a3ada5;
+  --sync-dot: #69736c;
+  --stripe-a: #8a9a86;
+  --stripe-b: #6d7c6a;
+  /* Gradient surfaces and the page behind the three columns. */
+  --avatar-from: #414944;
+  --avatar-to: #252c29;
+  --page-wide: #0a0d0c;
+}
+
+/* The light palette (MOM-30). With no choice made it follows the device (prefers-color-scheme: light); a choice made in Settings
+   is a data-theme on <html> that the server sets from a cookie, so the first paint is already right. The same values are
+   written twice (the media query and the "light" choice); tests/theme-tokens.test.ts fails if the two ever differ. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --background: oklch(0.948 0.012 115);
+    --foreground: oklch(0.22 0.02 150);
+    --panel: oklch(1 0 0);
+    --border: oklch(0 0 0 / 10%);
+    --muted: oklch(0.5 0.022 150);
+    --accent: oklch(0.52 0.135 132);
+    --primary-foreground: oklch(0.99 0.01 110);
+    --secondary: oklch(0.95 0.008 110);
+    --secondary-foreground: oklch(0.25 0.02 150);
+    --destructive: oklch(0.5 0.17 25);
+    --input: oklch(0 0 0 / 58%);
+    --ring: oklch(0.52 0.135 132 / 60%);
+    --surface-raised: oklch(1 0 0);
+    --surface-soft: oklch(1 0 0);
+    --lime: oklch(0.52 0.135 132);
+    --channel: oklch(0.46 0.14 265);
+    --streak: oklch(0.47 0.105 65);
+    --danger: oklch(0.5 0.17 25);
+
+    --ink: 20 30 22;
+    --lime-rgb: 74 120 20;
+    --amber-rgb: 130 76 1;
+    --red-rgb: 176 42 45;
+    --blue-rgb: 49 82 165;
+    --blue2-rgb: 49 82 165;
+    --glow-rgb: 74 120 20;
+    --shell-glow-rgb: 74 120 20;
+    --shadow-rgb: 20 30 22;
+    --header-rgb: 237 239 230;
+    --chip-rgb: 255 255 255;
+    --glow: 0.4;
+    --ctl-min: 58%;
+    --card-fill: oklch(1 0 0);
+    --card-line: oklch(0.22 0.02 150 / 16%);
+    --card-shadow: 0 1px 2px oklch(0.22 0.02 150 / 10%), 0 6px 16px oklch(0.22 0.02 150 / 7%);
+    --choice-line: 85%;
+    --choice-tint: 18%;
+    --choice-hover: 26%;
+    --choice-press: 36%;
+    --field-fill: oklch(1 0 0);
+    --field-shadow: inset 0 1px 3px oklch(0.22 0.02 150 / 18%);
+    --hover-primary: 86%;
+    --hover-base: black;
+
+    --text-bright-1: oklch(0.25 0.02 150);
+    --text-bright-2: oklch(0.25 0.02 150);
+    --text-bright-3: oklch(0.25 0.02 150);
+    --text-bright-4: oklch(0.25 0.02 150);
+    --text-bright-5: oklch(0.25 0.02 150);
+    --text-soft-1: oklch(0.38 0.02 150);
+    --text-soft-2: oklch(0.38 0.02 150);
+    --text-soft-3: oklch(0.38 0.02 150);
+    --text-soft-4: oklch(0.38 0.02 150);
+    --text-soft-5: oklch(0.38 0.02 150);
+    --text-dim-1: oklch(0.48 0.02 150);
+    --text-dim-2: oklch(0.48 0.02 150);
+    --text-dim-3: oklch(0.48 0.02 150);
+    --text-lime-1: oklch(0.4 0.1 135);
+    --text-lime-2: oklch(0.4 0.1 135);
+    --on-lime-1: oklch(0.99 0.01 110);
+    --on-lime-2: oklch(0.99 0.01 110);
+    --icon-dim: oklch(0.52 0.02 150);
+    --icon-lime: oklch(0.5 0.12 133);
+    --icon-blue: oklch(0.46 0.14 265);
+    --tick: oklch(0.3 0.03 150);
+    --toggle-track: oklch(0.93 0.008 150);
+    --toggle-knob: oklch(0.5 0.02 150);
+    --sync-dot: oklch(0.58 0.02 150);
+    --stripe-a: oklch(0.6 0.02 145);
+    --stripe-b: oklch(0.5 0.02 145);
+    --avatar-from: oklch(0.82 0.02 150);
+    --avatar-to: oklch(0.72 0.03 150);
+    --page-wide: oklch(0.948 0.012 115);
+  }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --background: oklch(0.948 0.012 115);
+  --foreground: oklch(0.22 0.02 150);
+  --panel: oklch(1 0 0);
+  --border: oklch(0 0 0 / 10%);
+  --muted: oklch(0.5 0.022 150);
+  --accent: oklch(0.52 0.135 132);
+  --primary-foreground: oklch(0.99 0.01 110);
+  --secondary: oklch(0.95 0.008 110);
+  --secondary-foreground: oklch(0.25 0.02 150);
+  --destructive: oklch(0.5 0.17 25);
+  --input: oklch(0 0 0 / 58%);
+  --ring: oklch(0.52 0.135 132 / 60%);
+  --surface-raised: oklch(1 0 0);
+  --surface-soft: oklch(1 0 0);
+  --lime: oklch(0.52 0.135 132);
+  --channel: oklch(0.46 0.14 265);
+  --streak: oklch(0.47 0.105 65);
+  --danger: oklch(0.5 0.17 25);
+
+  --ink: 20 30 22;
+  --lime-rgb: 74 120 20;
+  --amber-rgb: 130 76 1;
+  --red-rgb: 176 42 45;
+  --blue-rgb: 49 82 165;
+  --blue2-rgb: 49 82 165;
+  --glow-rgb: 74 120 20;
+  --shell-glow-rgb: 74 120 20;
+  --shadow-rgb: 20 30 22;
+  --header-rgb: 237 239 230;
+  --chip-rgb: 255 255 255;
+  --glow: 0.4;
+  --ctl-min: 58%;
+  --card-fill: oklch(1 0 0);
+  --card-line: oklch(0.22 0.02 150 / 16%);
+  --card-shadow: 0 1px 2px oklch(0.22 0.02 150 / 10%), 0 6px 16px oklch(0.22 0.02 150 / 7%);
+  --choice-line: 85%;
+  --choice-tint: 18%;
+  --choice-hover: 26%;
+  --choice-press: 36%;
+  --field-fill: oklch(1 0 0);
+  --field-shadow: inset 0 1px 3px oklch(0.22 0.02 150 / 18%);
+  --hover-primary: 86%;
+  --hover-base: black;
+
+  --text-bright-1: oklch(0.25 0.02 150);
+  --text-bright-2: oklch(0.25 0.02 150);
+  --text-bright-3: oklch(0.25 0.02 150);
+  --text-bright-4: oklch(0.25 0.02 150);
+  --text-bright-5: oklch(0.25 0.02 150);
+  --text-soft-1: oklch(0.38 0.02 150);
+  --text-soft-2: oklch(0.38 0.02 150);
+  --text-soft-3: oklch(0.38 0.02 150);
+  --text-soft-4: oklch(0.38 0.02 150);
+  --text-soft-5: oklch(0.38 0.02 150);
+  --text-dim-1: oklch(0.48 0.02 150);
+  --text-dim-2: oklch(0.48 0.02 150);
+  --text-dim-3: oklch(0.48 0.02 150);
+  --text-lime-1: oklch(0.4 0.1 135);
+  --text-lime-2: oklch(0.4 0.1 135);
+  --on-lime-1: oklch(0.99 0.01 110);
+  --on-lime-2: oklch(0.99 0.01 110);
+  --icon-dim: oklch(0.52 0.02 150);
+  --icon-lime: oklch(0.5 0.12 133);
+  --icon-blue: oklch(0.46 0.14 265);
+  --tick: oklch(0.3 0.03 150);
+  --toggle-track: oklch(0.93 0.008 150);
+  --toggle-knob: oklch(0.5 0.02 150);
+  --sync-dot: oklch(0.58 0.02 150);
+  --stripe-a: oklch(0.6 0.02 145);
+  --stripe-b: oklch(0.5 0.02 145);
+  --avatar-from: oklch(0.82 0.02 150);
+  --avatar-to: oklch(0.72 0.03 150);
+  --page-wide: oklch(0.948 0.012 115);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -112,8 +342,74 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* The hover of a filled accent button (MOM-30). In the utilities layer, with the :hover, so it wins over bg-primary. */
+@layer utilities {
+  .primary-hover:hover {
+    background-color: color-mix(in oklab, var(--primary) var(--hover-primary), var(--hover-base));
+  }
+}
+
 /* Component classes sit in the components layer so a Tailwind utility on the same element still wins. */
 @layer components {
+/* The border of an interactive control (MOM-30): the same alpha as before in dark (--ctl-min is 0%), and never fainter than
+   --ctl-min in light, so the edge of a field or a button reaches 3:1 against its surface. */
+.ctl-border {
+  border-color: rgb(var(--ink) / max(8%, var(--ctl-min)));
+}
+.ctl-20 {
+  border-color: color-mix(in oklab, var(--foreground) max(20%, var(--ctl-min)), transparent);
+}
+.ctl-30 {
+  border-color: color-mix(in oklab, var(--foreground) max(30%, var(--ctl-min)), transparent);
+}
+.ctl-45 {
+  border-color: color-mix(in oklab, var(--foreground) max(45%, var(--ctl-min)), transparent);
+}
+
+/* A tappable answer (MOM-30, round 3): it looks like a button, so it is never mistaken for the answer box. A tinted accent fill and
+   an accent border; deeper while the pointer is over it (only where there is a pointer, so a touch does not leave it stuck) and
+   deeper again while it is pressed. */
+.answer-choice {
+  border-color: color-mix(in oklab, var(--accent) var(--choice-line), transparent);
+  background-color: color-mix(in oklab, var(--accent) var(--choice-tint), transparent);
+}
+@media (hover: hover) {
+  .answer-choice:hover:not(:disabled) {
+    background-color: color-mix(in oklab, var(--accent) var(--choice-hover), transparent);
+  }
+}
+.answer-choice:active:not(:disabled) {
+  background-color: color-mix(in oklab, var(--accent) var(--choice-press), transparent);
+}
+/* The answer box: a plain field with no tint. In dark it is the page's colour sunk into the card; in light it is the card's own white
+   (the 3:1 control border and the inset shadow make it a field). */
+.field-input {
+  background-color: var(--field-fill);
+  box-shadow: var(--field-shadow);
+}
+
+/* ---- Card surface (MOM-30) ----------------------------------------------------------------------------------
+   One fill, one border and one shadow for every card and section block on every screen, through three tokens
+   (--card-fill, --card-line, --card-shadow). A block that is a card is listed here and sets none of the three itself;
+   tests/theme-cards.test.ts fails if a card-like rule or component does its own. The overlay sheets (.sheet-surface,
+   .adaptive-sheet) use the same tokens next to their own drop shadow. */
+.card-surface,
+.channel-card,
+.focus-card,
+.score-card,
+.home-notice,
+.home-hero,
+.home-goal,
+.plan-goal,
+.goal-card,
+.connected-stack,
+.connected-app-row,
+.sidebar-goal {
+  background-color: var(--card-fill);
+  border: 1px solid var(--card-line);
+  box-shadow: var(--card-shadow);
+}
+
 /* ---- Brand ---------------------------------------------------------------------------------------------- */
 
 .momentum-mark {
@@ -140,6 +436,15 @@ button:disabled {
   font-weight: 650;
   letter-spacing: -0.035em;
 }
+/* The title of a card (MOM-30, round 4): the first heading of every card is semibold at one size, in both themes. A heading that is a
+   card's title uses this class; tests/theme-cards.test.ts fails for a heading that is neither this nor a listed exception. */
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
 /* ---- Badges --------------------------------------------------------------------------------------------- */
 
 /* The label always says the level; the dot colour and the border only reinforce it. */
@@ -148,11 +453,11 @@ button:disabled {
   min-height: 24px;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgb(198 243 109 / 18%);
+  border: 1px solid rgb(var(--lime-rgb) / 18%);
   border-radius: 999px;
-  background: rgb(198 243 109 / 6%);
+  background: rgb(var(--lime-rgb) / 6%);
   padding: 0 10px;
-  color: #d3e3bb;
+  color: var(--text-lime-1);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -164,21 +469,21 @@ button:disabled {
   flex: 0 0 6px;
   border-radius: 50%;
   background: var(--lime);
-  box-shadow: 0 0 7px rgb(198 243 109 / 35%);
+  box-shadow: 0 0 7px rgb(var(--lime-rgb) / calc(35% * var(--glow)));
 }
 .burnout-badge[data-risk='rising'] {
-  border-color: rgb(244 194 126 / 35%);
-  background: rgb(244 194 126 / 8%);
+  border-color: rgb(var(--amber-rgb) / 35%);
+  background: rgb(var(--amber-rgb) / 8%);
   color: var(--streak);
 }
 .burnout-badge[data-risk='rising'] .burnout-dot {
   border-radius: 1px;
   background: var(--streak);
-  box-shadow: 0 0 7px rgb(244 194 126 / 35%);
+  box-shadow: 0 0 7px rgb(var(--amber-rgb) / calc(35% * var(--glow)));
 }
 .burnout-badge[data-risk='high'] {
-  border-color: rgb(244 128 120 / 40%);
-  background: rgb(244 128 120 / 9%);
+  border-color: rgb(var(--red-rgb) / 40%);
+  background: rgb(var(--red-rgb) / 9%);
   color: var(--danger);
 }
 .burnout-badge[data-risk='high'] .burnout-dot {
@@ -193,9 +498,9 @@ button:disabled {
   align-items: center;
   gap: 5px;
   border-radius: 7px;
-  background: rgb(255 255 255 / 6%);
+  background: rgb(var(--ink) / 6%);
   padding: 0 8px;
-  color: #d3d8cf;
+  color: var(--text-soft-1);
   font-size: 12px;
   font-weight: 550;
 }
@@ -203,27 +508,27 @@ button:disabled {
   display: inline-flex;
   min-height: 24px;
   align-items: center;
-  border: 1px solid rgb(255 255 255 / 12%);
+  border: 1px solid rgb(var(--ink) / 12%);
   border-radius: 999px;
   padding: 0 10px;
   color: var(--muted);
   font-size: 12px;
 }
 .chip-accent {
-  border-color: rgb(198 243 109 / 30%);
-  background: rgb(198 243 109 / 9%);
+  border-color: rgb(var(--lime-rgb) / 30%);
+  background: rgb(var(--lime-rgb) / 9%);
   color: var(--lime);
   font-weight: 600;
 }
 .chip-warn {
-  border-color: rgb(244 194 126 / 35%);
-  background: rgb(244 194 126 / 8%);
+  border-color: rgb(var(--amber-rgb) / 35%);
+  background: rgb(var(--amber-rgb) / 8%);
   color: var(--streak);
   font-weight: 600;
 }
 .chip-danger {
-  border-color: rgb(244 128 120 / 40%);
-  background: rgb(244 128 120 / 9%);
+  border-color: rgb(var(--red-rgb) / 40%);
+  background: rgb(var(--red-rgb) / 9%);
   color: var(--danger);
   font-weight: 600;
 }
@@ -237,13 +542,9 @@ button:disabled {
   align-items: center;
   overflow: hidden;
   gap: 10px;
-  border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 20px;
-  background:
-    radial-gradient(ellipse at 85% 60%, rgb(192 235 117 / 10%), transparent 48%),
-    linear-gradient(130deg, #1d2421, #171c1b 70%);
   padding: 15px 15px 15px 18px;
-  box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+  background: radial-gradient(ellipse at 85% 60%, rgb(var(--glow-rgb) / 10%), transparent 48%), var(--card-fill);
 }
 .score-ring {
   position: relative;
@@ -262,12 +563,12 @@ button:disabled {
   stroke-width: 5;
 }
 .score-ring-track {
-  stroke: rgb(255 255 255 / 8%);
+  stroke: rgb(var(--ink) / 8%);
 }
 .score-ring-progress {
   stroke: var(--lime);
   stroke-linecap: round;
-  filter: drop-shadow(0 0 5px rgb(198 243 109 / 24%));
+  filter: drop-shadow(0 0 5px rgb(var(--lime-rgb) / calc(24% * var(--glow))));
   transition: stroke-dashoffset 560ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -278,21 +579,19 @@ button:disabled {
   min-height: 98px;
   align-items: flex-start;
   gap: 12px;
-  border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 17px;
-  background: var(--surface-raised);
   padding: 13px 14px;
   transition:
     border-color 160ms ease,
     opacity 160ms ease;
 }
 .focus-card.is-complete {
-  border-color: rgb(198 243 109 / 28%);
+  border-color: rgb(var(--lime-rgb) / 28%);
 }
 .focus-card.is-complete h2 {
   color: var(--muted);
   text-decoration: line-through;
-  text-decoration-color: rgb(198 243 109 / 65%);
+  text-decoration-color: rgb(var(--lime-rgb) / 65%);
 }
 .task-check {
   display: grid;
@@ -300,9 +599,9 @@ button:disabled {
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border: 1px solid rgb(198 243 109 / 42%);
+  border: 1px solid rgb(var(--lime-rgb) / 42%);
   border-radius: 10px;
-  background: rgb(198 243 109 / 8%);
+  background: rgb(var(--lime-rgb) / 8%);
   color: var(--lime);
   transition:
     background 160ms ease,
@@ -310,14 +609,14 @@ button:disabled {
 }
 .task-check:hover:not(:disabled) {
   transform: scale(1.04);
-  background: rgb(198 243 109 / 15%);
+  background: rgb(var(--lime-rgb) / 15%);
 }
 .task-check:active:not(:disabled) {
   transform: scale(0.94);
 }
 .task-check[aria-checked='true'] {
   background: var(--lime);
-  color: #1c2514;
+  color: var(--on-lime-1);
 }
 .task-check:disabled {
   opacity: 0.7;
@@ -327,9 +626,7 @@ button:disabled {
 
 .channel-card {
   min-width: 0;
-  border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 16px;
-  background: var(--surface-soft);
   padding: 12px;
 }
 .channel-icon {
@@ -340,18 +637,18 @@ button:disabled {
   border-radius: 9px;
 }
 .channel-icon.career {
-  background: rgb(158 182 255 / 10%);
+  background: rgb(var(--blue-rgb) / 10%);
   color: var(--channel);
 }
 .channel-icon.fitness {
-  background: rgb(198 243 109 / 10%);
+  background: rgb(var(--lime-rgb) / 10%);
   color: var(--lime);
 }
 .channel-track {
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(255 255 255 / 8%);
+  background: rgb(var(--ink) / 8%);
 }
 .channel-track span {
   display: block;
@@ -379,9 +676,7 @@ button:disabled {
 }
 .home-notice {
   margin: 16px 0 22px;
-  border: 1px solid rgb(255 255 255 / 9%);
   border-radius: 16px;
-  background: var(--surface-soft);
   padding: 14px;
   color: var(--muted);
   font-size: 13px;
@@ -393,13 +688,9 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 14px;
-  border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 20px;
-  background:
-    radial-gradient(ellipse at 85% 60%, rgb(192 235 117 / 10%), transparent 48%),
-    linear-gradient(130deg, #1d2421, #171c1b 70%);
   padding: 16px;
-  box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+  background: radial-gradient(ellipse at 85% 60%, rgb(var(--glow-rgb) / 10%), transparent 48%), var(--card-fill);
 }
 .home-hero-list {
   align-items: stretch;
@@ -420,15 +711,15 @@ button:disabled {
   stroke-width: 5;
 }
 .home-ring-track {
-  stroke: rgb(255 255 255 / 8%);
+  stroke: rgb(var(--ink) / 8%);
 }
 .home-ring-progress {
   stroke: var(--lime);
   stroke-linecap: round;
-  filter: drop-shadow(0 0 5px rgb(198 243 109 / 24%));
+  filter: drop-shadow(0 0 5px rgb(var(--lime-rgb) / calc(24% * var(--glow))));
 }
 .home-hero[data-celebration='bold'] .home-ring-progress {
-  filter: drop-shadow(0 0 9px rgb(198 243 109 / 55%));
+  filter: drop-shadow(0 0 9px rgb(var(--lime-rgb) / calc(55% * var(--glow))));
 }
 .home-ring-centre {
   position: absolute;
@@ -461,11 +752,11 @@ button:disabled {
   color: var(--lime);
 }
 .home-hero-title[data-celebration='bold'] {
-  text-shadow: 0 0 18px rgb(198 243 109 / 30%);
+  text-shadow: 0 0 18px rgb(var(--lime-rgb) / calc(30% * var(--glow)));
 }
 .home-hero-sub {
   margin-top: 4px;
-  color: #b9c2bb;
+  color: var(--text-soft-4);
   font-size: 13px;
   line-height: 1.4;
 }
@@ -493,11 +784,11 @@ button:disabled {
   background: var(--lime);
 }
 .home-bar[data-empty='true'] i {
-  background: rgb(255 255 255 / 14%);
+  background: rgb(var(--ink) / 14%);
 }
 .home-bar-value {
   height: 12px;
-  color: #dce4d9;
+  color: var(--text-bright-1);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -517,9 +808,7 @@ button:disabled {
 }
 .home-goal {
   min-width: 0;
-  border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 20px;
-  background: var(--surface-soft);
   padding: 14px;
 }
 .home-goal > header {
@@ -529,14 +818,9 @@ button:disabled {
   gap: 8px;
   margin-bottom: 4px;
 }
-.home-goal h3 {
-  font-size: 16px;
-  letter-spacing: -0.035em;
-  overflow-wrap: anywhere;
-}
 .home-target {
   margin-top: 10px;
-  border-top: 1px solid rgb(255 255 255 / 7%);
+  border-top: 1px solid rgb(var(--ink) / 7%);
   padding: 12px 0 4px;
 }
 .home-target-row {
@@ -588,7 +872,7 @@ button:disabled {
 }
 .home-next {
   margin-top: 6px;
-  color: #d3e3bb;
+  color: var(--text-lime-1);
   font-size: 12px;
 }
 .home-track {
@@ -596,7 +880,7 @@ button:disabled {
   height: 6px;
   margin-top: 10px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 9%);
+  background: rgb(var(--ink) / 9%);
 }
 .home-track > span {
   position: absolute;
@@ -607,7 +891,7 @@ button:disabled {
   background: var(--lime);
 }
 .home-track[data-graded='false'] > span {
-  background: repeating-linear-gradient(45deg, #8a9a86 0 4px, #6d7c6a 4px 8px);
+  background: repeating-linear-gradient(45deg, var(--stripe-a) 0 4px, var(--stripe-b) 4px 8px);
 }
 .home-tick {
   position: absolute;
@@ -615,7 +899,7 @@ button:disabled {
   width: 2px;
   height: 14px;
   border-radius: 1px;
-  background: #e8efe3;
+  background: var(--tick);
   text-decoration: none;
 }
 .home-tick-aspiration {
@@ -629,11 +913,11 @@ button:disabled {
   line-height: 1.4;
 }
 .home-pattern[data-tone='good'] {
-  background: rgb(198 243 109 / 7%);
-  color: #d3e3bb;
+  background: rgb(var(--lime-rgb) / 7%);
+  color: var(--text-lime-1);
 }
 .home-pattern[data-tone='nudge'] {
-  background: rgb(244 194 126 / 8%);
+  background: rgb(var(--amber-rgb) / 8%);
   color: var(--streak);
 }
 /* The weekly review's recap (MOM-113 block 3.2) reuses the home cards above; these are only its own lists and link. */
@@ -718,7 +1002,8 @@ button:disabled {
   gap: 12px;
   min-width: 0;
 }
-.plan-section > h2 {
+/* The heading above the plan's goal cards; the kinds-of-day section is itself a card, and its heading is a card title. */
+.plan-section:not(.plan-goal) > h2 {
   font-size: 15px;
   letter-spacing: -0.03em;
 }
@@ -728,28 +1013,21 @@ button:disabled {
   line-height: 1.5;
 }
 .plan-error {
-  border: 1px solid rgb(244 128 120 / 40%);
+  border: 1px solid rgb(var(--red-rgb) / 40%);
   border-radius: 12px;
-  background: rgb(244 128 120 / 9%);
+  background: rgb(var(--red-rgb) / 9%);
   padding: 10px 12px;
   color: var(--danger);
   font-size: 13px;
 }
 .plan-goal {
   min-width: 0;
-  border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 20px;
-  background: var(--surface-soft);
   padding: 14px;
-}
-.plan-goal h3 {
-  font-size: 16px;
-  letter-spacing: -0.035em;
-  overflow-wrap: anywhere;
 }
 .plan-row {
   margin-top: 10px;
-  border-top: 1px solid rgb(255 255 255 / 7%);
+  border-top: 1px solid rgb(var(--ink) / 7%);
   padding: 12px 0 4px;
 }
 .plan-row-head {
@@ -802,7 +1080,7 @@ button:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgb(255 255 255 / 22%);
+  border: 1px solid rgb(var(--ink) / max(22%, var(--ctl-min)));
   border-radius: 12px;
   background: transparent;
   color: var(--foreground);
@@ -818,11 +1096,11 @@ button:disabled {
   font-weight: 600;
 }
 .plan-day[data-today='true'] {
-  border-color: rgb(198 243 109 / 45%);
+  border-color: rgb(var(--lime-rgb) / 45%);
 }
 .plan-day[aria-pressed='true'] {
-  border-color: rgb(198 243 109 / 60%);
-  background: rgb(198 243 109 / 14%);
+  border-color: rgb(var(--lime-rgb) / 60%);
+  background: rgb(var(--lime-rgb) / 14%);
   color: var(--lime);
 }
 .plan-day[aria-pressed='true'] span:first-child {
@@ -830,7 +1108,7 @@ button:disabled {
 }
 /* A day that has passed is clearly quieter than one the person can still choose. */
 .plan-day:disabled {
-  border-color: rgb(255 255 255 / 8%);
+  border-color: rgb(var(--ink) / 8%);
   opacity: 0.38;
 }
 .plan-row .plan-note {
@@ -841,9 +1119,9 @@ button:disabled {
   min-height: 44px;
   align-items: center;
   justify-self: start;
-  border: 1px solid rgb(198 243 109 / 35%);
+  border: 1px solid rgb(var(--lime-rgb) / 35%);
   border-radius: 999px;
-  background: rgb(198 243 109 / 9%);
+  background: rgb(var(--lime-rgb) / 9%);
   padding: 0 16px;
   color: var(--lime);
   font-size: 13px;
@@ -872,7 +1150,7 @@ button:disabled {
   min-width: 0;
   max-width: 55%;
   min-height: 44px;
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid rgb(var(--ink) / max(14%, var(--ctl-min)));
   border-radius: 12px;
   background: var(--surface-raised);
   padding: 0 10px;
@@ -918,7 +1196,7 @@ button:disabled {
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
-  border: 1.5px solid rgb(255 255 255 / 30%);
+  border: 1.5px solid rgb(var(--ink) / max(30%, var(--ctl-min)));
   border-radius: 5px;
 }
 .home-steps li[data-done='true'] {
@@ -936,9 +1214,7 @@ button:disabled {
   min-width: 0;
   align-items: center;
   gap: 11px;
-  border: 1px solid rgb(255 255 255 / 6%);
   border-radius: 13px;
-  background: rgb(255 255 255 / 2%);
   padding: 12px 11px;
 }
 .connected-app-icon {
@@ -948,8 +1224,8 @@ button:disabled {
   flex: 0 0 34px;
   place-items: center;
   border-radius: 11px;
-  background: rgb(111 163 255 / 11%);
-  color: #9bbcff;
+  background: rgb(var(--blue2-rgb) / 11%);
+  color: var(--icon-blue);
 }
 .connected-app-icon svg {
   width: 17px;
@@ -960,11 +1236,11 @@ button:disabled {
   height: 5px;
   flex: 0 0 5px;
   border-radius: 50%;
-  background: #69736c;
+  background: var(--sync-dot);
 }
 .sync-dot.synced {
   background: var(--lime);
-  box-shadow: 0 0 7px rgb(198 243 109 / 38%);
+  box-shadow: 0 0 7px rgb(var(--lime-rgb) / calc(38% * var(--glow)));
 }
 /* The switch is the whole 44px tap target; the pill inside is what is drawn. */
 .connection-toggle {
@@ -983,9 +1259,9 @@ button:disabled {
   display: block;
   width: 33px;
   height: 19px;
-  border: 1px solid rgb(255 255 255 / 45%);
+  border: 1px solid rgb(var(--ink) / max(45%, var(--ctl-min)));
   border-radius: 999px;
-  background: #2a312d;
+  background: var(--toggle-track);
   padding: 2px;
   transition:
     border-color 180ms ease,
@@ -996,14 +1272,14 @@ button:disabled {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: #a3ada5;
+  background: var(--toggle-knob);
   transition:
     transform 180ms ease,
     background 180ms ease;
 }
 .connection-toggle[aria-checked='true'] > .pill {
-  border-color: rgb(198 243 109 / 40%);
-  background: rgb(198 243 109 / 17%);
+  border-color: rgb(var(--lime-rgb) / 40%);
+  background: rgb(var(--lime-rgb) / 17%);
 }
 .connection-toggle[aria-checked='true'] > .pill > span {
   transform: translateX(14px);
@@ -1016,11 +1292,9 @@ button:disabled {
 /* ---- Dialogs (goal wizard, rebalance drawer) ------------------------------------------------------------ */
 
 .sheet-surface {
-  border: 1px solid rgb(255 255 255 / 9%);
-  background: linear-gradient(160deg, #202724 0%, #191e1d 62%);
-  box-shadow:
-    0 -16px 50px rgb(0 0 0 / 28%),
-    inset 0 1px rgb(255 255 255 / 4%);
+  background-color: var(--card-fill);
+  border: 1px solid var(--card-line);
+  box-shadow: 0 -16px 50px rgb(var(--shadow-rgb) / 28%), var(--card-shadow);
 }
 .ai-icon {
   display: grid;
@@ -1028,9 +1302,9 @@ button:disabled {
   height: 35px;
   flex: 0 0 35px;
   place-items: center;
-  border: 1px solid rgb(198 243 109 / 18%);
+  border: 1px solid rgb(var(--lime-rgb) / 18%);
   border-radius: 12px;
-  background: rgb(198 243 109 / 9%);
+  background: rgb(var(--lime-rgb) / 9%);
   color: var(--lime);
 }
 }
@@ -1075,8 +1349,8 @@ button:disabled {
     gap: 10px;
     margin: 0 -16px;
     padding: 12px 16px;
-    border-bottom: 1px solid rgb(255 255 255 / 6%);
-    background: rgb(17 21 19 / 92%);
+    border-bottom: 1px solid rgb(var(--ink) / 6%);
+    background: rgb(var(--header-rgb) / 92%);
     backdrop-filter: blur(10px);
   }
   /* Who is signed in, and the way to sign out: a second row of the sticky header, full width under the logo row. */
@@ -1114,7 +1388,7 @@ button:disabled {
     overflow: hidden;
     border-radius: 11px;
     background: var(--lime);
-    color: #1a2412;
+    color: var(--on-lime-2);
   }
   .avatar-button {
     position: relative;
@@ -1124,7 +1398,7 @@ button:disabled {
     flex: 0 0 44px;
     place-items: center;
     border-radius: 50%;
-    color: #e5e9e1;
+    color: var(--text-bright-3);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.03em;
@@ -1134,9 +1408,9 @@ button:disabled {
     width: 34px;
     height: 34px;
     place-items: center;
-    border: 1px solid rgb(255 255 255 / 12%);
+    border: 1px solid rgb(var(--ink) / 12%);
     border-radius: 50%;
-    background: linear-gradient(145deg, #414944, #252c29);
+    background: linear-gradient(145deg, var(--avatar-from), var(--avatar-to));
   }
   .icon-link {
     display: grid;
@@ -1148,7 +1422,7 @@ button:disabled {
   }
   .icon-link:hover,
   .icon-link[aria-current='page'] {
-    background: rgb(255 255 255 / 6%);
+    background: rgb(var(--ink) / 6%);
     color: var(--foreground);
   }
   .icon-link[aria-current='page'] {
@@ -1174,14 +1448,14 @@ button:disabled {
     height: 36px;
     flex: 0 0 36px;
     place-items: center;
-    border: 1px solid rgb(198 243 109 / 15%);
+    border: 1px solid rgb(var(--lime-rgb) / 15%);
     border-radius: 11px;
-    background: rgb(198 243 109 / 9%);
+    background: rgb(var(--lime-rgb) / 9%);
     color: var(--lime);
   }
   .goal-builder-eyebrow {
     margin: 0;
-    color: #c1d79c;
+    color: var(--text-lime-2);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.12em;
@@ -1189,14 +1463,11 @@ button:disabled {
   }
   .goal-builder-copy h2 {
     margin: 5px 0 0;
-    color: #f0f3eb;
-    font-size: 15px;
-    font-weight: 620;
-    letter-spacing: -0.035em;
+    color: var(--text-bright-5);
   }
   .goal-builder-description {
     margin: 5px 0 0;
-    color: #a9b3ab;
+    color: var(--text-dim-1);
     font-size: 12px;
     line-height: 1.5;
   }
@@ -1211,11 +1482,11 @@ button:disabled {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    border: 1px solid rgb(255 255 255 / 14%);
+    border: 1px solid rgb(var(--ink) / max(14%, var(--ctl-min)));
     border-radius: 11px;
-    background: rgb(12 16 14 / 55%);
+    background: rgb(var(--chip-rgb) / 55%);
     padding: 0 12px;
-    color: #d3dad4;
+    color: var(--text-soft-2);
     font-size: 12px;
     font-weight: 550;
     white-space: nowrap;
@@ -1227,16 +1498,16 @@ button:disabled {
   .builder-chip svg {
     width: 14px;
     height: 14px;
-    color: #a9c77c;
+    color: var(--icon-lime);
   }
   .builder-chip:disabled {
     cursor: not-allowed;
     opacity: 0.5;
   }
   .builder-chip:hover:not(:disabled) {
-    border-color: rgb(198 243 109 / 35%);
-    background: rgb(198 243 109 / 9%);
-    color: #eef4e3;
+    border-color: rgb(var(--lime-rgb) / 35%);
+    background: rgb(var(--lime-rgb) / 9%);
+    color: var(--text-bright-4);
   }
 
   /* Goal cards (the in-feed goal picker on small screens). */
@@ -1244,15 +1515,13 @@ button:disabled {
     position: relative;
     display: block;
     min-width: 0;
-    border: 1px solid rgb(255 255 255 / 7%);
     border-radius: 16px;
-    background: var(--surface-soft);
     padding: 12px;
     color: var(--foreground);
   }
   .goal-card[aria-current='page'] {
-    border-color: rgb(198 243 109 / 45%);
-    background: rgb(198 243 109 / 6%);
+    border-color: rgb(var(--lime-rgb) / 45%);
+    background: rgb(var(--lime-rgb) / 6%);
   }
   .goal-count {
     color: var(--foreground);
@@ -1267,14 +1536,11 @@ button:disabled {
 
   /* Connected stack card (right column). */
   .connected-stack {
-    border: 1px solid rgb(255 255 255 / 8%);
     border-radius: 20px;
-    background: linear-gradient(155deg, #1d2421, #171c1b 76%);
-    box-shadow: inset 0 1px rgb(255 255 255 / 2%);
   }
   .right-panel-eyebrow {
     margin: 0;
-    color: #a9b3ab;
+    color: var(--text-dim-1);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.13em;
@@ -1289,14 +1555,14 @@ button:disabled {
     left: 50%;
     width: min(100%, 520px);
     transform: translateX(-50%);
-    border: 1px solid rgb(255 255 255 / 9%);
+    border: 1px solid var(--card-line);
     border-bottom: 0;
     border-radius: 23px 23px 0 0;
-    background: linear-gradient(160deg, #202724 0%, #191e1d 62%);
+    background: var(--card-fill);
     padding: 10px 20px calc(17px + env(safe-area-inset-bottom));
     box-shadow:
-      0 -16px 50px rgb(0 0 0 / 28%),
-      inset 0 1px rgb(255 255 255 / 4%);
+      0 -16px 50px rgb(var(--shadow-rgb) / 28%),
+      var(--card-shadow);
     animation: sheet-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
   .sheet-handle {
@@ -1304,7 +1570,7 @@ button:disabled {
     height: 4px;
     margin: 0 auto 17px;
     border-radius: 99px;
-    background: rgb(255 255 255 / 22%);
+    background: rgb(var(--ink) / 22%);
   }
   .ai-label {
     color: var(--lime);
@@ -1314,9 +1580,9 @@ button:disabled {
   }
   .ai-new {
     border-radius: 4px;
-    background: rgb(255 255 255 / 9%);
+    background: rgb(var(--ink) / 9%);
     padding: 2px 6px;
-    color: #c0c8c1;
+    color: var(--text-soft-3);
     font-size: 10px;
     font-weight: 650;
     letter-spacing: 0.08em;
@@ -1324,7 +1590,7 @@ button:disabled {
 
   /* Sidebar pieces (desktop). */
   .sidebar-label {
-    color: #98a39b;
+    color: var(--text-dim-3);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.12em;
@@ -1353,7 +1619,7 @@ button:disabled {
     border: 1px solid transparent;
     border-radius: 11px;
     padding: 0 11px;
-    color: #b0b9b2;
+    color: var(--text-soft-5);
     font-size: 13px;
     font-weight: 550;
     transition:
@@ -1364,16 +1630,16 @@ button:disabled {
   .desktop-nav-link svg {
     width: 16px;
     height: 16px;
-    color: #909b93;
+    color: var(--icon-dim);
   }
   .desktop-nav-link:hover {
-    background: rgb(255 255 255 / 4%);
+    background: rgb(var(--ink) / 4%);
     color: var(--foreground);
   }
   .desktop-nav-link[aria-current='page'] {
-    border-color: rgb(198 243 109 / 22%);
-    background: rgb(198 243 109 / 8%);
-    color: #eef4e3;
+    border-color: rgb(var(--lime-rgb) / 22%);
+    background: rgb(var(--lime-rgb) / 8%);
+    color: var(--text-bright-4);
     font-weight: 650;
   }
   .desktop-nav-link[aria-current='page'] svg {
@@ -1384,25 +1650,23 @@ button:disabled {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    border: 1px solid rgb(255 255 255 / 8%);
     border-radius: 13px;
-    background: rgb(255 255 255 / 2%);
     padding: 11px 11px 10px;
     transition:
       background 160ms ease,
       border-color 160ms ease;
   }
   .sidebar-goal:hover {
-    border-color: rgb(255 255 255 / 14%);
-    background: rgb(255 255 255 / 4%);
+    border-color: rgb(var(--ink) / 14%);
+    background: rgb(var(--ink) / 4%);
   }
   .sidebar-goal:focus-within {
     outline: 2px solid var(--lime);
     outline-offset: 2px;
   }
   .sidebar-goal[data-active='true'] {
-    border-color: rgb(198 243 109 / 45%);
-    background: rgb(198 243 109 / 6%);
+    border-color: rgb(var(--lime-rgb) / 45%);
+    background: rgb(var(--lime-rgb) / 6%);
   }
   .sidebar-goal-top {
     display: flex;
@@ -1414,7 +1678,7 @@ button:disabled {
     height: 25px;
   }
   .sidebar-goal-count {
-    color: #dce4d9;
+    color: var(--text-bright-1);
     font-size: 12px;
     font-weight: 650;
     font-variant-numeric: tabular-nums;
@@ -1426,7 +1690,7 @@ button:disabled {
     padding: 0;
     border: 0;
     background: none;
-    color: #e0e6df;
+    color: var(--text-bright-2);
     font-size: 13px;
     font-weight: 550;
     text-align: left;
@@ -1450,7 +1714,7 @@ button:disabled {
     align-items: center;
     gap: 9px;
     padding: 15px 9px 3px;
-    color: #a2ada5;
+    color: var(--text-dim-2);
     font-size: 12px;
   }
   /* Who is signed in, above the sign-out button (WorkspaceSidebar). The email can be long, so it truncates. */
@@ -1473,12 +1737,12 @@ button:disabled {
     flex: 0 0 7px;
     border-radius: 50%;
     background: var(--lime);
-    box-shadow: 0 0 8px rgb(198 243 109 / 35%);
+    box-shadow: 0 0 8px rgb(var(--lime-rgb) / calc(35% * var(--glow)));
   }
 
   @media (min-width: 1200px) {
     body {
-      background: #0a0d0c;
+      background: var(--page-wide);
     }
     .desktop-shell {
       display: grid;
@@ -1490,7 +1754,7 @@ button:disabled {
       min-height: 100dvh;
       margin: 0 auto;
       padding: 30px 32px;
-      background: radial-gradient(ellipse at 47% -12%, rgb(169 206 114 / 5%), transparent 44%);
+      background: radial-gradient(ellipse at 47% -12%, rgb(var(--shell-glow-rgb) / 5%), transparent 44%);
     }
     .desktop-shell[data-columns='2'] {
       grid-template-columns: 232px minmax(0, 1fr);
@@ -1504,7 +1768,7 @@ button:disabled {
       max-height: calc(100dvh - 60px);
       overflow-y: auto;
       padding: 4px 20px 0 0;
-      border-right: 1px solid rgb(255 255 255 / 7%);
+      border-right: 1px solid rgb(var(--ink) / 7%);
     }
     .desktop-status-stack {
       display: flex;
@@ -1549,9 +1813,10 @@ button:disabled {
     }
     .goal-builder-banner {
       margin-bottom: 30px;
-      border: 1px solid rgb(198 243 109 / 14%);
+      border: 1px solid rgb(var(--lime-rgb) / 14%);
       border-radius: 18px;
-      background: linear-gradient(110deg, rgb(198 243 109 / 8%), rgb(255 255 255 / 2%) 64%);
+      background: linear-gradient(110deg, rgb(var(--lime-rgb) / 8%), rgb(var(--ink) / 2%) 64%), var(--card-fill);
+      box-shadow: var(--card-shadow);
       padding: 19px 21px;
     }
     .goal-builder-copy {
@@ -1577,10 +1842,10 @@ button:disabled {
       left: auto;
       width: 100%;
       transform: none;
-      border: 1px solid rgb(255 255 255 / 8%);
+      border: 1px solid var(--card-line);
       border-radius: 20px;
       padding: 20px;
-      box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+      box-shadow: var(--card-shadow);
       animation: none;
     }
     .sheet-handle {

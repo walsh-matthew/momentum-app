@@ -20,7 +20,7 @@ export function GoalScoreboardCard({ goal, tone, today = null }: GoalScoreboardC
   return (
     <section className="home-goal" aria-label={goal.title}>
       <header>
-        <h3>{goal.title}</h3>
+        <h3 className="card-title">{goal.title}</h3>
         <span className="chip">{SHAPE_LABEL[goal.shape]}</span>
       </header>
       {goal.targets.map((card) => (

@@ -24,7 +24,7 @@ export function RecapBody({ recap, tone, today = null }: RecapBodyProps) {
       {recap.goals.map((goal) => (
         <section key={goal.id} className="home-goal" aria-label={goal.title}>
           <header>
-            <h3>{goal.title}</h3>
+            <h3 className="card-title">{goal.title}</h3>
           </header>
           {goal.targets.map((target) => (
             <TargetRow key={target.id} card={target} tone={tone} settled today={today}>
@@ -42,7 +42,7 @@ export function RecapBody({ recap, tone, today = null }: RecapBodyProps) {
       {recap.priorities.length > 0 && (
         <section className="home-goal" aria-label="Priorities you named">
           <header>
-            <h3>Priorities you named</h3>
+            <h3 className="card-title">Priorities you named</h3>
           </header>
           <ul className="review-priorities">
             {recap.priorities.map((p) => (
@@ -69,7 +69,7 @@ export function ChangesSince({ changes, today = null }: ChangesSinceProps) {
   const weeks = [...new Set(changes.map((c) => c.weekStart))].sort().reverse();
   return (
     <section className="home-notice review-changes">
-      <h2 className="section-title">Since this recap</h2>
+      <h2 className="card-title">Since this recap</h2>
       {weeks.map((weekStart) => (
         <div key={weekStart}>
           <p className="eyebrow">Week of {formatDay(weekStart, today, { relative: false })}</p>

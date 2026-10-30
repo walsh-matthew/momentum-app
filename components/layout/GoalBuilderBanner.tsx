@@ -21,7 +21,7 @@ export function GoalBuilderBanner({ onNewGoal, onAdjustPace, actionsDisabled = f
         </span>
         <div>
           <p className="goal-builder-eyebrow">A calmer way to make progress</p>
-          <h2 id="goal-builder-title">Shape your goals around real life.</h2>
+          <h2 id="goal-builder-title" className="card-title">Shape your goals around real life.</h2>
           <p className="goal-builder-description">
             Start with a simple next step. Momentum will help you map the rest.
           </p>

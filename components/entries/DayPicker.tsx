@@ -31,7 +31,7 @@ export function DayPicker({ days, value, onChange, disabled = false, name, capti
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
-        className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-border px-3 text-left text-sm disabled:opacity-60"
+        className="flex min-h-11 w-full items-center gap-2 rounded-xl border ctl-border px-3 text-left text-sm disabled:opacity-60"
       >
         <CalendarDays className="size-4 shrink-0 text-muted" aria-hidden="true" />
         <span className="min-w-0 flex-1">
@@ -56,7 +56,7 @@ export function DayPicker({ days, value, onChange, disabled = false, name, capti
                   setOpen(false);
                 }}
                 className={`flex min-h-14 flex-col items-center justify-center rounded-xl border px-1 transition-transform active:scale-[0.97] disabled:opacity-60 ${
-                  selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary'
+                  selected ? 'border-primary bg-primary text-primary-foreground' : 'ctl-border bg-secondary'
                 }`}
               >
                 <span className="text-sm font-medium">{day.label}</span>

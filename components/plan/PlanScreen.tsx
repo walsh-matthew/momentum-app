@@ -73,7 +73,7 @@ export function PlanScreen({ plan }: PlanScreenProps) {
             <p className="plan-note">{WHAT_TO_DO_HELP}</p>
             {[...itemsByGoal].map(([goalId, group]) => (
               <section key={goalId} aria-label={group.title} className="plan-goal">
-                <h3>{group.title}</h3>
+                <h3 className="card-title">{group.title}</h3>
                 {group.items.map((item) => {
                   const chosen = new Set(plan.days.filter((d) => d.itemIds.includes(item.id)).map((d) => d.date));
                   return (
@@ -128,8 +128,8 @@ export function PlanScreen({ plan }: PlanScreenProps) {
         )}
       </section>
 
-      <section aria-labelledby="plan-kinds" className="plan-section">
-        <h2 id="plan-kinds">{KINDS_HEADING}</h2>
+      <section aria-labelledby="plan-kinds" className="plan-section plan-goal">
+        <h2 id="plan-kinds" className="card-title">{KINDS_HEADING}</h2>
         <p className="plan-note">{KINDS_REASON}</p>
         {plan.dayKinds.length === 0 ? (
           <p className="plan-note">{KINDS_NONE_YET}</p>

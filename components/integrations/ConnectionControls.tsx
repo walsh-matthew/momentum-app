@@ -46,7 +46,7 @@ function HevyKeyForm({ reconnect }: HevyKeyFormProps) {
         required
         minLength={8}
         aria-describedby="hevy-key-help"
-        className="min-h-11 rounded-lg border border-foreground/45 bg-background px-3 text-base text-foreground"
+        className="min-h-11 rounded-lg border ctl-45 bg-background px-3 text-base text-foreground"
       />
       <p id="hevy-key-help" className="text-xs text-muted">
         Paste your key here. It is stored on the server and never shown again.

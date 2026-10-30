@@ -10,7 +10,7 @@ export interface NoGoalsStateProps {
 export function NoGoalsState({ onNewGoal }: NoGoalsStateProps) {
   return (
     <section aria-labelledby="no-goals-heading" className="channel-card mt-6 border-dashed p-6">
-      <h2 id="no-goals-heading" className="section-title">
+      <h2 id="no-goals-heading" className="card-title">
         No goals yet
       </h2>
       <p className="mt-2 text-sm text-muted">

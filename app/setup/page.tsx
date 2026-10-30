@@ -34,7 +34,7 @@ export default async function SetupPage() {
           </p>
         ) : start.data.alreadySetUp ? (
           <section className="channel-card space-y-3 p-4">
-            <h2 className="text-lg font-semibold tracking-[-0.02em]">Setup is already done</h2>
+            <h2 className="card-title">Setup is already done</h2>
             <p className="text-base">
               You have already set up your goals. Adding another goal from here is not built yet. You can log against what you
               have on the{' '}
