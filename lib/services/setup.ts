@@ -42,6 +42,7 @@ import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
 import { normalizeNumberTurn } from '@/lib/setup/numbers';
 import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog } from '@/lib/setup/feedback';
 import { shownModel } from '@/lib/setup/paraphrase';
+import { normalizePlainTurn } from '@/lib/setup/plainCard';
 import { spokenTimes } from '@/lib/setup/playback';
 import { personToday } from '@/lib/setup/relativeDates';
 import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
@@ -218,10 +219,12 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   let lastSignature: string | null = null;
   let longestCallMs = 0;
   // A date question shown with code's suggestion or code's wording (round 3, finding 2; round 3b, finding 2), and a number
-  // question that names what is counted and which number it asks for (round 3b, finding 1), kept only when it breaks no hard
-  // or draft rule; otherwise Claude's own checked turn is shown.
+  // question that names what is counted and which number it asks for (round 3b, finding 1), and a turn with any line in
+  // jargon or pointing at an earlier answer by name left out (round 3c, lib/setup/plainCard.ts), kept only when it breaks no
+  // hard or draft rule; otherwise Claude's own checked turn is shown.
   const shown = (claude: AssistantTurn): AssistantTurn => {
-    const rewritten = normalizeNumberTurn(normalizeDateTurn(claude, session.transcript, session.draft, personDay), personDay ?? null);
+    const dated = normalizeDateTurn(claude, session.transcript, session.draft, personDay);
+    const rewritten = normalizePlainTurn(normalizeNumberTurn(dated, personDay ?? null, personWords(session.transcript)), session.transcript);
     return rewritten !== claude && checkTurn(rewritten, context).every((x) => x.rule === 'plain_words') ? rewritten : claude;
   };
   for (let attempt = 0; attempt <= MAX_REPLY_RETRIES; attempt++) {

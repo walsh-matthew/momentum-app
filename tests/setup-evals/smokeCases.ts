@@ -200,7 +200,6 @@ function ideasFromInterpretations(): ScriptedCase {
   s.add({
     kind: 'ideas',
     topic: 'floor',
-    detail: 'The fewest a week that still counts as on track, as starting points.',
     options: ['At least 2 a week', 'At least 3 a week'],
     question: 'Which of these would you like to start from, or give your own?',
   });

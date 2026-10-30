@@ -73,10 +73,10 @@ const ASKING: TurnKind[] = ['question', 'offer_ideas', 'ideas', 'interpretations
 // ---------------------------------------------------------------------------
 
 describe('finding 1: option buttons come from the conversation, with a detail line for context', () => {
-  it.each(['ideas', 'offer_ideas'] as const)('a %s turn with no detail line is flagged', (kind) => {
-    const options = kind === 'ideas' ? ['2 sessions a week', '3 sessions a week'] : [];
-    expect(codes(turn({ kind, options }))).toEqual(['choice.ideas_context']);
-    expect(codes(turn({ kind, options, detail: 'Sessions a week, from what you said about where you are now.' }))).toEqual([]);
+  it('an offer of ideas with no detail line is flagged; starting ideas need none, since code\'s line leads them (round 3c)', () => {
+    expect(codes(turn({ kind: 'offer_ideas' }))).toEqual(['choice.ideas_context']);
+    expect(codes(turn({ kind: 'offer_ideas', detail: 'Sessions you would count.' }))).toEqual([]);
+    expect(codes(turn({ kind: 'ideas', options: ['2 sessions a week', '3 sessions a week'] }))).toEqual([]);
   });
 
   it.each(['ideas', 'interpretations', 'proposal'] as const)('a %s with a bare number, or a number and a period only, is flagged', (kind) => {
@@ -103,7 +103,8 @@ describe('finding 1: option buttons come from the conversation, with a detail li
   it('all three are plain-words checks with fixed retry words (owner decision D4), never hard rules', () => {
     const t = turn({ kind: 'ideas', options: ['1', '2', '3', '4', '5'] });
     const found = checkOptionList(t);
-    expect(found.map((x) => x.code).sort()).toEqual(['choice.ideas_bare', 'choice.ideas_context', 'choice.ideas_scale']);
+    expect(found.map((x) => x.code).sort()).toEqual(['choice.ideas_bare', 'choice.ideas_scale']);
+    expect(checkOptionList(turn({ kind: 'offer_ideas' })).map((x) => x.code)).toEqual(['choice.ideas_context']);
     expect(found.every((x) => x.rule === 'plain_words')).toBe(true);
     for (const code of ['choice.ideas_context', 'choice.ideas_bare', 'choice.ideas_scale'] as const) expect(RETRY_FEEDBACK[code]).toBeTruthy();
   });
@@ -120,7 +121,7 @@ describe('finding 1: option buttons come from the conversation, with a detail li
     const { calls, deps } = fakeModel([weak, weak, weak]);
     const view = await runCheckedTurn({ userId: 'u', session: { transcript, draft: emptyDraft(), spentTokens: 0 }, today: TODAY, deadlineMs: SETUP_TURN_BUDGET_MS }, deps);
     expect(calls).toHaveLength(2);
-    expect(calls[1].retryFeedback).toEqual(expect.arrayContaining([RETRY_FEEDBACK['choice.ideas_bare'], RETRY_FEEDBACK['choice.ideas_context'], RETRY_FEEDBACK['choice.ideas_scale']]));
+    expect(calls[1].retryFeedback).toEqual(expect.arrayContaining([RETRY_FEEDBACK['choice.ideas_bare'], RETRY_FEEDBACK['choice.ideas_scale']]));
     expect(view).toMatchObject({ kind: 'turn', rejected: 1 });
   });
 

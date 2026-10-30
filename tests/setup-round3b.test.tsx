@@ -81,21 +81,22 @@ const asked = (over: Partial<AssistantTurn> = {}): Transcript[number] => ({ role
 
 describe('finding 1: a number question names the counted thing and whether it is the fewest or the aim', () => {
   it.each([
-    ['floor', counting('Workouts'), "What's the fewest workouts in a week that still counts as on track?"],
-    ['aspiration', counting('Workouts', { floor: 2 }), 'How many workouts in a week are you aiming for?'],
-    ['floor', counting('Pages'), "What's the fewest pages in a week that still counts as on track?"],
-    ['floor', counting('Practice', { measure: 'time' }), "What's the fewest minutes of practice in a week that still counts as on track?"],
-    ['floor', counting('Blocks sewn', { period: { kind: 'deadline', dueDate: '2026-12-15' } }), "What's the fewest blocks sewn by Tuesday, Dec 15 that still counts as on track?"],
+    // Round 3c: in everyday words, never "fewest" or "aim" on their own.
+    ['floor', counting('Workouts'), 'How many workouts makes a week count, even a hard one?'],
+    ['aspiration', counting('Workouts', { floor: 2 }), 'How many workouts a week are you hoping for?'],
+    ['floor', counting('Pages'), 'How many pages makes a week count, even a hard one?'],
+    ['floor', counting('Practice', { measure: 'time' }), 'How many minutes of practice makes a week count, even a hard one?'],
+    ['floor', counting('Blocks sewn', { period: { kind: 'deadline', dueDate: '2026-12-15' } }), 'How many blocks sewn by Tuesday, Dec 15 would still count as on track?'],
   ] as const)('a bare %s question becomes "%s"', (topic, draft, words) => {
     const shown = normalizeNumberTurn(turn({ topic, draft, question: 'What number feels right?' }), TODAY);
     expect(shown.question).toBe(words);
   });
 
-  it('keeps Claude\'s own question when it already names the thing and which number it asks for', () => {
+  it('always shows code\'s words, even when Claude\'s already name the thing (round 3c: "fewest" read as jargon)', () => {
     const own = turn({ question: "What's the fewest workouts a week you'd still call on track?" });
-    expect(normalizeNumberTurn(own, TODAY)).toBe(own);
-    const aim = turn({ topic: 'aspiration', draft: counting('Workouts', { floor: 2 }), question: 'Is there a higher number of workouts you are hoping for?' });
-    expect(normalizeNumberTurn(aim, TODAY)).toBe(aim);
+    expect(normalizeNumberTurn(own, TODAY).question).toBe('How many workouts makes a week count, even a hard one?');
+    const same = turn({ question: 'How many workouts makes a week count, even a hard one?' });
+    expect(normalizeNumberTurn(same, TODAY)).toBe(same);
   });
 
   it.each(ALL_TOPICS.filter((t) => !NUMBER_TOPICS.has(t)))('leaves a %s question alone', (topic) => {
@@ -129,8 +130,9 @@ describe('finding 1: a number question names the counted thing and whether it is
     fireEvent.click(links[0]);
     if (NUMBER_TOPICS.has(topic)) {
       expect(onAnswer).not.toHaveBeenCalled();
-      const words = screen.getByText(/The fewest is the smallest number of workouts in a week/);
-      expect(words.textContent).toContain('The aim is the number of workouts');
+      const words = screen.getByText(/The first number is how many workouts make a week count, even a hard one/);
+      expect(words.textContent).toContain("The second is how many you're hoping for");
+      expect(words.textContent).not.toMatch(/fewest|\baim\b/i);
       expect(words.textContent).toBe(numberHelp(draft, topic, TODAY));
     } else {
       expect(onAnswer).toHaveBeenCalledWith(MEANING_TEXT);

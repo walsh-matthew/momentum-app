@@ -129,9 +129,10 @@ describe('finding 1: one bold line on every card, and nothing heavier', () => {
 
 describe('finding 2: a card of options leads with one short line in code\'s words', () => {
   it.each([
-    ['the workout case', E2E_CASE_ID, 'Some starting points for the fewest runs in a week'],
-    ['the reading case', READING_CASE_ID, 'Some starting points for the fewest pages in a week'],
-  ])('%s: the lead names the counted thing, then "Pick one or write your own.", then the detail and the ideas', (_name, id, lead) => {
+    // The wording fix after round 3c: the number question in everyday words.
+    ['the workout case', E2E_CASE_ID, 'How many runs makes a week count, even a hard one?'],
+    ['the reading case', READING_CASE_ID, 'How many pages makes a week count, even a hard one?'],
+  ])('%s: the lead asks the number question, then "Pick one or write your own.", then the detail and the ideas', (_name, id, lead) => {
     const t = ideasTurnOf(id);
     expect(optionsLead(t, TODAY)).toBe(lead);
     render(<QuestionCard turn={t} busy={false} onAnswer={() => {}} today={TODAY} />);
@@ -187,16 +188,16 @@ describe('finding 2: a card of options leads with one short line in code\'s word
       { title: 'Learn Spanish', targets: [target('t2', 'Spanish lessons')] },
     ]);
     expect(optionsLead(turn({ kind: 'ideas', draft: d }), TODAY, ['I want to take Spanish lessons.'])).toBe(
-      'Some starting points for the fewest Spanish lessons in a week, for Learn Spanish',
+      'For Learn Spanish, how many Spanish lessons makes a week count, even a hard one?',
     );
   });
 
   it('on the aim, on what to count, on the goal itself, and on readings of an answer', () => {
     const d = withTargets([{ title: 'Read more books', targets: [target('t1', 'Pages', { floor: 50 })] }]);
-    expect(optionsLead(turn({ kind: 'ideas', topic: 'aspiration', draft: d }), TODAY)).toBe('Some starting points for how many pages to aim for in a week');
+    expect(optionsLead(turn({ kind: 'ideas', topic: 'aspiration', draft: d }), TODAY)).toBe('How many pages a week are you hoping for?');
     expect(optionsLead(turn({ kind: 'ideas', topic: 'target', draft: d }), TODAY)).toBe('Some ways to count your progress on Read more books');
     expect(optionsLead(turn({ kind: 'ideas', topic: 'idea' }), TODAY)).toBe('Some goal ideas to start from');
-    expect(optionsLead(turn({ kind: 'interpretations', topic: 'floor', draft: d }), TODAY)).toBe('A few ways to read your answer about the fewest pages in a week');
+    expect(optionsLead(turn({ kind: 'interpretations', topic: 'floor', draft: d }), TODAY)).toBe('How many pages makes a week count, even a hard one?');
     expect(optionsLead(turn({ kind: 'interpretations', topic: 'day_end' }), TODAY)).toBe('A few ways to read your answer about when your day ends');
   });
 
@@ -235,7 +236,7 @@ describe('finding 2: a card of options leads with one short line in code\'s word
 
   it('a long lead-in on a card of options is retried once with fixed words, then shown', async () => {
     const transcript: Transcript = [
-      { role: 'assistant', turn: turn({ kind: 'offer_ideas', question: 'Do you have a number in mind, or would some starting ideas help?', detail: 'The fewest runs in a week.' }) },
+      { role: 'assistant', turn: turn({ kind: 'offer_ideas', question: 'Do you have a number in mind, or would some starting ideas help?', detail: 'The number of runs that makes a week count.' }) },
       { role: 'person', text: 'Some ideas, please.' },
     ];
     const long = turn({

@@ -25,8 +25,9 @@ const SHAPE_Q = 'Does this keep going, run until a set date, or have a deadline?
 const IDEA_DETAIL = 'Big or small, in your own words.';
 const SHAPE_DETAIL = 'It decides how your plan is laid out: in stretches that keep going, up to an end date, or back from a deadline.';
 const BLOCK_Q = 'How many weeks should the first stretch run?';
-// The fewest question names what is counted, in the person's words (MOM-111 round 3b, finding 1).
-const floorQ = (counted: string): string => `What's the fewest ${counted} in a week that still counts as on track?`;
+// The question on the least that still counts names what is counted, in the person's words (MOM-111 round 3b, finding 1),
+// and says what the number is for in everyday words (round 3c): the same words code writes (lib/setup/numbers.ts).
+const floorQ = (counted: string): string => `How many ${counted} makes a week count, even a hard one?`;
 
 const done = (c: Omit<SetupEvalCase, 'person'>, s: Script): ScriptedCase => ({ ...c, person: s.person, script: s.turns });
 
@@ -56,8 +57,10 @@ interface HabitOptions {
   why?: { reply: string; text: string };
   // What the person counts, in their own words: their reply, the target's title, the word options use, and the habit.
   counted?: { reply: string; title: string; word: string; habit: string };
-  // The three starting ideas for the fewest, when the person asks for ideas; the second is the one they pick.
+  // The three starting ideas for the least that still counts, when the person asks for ideas; the second is the one they pick.
   ideaNumbers?: [number, number, number];
+  // Where the ideas come from, quoting what the person said in their first message (round 3c: quoted, or no detail line).
+  ideasDetail?: string;
 }
 
 const SESSIONS = { reply: 'Sessions.', title: 'Sessions', word: 'sessions', habit: 'Do a session' };
@@ -229,14 +232,14 @@ function habitCase(o: HabitOptions): ScriptedCase {
         topic: 'floor',
         edit: addTarget,
         question: 'Do you have a number in mind, or would some starting ideas help?',
-        detail: `The fewest ${counted.word} in a week that still counts as on track.`,
+        detail: `The number of ${counted.word} that makes a week count, even a hard one.`,
         reply: 'Some ideas, please.',
       });
       s.add({
         kind: 'ideas',
         topic: 'floor',
         say: 'Here are some starting points.',
-        detail: `${counted.title} a week, from what you said about where you are now.`,
+        detail: o.ideasDetail,
         options: [`At least ${lo} a week`, `At least ${mid} a week`, `At least ${hi} a week`],
         question: 'Which of these would you like to start from, or give your own?',
         reply: 'The second one works.',
@@ -617,7 +620,7 @@ const FIXTURES: ScriptedCase[] = [
     'gives starting ideas without offering the choice first',
     (s) => {
       s.add({ topic: 'idea', question: 'What would you like to work on?', reply: 'I want to run more.' });
-      s.add({ kind: 'ideas', topic: 'floor', detail: 'Runs a week.', options: ['At least 2 a week', 'At least 3 a week'], question: 'Which of these would you like?' });
+      s.add({ kind: 'ideas', topic: 'floor', options: ['At least 2 a week', 'At least 3 a week'], question: 'Which of these would you like?' });
     },
     1,
   ),
@@ -771,12 +774,13 @@ export const SETUP_CASES: ScriptedCase[] = [
     id: 'run-i-what-do-you-mean-protected',
     title: 'the person asks "what do you mean?" at the crowd-out question: Claude explains with examples, and setup carries on',
     rules: ['skip_answered', 'choice_before_examples', 'no_announced_reminder'],
-    idea: 'I want to run more.',
+    idea: 'I want to run more. I run about 2 times a week now.',
     priorities: 'whatDoYouMean',
     floor: 'ideas',
     dayEnd: 'checkin',
     reminders: true,
     counted: RUNS,
+    ideasDetail: 'You said you run about 2 times a week now.',
   }),
   habitCase({
     id: 'run-j-what-do-you-mean-day-end',
@@ -804,7 +808,7 @@ export const SETUP_CASES: ScriptedCase[] = [
     id: READING_CASE_ID,
     title: "a reading goal: the ideas and the recap count pages, in the person's own word",
     rules: ['choice_before_examples', 'no_math'],
-    idea: 'I want to read more books.',
+    idea: 'I want to read more books. I read about 50 pages a week now.',
     goalTitle: 'Read more books',
     why: { reply: 'It helps me unwind.', text: 'it helps me unwind' },
     priorities: 'plain',
@@ -812,5 +816,6 @@ export const SETUP_CASES: ScriptedCase[] = [
     dayEnd: 'checkin',
     counted: { reply: 'Pages.', title: 'Pages', word: 'pages', habit: 'Read' },
     ideaNumbers: [50, 100, 150],
+    ideasDetail: 'You said you read about 50 pages a week now.',
   }),
 ];

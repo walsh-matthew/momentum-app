@@ -53,11 +53,15 @@ function shooter(set: string) {
   };
 }
 
-// Every card on screen fits, and has one bold line with nothing heavier (round 3c, finding 1).
+// Words no card shows (round 3c, wording fix): the model's own words for a number, and an earlier step named, not quoted.
+const JARGON = /\b(fewest|floor|aspirations?|baseline)\b|\bwhere you are now\b/i;
+
+// Every card on screen fits, has one bold line with nothing heavier (round 3c, finding 1), and is in everyday words.
 async function fits(page: Page, what: string): Promise<void> {
   expect(await elementsOffScreen(page), `${what}: nothing sits past the screen edge`).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), `${what}: no sideways scroll`).toBe(false);
   await oneBoldLine(page, what);
+  await expect(page.locator('main'), `${what}: everyday words`).not.toContainText(JARGON);
 }
 
 async function oneBoldLine(page: Page, what: string): Promise<void> {
@@ -141,8 +145,9 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
   const seen = new Set<CardKind>();
   let errorsShown = false;
   let stuckShown = false;
-  // The ideas card's lead line, in code's words (round 3c, finding 2).
+  // The ideas card's lead line, in code's words (round 3c, finding 2), and its detail line.
   let ideasLead: string | null = null;
+  let ideasDetail: string | null = null;
 
   for (const { say: line } of scripted.person) {
     await expect(page.locator(CARD)).toHaveCount(1);
@@ -154,6 +159,8 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
       // Code's line is the only lead: Claude's lead-in is not shown.
       const say = scripted.script.find((t) => t.kind === 'ideas')?.say.trim();
       if (say) await expect(sectionOf(page)).not.toContainText(say);
+      const detail = sectionOf(page).locator('[data-slot="question-detail"]');
+      ideasDetail = (await detail.count()) > 0 ? ((await detail.textContent()) ?? '').trim() : null;
     }
     if (opts.everyCard || !seen.has(kind)) await shot(page, kind);
     seen.add(kind);
@@ -232,7 +239,7 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
   await fits(page, 'final');
   await shot(page, 'final');
   seen.add('final');
-  return { seen, errorsShown: errorsShown && stuckShown, ideasLead };
+  return { seen, errorsShown: errorsShown && stuckShown, ideasLead, ideasDetail };
 }
 
 test.describe('at 390px (phone)', () => {
@@ -242,10 +249,11 @@ test.describe('at 390px (phone)', () => {
     test.setTimeout(420_000);
     await signUpAndConfirm(page, 'setup-cards');
     try {
-      const { seen, errorsShown, ideasLead } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
+      const { seen, errorsShown, ideasLead, ideasDetail } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
       expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options'].sort());
       expect(errorsShown).toBe(true);
-      expect(ideasLead).toBe('Some starting points for the fewest runs in a week');
+      expect(ideasLead).toBe('How many runs makes a week count, even a hard one?');
+      expect(ideasDetail).toBe('You said you run about 2 times a week now.');
       // Round 3, finding 5; round 3c, finding 3: the recap reads as the person's goal, in whole sentences.
       const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
       expect(recap[0]).toMatch(/^Your goal: at least \d+ runs a week\.$/);
@@ -260,8 +268,9 @@ test.describe('at 390px (phone)', () => {
     test.setTimeout(300_000);
     const reading = SETUP_CASES.find((c) => c.id === READING_CASE_ID)!;
     await signUpAndConfirm(page, 'setup-reading');
-    const { ideasLead } = await walk(page, reading, shooter('reading'), { everyCard: true, errors: false });
-    expect(ideasLead).toBe('Some starting points for the fewest pages in a week');
+    const { ideasLead, ideasDetail } = await walk(page, reading, shooter('reading'), { everyCard: true, errors: false });
+    expect(ideasLead).toBe('How many pages makes a week count, even a hard one?');
+    expect(ideasDetail).toBe('You said you read about 50 pages a week now.');
     const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
     expect(recap[0]).toBe('Your goal: at least 100 pages a week.');
     await expect(page.locator('main')).not.toContainText(/sessions/i);
