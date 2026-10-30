@@ -28,6 +28,7 @@ import { FINAL_MAX_LINES, renderFinal } from './playback';
 import { answerWords, latestAnswer, personWords, type PersonAnswer } from './said';
 import { DATE_TOPICS, hasDate } from './codeTurns';
 import { NUMBER_OPTION_LEADS, NUMBER_TOPICS } from './numbers';
+import { optionsLead } from './optionsLead';
 import { ASKED_ONCE_TOPICS, DAY_END_SAY, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
 import { acceptsText, asksForIdeas, asksMeaning, datesIn, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas, withoutDateWeekdays } from './text';
 import { validateDraft } from './validate';
@@ -418,14 +419,18 @@ function explains(turn: AssistantTurn, answer: PersonAnswer | null): boolean {
 }
 
 // On a card of options (starting ideas, readings of an answer) code's own line leads, saying what the options are about
-// (lib/setup/optionsLead.ts, round 3c, finding 2), so Claude's lead-in is one short line or "".
+// (lib/setup/optionsLead.ts, round 3c, finding 2), and Claude's lead-in is not shown. Where code has no words for the topic,
+// Claude's question leads and its lead-in is shown: then it is one short line or "".
 export const OPTIONS_SAY_MAX_CHARS = 60;
 
 export function checkLeadIn(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const say = turn.say.trim();
   if (!say || !ASKING_KINDS.includes(turn.kind)) return [];
   const out: Violation[] = [];
-  if ((turn.kind === 'ideas' || turn.kind === 'interpretations') && (sentencesOf(say).length > 1 || say.length > OPTIONS_SAY_MAX_CHARS)) {
+  const options = turn.kind === 'ideas' || turn.kind === 'interpretations';
+  // Whether code leads does not depend on the date: only a deadline's wording does.
+  if (options && optionsLead(turn, null) !== null) return [];
+  if (options && (sentencesOf(say).length > 1 || say.length > OPTIONS_SAY_MAX_CHARS)) {
     out.push(v('plain_words', 'plain.options_say', 'The lead-in on a card of options is longer than one short line.'));
   }
   if (explains(turn, latestAnswer(ctx.transcript))) return out;

@@ -154,6 +154,33 @@ describe('finding 2: a card of options leads with one short line in code\'s word
     expect(first.className).toContain('font-normal');
   });
 
+  it.each([
+    ['the workout case', E2E_CASE_ID],
+    ['the reading case', READING_CASE_ID],
+  ])('%s: no lead-in of Claude\'s renders; code\'s line is the first text on the card', (_name, id) => {
+    const t = ideasTurnOf(id);
+    expect(t.say.trim()).not.toBe('');
+    for (const kind of ['ideas', 'interpretations'] as const) {
+      const shown = { ...t, kind };
+      expect(optionsLead(shown, TODAY)).not.toBeNull();
+      const { container } = render(<QuestionCard turn={shown} busy={false} onAnswer={() => {}} today={TODAY} />);
+      expect(container.textContent).not.toContain(t.say.trim());
+      // The first element with words of its own is code's lead.
+      const firstText = [...container.querySelectorAll('section *')].find((el) =>
+        [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== ''),
+      );
+      expect(firstText?.getAttribute('data-slot')).toBe(LEAD_SLOT);
+      expect(firstText?.textContent).toBe(optionsLead(shown, TODAY));
+      cleanup();
+    }
+  });
+
+  it('where code has no words for the topic, Claude\'s lead-in still shows above its question', () => {
+    const t = turn({ kind: 'interpretations', topic: 'role', say: 'Not sure which.', question: 'Which of these is closest?', options: ['One', 'Two'] });
+    render(<QuestionCard turn={t} busy={false} onAnswer={() => {}} today={TODAY} />);
+    expect(screen.getByText('Not sure which.')).toBeTruthy();
+  });
+
   it('names the goal too when there is more than one, and keeps the person\'s capitals', () => {
     const d = withTargets([
       { title: 'Run more', targets: [target('t1', 'Runs', { floor: 2 })] },
@@ -185,8 +212,15 @@ describe('finding 2: a card of options leads with one short line in code\'s word
     expect(screen.queryByText(PICK_ONE)).toBeNull();
   });
 
-  it(`Claude's lead-in on a card of options is one short line, at most ${OPTIONS_SAY_MAX_CHARS} characters, or nothing`, () => {
+  it('a lead-in on a card code leads is never shown, so it is never retried', () => {
     const ctx = { transcript: [] as Transcript, prevDraft: emptyDraft() };
+    const t = { ...ideasTurnOf(READING_CASE_ID), say: 'Here are a few starting points, based on what you told me about your weeks.' };
+    expect(checkLeadIn(t, ctx)).toEqual([]);
+  });
+
+  it(`where Claude's question leads a card of options, its lead-in is one short line, at most ${OPTIONS_SAY_MAX_CHARS} characters, or nothing`, () => {
+    const ctx = { transcript: [] as Transcript, prevDraft: emptyDraft() };
+    // An empty draft has no counted target, so code has no words for these cards' topic.
     for (const kind of ['ideas', 'interpretations'] as const) {
       expect(checkLeadIn(turn({ kind, say: 'Here are some starting points.' }), ctx)).toEqual([]);
       expect(checkLeadIn(turn({ kind, say: '' }), ctx)).toEqual([]);

@@ -48,14 +48,16 @@ describe('the question card, on every kind of asking turn (findings 1 to 3)', ()
     render(<QuestionCard turn={forKind(kind)} busy={false} onAnswer={() => {}} today={TODAY} />);
     // A proposal opens its box from a small link, so Yes stays the one main button (round 2, finding 8).
     if (kind === 'proposal') fireEvent.click(screen.getByRole('button', { name: TYPE_INSTEAD }));
-    const lead = screen.getByText('Got it, one goal.');
-    // A card of options leads with code's line instead of Claude's question (round 3c, finding 2).
-    const question = screen.getByRole('heading', { name: optionsLead(forKind(kind), TODAY) ?? 'Does this keep going with no end date?' });
+    // A card of options leads with code's line instead of Claude's question and lead-in (round 3c, finding 2).
+    const codeLead = optionsLead(forKind(kind), TODAY);
+    const lead = screen.queryByText('Got it, one goal.');
+    if (codeLead) expect(lead).toBeNull();
+    const question = screen.getByRole('heading', { name: codeLead ?? 'Does this keep going with no end date?' });
     const box = screen.getByLabelText('Your answer');
     const send = screen.getByRole('button', { name: 'Send' });
     const help = screen.getByRole('button', { name: MEANING_LINK });
     const answers = document.querySelectorAll('[data-slot="answer-choice"]');
-    expect(ascending(order(lead, question, ...answers, box, send, help))).toBe(true);
+    expect(ascending(order(...(lead ? [lead] : []), question, ...answers, box, send, help))).toBe(true);
     // No full-width "What do you mean?" button any more: a small muted link.
     expect(screen.queryByRole('button', { name: MEANING_TEXT })).toBeNull();
     expect(help.className).toMatch(/text-sm/);

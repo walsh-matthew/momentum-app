@@ -52,7 +52,7 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
   // (round 3b, finding 1); on any other card, it asks Claude to explain.
   const help = { explain: numberHelp(turn.draft, turn.topic, today), onAsk: () => onAnswer(MEANING_TEXT) };
   // A card of starting ideas or readings of an answer leads with code's own line, naming what the options are about, then
-  // "Pick one or write your own." (round 3c, finding 2). Claude's question is then not shown: the lead says it.
+  // "Pick one or write your own." (round 3c, finding 2). Claude's question and lead-in are then not shown: the lead says it.
   const lead = optionsLead(turn, today, said);
   const heading = lead ?? (turn.question ? words(turn.question) : null);
   // Under an error card the error's headline is the one bold line; the question stays above it, in regular weight.
@@ -62,7 +62,9 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
     <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4">
       {turn.skipped && <p className={CARD_TEXT.note}>{words(turn.skipped.line)}</p>}
       <div className="space-y-1">
-        {turn.say && <p className={CARD_TEXT.secondary}>{words(turn.say)}</p>}
+        {/* Where code's line leads a card of options, Claude's lead-in is not shown: code's line is all that sits above the
+            options. */}
+        {turn.say && !lead && <p className={CARD_TEXT.secondary}>{words(turn.say)}</p>}
         {heading && (
           <CardLead id="setup-question" leads={!errorLeads}>
             {heading}

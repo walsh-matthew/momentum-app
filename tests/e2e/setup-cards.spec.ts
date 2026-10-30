@@ -151,6 +151,9 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
     if (kind === 'ideas') {
       ideasLead = heading;
       await expect(sectionOf(page).getByText(PICK_ONE, { exact: true })).toBeVisible();
+      // Code's line is the only lead: Claude's lead-in is not shown.
+      const say = scripted.script.find((t) => t.kind === 'ideas')?.say.trim();
+      if (say) await expect(sectionOf(page)).not.toContainText(say);
     }
     if (opts.everyCard || !seen.has(kind)) await shot(page, kind);
     seen.add(kind);
