@@ -5,6 +5,7 @@
 // is held to localhost by readLocalStackEnv. Nothing is printed.
 
 import { createClient } from '@supabase/supabase-js';
+import { dateInZone } from '../../../lib/dates/casual';
 import type { Database } from '../../../types/database.types';
 import { PASSWORD } from '../fixtures';
 import { readLocalStackEnv } from './localStack';
@@ -23,9 +24,12 @@ export const SEED_TITLES = {
   steps: ['Read the brief', 'Book the room'],
 } as const;
 
-// The date (YYYY-MM-DD, UTC) this many days from today. A negative number is in the past.
-export function dateFromToday(days: number): string {
-  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+// The date (YYYY-MM-DD) this many days from the person's today in `timeZone`. A negative number is in the past. The person's
+// today, not the machine's UTC date: between UTC midnight and the person's midnight the two differ by a day (PR #68 CI).
+export function dateFromToday(days: number, timeZone: string): string {
+  const today = dateInZone(timeZone);
+  if (!today) throw new Error(`Not a time zone: ${timeZone}`);
+  return new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 export interface SeedOptions {
@@ -39,7 +43,7 @@ export interface SeedOptions {
 // Signs in as the throwaway account and writes its rows. `timeZone` null leaves person_settings out entirely, which
 // is the state of a person who has not been through setup: logging must then refuse.
 export async function seedGoalModel(email: string, timeZone: string | null, options: SeedOptions = {}): Promise<SeededGoalModel> {
-  const startDate = options.startDate ?? dateFromToday(-30);
+  const startDate = options.startDate ?? dateFromToday(-30, timeZone ?? 'UTC');
   const dayEnd = options.dayEnd === undefined ? '22:00:00' : options.dayEnd;
   const { serverEnv } = readLocalStackEnv();
   const supabase = createClient<Database>(serverEnv.NEXT_PUBLIC_SUPABASE_URL, serverEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {

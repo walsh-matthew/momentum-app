@@ -213,7 +213,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       const serverErrors = watchForServerErrors(page);
       const email = await signUpAndConfirm(page, `entry-start-${width}`);
       // The goal started two days ago: a log now is on or after it; a log 7 days back is before it.
-      await seedGoalModel(email, 'America/Los_Angeles', { startDate: dateFromToday(-2) });
+      await seedGoalModel(email, 'America/Los_Angeles', { startDate: dateFromToday(-2, 'America/Los_Angeles') });
 
       await page.goto('/log');
       await page.waitForLoadState('networkidle');
@@ -245,7 +245,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
     test('says so for a log made now, before a goal that starts in a few days', async ({ page }) => {
       const serverErrors = watchForServerErrors(page);
       const email = await signUpAndConfirm(page, `entry-future-${width}`);
-      await seedGoalModel(email, 'America/Los_Angeles', { startDate: dateFromToday(3) });
+      await seedGoalModel(email, 'America/Los_Angeles', { startDate: dateFromToday(3, 'America/Los_Angeles') });
 
       await page.goto('/log');
       await page.waitForLoadState('networkidle');

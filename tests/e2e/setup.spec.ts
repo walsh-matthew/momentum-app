@@ -14,10 +14,16 @@
 // - after Save the goal's targets are there to log against, the tab's copy is gone, and a second setup is refused.
 // The scripted model is written for a fixed order, so the spec answers exactly the scripted lines. The spacing limit
 // (a second between one person's calls) can answer "wait"; the spec taps Try again, as a person would.
+//
+// Dates follow the person, not the machine running the test (PR #68 CI): once setup knows the person's time zone, the server
+// suggests their own today, so the spec works the expected date out the same way (personToday) instead of reading the
+// browser's date. E2E_UTC_AHEAD_OF_PERSON=1 runs the spec in the case that failed in CI: the browser on UTC at 03:00, when the
+// UTC date is already a day ahead of the scripted person's (America/Denver); the real clock still drives the server.
 
 import type { Locator, Page } from '@playwright/test';
-import { MACHINE_DATE } from '@/lib/dates/casual';
+import { MACHINE_DATE, dateInZone } from '@/lib/dates/casual';
 import { runSetupEval } from '@/lib/setup/evals';
+import { personToday } from '@/lib/setup/relativeDates';
 import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, TYPE_INSTEAD, errorCopy } from '@/lib/setup/session';
 import { acceptsText } from '@/lib/setup/text';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
@@ -33,6 +39,18 @@ interface FakeLast {
   lastSetupUserText: string;
 }
 const fakeLast = async (): Promise<FakeLast> => (await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}/__fake/last`)).json() as Promise<FakeLast>;
+// Waits until no setup request has reached the fake model for a few seconds: every turn this test started has finished.
+async function fakeSettled(quietMs = 3000, maxMs = 60_000): Promise<void> {
+  const start = Date.now();
+  let count = (await fakeLast()).setupRequests;
+  let since = Date.now();
+  while (Date.now() - start < maxMs) {
+    await new Promise((r) => setTimeout(r, 500));
+    const now = (await fakeLast()).setupRequests;
+    if (now !== count) [count, since] = [now, Date.now()];
+    else if (Date.now() - since >= quietMs) return;
+  }
+}
 // Holds each fake answer back, or makes the next ones unusable (tests/e2e/support/fakeAnthropic.ts).
 const fakeControl = async (path: string): Promise<void> => {
   await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}${path}`, { method: 'POST' });
@@ -50,7 +68,18 @@ async function cardIsReadable(page: Page, width: number): Promise<void> {
   expect(text, 'no date on screen as YYYY-MM-DD').not.toMatch(MACHINE_DATE);
 }
 
-// The date on this machine as the app writes it (the browser's local date).
+// The browser's clock and time zone in the case CI failed in: UTC, at 03:00 on the day after the scripted person's today
+// (America/Denver is seven or six hours behind, so it is still the evening before there).
+const UTC_AHEAD = process.env.E2E_UTC_AHEAD_OF_PERSON === '1';
+const PERSON_ZONE = 'America/Denver';
+async function setBrowserClock(page: Page): Promise<void> {
+  if (!UTC_AHEAD) return;
+  const personDay = dateInZone(PERSON_ZONE) ?? '';
+  const next = new Date(Date.parse(`${personDay}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  await page.clock.setFixedTime(new Date(`${next}T03:00:00Z`));
+}
+
+// The date on this device as the app writes it (the browser's local date).
 const localDate = (page: Page) =>
   page.evaluate(() => {
     const now = new Date();
@@ -104,7 +133,8 @@ async function nextCard(page: Page, previous: string | null): Promise<{ id: stri
 
 for (const [name, width] of Object.entries(WIDTHS)) {
   test.describe(`at ${width}px (${name})`, () => {
-    test.use({ viewport: { width, height: 900 } });
+    test.use({ viewport: { width, height: 900 }, ...(UTC_AHEAD ? { timezoneId: 'UTC' } : {}) });
+    test.beforeEach(async ({ page }) => setBrowserClock(page));
 
     test('setup: a scripted conversation, approved part by part, saved once, and usable', async ({ page, context }) => {
       test.setTimeout(240_000);
@@ -209,9 +239,15 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(log.getByText(/No targets yet/)).toBeVisible();
       await log.close();
 
-      // The suggested start date was the browser's own date, labelled as a suggestion.
+      // The suggested start date, labelled as a suggestion: the person's own today. Once setup knows their time zone the
+      // server uses that zone's date, else the device's (lib/setup/relativeDates.ts personToday), so the expected date is
+      // worked out the same way, never read off the browser alone (PR #68 CI: a UTC browser after 00:00 UTC is a day ahead
+      // of America/Denver).
       const last = await fakeLast();
-      expect(last.lastSetupUserText).toContain(`Suggested start date (today's date on the person's device, a suggestion only): ${await localDate(page)}`);
+      const zone = report.draft.model.person.timeZone;
+      expect(zone, 'the scripted person gives a time zone').toBe(PERSON_ZONE);
+      const personDay = personToday(zone, await localDate(page), new Date());
+      expect(last.lastSetupUserText).toContain(`Suggested start date (today's date on the person's device, a suggestion only): ${personDay}`);
 
       await page.getByRole('button', { name: 'Save my setup' }).click();
       await expect(page.getByRole('heading', { name: 'Your setup is saved' })).toBeVisible();
@@ -268,7 +304,10 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         await page.getByRole('button', { name: 'Send' }).click();
         const stuck = errorCopy('stuck', true);
         await expect(page.locator('main').getByRole('alert')).toHaveText(`${stuck.headline}${stuck.line}`, { timeout: 30_000 });
+        // The service can stop before all three are used (the same shape error twice ends the turn), so the rest are disarmed
+        // here: a leftover one went to the cut-off request below, whose retry then landed in the next test (PR #68 CI).
         await fakeControl('/__fake/slow?ms=0');
+        await fakeControl('/__fake/unusable?count=0');
         await expect(second).toBeVisible();
         await cardIsReadable(page, width);
         await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
@@ -294,6 +333,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       } finally {
         await fakeControl('/__fake/slow?ms=0');
         await fakeControl('/__fake/unusable?count=0');
+        // The request cut off by the reload is still running on the server; let it, and any retry, finish here, so no call of
+        // this test reaches the fake while the next one counts its own.
+        await fakeSettled();
       }
     });
   });
