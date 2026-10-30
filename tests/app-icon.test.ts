@@ -64,9 +64,9 @@ describe('web manifest', () => {
     );
   });
 
-  it('keeps the theme color the viewport already uses', () => {
+  it("keeps the theme color the viewport uses for the device's dark setting", () => {
     const layout = readFileSync(path.join(ROOT, 'app/layout.tsx'), 'utf8');
-    expect(layout).toContain(`themeColor: '${result.theme_color}'`);
+    expect(layout).toContain(`{ media: '(prefers-color-scheme: dark)', color: '${result.theme_color}' }`);
   });
 
   it('lists a 192 icon, a 512 icon and a maskable 512 icon, each a real PNG of its declared size', () => {

@@ -1,8 +1,8 @@
 import type { MetadataRoute } from 'next';
 
 // The web manifest (MOM-142): what a phone reads when the site is added to the home screen. It names the app and its
-// colors and nothing else, because the repo is public. The colors match the viewport's theme color in app/layout.tsx;
-// the app is dark only today, so they can follow the light palette once MOM-30 merges. The icon files are made by
+// colors and nothing else, because the repo is public. A manifest holds one theme color, so it matches the viewport's
+// dark theme color in app/layout.tsx (MOM-30 added a light one beside it). The icon files are made by
 // scripts/render-icons.ts.
 export default function manifest(): MetadataRoute.Manifest {
   return {
