@@ -282,7 +282,8 @@ describe('the finish: one button, once', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Finish review' }));
     expect((await screen.findByRole('alert')).textContent).toBe("You already finished this week's review.");
     expect(refresh).not.toHaveBeenCalled();
-    expect((screen.getByRole('button', { name: 'Finish review' }) as HTMLButtonElement).disabled).toBe(false);
+    // The settled state (MOM-96): the button is back, not only the error.
+    expect(((await screen.findByRole('button', { name: 'Finish review' })) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('says so, and saves nothing, when the action itself fails', async () => {
@@ -292,6 +293,7 @@ describe('the finish: one button, once', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Finish review' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Could not save your weekly review. Nothing was saved.');
     expect(refresh).not.toHaveBeenCalled();
+    expect(((await screen.findByRole('button', { name: 'Finish review' })) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('does not depend on the line: a review can be finished without ever asking for one', async () => {

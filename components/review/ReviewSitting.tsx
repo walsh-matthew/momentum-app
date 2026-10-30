@@ -56,15 +56,17 @@ export function ReviewSitting({ offerLine, adjustment }: ReviewSittingProps) {
     }
   }
 
+  // A state update after an await is not part of the transition (React 19), so each one is wrapped in startFinish again:
+  // the error and the restored "Finish review" button then show in the same render, never the error beside "Saving…".
   function finish() {
     setFinishError(null);
     startFinish(async () => {
       try {
         const result = await finishReview(adjustment === null ? null : choice);
         if (result.ok) router.refresh();
-        else setFinishError(result.error);
+        else startFinish(() => setFinishError(result.error));
       } catch {
-        setFinishError('Could not save your weekly review. Nothing was saved.');
+        startFinish(() => setFinishError('Could not save your weekly review. Nothing was saved.'));
       }
     });
   }
