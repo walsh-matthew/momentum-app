@@ -16,9 +16,9 @@ export const CHANGE_PROMPT = 'What would you like to change?';
 export const KEEP_IT = 'Keep it as it is';
 
 // The question card's link for a person who is not sure what a question means (MOM-111 finding 1: a small muted link under
-// Send). It sends MEANING_TEXT as their answer, and Claude explains the question in plainer words (lib/setup/text.ts
-// asksMeaning).
-export const MEANING_LINK = 'Not sure what I mean?';
+// Send; round 3, finding 4: the same words on every card). It sends MEANING_TEXT as their answer, and Claude explains the
+// question in plainer words (lib/setup/text.ts asksMeaning).
+export const MEANING_LINK = 'What does this mean?';
 export const MEANING_TEXT = 'What do you mean?';
 
 // What a proposal's Yes sends for the person: an acceptance (lib/setup/text.ts acceptsText), so the value it showed counts as
@@ -31,12 +31,19 @@ export const PICK_DATE = 'Pick a date';
 export const PICK_OTHER_DATE = 'Pick a different date';
 export const TYPE_INSTEAD = 'Type it instead';
 
-// What the error card says, by why no reply came (MOM-111 round 2, findings 12 and 14). The server sends the first two with
-// a failed turn; the screen uses the second for a request that never reached it.
-export const STUCK_MESSAGE = 'I got stuck on that one. Could you say it another way?';
+// What the error card says, by why no reply came (MOM-111 round 2, findings 12 and 14; round 3, finding 6). The answer could
+// not be understood: STUCK_MESSAGE, with only "Change my answer". A technical failure says which one, plainly, with only "Try
+// again": the network (the screen uses it for a request that never reached the server), Claude busy, Claude not answering, or
+// the time limit.
+export const STUCK_MESSAGE = "I couldn't make sense of that answer. Could you say it another way?";
 export const UNREACHABLE_MESSAGE = "We couldn't reach Momentum just now. Your answer is safe.";
+export const BUSY_MESSAGE = 'Claude is busy right now. Your answer is safe.';
+export const NO_ANSWER_MESSAGE = "Claude didn't answer just now. Your answer is safe.";
+export const TIMED_OUT_MESSAGE = 'That took too long to answer. Your answer is safe.';
 export const CHANGE_ANSWER = 'Change my answer';
 export const TRY_AGAIN = 'Try again';
+// After a reload, the answer is still waiting to be sent: nothing went wrong.
+export const SEND_AGAIN = 'Send it again';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

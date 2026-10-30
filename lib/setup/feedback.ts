@@ -54,6 +54,12 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
     'Name no activity (exercising, working out, running, lifting, the gym and the like) the person has not said. Use their own words, or general ones like moving more.',
   'plain.question_long': 'Keep "question" to the core ask, in at most about 12 words; move the examples and the reason into "detail".',
   'plain.date_lead_in': 'On a date question or a date proposal, "say" is "" or a short reaction that does not repeat the date; the question shows it.',
+  'choice.ideas_context':
+    'Give an offer of ideas, and starting ideas, a "detail" line saying what the options count and that they are starting points, from what the person said.',
+  'choice.ideas_bare':
+    'Write each option that has a number with what is counted, in the person\'s words, and its period ("2 sessions a week"), never a bare number or "3 a week".',
+  'choice.ideas_scale':
+    'Do not list a fixed run of numbers. Give two to four options that follow the goal and how often it happens, from what the person said.',
 };
 
 const DRAFT_CODES = new Set<ViolationCode>(['draft.no_source', 'draft.not_said', 'draft.not_accepted', 'draft.rule']);

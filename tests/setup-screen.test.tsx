@@ -342,14 +342,15 @@ describe('when a turn does not come', () => {
   it('keeps the question on screen, and "Change my answer" puts the answer back in the box to edit and send', async () => {
     actions.ask
       .mockResolvedValueOnce(turnView(script[0]))
-      .mockResolvedValueOnce({ ok: true, data: { kind: 'failed', message: 'I couldn\'t put together a good reply just now.', rejected: 3 } })
+      .mockResolvedValueOnce({ ok: true, data: { kind: 'failed', reason: 'stuck', message: STUCK_MESSAGE, rejected: 3 } })
       .mockResolvedValueOnce(turnView(script[1]));
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     answerWith('Run more, maybe');
     await screen.findByRole('alert');
     expect(screen.getByRole('heading', { name: script[0].question ?? '' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    // Round 3, finding 6: the stuck card shows only "Change my answer".
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Change my answer' }));
     const box = screen.getByLabelText('Your answer') as HTMLTextAreaElement;
@@ -368,24 +369,24 @@ describe('when a turn does not come', () => {
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     answerWith('Run more');
-    // MOM-111 round 2, findings 12 and 14: what happened in plain words, and Try again as the main button.
+    // MOM-111 round 2, findings 12 and 14; round 3, finding 6: what happened in plain words, and only Try again.
     expect((await screen.findByRole('alert')).textContent).toBe("We couldn't reach Momentum just now. Your answer is safe.");
     expect(screen.getByRole('button', { name: 'Try again' }).getAttribute('data-tone')).toBe('main');
-    expect(screen.getByRole('button', { name: 'Change my answer' }).getAttribute('data-tone')).toBe('second');
+    expect(screen.queryByRole('button', { name: 'Change my answer' })).toBeNull();
     expect(JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null').transcript.at(-1)).toEqual({ role: 'person', text: 'Run more' });
   });
 
-  it('after stuck replies, asks for it another way, with Change my answer as the main button', async () => {
+  it('after stuck replies, asks for it another way, with only Change my answer', async () => {
     actions.ask
       .mockResolvedValueOnce(turnView(script[0]))
       .mockResolvedValueOnce({ ok: true, data: { kind: 'failed', reason: 'stuck', message: STUCK_MESSAGE, rejected: 3 } });
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     answerWith('Run more');
-    expect((await screen.findByRole('alert')).textContent).toBe('I got stuck on that one. Could you say it another way?');
+    expect((await screen.findByRole('alert')).textContent).toBe("I couldn't make sense of that answer. Could you say it another way?");
     const change = screen.getByRole('button', { name: 'Change my answer' });
     expect(change.getAttribute('data-tone')).toBe('main');
-    expect(screen.getByRole('button', { name: 'Try again' }).getAttribute('data-tone')).toBe('second');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     // Round 2, finding 13: the old answer comes back in the box, selected and focused, with a small clear button.
     fireEvent.click(change);
     const box = screen.getByLabelText('Your answer') as HTMLTextAreaElement;

@@ -22,8 +22,12 @@
 //   schema needs there (lib/setup/feedback.ts shapeFeedback); an unusable answer says whether it was cut off, had no text,
 //   or was not JSON.
 // - C: a turn has a time budget inside the page's maxDuration (app/setup/page.tsx). Each call may take only the time left,
-//   and another try starts only when one can fit; otherwise the turn ends in the stuck-reply card, never a network error.
-// - A failed turn says why ('stuck', 'unreachable', 'not_configured'), so the error card picks its words and main button.
+//   and another try starts only when one can fit; otherwise the turn ends in the time-limit card, never a network error
+//   (round 3, finding 6: running out of time is a technical failure, with only "Try again").
+// - A failed turn says why ('stuck', 'unreachable', 'not_configured'), so the error card picks its words and its one button.
+//
+// MOM-111 round 3, finding 2: a date question Claude writes is shown with code's suggestion when code has one (the date
+// confirmation), and in code's own words when its question asks for an "exact date" (lib/setup/codeTurns.ts normalizeDateTurn).
 //
 // The save: FIRST SETUP ONLY. It validates the draft in 'final' mode, turns it into the payload save_guided_setup() reads
 // (migration 015) and makes that one call, which is one database transaction: everything the person approved, or nothing.
@@ -34,13 +38,13 @@ import 'server-only';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, onlyPlainWords, type Violation } from '@/lib/setup/checks';
-import { dateStep } from '@/lib/setup/codeTurns';
+import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
 import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog } from '@/lib/setup/feedback';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { spokenTimes } from '@/lib/setup/playback';
 import { personToday } from '@/lib/setup/relativeDates';
 import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
-import { STUCK_MESSAGE, UNREACHABLE_MESSAGE } from '@/lib/setup/session';
+import { BUSY_MESSAGE, NO_ANSWER_MESSAGE, STUCK_MESSAGE, TIMED_OUT_MESSAGE } from '@/lib/setup/session';
 import { sourceNote } from '@/lib/setup/sources';
 import { draftToRows, toSavePayload } from '@/lib/setup/rows';
 import { validateDraft } from '@/lib/setup/validate';
@@ -51,6 +55,7 @@ import {
   SETUP_CHUNKS,
   SetupSessionSchema,
   SuggestedDateSchema,
+  type AssistantTurn,
   type SetupSession,
 } from '@/types/setup';
 import type { QuickPathReason, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
@@ -77,13 +82,16 @@ const SIGN_IN = 'Sign in to set up your goals.';
 const BAD_REQUEST = 'That setup could not be read. Start again. Nothing was saved.';
 const SAVE_FAILED = 'Could not save your setup. Nothing was saved.';
 
-// What the error card says, by why no reply came (MOM-111 round 2, findings 12 and 14): the words live in lib/setup/session.ts
-// so the screen says the same for a request that never reached the server.
+// What the error card says, by why no reply came (MOM-111 round 2, findings 12 and 14; round 3, finding 6): the words live in
+// lib/setup/session.ts so the screen says the same for a request that never reached the server. A technical failure says
+// which one: Claude busy, Claude not answering, or the turn's time limit (a call that ran to its timeout, or no time left for
+// another try). Only an answer whose replies were all thrown away is 'stuck'.
 export const SETUP_FAILURE_MESSAGES = {
   not_configured: "Claude isn't set up on the server yet, so setup can't go on. Nothing was saved.",
   refused: STUCK_MESSAGE,
-  rate_limited: UNREACHABLE_MESSAGE,
-  unavailable: UNREACHABLE_MESSAGE,
+  rate_limited: BUSY_MESSAGE,
+  unavailable: NO_ANSWER_MESSAGE,
+  timed_out: TIMED_OUT_MESSAGE,
   unusable: STUCK_MESSAGE,
 } as const;
 
@@ -92,6 +100,7 @@ const FAILURE_REASONS: Record<keyof typeof SETUP_FAILURE_MESSAGES, SetupFailedRe
   refused: 'stuck',
   rate_limited: 'unreachable',
   unavailable: 'unreachable',
+  timed_out: 'unreachable',
   unusable: 'stuck',
 };
 
@@ -209,14 +218,22 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   let plainRetried = false;
   let lastSignature: string | null = null;
   let longestCallMs = 0;
+  // A date question shown with code's suggestion or code's wording (round 3, finding 2), kept only when it breaks no hard or
+  // draft rule; otherwise Claude's own checked turn is shown.
+  const shown = (claude: AssistantTurn): AssistantTurn => {
+    const dated = normalizeDateTurn(claude, session.transcript, session.draft, personDay);
+    return dated !== claude && checkTurn(dated, context).every((x) => x.rule === 'plain_words') ? dated : claude;
+  };
   for (let attempt = 0; attempt <= MAX_REPLY_RETRIES; attempt++) {
     const remaining = deadlineMs - nowMs();
-    // A try that cannot finish before the server's limit would end in a network error, not a card: stop here instead.
+    // A try that cannot finish before the server's limit would end in a network error, not a card: stop here instead. That is
+    // the time limit, a technical failure, not an answer that could not be understood (round 3, finding 6).
     if (attempt > 0 && remaining < Math.max(MIN_CALL_MS, longestCallMs)) {
       console.warn('[setup] no time left for another try', { attempt, rejected, remainingMs: Math.max(0, Math.round(remaining)), longestCallMs });
-      break;
+      return failed('timed_out', rejected);
     }
     const started = nowMs();
+    const timeoutMs = Math.max(1_000, remaining - CALL_MARGIN_MS);
     const answer = await runTurn({
       userId: input.userId,
       transcript: session.transcript,
@@ -226,7 +243,7 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
       retryFeedback: feedback,
       dateHint,
       sourceNote: note,
-      timeoutMs: Math.max(1_000, remaining - CALL_MARGIN_MS),
+      timeoutMs,
     });
     const ms = Math.round(nowMs() - started);
     longestCallMs = Math.max(longestCallMs, ms);
@@ -236,6 +253,8 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
     // The tokens of every call count against the setup budget, a thrown-away reply as much as a kept one.
     spentTokens = answer.spentTokens;
     const result = answer.result;
+    // A call that ran until its timeout is reported as 'unavailable'; the person is told it took too long.
+    if (!result.ok && result.reason === 'unavailable' && ms >= timeoutMs - CALL_MARGIN_MS) return failed('timed_out', rejected);
     if (!result.ok && result.reason !== 'bad_output') return failed(result.reason, rejected);
 
     if (!result.ok) {
@@ -259,7 +278,7 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
       continue;
     }
     const violations = checkTurn(turn.data, context);
-    if (violations.length === 0) return { kind: 'turn', turn: turn.data, spentTokens, rejected };
+    if (violations.length === 0) return { kind: 'turn', turn: shown(turn.data), spentTokens, rejected };
 
     const rules = ruleNames(violations);
     const plainOnly = onlyPlainWords(violations);
@@ -267,7 +286,7 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
     const codes = [...new Set(violations.map((x) => x.code))].sort();
     if (plainOnly && (plainRetried || attempt === MAX_REPLY_RETRIES)) {
       console.warn('[setup] a reply was shown after its plain-words retry', { category: 'plain_words', rules, codes });
-      return { kind: 'turn', turn: turn.data, spentTokens, rejected };
+      return { kind: 'turn', turn: shown(turn.data), spentTokens, rejected };
     }
     rejected += 1;
     // The turn's topic and the topic it skipped are names from SETUP_TOPICS (the schema allows nothing else), never text.

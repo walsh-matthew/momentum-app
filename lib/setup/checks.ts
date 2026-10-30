@@ -83,6 +83,9 @@ export const VIOLATION_CODES = [
   'plain.activity',
   'plain.question_long',
   'plain.date_lead_in',
+  'choice.ideas_context',
+  'choice.ideas_bare',
+  'choice.ideas_scale',
 ] as const;
 export type ViolationCode = (typeof VIOLATION_CODES)[number];
 
@@ -463,7 +466,45 @@ export function checkDateLeadIn(turn: AssistantTurn): Violation[] {
     : [];
 }
 
-export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn] as const;
+// Option lists (MOM-111 round 3, finding 1, owner decision D4). In the owner's screenshots the starting ideas read "2 a week,
+// 3 a week, 4 a week" with nothing saying what was counted, and a list ran 1 to 7 whatever the goal. Options are written from
+// the conversation: an offer of ideas and the ideas themselves carry a detail line saying what they count; an option with a
+// number names what is counted besides the number and its period; and a run of five or more numbers in a row is a fixed
+// scale, not options from what the person said. Plain-words checks: one retry with the fixed feedback, then the reply is
+// shown and its rule names logged, so a weak option list never ends a setup in the stuck card.
+const RATE_PHRASES = /\b(a|an|per|each|every)\s+(day|week|month|year)\b/g;
+const NUMBER_TALK =
+  /\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|ninety|half|times?|x|once|twice|daily|weekly|monthly|or|about|around|roughly|at|least|most|up|to|aiming|for|more|less|than|and|a|an)\b/g;
+// An option that is only a number and how often ("3", "2 a week", "3 times a week"), with nothing saying what is counted.
+export function bareNumberOption(option: string): boolean {
+  if (numbersIn(option).length === 0) return false;
+  const rest = option
+    .toLowerCase()
+    .replace(/\d[\d,.]*/g, ' ')
+    .replace(RATE_PHRASES, ' ')
+    .replace(NUMBER_TALK, ' ')
+    .replace(/[^a-z]+/g, ' ')
+    .trim();
+  return rest === '';
+}
+export const SCALE_MIN_OPTIONS = 5;
+
+export function checkOptionList(turn: AssistantTurn): Violation[] {
+  const out: Violation[] = [];
+  if ((turn.kind === 'ideas' || turn.kind === 'offer_ideas') && !(turn.detail ?? '').trim()) {
+    out.push(v('plain_words', 'choice.ideas_context', 'The ideas have no detail line saying what they count.'));
+  }
+  if (!LISTING_KINDS.includes(turn.kind)) return out;
+  if (turn.options.some(bareNumberOption)) out.push(v('plain_words', 'choice.ideas_bare', 'An option is a bare number, with nothing saying what is counted.'));
+  const firsts = turn.options.map((o) => numbersIn(o, { skipOne: true })[0]).filter((n): n is number => n !== undefined);
+  const sorted = [...firsts].sort((a, b) => a - b);
+  if (sorted.length >= SCALE_MIN_OPTIONS && sorted.every((n, i) => i === 0 || n === sorted[i - 1] + 1)) {
+    out.push(v('plain_words', 'choice.ideas_scale', 'The options are a fixed run of numbers, not options from what the person said.'));
+  }
+  return out;
+}
+
+export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn, checkOptionList] as const;
 
 // ---------------------------------------------------------------------------
 // All of it

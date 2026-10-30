@@ -197,7 +197,13 @@ function ideasFromInterpretations(): ScriptedCase {
     question: 'Which of these is closest?',
     reply: 'Option 2',
   });
-  s.add({ kind: 'ideas', topic: 'floor', options: ['2 a week', '3 a week'], question: 'Which of these would you like to start from, or give your own?' });
+  s.add({
+    kind: 'ideas',
+    topic: 'floor',
+    detail: 'Sessions a week, from what you said about where you are now.',
+    options: ['2 sessions a week', '3 sessions a week'],
+    question: 'Which of these would you like to start from, or give your own?',
+  });
   return done({ id: 'smoke-14-ideas-from-interpretations', title: 'a tapped "starting ideas" interpretation lets the ideas through', rules: ['choice_before_examples'], expect: { violations: [] } }, s);
 }
 

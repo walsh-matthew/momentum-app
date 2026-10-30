@@ -14,19 +14,16 @@ export interface SetupButtonProps extends ButtonHTMLAttributes<HTMLButtonElement
 // target as the rest of setup, full width on a phone. It writes its own classes rather than layering on the shared Button:
 // cn() does not merge classes, so the outline variant's own border colour would win over a second choice's.
 export function SetupButton({ tone, className, type = 'button', ...props }: SetupButtonProps) {
-  return (
-    <button
-      type={type}
-      data-slot="button"
-      data-tone={tone}
-      className={cn(
-        'inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-lg border px-5 text-sm font-medium whitespace-nowrap transition-colors select-none disabled:pointer-events-none disabled:opacity-50 sm:w-auto',
-        tone === 'main'
-          ? 'border-transparent bg-primary text-primary-foreground hover:bg-primary/85'
-          : 'border-foreground/60 bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.12]',
-        className,
-      )}
-      {...props}
-    />
+  return <button type={type} data-slot="button" data-tone={tone} className={cn(setupButtonClasses(tone), className)} {...props} />;
+}
+
+// The look of a setup button, for a control that must look like one without being a <button> (the date picker trigger in
+// components/setup/DateAnswer.tsx).
+export function setupButtonClasses(tone: SetupButtonProps['tone']): string {
+  return cn(
+    'inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-lg border px-5 text-sm font-medium whitespace-nowrap transition-colors select-none disabled:pointer-events-none disabled:opacity-50 sm:w-auto',
+    tone === 'main'
+      ? 'border-transparent bg-primary text-primary-foreground hover:bg-primary/85'
+      : 'border-foreground/60 bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.12]',
   );
 }

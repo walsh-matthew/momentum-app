@@ -70,12 +70,14 @@ export function spokenTimes(draft: SetupDraft, transcript: Transcript): (path: C
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
-function describePeriod(t: TargetDraft, options: PlaybackOptions): string {
+// When a target is counted. 'rate' follows an amount ("2 a week"); 'each' stands alone ("counted each week").
+function describePeriod(t: TargetDraft, options: PlaybackOptions, style: 'rate' | 'each'): string {
+  const week = style === 'rate' ? 'a week' : 'each week';
   switch (t.period.kind) {
     case 'weekly':
-      return 'each week';
+      return week;
     case 'day_slots':
-      return `each week on ${listOf(t.period.weekdays.map(weekdayName))}`;
+      return `${week} on ${listOf(t.period.weekdays.map(weekdayName))}`;
     case 'deadline':
       return `by ${dateWords(t.period.dueDate, options)}`;
   }
@@ -95,17 +97,19 @@ function amount(t: TargetDraft, n: number): string {
   }
 }
 
-function describeTarget(t: TargetDraft, options: PlaybackOptions): string {
-  const title = titleOf(t.title);
-  const period = describePeriod(t, options);
-  let line: string;
+// A target's numbers in plain words, the same in the playback and the final recap (MOM-111 round 3, finding 5, owner decision
+// D3): "at least 2 a week, aiming for 3". Null when it has no number (an outcome is often only counted).
+function targetNumbers(t: TargetDraft, options: PlaybackOptions): string | null {
   if (t.floor !== null) {
-    line = `${title}: at least ${amount(t, t.floor)} ${period}${t.aspiration !== null ? `, aiming for ${amount(t, t.aspiration)}` : ''}.`;
-  } else if (t.measure === 'checklist') {
-    line = `${title}: a checklist to work through ${period}.`;
-  } else {
-    line = `${title}: counted ${period}${t.aspiration !== null ? `, aiming for ${amount(t, t.aspiration)}` : ''}.`;
+    return `at least ${amount(t, t.floor)} ${describePeriod(t, options, 'rate')}${t.aspiration !== null ? `, aiming for ${amount(t, t.aspiration)}` : ''}`;
   }
+  if (t.measure === 'checklist') return `a checklist to work through ${describePeriod(t, options, 'each')}`;
+  if (t.aspiration !== null) return `aiming for ${amount(t, t.aspiration)} ${describePeriod(t, options, 'rate')}`;
+  return null;
+}
+
+function describeTarget(t: TargetDraft, options: PlaybackOptions): string {
+  let line = `${titleOf(t.title)}: ${targetNumbers(t, options) ?? `counted ${describePeriod(t, options, 'each')}`}.`;
   if (t.role === 'outcome') line += " It isn't fully in your hands, so it's shown to you, never judged.";
   if (t.qualifyingThreshold !== null) line += ` Only entries of ${amount(t, t.qualifyingThreshold)} or more count.`;
   return line;
@@ -256,13 +260,37 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
 
 export const FINAL_MAX_LINES = 6;
 
-// The last confirmation: a few lines for the whole, then save. Never more than FINAL_MAX_LINES.
-export function renderFinal(model: SetupModel): string[] {
+// What is counted, after "You'll count": "workouts", not "Workouts". A first word in capitals or with a capital inside it
+// ("PT", "iPad"), or an app's name ("Hevy"), keeps its capitals.
+const countedWords = (title: string): string => {
+  const words = itemOf(title);
+  const first = words.match(/^[A-Za-z]+/)?.[0] ?? '';
+  const name = [...PROVIDER_NAMES.values()].some((n) => n.split(' ')[0] === first);
+  return first.length > 1 && /^[A-Z][a-z]+$/.test(first) && !name ? words.charAt(0).toLowerCase() + words.slice(1) : words;
+};
+
+// The last confirmation (MOM-111 round 3, finding 5): what is counted and its numbers, in whole sentences ("You'll count
+// workouts: at least 2 a week, aiming for 3."), one line for each thing counted, never a fragment such as a goal's title
+// alone. With more than one goal, each line names its goal. Never more than FINAL_MAX_LINES.
+export function renderFinal(model: SetupModel, options: PlaybackOptions = {}): string[] {
   const active = model.goals.filter((g) => g.state === 'active');
-  const shown = active.slice(0, FINAL_MAX_LINES - 2);
-  const lines = shown.map((g) => `${titleOf(g.title)}: ${plural(g.targets.length, 'thing', 'things')} you'll count.`);
-  if (active.length > shown.length) lines.push(`And ${active.length - shown.length} more.`);
+  const several = active.length > 1;
+  const counted: { line: string; things: number }[] = active.flatMap((g) => {
+    const lead = several ? `For ${titleOf(g.title)}, you'll count` : "You'll count";
+    if (g.targets.length === 0) return [{ line: several ? `For ${titleOf(g.title)}, nothing is counted yet.` : 'Nothing is counted yet.', things: 0 }];
+    return g.targets.map((t) => {
+      const numbers = targetNumbers(t, options);
+      const what = countedWords(t.title);
+      return { line: numbers ? `${lead} ${what}: ${numbers}.` : `${lead} ${what} ${describePeriod(t, options, 'each')}.`, things: 1 };
+    });
+  });
   const parked = model.goals.length - active.length;
+  // Room left after the parked line and the settings line; one line goes to "And N more" when they do not all fit.
+  const room = FINAL_MAX_LINES - 1 - (parked > 0 ? 1 : 0);
+  const shown = counted.length > room ? counted.slice(0, room - 1) : counted;
+  const lines = shown.map((c) => c.line);
+  const hidden = counted.slice(shown.length).reduce((n, c) => n + c.things, 0);
+  if (counted.length > shown.length) lines.push(hidden > 0 ? `And ${plural(hidden, 'more thing', 'more things')} you'll count.` : 'And more goals with nothing counted yet.');
   if (parked > 0) lines.push(`${plural(parked, 'goal', 'goals')} set aside for now, with a way back.`);
   lines.push('Everything can be changed on your settings page.');
   return lines.slice(0, FINAL_MAX_LINES);

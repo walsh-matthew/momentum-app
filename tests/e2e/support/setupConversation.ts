@@ -7,7 +7,7 @@ import { SETUP_CASES, type ScriptedCase } from '../../setup-evals/cases';
 import type { FakeScript } from './fakeAnthropic';
 
 export const E2E_CASE_ID = 'run-i-what-do-you-mean-protected';
-// A deadline goal: its exact date is asked as a plain question, the one card run-i never shows (MOM-111 round 2 screenshots).
+// A deadline goal: its date is asked with no suggestion, the one card run-i never shows (MOM-111 round 2 screenshots).
 export const DATE_QUESTION_CASE_ID = 'run-a-deadline-only';
 
 function caseById(id: string): ScriptedCase {

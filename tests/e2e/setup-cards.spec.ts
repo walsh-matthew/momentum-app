@@ -1,23 +1,42 @@
-// Every kind of guided setup card on a phone (MOM-111 round 2, findings 5 and the screenshot step): at 390px, nothing on any
-// card sits past the screen's edge, element by element, with the date picker open on the date cards; and each kind of card
-// is saved as a screenshot so the owner can look at it before the merge. The fake model of tests/e2e/support/fakeAnthropic.ts
-// answers as Claude (no paid call, no key): run-i gives a question, a question with an option to tap, a date confirmation,
-// starting ideas, the playbacks and the final card; run-a gives a date question. The stuck-reply card comes from replies the
-// fake makes unusable, and the network card from a request the browser never lets out.
+// Every kind of guided setup card on a phone (MOM-111 round 2, findings 5 and the screenshot step; round 3): at 390px,
+// nothing on any card sits past the screen's edge, element by element, with the date picker tapped on the date cards; and
+// each kind of card is saved as a screenshot so the owner can look at it before the merge. The fake model of
+// tests/e2e/support/fakeAnthropic.ts answers as Claude (no paid call, no key): run-i gives a question, a question with an
+// option to tap, a date confirmation, starting ideas, the playbacks and the final card; run-a gives a date question with
+// nothing to suggest. The stuck-reply card comes from replies the fake makes unusable, the busy card from the fake's 429, and
+// the network card from a request the browser never lets out.
+//
+// Round 3: "Pick a date" is the date field itself (finding 3), so its "-picker-open" screenshot is the card right after the
+// tap, with the phone's own picker (outside the page) open over it; the help link reads "What does this mean?" (finding 4);
+// and every error card has one button (finding 6).
 //
 // Screenshots are written only when SETUP_SCREENSHOT_DIR names a folder (outside the repo); without it the checks still run.
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
-import { APPROVE_TEXT, CHANGE_ANSWER, MEANING_LINK, MEANING_TEXT, PICK_DATE, PICK_OTHER_DATE, PROPOSAL_YES_TEXT, TRY_AGAIN, TYPE_INSTEAD } from '@/lib/setup/session';
+import {
+  APPROVE_TEXT,
+  BUSY_MESSAGE,
+  CHANGE_ANSWER,
+  MEANING_LINK,
+  MEANING_TEXT,
+  PICK_DATE,
+  PICK_OTHER_DATE,
+  PROPOSAL_YES_TEXT,
+  STUCK_MESSAGE,
+  TRY_AGAIN,
+  TYPE_INSTEAD,
+  UNREACHABLE_MESSAGE,
+  pickedDateText,
+} from '@/lib/setup/session';
 import { expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
-import { CARD, cardOf, elementsOffScreen, headingOf } from './support/setupCards';
+import { CARD, cardOf, elementsOffScreen, headingOf, sectionOf } from './support/setupCards';
 import { dateQuestionCase, e2eCase } from './support/setupConversation';
 
 const SHOTS = process.env.SETUP_SCREENSHOT_DIR;
-const ORDER = ['question', 'question-with-options', 'date-question', 'date-confirmation', 'ideas', 'playback', 'final', 'stuck-error', 'network-error'] as const;
+const ORDER = ['question', 'question-with-options', 'date-question', 'date-confirmation', 'ideas', 'playback', 'final', 'stuck-error', 'network-error', 'busy-error'] as const;
 type CardKind = (typeof ORDER)[number];
 
 const fakeControl = async (path: string): Promise<void> => {
@@ -39,8 +58,8 @@ async function fits(page: Page, what: string): Promise<void> {
 async function kindOf(page: Page): Promise<CardKind> {
   if ((await page.locator('h2#setup-playback').count()) > 0) return 'playback';
   if ((await page.locator('h2#setup-final').count()) > 0) return 'final';
-  if ((await page.getByRole('button', { name: PICK_OTHER_DATE }).count()) > 0) return 'date-confirmation';
-  if ((await page.getByRole('button', { name: PICK_DATE, exact: true }).count()) > 0) return 'date-question';
+  if ((await page.getByLabel(PICK_OTHER_DATE, { exact: true }).count()) > 0) return 'date-confirmation';
+  if ((await page.getByLabel(PICK_DATE, { exact: true }).count()) > 0) return 'date-question';
   if ((await page.locator('ol [data-slot="answer-choice"]').count()) > 0) return 'ideas';
   if ((await page.locator('[data-slot="answer-choice"]').count()) > 0) return 'question-with-options';
   return 'question';
@@ -81,13 +100,27 @@ async function answer(page: Page, line: string): Promise<void> {
   }
 }
 
-// On a date card, the picker opens in place and still fits the screen (finding 5).
-async function withPickerOpen(page: Page, kind: CardKind): Promise<void> {
-  await page.getByRole('button', { name: kind === 'date-confirmation' ? PICK_OTHER_DATE : PICK_DATE, exact: true }).click();
-  await expect(page.locator('input[type="date"]')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await fits(page, `${kind} with the picker open`);
+// The error card's buttons: exactly the one named (finding 6).
+async function onlyButton(page: Page, name: string): Promise<void> {
+  const other = name === CHANGE_ANSWER ? TRY_AGAIN : CHANGE_ANSWER;
+  await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('data-tone', 'main');
+  await expect(page.getByRole('button', { name: other, exact: true })).toHaveCount(0);
+}
+
+// On a date card, "Pick a date" is the one date field (finding 3): tapping it opens the browser's own picker, outside the
+// page, and adds nothing to the card. The screenshot is the card right after the tap.
+async function withPickerTapped(page: Page, kind: CardKind): Promise<void> {
+  const field = page.getByLabel(kind === 'date-confirmation' ? PICK_OTHER_DATE : PICK_DATE, { exact: true });
+  const card = sectionOf(page);
+  await expect(card.locator('input[type="date"]')).toHaveCount(1);
+  await expect(card.locator('[data-picker="date"] input[type="date"]')).toHaveCount(1);
+  const before = await card.locator('*').count();
+  await field.click();
+  await expect(field).toBeFocused();
+  expect(await card.locator('*').count(), `${kind}: nothing opens in place`).toBe(before);
+  await fits(page, `${kind} with the picker tapped`);
   await shot(page, kind, '-picker-open');
+  await page.keyboard.press('Escape');
 }
 
 test.describe('at 390px (phone)', () => {
@@ -103,6 +136,7 @@ test.describe('at 390px (phone)', () => {
     const seen = new Set<CardKind>();
     let stuckShown = false;
     let networkShown = false;
+    let busyShown = false;
 
     try {
       for (const { say: line } of scripted.person) {
@@ -112,38 +146,54 @@ test.describe('at 390px (phone)', () => {
         if (!seen.has(kind)) {
           seen.add(kind);
           await shot(page, kind);
-          if (kind === 'date-confirmation') await withPickerOpen(page, kind);
+          if (kind === 'date-confirmation' || kind === 'date-question') await withPickerTapped(page, kind);
         }
+        if (kind !== 'playback' && kind !== 'final') await expect(page.getByRole('button', { name: MEANING_LINK })).toHaveCount(1);
 
         if (kind === 'question' && line !== MEANING_TEXT && seen.size >= 2 && !stuckShown) {
-          // The stuck-reply card (findings 12 and 14): replies thrown away, so "Change my answer" leads. Each fake answer waits a
-          // little, so the tries inside one turn are not refused by the one-second spacing limit.
+          // The stuck-reply card: the replies were thrown away, so the answer could not be understood: only "Change my
+          // answer". Each fake answer waits a little, so the tries inside one turn are not refused by the spacing limit.
           stuckShown = true;
           await fakeControl('/__fake/slow?ms=1100');
           await fakeControl('/__fake/unusable?count=3');
           await page.waitForTimeout(1200);
           await answer(page, line);
-          await expect(page.locator('main').getByRole('alert')).toHaveText("I got stuck on that one. Could you say it another way?", { timeout: 30_000 });
-          await expect(page.getByRole('button', { name: CHANGE_ANSWER })).toHaveAttribute('data-tone', 'main');
+          await expect(page.locator('main').getByRole('alert')).toHaveText(STUCK_MESSAGE, { timeout: 30_000 });
+          await onlyButton(page, CHANGE_ANSWER);
           await fits(page, 'stuck-error');
           await shot(page, 'stuck-error');
           await fakeControl('/__fake/unusable?count=0');
           await fakeControl('/__fake/slow?ms=0');
-          // Finding 13: the answer comes back in the box, selected, ready to change.
+          // The answer comes back in the box, selected and focused, ready to change.
           await page.getByRole('button', { name: CHANGE_ANSWER }).click();
           await expect(page.getByLabel('Your answer')).toHaveValue(line);
           await expect(page.getByLabel('Your answer')).toBeFocused();
           await page.waitForTimeout(1200);
         } else if (kind === 'question' && line !== MEANING_TEXT && stuckShown && !networkShown) {
-          // The network card: the request never leaves the browser, so "Try again" leads and the answer is safe.
+          // The network card: the request never leaves the browser, so only "Try again", and the answer is safe.
           networkShown = true;
           await page.route('**/setup', (route) => (route.request().method() === 'POST' ? route.abort() : route.continue()));
           await answer(page, line);
-          await expect(page.locator('main').getByRole('alert')).toHaveText("We couldn't reach Momentum just now. Your answer is safe.");
-          await expect(page.getByRole('button', { name: TRY_AGAIN })).toHaveAttribute('data-tone', 'main');
+          await expect(page.locator('main').getByRole('alert')).toHaveText(UNREACHABLE_MESSAGE);
+          await onlyButton(page, TRY_AGAIN);
           await fits(page, 'network-error');
           await shot(page, 'network-error');
           await page.unroute('**/setup');
+          await page.waitForTimeout(1200);
+          await page.getByRole('button', { name: TRY_AGAIN }).click();
+          heading = await nextCard(page, heading);
+          continue;
+        } else if (kind === 'question' && line !== MEANING_TEXT && networkShown && !busyShown) {
+          // The busy card: Claude answered 429, a technical failure, so only "Try again".
+          busyShown = true;
+          await fakeControl('/__fake/busy?count=1');
+          await page.waitForTimeout(1200);
+          await answer(page, line);
+          await expect(page.locator('main').getByRole('alert')).toHaveText(BUSY_MESSAGE, { timeout: 30_000 });
+          await onlyButton(page, TRY_AGAIN);
+          await fits(page, 'busy-error');
+          await shot(page, 'busy-error');
+          await fakeControl('/__fake/busy?count=0');
           await page.waitForTimeout(1200);
           await page.getByRole('button', { name: TRY_AGAIN }).click();
           heading = await nextCard(page, heading);
@@ -155,19 +205,24 @@ test.describe('at 390px (phone)', () => {
     } finally {
       await fakeControl('/__fake/unusable?count=0');
       await fakeControl('/__fake/slow?ms=0');
+      await fakeControl('/__fake/busy?count=0');
     }
 
     expect(await kindOf(page)).toBe('final');
     await fits(page, 'final');
     seen.add('final');
     await shot(page, 'final');
+    // Finding 5: the recap names what is counted, in whole sentences, never a title with nothing after it.
+    const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
+    expect(recap.some((l) => /^You'll count .+: .+\.$|^You'll count .+ each week\.$/.test(l)), recap.join(' | ')).toBe(true);
+    expect(recap.every((l) => !/: \d+ things? you'll count\.$/.test(l))).toBe(true);
     expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options'].sort());
-    expect(stuckShown && networkShown).toBe(true);
+    expect(stuckShown && networkShown && busyShown).toBe(true);
     // The approval line is the person's own words, and the save is still a tap away: nothing is saved here.
     expect(APPROVE_TEXT).toBe('Yes, that is right.');
   });
 
-  test('a date question: the picker in place, a small "Type it instead" link, and no second date field', async ({ page }) => {
+  test('a date question with nothing to suggest: one "Pick a date" that is the date field, and picking a date answers it', async ({ page }) => {
     test.setTimeout(180_000);
     const scripted = dateQuestionCase();
     await signUpAndConfirm(page, 'setup-date-question');
@@ -178,12 +233,18 @@ test.describe('at 390px (phone)', () => {
       const kind = await kindOf(page);
       await fits(page, kind);
       if (kind === 'date-question') {
-        await expect(page.getByRole('button', { name: PICK_DATE, exact: true })).toHaveAttribute('data-tone', 'main');
+        // Finding 2: never an "exact date".
+        await expect(sectionOf(page)).not.toContainText(/exact (date|day)/i);
+        await expect(page.locator('[data-picker="date"]')).toHaveAttribute('data-tone', 'main');
         await expect(page.getByRole('button', { name: TYPE_INSTEAD })).toBeVisible();
-        await expect(page.locator('input[type="date"]')).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Use this date' })).toHaveCount(0);
         await shot(page, 'date-question');
-        await withPickerOpen(page, kind);
+        await withPickerTapped(page, kind);
+        // Choosing a date answers the question: it is sent as the person's answer ("Saturday, June 5, 2027"), which the card
+        // shows the casual way under the question while it waits.
+        expect(pickedDateText('2027-06-05')).toBe('Saturday, June 5, 2027');
+        await page.getByLabel(PICK_DATE, { exact: true }).fill('2027-06-05');
+        await expect(sectionOf(page).getByText('Saturday, Jun 5, 2027', { exact: true })).toBeVisible();
         return;
       }
       await answer(page, line);

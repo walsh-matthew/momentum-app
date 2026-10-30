@@ -5,7 +5,7 @@
 // - nothing asks Claude until Start is tapped, and the device's date goes with the request as a suggestion;
 // - one question is on screen at a time (and at 390px nothing scrolls sideways);
 // - a part is played back and approved with a tap, and the conversation survives a reload in the same tab;
-// - (MOM-111) "Keep it as it is" in the change box approves a part, "Not sure what I mean?" sends "What do you mean?", and the
+// - (MOM-111) "Keep it as it is" in the change box approves a part, "What does this mean?" sends "What do you mean?", and the
 //   answer box and both buttons sit inside the screen at each width;
 // - (MOM-111 smoke-test round) at 390px nothing on any setup card scrolls sideways, no card shows a date as YYYY-MM-DD, a
 //   reload opens straight on the question, and while a reply is slow, or after replies are thrown away, the question stays
@@ -18,7 +18,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { MACHINE_DATE } from '@/lib/dates/casual';
 import { runSetupEval } from '@/lib/setup/evals';
-import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, TYPE_INSTEAD } from '@/lib/setup/session';
+import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, STUCK_MESSAGE, TYPE_INSTEAD } from '@/lib/setup/session';
 import { acceptsText } from '@/lib/setup/text';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
@@ -167,7 +167,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           }
         } else {
           expect(card.id, `turn ${k} should be a question`).toBe('setup-question');
-          // "Not sure what I mean?" is on every question, inside the screen's width.
+          // "What does this mean?" is on every question, inside the screen's width.
           await inView(page, page.getByRole('button', { name: MEANING_LINK }));
           const yes = page.getByRole('button', { name: 'Yes', exact: true });
           if ((await page.getByLabel('Your answer').count()) > 0) {
@@ -256,16 +256,20 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         }
         expect((await nextCard(page, first)).heading).toBe(scripted.script[1].question ?? '');
 
-        // Thrown away three times: the question stays, with Try again and Change my answer.
+        // Thrown away three times: the question stays, with only Change my answer (round 3, finding 6).
         const second = page.getByRole('heading', { name: scripted.script[1].question ?? '' });
-        await fakeControl('/__fake/slow?ms=0');
+        // Each fake answer waits a little, so the tries inside the turn are not refused by the spacing limit (that "wait" is
+        // a technical card with only Try again).
+        await fakeControl('/__fake/slow?ms=1100');
         await fakeControl('/__fake/unusable?count=3');
         await spaced();
         await page.getByLabel('Your answer').fill('First try at this');
         await page.getByRole('button', { name: 'Send' }).click();
-        await expect(page.getByRole('alert')).toBeVisible();
+        await expect(page.locator('main').getByRole('alert')).toHaveText(STUCK_MESSAGE, { timeout: 30_000 });
+        await fakeControl('/__fake/slow?ms=0');
         await expect(second).toBeVisible();
         await cardIsReadable(page, width);
+        await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
         await page.getByRole('button', { name: 'Change my answer' }).click();
         await expect(page.getByLabel('Your answer')).toHaveValue('First try at this');
 

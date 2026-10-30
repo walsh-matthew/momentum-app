@@ -213,13 +213,15 @@ function habitCase(o: HabitOptions): ScriptedCase {
         topic: 'floor',
         edit: addTarget,
         question: 'Do you have a number in mind, or would some starting ideas help?',
+        detail: 'The least number of sessions a week that still counts as on track.',
         reply: 'Some ideas, please.',
       });
       s.add({
         kind: 'ideas',
         topic: 'floor',
         say: 'Here are some starting points.',
-        options: ['2 a week', '3 a week', '4 a week'],
+        detail: 'Sessions a week, from what you said about where you are now.',
+        options: ['2 sessions a week', '3 sessions a week', '4 sessions a week'],
         question: 'Which of these would you like to start from, or give your own?',
         reply: 'The second one works.',
       });
@@ -236,7 +238,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
         kind: 'interpretations',
         topic: 'floor',
         say: 'I am not sure which number that is.',
-        options: ['Two a week', 'Three a week', 'A different number'],
+        options: ['Two sessions a week', 'Three sessions a week', 'A different number'],
         question: 'Which of these is closest?',
         reply: 'The second one.',
       });
@@ -319,7 +321,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
 }
 
 // ---------------------------------------------------------------------------
-// A deadline-only goal: no week start, the exact date, and whether it can move
+// A deadline-only goal: no week start, the date, and whether it can move
 // ---------------------------------------------------------------------------
 
 interface DeadlineOptions {
@@ -358,7 +360,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
     topic: 'deadline_date',
     edit: (m) => (goalOf(m, 'g1').shape = 'project'),
     say: "That's the date we'll plan back from.",
-    question: 'What is the exact date it has to be done by?',
+    question: 'Which day does it have to be done by?',
     reply: o.dateReply,
   });
   const moveAsked = s.next;
@@ -599,7 +601,7 @@ const FIXTURES: ScriptedCase[] = [
     'gives starting ideas without offering the choice first',
     (s) => {
       s.add({ topic: 'idea', question: 'What would you like to work on?', reply: 'I want to run more.' });
-      s.add({ kind: 'ideas', topic: 'floor', options: ['2 a week', '3 a week'], question: 'Which of these would you like?' });
+      s.add({ kind: 'ideas', topic: 'floor', detail: 'Sessions a week.', options: ['2 sessions a week', '3 sessions a week'], question: 'Which of these would you like?' });
     },
     1,
   ),
@@ -663,7 +665,7 @@ export const SETUP_CASES: ScriptedCase[] = [
   ...FIXTURES,
   deadlineCase({
     id: 'run-a-deadline-only',
-    title: 'a deadline-only goal: exact date, can it move, and no week start',
+    title: 'a deadline-only goal: its date, can it move, and no week start',
     rules: ['one_question', 'assume_nothing', 'no_math'],
     goalTitle: 'Finish the quilt',
     idea: "Finish a quilt for my sister's wedding.",
@@ -723,7 +725,7 @@ export const SETUP_CASES: ScriptedCase[] = [
   }),
   deadlineCase({
     id: 'run-g-relative-deadline',
-    title: 'a deadline given as "the week before X": the exact date is asked, never worked out',
+    title: 'a deadline given as "the week before X": the date is asked, never worked out',
     rules: ['assume_nothing', 'no_math'],
     goalTitle: 'Demo ready',
     idea: 'Get my demo ready the week before the conference.',

@@ -249,7 +249,8 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   const waiting = awaitsClaude(session);
   const retry = () => void ask(session);
   // Which error card: the server's reason for a failed turn, "couldn't reach" for a wait or a request that never got an
-  // answer, and "waiting" after a reload, when nothing went wrong (round 2, findings 12 and 14).
+  // answer, and "waiting" after a reload, when nothing went wrong (round 2, findings 12 and 14). Each card shows one button
+  // (round 3, finding 6, owner decisions D1 and D2).
   const kind: RetryKind = view?.kind === 'failed' ? view.reason : view?.kind === 'wait' ? 'unreachable' : error ? errorKind : 'waiting';
   const noticeMessage = error ?? view?.message ?? STILL_WAITING;
 
@@ -298,7 +299,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         />
       ) : turn.kind === 'final' ? (
         <FinalCard
-          lines={renderFinal(shownModel(turn.draft, session.transcript))}
+          lines={renderFinal(shownModel(turn.draft, session.transcript), playbackOptions)}
           saving={saving || busy || waiting}
           error={null}
           onSave={() => void save(false)}

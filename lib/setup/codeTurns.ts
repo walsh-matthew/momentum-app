@@ -26,6 +26,7 @@ import {
   type RelativeDate,
 } from './relativeDates';
 import { latestAnswer } from './said';
+import { asksMeaning, datesIn, type MentionedDate } from './text';
 
 // The questions whose answer is a date the person picks (start, end, deadline and deadline-task dates, and a set-aside
 // goal's way back). The screen shows the one date layout on each (components/setup/DateAnswer.tsx).
@@ -38,13 +39,17 @@ const PROPOSAL_WORDS: Partial<Record<SetupTopic, (date: string) => string>> = {
   parked_return: (d) => `Bring it back on ${d}?`,
 };
 
-// The question again for a vague answer, with its reason saying what the answer is for (finding 10).
+// A date question in code's own words, with its reason saying what the answer is for (finding 10): the question again for a
+// vague answer, and the words that replace a question asking for an "exact date" (round 3, finding 2).
 const ASK_THE_DAY: Partial<Record<SetupTopic, { question: string; detail: string }>> = {
   start_date: { question: 'Which day would you like to start?', detail: 'Your first week is planned from that day.' },
   end_date: { question: 'Which day should it run until?', detail: 'Your plan stops on that day.' },
-  deadline_date: { question: 'What is the exact date it has to be done by?', detail: 'We plan back from that day.' },
+  deadline_date: { question: 'Which day does it have to be done by?', detail: 'We plan back from that day.' },
   parked_return: { question: 'Which day should it come back?', detail: 'It comes back into your plan on that day.' },
 };
+
+// A date question never asks for an "exact date" (round 3, finding 2): the picker and the suggestion make the date exact.
+export const EXACT_DATE = /\bexact (date|day)\b/i;
 
 // Answers where a relative day is a date to give Claude a hint about: the date questions, and the shape question ("a deadline
 // in two weeks"). Anywhere else a weekday is not a date ("Monday" is when their week starts), so there is no hint.
@@ -131,6 +136,120 @@ function lengthHint(transcript: Transcript, draft: SetupDraft, today: string): s
     `Length note from code: the person said "${d.phrase}". Counted by code from the goal's start date: when you ask about it, ${parts.join('; ')}. ` +
     'Show it as a "proposal" they accept with Yes, record it only after they do, and never work a length out yourself.'
   );
+}
+
+// ---------------------------------------------------------------------------
+// A date question leads with a suggestion whenever code has one (MOM-111 round 3, finding 2)
+// ---------------------------------------------------------------------------
+//
+// In the owner's screenshots a deadline came as a bare "What is the exact date it has to be done by?", though code could have
+// suggested a date. Every date question Claude writes passes through normalizeDateTurn() before it is shown: when code or
+// the conversation gives a date, the question becomes the date confirmation ("Done by Tuesday, Dec 15?", Yes as the main
+// button, then a way to pick another); the question with no suggestion is left only for when nothing can be suggested, and
+// never asks for an "exact date". Where a suggestion comes from:
+// - a start date: the person's today, as setup already tells Claude ("Suggested start date");
+// - an end date, a deadline or a way back: a date the person wrote out anywhere ("by March 15"), or a relative day in their
+//   answer to the shape question ("a deadline in two weeks"), later than today and not already in the draft; for an end date,
+//   also a length of time they said, counted from the start date (round 2, finding 7).
+// Only what was said since this same question was last answered is read (owner decision D5), so an earlier goal's date is
+// never suggested for the next goal; a date already saved in the draft never is either. After the person has answered this
+// question without a date ("not today"), nothing is suggested again: Claude's question is shown as it is.
+
+// Topics whose answers hold a date of their own, or a past one: never read for another date question's suggestion.
+const OWN_DATE_TOPICS: ReadonlySet<SetupTopic> = new Set<SetupTopic>([...DATE_TOPICS, ...PAST_TOPICS]);
+const PAST_SAID = /\b(ago|past|last|been|used to|started|since|began)\b/;
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+const realDate = (iso: string): boolean => {
+  const [y, m, d] = [Number(iso.slice(0, 4)), Number(iso.slice(5, 7)), Number(iso.slice(8, 10))];
+  return new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10) === iso;
+};
+
+// A written-out date as YYYY-MM-DD: its own year, or the next time that day comes round from today.
+function isoOfWritten(d: MentionedDate, today: string): string | null {
+  const on = (year: number): string => `${year}-${pad2(d.month)}-${pad2(d.day)}`;
+  if (d.year !== null) return realDate(on(d.year)) ? on(d.year) : null;
+  const year = Number(today.slice(0, 4));
+  const candidate = realDate(on(year)) && on(year) >= today ? on(year) : on(year + 1);
+  return realDate(candidate) ? candidate : null;
+}
+
+// Every date the draft already holds: start, end, return and due dates.
+function draftDates(draft: SetupDraft): Set<string> {
+  const out = new Set<string>();
+  for (const g of draft.model.goals) {
+    for (const d of [g.startDate, g.endDate, g.returnWhen?.kind === 'date' ? g.returnWhen.date : null]) if (d) out.add(d);
+    for (const i of g.items) if (i.kind === 'deadline_task' && i.dueDate) out.add(i.dueDate);
+    for (const t of g.targets) if (t.period.kind === 'deadline') out.add(t.period.dueDate);
+  }
+  return out;
+}
+
+// The topic of the turn a person's message answered, or null.
+const answeredTopic = (transcript: Transcript, i: number): SetupTopic | null => {
+  const before = transcript[i - 1];
+  return before?.role === 'assistant' ? before.turn.topic : null;
+};
+
+// The date a person said for an end date, deadline or way back: the newest one code can read, as above. Null when none.
+function saidDate(topic: SetupTopic, transcript: Transcript, draft: SetupDraft, today: string): string | null {
+  const used = draftDates(draft);
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    const m = transcript[i];
+    if (m.role !== 'person') continue;
+    const asked = answeredTopic(transcript, i);
+    // "What does this mean?" about this question says no date; read on past it.
+    if (asked === topic && asksMeaning(m.text)) continue;
+    if (asked === topic) break;
+    if (asked !== null && OWN_DATE_TOPICS.has(asked)) continue;
+    // "I started on October 1" is about the past: its date is not the plan's.
+    if (PAST_SAID.test(m.text.toLowerCase())) continue;
+    const written = datesIn(m.text).map((d) => isoOfWritten(d, today));
+    let iso: string | null = null;
+    if (written.length === 1) iso = written[0];
+    else if (written.length === 0 && asked === 'shape') {
+      const found = relativeDateIn(m.text, today);
+      iso = found?.kind === 'date' ? found.iso : null;
+    }
+    if (iso && iso > today && !used.has(iso)) return iso;
+  }
+  return null;
+}
+
+// What code can suggest for a date question, as YYYY-MM-DD, or null when nothing can be suggested.
+export function suggestedDate(topic: SetupTopic, transcript: Transcript, draft: SetupDraft, today: string): string | null {
+  if (!DATE_TOPICS.has(topic)) return null;
+  // The person just answered this question without a date, and not by asking what it means: suggest nothing again.
+  const last = transcript[transcript.length - 1];
+  if (last?.role === 'person' && answeredTopic(transcript, transcript.length - 1) === topic && !asksMeaning(last.text)) return null;
+  if (topic === 'start_date') return today;
+  const said = saidDate(topic, transcript, draft, today);
+  if (said) return said;
+  if (topic === 'end_date') {
+    const d = lengthSaid(transcript);
+    const goal = goalForLength(draft, 'end_date');
+    if (d && goal?.startDate) return durationEnd(goal.startDate, d);
+  }
+  return null;
+}
+
+// A date question Claude wrote, as the person sees it: the date confirmation when code has a suggestion, otherwise Claude's
+// question, in code's words when it asked for an "exact date". Any other turn is returned as it is. The service shows the
+// result only when it passes the checks (lib/services/setup.ts).
+export function normalizeDateTurn(turn: AssistantTurn, transcript: Transcript, draft: SetupDraft, today: string | undefined): AssistantTurn {
+  if (turn.kind !== 'question' || turn.topic === null || !DATE_TOPICS.has(turn.topic) || !today) return turn;
+  const ask = ASK_THE_DAY[turn.topic];
+  const proposal = PROPOSAL_WORDS[turn.topic];
+  if (!ask || !proposal) return turn;
+  // Claude's reason, unless it has none or asks for an "exact date": then code's.
+  const detail = turn.detail !== null && !EXACT_DATE.test(turn.detail) ? turn.detail : ask.detail;
+  const date = suggestedDate(turn.topic, transcript, draft, today);
+  if (date) {
+    // The text keeps the date written out, so the person's yes accepts a value the turn showed; the screen shows it casually.
+    return { ...turn, kind: 'proposal', question: proposal(date === today ? `today, ${date}` : date), detail, options: [] };
+  }
+  const question = EXACT_DATE.test(turn.question ?? '') ? ask.question : turn.question;
+  return question === turn.question && detail === turn.detail ? turn : { ...turn, question, detail };
 }
 
 // What code does with the person's newest answer, given their today (YYYY-MM-DD). Null when it has nothing to add.

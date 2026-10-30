@@ -17,7 +17,7 @@ interface AnswerBoxProps {
   onSubmit: (text: string) => void;
   // A second button beside the send button, the same size (for example "Keep it as it is" in the change box).
   secondary?: { label: string; onClick: () => void };
-  // A small muted link under Send (for example "Not sure what I mean?" on a question).
+  // A small muted link under Send (for example "What does this mean?" on a question).
   help?: { label: string; onClick: () => void };
   // Words already in the box when it opens: the person's last answer, put back to edit ("Change my answer").
   initialText?: string;

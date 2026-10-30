@@ -156,7 +156,7 @@ describe('asking for ideas or a recommendation counts wherever it is said', () =
   });
 
   it('lets ideas through after each way of asking, and stops them when nobody asked', () => {
-    const ideas = turn({ kind: 'ideas', topic: 'floor', options: ['2 a week', '3 a week'], question: 'Which of these would you like?' });
+    const ideas = turn({ kind: 'ideas', topic: 'floor', detail: 'Sessions a week.', options: ['2 sessions a week', '3 sessions a week'], question: 'Which of these would you like?' });
     const ok: Transcript[] = [
       [asked({ kind: 'offer_ideas', topic: 'floor' }), said('Yes')],
       [asked({ kind: 'interpretations', topic: 'floor', options: ['A number', 'Starting ideas'] }), said('Option 2')],
