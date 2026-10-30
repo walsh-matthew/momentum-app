@@ -39,8 +39,8 @@ test.describe('password reset', () => {
     await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
     await requestReset(page, email);
 
-    // The emailed link is opened in the same browser (the request keeps its code verifier there) and lands signed in
-    // on the new-password page.
+    // The emailed link is a token link: opened here, it lands signed in on the new-password page. (The next test opens
+    // it in a browser that never asked.)
     const link = await recoveryLinkFor(email);
     await page.goto(link);
     await expect(page).toHaveURL(/\/auth\/reset$/);
@@ -67,16 +67,47 @@ test.describe('password reset', () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
 
-    // The link works once: opened again, in a browser that never asked for it, it goes back to /login with the way
+    // The link works once: opened again (here in a fresh browser) it is used up, and goes back to /login with the way
     // to ask for another.
     const stranger = await browser.newContext();
     const strangerPage = await stranger.newPage();
     await strangerPage.goto(link);
-    // The Auth server's own error fragment (#error=otp_expired) is carried along by the browser; the page ignores it.
-    await expect(strangerPage).toHaveURL(/\/login\?error=reset(#.*)?$/);
+    await expect(strangerPage).toHaveURL(/\/login\?error=reset$/);
     await expect(strangerPage.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
     await expect(strangerPage.locator('form [role="alert"]')).toContainText('reset link is invalid or has expired');
     await stranger.close();
+  });
+
+  test('a link asked for in one browser opens and works in another, once', async ({ page, browser }) => {
+    const email = await signUpAndConfirm(page, 'other-browser');
+    await signOutFromSettings(page);
+    await page.goto('/login?reset=1');
+    await requestReset(page, email);
+    const link = await recoveryLinkFor(email);
+
+    // The "phone": a separate browser context with none of the laptop's cookies, so none of the request's PKCE state.
+    const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const phonePage = await phone.newPage();
+    await phonePage.goto(link);
+    await expect(phonePage).toHaveURL(/\/auth\/reset$/);
+    await expect(phonePage.getByRole('heading', { name: 'Set a new password' })).toBeVisible();
+    await phonePage.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
+    await phonePage.getByLabel('Confirm new password').fill(NEW_PASSWORD);
+    await phonePage.getByRole('button', { name: 'Set new password' }).click();
+    await expect(phonePage).toHaveURL(/\/$/);
+    await expect(phonePage.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+    await phone.close();
+
+    // The laptop never held a session; the new password signs in there, and the link is now used up.
+    await page.goto('/login');
+    await submitCredentials(page, email, NEW_PASSWORD, 'Sign in');
+    await expect(page).toHaveURL(/\/$/);
+    const again = await browser.newContext();
+    const againPage = await again.newPage();
+    await againPage.goto(link);
+    await expect(againPage).toHaveURL(/\/login\?error=reset$/);
+    await expect(againPage.locator('form [role="alert"]')).toContainText('reset link is invalid or has expired');
+    await again.close();
   });
 
   test('an address with no account gets the same answer and no email', async ({ page }) => {
@@ -102,7 +133,12 @@ test.describe('password reset', () => {
     await page.goto('/auth/reset');
     await expect(page).toHaveURL(/\/login$/);
 
-    for (const path of ['/auth/callback/reset', '/auth/callback/reset?code=not-a-real-code']) {
+    for (const path of [
+      '/auth/callback/reset',
+      '/auth/callback/reset?code=not-a-real-code',
+      '/auth/callback/reset?token_hash=not-a-real-token&type=recovery',
+      '/auth/callback/reset?token_hash=not-a-real-token&type=signup',
+    ]) {
       await page.goto(path);
       await expect(page).toHaveURL(/\/login\?error=reset$/);
       await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();

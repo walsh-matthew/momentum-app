@@ -2,9 +2,11 @@
 // sign-out (CLAUDE.md, Architectural Directive 1). Server-side only: it writes the session cookies. Errors come
 // back as values.
 
+import { cookies } from 'next/headers';
 import { z } from 'zod';
-import { getCaptchaConfig } from '@/lib/config/env';
+import { getCaptchaConfig, getRecoveryCookieSecret } from '@/lib/config/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { RECOVERY_COOKIE, isValidRecoveryMarker, recoveryMarkerCookie, type RecoveryCookie } from './recoveryMarker';
 import type { ServiceResult } from './result';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -113,13 +115,25 @@ export async function requestPasswordReset(
 
 // True when the current session is the one an emailed recovery link created. Supabase records how a session was
 // started in the token's `amr` claim; a session from a normal sign-in carries `password` instead. The claims are
-// verified (getClaims checks the token's signature), unlike the cookie contents.
+// verified (getClaims checks the token's signature), unlike the cookie contents. Two ways in:
+// - `recovery`: the older code link, which Supabase marks as a recovery session itself.
+// - `otp` plus the signed marker cookie for this same user (MOM-122): the token link starts an `otp` session, which
+//   on its own is not enough, so the reset route also set the marker (lib/services/recoveryMarker.ts). With no secret
+//   configured, or a missing, expired, forged or other-user marker, this is false.
 export async function hasRecoverySession(): Promise<boolean> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
   if (error || !data) return false;
   const amr: unknown = data.claims.amr;
-  return Array.isArray(amr) && amr.some((entry) => (entry as { method?: unknown } | null)?.method === 'recovery');
+  const methods = Array.isArray(amr) ? amr.map((entry) => (entry as { method?: unknown } | null)?.method) : [];
+  if (methods.includes('recovery')) return true;
+  if (!methods.includes('otp')) return false;
+
+  const userId = data.claims.sub;
+  const secret = getRecoveryCookieSecret();
+  if (typeof userId !== 'string' || userId === '' || secret === null) return false;
+  const marker = (await cookies()).get(RECOVERY_COOKIE)?.value;
+  return isValidRecoveryMarker(marker, userId, secret);
 }
 
 // Sets the new password for the recovery session, with the same rules as sign-up. A session that did not come from
@@ -133,6 +147,8 @@ export async function updatePassword(rawPassword: unknown): Promise<ServiceResul
   const { error } = await supabase.auth.updateUser({ password: parsed.data });
   if (error?.code === 'same_password') return { ok: false, error: REUSED_PASSWORD };
   if (error) return { ok: false, error: PASSWORD_UPDATE_FAILED };
+  // The reset link works once: the marker goes with the password change, so the page cannot be used a second time.
+  (await cookies()).delete(RECOVERY_COOKIE);
   return { ok: true, data: null };
 }
 
@@ -142,6 +158,28 @@ export async function exchangeAuthCode(code: string): Promise<ServiceResult<null
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: null };
+}
+
+// Completes the emailed password reset link (a token link, MOM-122): verifies the one-time token hash and starts the
+// recovery session. Unlike the code above it needs nothing kept in the browser that asked, so the link opens in any
+// browser or device. Only the recovery type is accepted; an empty, used or expired token comes back as an error.
+// On success it returns the signed marker cookie the caller must set (hasRecoverySession needs it). It fails closed:
+// with no RECOVERY_COOKIE_SECRET the token is not even used up, one line naming the variable is logged, and the
+// caller shows the usual expired-link message.
+export async function verifyRecoveryToken(tokenHash: string): Promise<ServiceResult<{ cookie: RecoveryCookie }>> {
+  if (tokenHash.trim() === '') return { ok: false, error: 'The reset link has no token.' };
+  const secret = getRecoveryCookieSecret();
+  if (secret === null) {
+    console.error('RECOVERY_COOKIE_SECRET is not set (or is too short); token reset links are refused.');
+    return { ok: false, error: 'Token reset links are not available.' };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
+  if (error) return { ok: false, error: error.message };
+  const userId = data.user?.id;
+  if (!userId) return { ok: false, error: 'The reset link did not start a session.' };
+  return { ok: true, data: { cookie: recoveryMarkerCookie(userId, secret) } };
 }
 
 export async function signOut(): Promise<ServiceResult<null>> {

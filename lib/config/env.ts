@@ -123,6 +123,17 @@ export function getGoogleOAuthEnv(): GoogleOAuthEnv {
   return googleOAuthEnv;
 }
 
+// The key that signs the short-lived cookie saying "this session was started by a password reset link" (MOM-122,
+// lib/services/recoveryMarker.ts). Server only. Fails closed: a missing or short value comes back as null, never an
+// exception and never a default, so without it the reset link is refused instead of weakly protected. Not cached, so a
+// change of environment takes effect on the next request.
+export const RECOVERY_SECRET_MIN_LENGTH = 32;
+
+export function getRecoveryCookieSecret(): string | null {
+  const secret = process.env.RECOVERY_COOKIE_SECRET?.trim();
+  return secret && secret.length >= RECOVERY_SECRET_MIN_LENGTH ? secret : null;
+}
+
 // Just the Anthropic key, for the rebalance model call (lib/ai/rebalance.ts, MOM-47). Read only on the
 // server, and only when a user asks for a model suggestion.
 export function getAnthropicApiKey(): string {

@@ -64,8 +64,9 @@ export async function confirmationLinkFor(email: string): Promise<string> {
   throw new Error(`No confirmation email for ${email} reached the local Mailpit inbox within 30 seconds.`);
 }
 
-// The password reset link in a message sent to `email`: the Auth server's verify link whose type is `recovery`. A
-// message that is not a reset (the sign-up confirmation) has `type=signup`, so it is skipped. Polls like the above.
+// The password reset link in a message sent to `email`: the token link the recovery template builds (MOM-122),
+// /auth/callback/reset?token_hash=...&type=recovery. A message that is not a reset (the sign-up confirmation) has no
+// such link, so it is skipped. Polls like the above.
 export async function recoveryLinkFor(email: string): Promise<string> {
   const base = mailpit();
   const deadline = Date.now() + 30_000;
@@ -77,7 +78,9 @@ export async function recoveryLinkFor(email: string): Promise<string> {
         const detail = await fetch(`${base}/api/v1/message/${ID}`);
         const body = (await detail.json()) as { Text?: string; HTML?: string };
         const text = `${body.Text ?? ''}\n${body.HTML ?? ''}`.replace(/&amp;/g, '&');
-        const link = text.match(/https?:\/\/[^\s"'<>]*\/auth\/v1\/verify[^\s"'<>]*/g)?.find((l) => /[?&]type=recovery/.test(l));
+        const link = text
+          .match(/https?:\/\/[^\s"'<>]*\/auth\/callback\/reset\?[^\s"'<>]*/g)
+          ?.find((l) => /[?&]token_hash=[^&]+/.test(l) && /[?&]type=recovery/.test(l));
         if (link) return link;
       }
     }
