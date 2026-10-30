@@ -1,8 +1,10 @@
 # 🚀 MOMENTUM BUILD: NEXT-PHASE MASTER EXECUTION PLAN
 
-> **Date:** 2026-10-31 | **Active Epic:** MOM-105 | **Base Commit:** 7d30531
+> **Date:** 2026-10-30 | **Active Epic:** MOM-105 | **Base Commit:** 7d30531
 
-> **Since the last plan (run on 2026-10-30):** build day 6 built every planned block but one, each on its own branch, and the 2026-10-30 day-end pushed them for pull requests: MOM-111 (setup round 3d: the floor question "In a hard week, how many <thing> would still count?", idea buttons that name the counted thing, a quick-path card that says what to do next; a live run of 21 calls, about $1.34), MOM-30 (a light palette that follows the device, with a light / dark / "Match my device" choice), MOM-142 (a home-screen icon and manifest), MOM-143 (a "Set up your goals" card on home), MOM-113 block 3.3 (layer 2's one-line look back, layer 3's choice and the finished review; no migration), MOM-122 (a reset link that works in any browser, with a signed recovery cookie; the sender waits on the owner), MOM-131 (the 390px header) and MOM-144 (the PM docs pilot). MOM-142, MOM-143, MOM-113 and MOM-131 are stacked on MOM-30, which merges first; MOM-144 is rebased onto `main` last. MOM-123 did not run (it waits for an email sender). The day-end fixed one real UI race on MOM-113 and MOM-30 (failure log F-072) and created MOM-145 to MOM-148. Day 6 added no migration: production holds 001 to 019 (677 verify checks passing at the 2026-10-29 day-end). **This is build day 7, after N = 6; the family trial starts Tue 2026-11-03, with no scope cuts.** The next free migration number is **020**.
+> **Day 7 starts tonight, 2026-10-30, and runs at the owner's pace across tonight and tomorrow (2026-10-31).** Its day-end comes when the last block is done, whichever calendar day that is.
+
+> **Since the last plan (run on 2026-10-30):** build day 6 built every planned block but one, each on its own branch, and the 2026-10-30 day-end pushed them for pull requests: MOM-111 (setup round 3d: the floor question "In a hard week, how many <thing> would still count?", idea buttons that name the counted thing, a quick-path card that says what to do next; a live run of 21 calls, about $1.34), MOM-30 (a light palette that follows the device, with a light / dark / "Match my device" choice), MOM-142 (a home-screen icon and manifest), MOM-143 (a "Set up your goals" card on home), MOM-113 block 3.3 (layer 2's one-line look back, layer 3's choice and the finished review; no migration), MOM-122 (a reset link that works in any browser, with a signed recovery cookie), MOM-131 (the 390px header) and MOM-144 (the PM docs pilot). MOM-142, MOM-143, MOM-113 and MOM-131 are stacked on MOM-30, which merges first; MOM-144 is rebased onto `main` last. MOM-123 did not run (it waited for an email sender). **The trial's email sender went live at the 2026-10-30 day-end** (owner, through Company HQ): domain `ownaccordlabs.com`, Resend over SMTP, sender "Momentum" at `hello@ownaccordlabs.com`, SPF, DKIM and DMARC passing; the app is getting `app.ownaccordlabs.com` in Vercel, and the `vercel.app` address keeps working. MOM-122 moves to Done once its pull request merges (owner's OK); the warmer email templates are MOM-149. The day-end fixed one real UI race on MOM-113 and MOM-30 (failure log F-072) and created MOM-145 to MOM-148. Day 6 added no migration: production holds 001 to 019 (677 verify checks passing at the 2026-10-29 day-end). **This is build day 7, after N = 6; the family trial starts Tue 2026-11-03, with no scope cuts.** The next free migration number is **020**.
 
 ---
 
@@ -17,19 +19,19 @@
 | 2 | `/run-block MOM-145` | Sonnet / Medium | Size M. You approved side-by-side screenshots against `main` before code: dark cards darker with the border carrying them, solid lime for each screen's one primary action, dark control borders at 3:1; every contrast test passes in both themes. |
 | 3 | `/run-block MOM-115` | Sonnet / Medium | Size S. On home, a person with no setup sees no old-model controls (no "New Goal Wizard", no "Adjust Weekly Pace", no empty "ALL CHANNELS" heading); the old model's code stays until the full MOM-115. |
 | 4 | `/run-block MOM-148` | Sonnet / Medium | Size S. At 390px every signed-in page has a way home and Sign out, and none scrolls sideways with a long address (light and dark). |
-| 5 | `/run-block MOM-146` | Sonnet / High | Size L, may split. You approved which fields can change and where before code; "Yes, I want to change it" in the review opens the edit and returns; closed weeks keep their grade; a migration (020) only if the design stop shows it is needed. |
-| 6 | `/run-block MOM-122` | Sonnet / Medium | Size S. Only if you chose a sender: the sender is set in the dashboard by you, `/privacy` names it, the template is pasted after `RECOVERY_COOKIE_SECRET` is in Vercel, and the hourly limit is recorded on the ticket. Skip it otherwise. |
-| 7 | `/run-block MOM-123` | Sonnet / Low | Size S. Only after block 6: you walked sign-up, confirmation, sign-out and password reset on production with a disposable address, deleted it in the dashboard, and production is back to one user. |
+| 5 | `/run-block MOM-149` | Sonnet / Medium | Size S. You approved each email's words before code: who it is from (Momentum), why the person got it, one button plus the plain link written out, what happens if they ignore it, no tracking or images; tests pin each link format; `/privacy` names the sender; the block printed each template for your dashboard paste, which waits until MOM-122 is deployed. |
+| 6 | `/run-block MOM-146` | Sonnet / High | Size L, may split. You approved which fields can change and where before code; "Yes, I want to change it" in the review opens the edit and returns; closed weeks keep their grade; a migration (020) only if the design stop shows it is needed. |
+| 7 | `/run-block MOM-123` | Sonnet / Low | Size S. On `app.ownaccordlabs.com`, you walked sign-up, confirmation, sign-out and password reset with a disposable address (the emails come from "Momentum" at `hello@ownaccordlabs.com`), deleted it in the dashboard, and production is back to one user. |
 | 8 | `/run-block MOM-113` | Sonnet / High | Size M. Block 3.4: "Still right for you?" on a suggestion taken at setup, and layer 2's line warmer within the same rules; every live call waited for your OK and its cost; Claude writes words only. |
 | 9 | `/day-end` | Opus / High | The day's branches pass their checks; any migration (020, 021) is applied to production at step F after CI is green and your OK, before its pull request merges, with every verify script after it; production holds one user. Restart the PC afterwards (the reminder is MOM-124, not built yet). |
 
-If a block needs another ticket's code, `/run-block` checks that code is already in `origin/main`. If it is only on an unmerged branch, it stops and offers two ways forward: push that branch and merge its pull request first, or stack this block on that branch (only with your OK). **Every block in this plan needs the 2026-10-30 pull requests merged**: the quick path uses MOM-30's card look and MOM-111's round 3d; MOM-115's home subset sits next to MOM-143's setup card; MOM-148 builds on MOM-131's header; MOM-146 and MOM-113 build on block 3.3. Block 7 (MOM-123) needs block 6 (MOM-122). Blocks 2 and 4 both change `app/globals.css` and the dark baseline: the later one merges `origin/main` before its push.
+If a block needs another ticket's code, `/run-block` checks that code is already in `origin/main`. If it is only on an unmerged branch, it stops and offers two ways forward: push that branch and merge its pull request first, or stack this block on that branch (only with your OK). **Every block in this plan needs the 2026-10-30 pull requests merged**: the quick path uses MOM-30's card look and MOM-111's round 3d; MOM-115's home subset sits next to MOM-143's setup card; MOM-148 builds on MOM-131's header; MOM-146 and MOM-113 build on block 3.3; MOM-149 rewrites MOM-122's `supabase/templates/recovery.html`. Block 7 (MOM-123) needs MOM-122 deployed and, for the walk to see the new emails, block 5's templates pasted in the dashboard first. Blocks 2 and 4 both change `app/globals.css` and the dark baseline: the later one merges `origin/main` before its push.
 
 ---
 
 ## Executive Overview & Architectural Invariants
 
-Build day 7 is the last build day before the family trial (Tue 2026-11-03), and the owner's order puts what testers meet first. Session 1: the quick path that keeps what a person said when setup stops early (MOM-111), the dark theme's vibrancy (MOM-145), home without the old model's controls (a MOM-115 subset), and a way home and out on every phone page (MOM-148). Session 2: the review's "change" choice leading to a real edit (MOM-146), the trial's email sender and the production sign-up walk once a sender exists (MOM-122, MOM-123), and the review's block 3.4 with layer 2's tone (MOM-113).
+Build day 7 is the last build day before the family trial (Tue 2026-11-03), and the owner's order puts what testers meet first. Session 1: the quick path that keeps what a person said when setup stops early (MOM-111), the dark theme's vibrancy (MOM-145), home without the old model's controls (a MOM-115 subset), and a way home and out on every phone page (MOM-148). Session 2: warmer, clearer auth emails from the new sender (MOM-149), the review's "change" choice leading to a real edit (MOM-146), the production sign-up walk on `app.ownaccordlabs.com` (MOM-123), and the review's block 3.4 with layer 2's tone (MOM-113).
 
 `docs/DOMAIN_MODEL.md` is binding for all new code. The old model stays in the code until MOM-115 retires it, so new code is built beside the old tables, never into them. Every block preserves these invariants:
 
@@ -87,14 +89,14 @@ SESSION 1: BEFORE THE TRIAL, WHAT TESTERS MEET (MOM-111, MOM-145, MOM-115, MOM-1
   - Dark mode vibrancy
   - Home without the old model's controls (a MOM-115 subset)
   - A way home and out on every phone page
-SESSION 2: THE REVIEW'S LAST PIECES AND THE TRIAL'S EMAIL (MOM-146, MOM-122, MOM-123, MOM-113)
+SESSION 2: THE TRIAL'S EMAIL AND THE REVIEW'S LAST PIECES (MOM-149, MOM-146, MOM-123, MOM-113)
+  - Warmer, clearer auth emails, printed for the dashboard paste
   - The review's "change" leads to a real edit (020 if needed)
-  - The trial's email sender, once you have chosen one
-  - The production sign-up walk with a disposable account
+  - The production sign-up walk on app.ownaccordlabs.com with a disposable account
   - Review block 3.4 and layer 2's tone (021, or 020, if needed)
 ```
 
-*Order is the owner's (2026-10-30 day-end). Session 1 is what a tester meets in their first minutes; MOM-148 goes before the trial. Session 2's MOM-122 and MOM-123 run only once a sender exists (no domain yet on 2026-10-30); if none does, skip both and they stay first on the next day. Safe stopping points: after each block. Anything unfinished goes first on the next build day.*
+*Order is the owner's (2026-10-30 day-end). Session 1 is what a tester meets in their first minutes; MOM-148 goes before the trial. The sender went live on 2026-10-30, so session 2 opens with the email templates, and MOM-123's walk follows once MOM-122 is deployed and the templates are pasted. Safe stopping points: after each block. Anything unfinished goes first on the next build day.*
 
 ---
 
@@ -236,11 +238,46 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 
 ---
 
-# SESSION 2: THE REVIEW'S LAST PIECES AND THE TRIAL'S EMAIL
+# SESSION 2: THE TRIAL'S EMAIL AND THE REVIEW'S LAST PIECES
 
-**Your prerequisites before this session:** (1) MOM-113's block 3.3 is in `origin/main` (merged after the 2026-10-30 day-end). (2) The local stack running with `main`'s migrations. (3) For MOM-122: your choice of sender (a bought domain with a mail provider, a dedicated Gmail sender, or no emails for the trial), set up by you in the provider's and Supabase's dashboards (Claude never sees the credentials), and `RECOVERY_COOKIE_SECRET` added by you in Vercel (Production and Preview, different values) before the reset template is pasted. Without a sender, skip blocks 6 and 7. (4) For MOM-123: a disposable email address you can read, and time for a walk on production. (5) Be ready to OK MOM-113's live calls and their cost.
+**Your prerequisites before this session:** (1) MOM-122 and MOM-113's block 3.3 are in `origin/main` (merged after the 2026-10-30 day-end), and MOM-122 is deployed. (2) The local stack running with `main`'s migrations, with Mailpit (the sign-up and reset specs read their emails there). (3) Done by you on 2026-10-30: the sender (Resend over SMTP, "Momentum" at `hello@ownaccordlabs.com`, SPF, DKIM and DMARC passing) set in Supabase; `RECOVERY_COOKIE_SECRET` in Vercel; `app.ownaccordlabs.com` added to Supabase URL Configuration (Site URL, plus a `https://app.ownaccordlabs.com/**` redirect entry), to the Cloudflare Turnstile widget's hostnames and to the Google OAuth client's redirect URIs. Claude never sees a credential. (4) For MOM-123: `app.ownaccordlabs.com` serving the app in Vercel, a disposable email address you can read, and time for a walk on production. (5) Be ready to OK MOM-113's live calls and their cost.
 
-## Block 2.1: The Review's "Change" Leads to a Real Edit (MOM-146)
+## Block 2.1: Warmer, Clearer Auth Emails (MOM-149)
+
+* **Objective & Scope:** Size S (about 20 to 40 minutes after your design OK). The sender is live, so every auth email Momentum sends should be warm and clear. Rewrite every template in `supabase/templates/` and every template `supabase/config.toml` points to: today only `recovery.html` exists (MOM-122's token link, `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery`, verified by `/auth/callback/reset`); sign-up confirmation still uses Supabase's default, so add `confirmation.html` with the link `/auth/callback` verifies today (`{{ .ConfirmationURL }}`, which lands on `/auth/callback?code=…`). Each email says who it is from (Momentum), why the person got it, has one button plus the plain link written out, says what happens if they ignore it, and has no tracking or images. `/privacy` names the email provider. The block prints each template for you to paste into the Supabase dashboard; the paste happens only after `RECOVERY_COOKIE_SECRET` is in Vercel and MOM-122 is deployed.
+* **Core Invariants to Protect:** *Plain words*: everyday words with a reason, a way out. *No credential in the repo, a log or this session*. *The repo is public*: no personal address in any template, test or doc; the sender address is the product's. *Production changes need your approval*: Claude never edits the dashboard.
+* **CLI Session Config:** Model: Sonnet | Effort: Medium
+
+#### Exact Copy-Paste Prompt for Claude Code CLI
+
+```text
+Implement MOM-149: rewrite every auth email template to be warmer and clearer, name the sender in /privacy, and print each template for the dashboard paste.
+
+Task Instructions:
+1. Read ticket MOM-149 in Jira first, and MOM-122's 2026-10-30 comments (the token link, the recovery cookie and the sender facts). Its acceptance criteria are the definition of done. If they and these instructions disagree, stop and flag it. MOM-122 must already be in origin/main; stop if it is not.
+2. Read CLAUDE.md, docs/DOMAIN_MODEL.md §2.1 (plain words), supabase/templates/recovery.html, supabase/config.toml (`[auth.email]` and every `[auth.email.template.*]`, including the commented ones), app/auth/callback/route.ts, app/auth/callback/reset/route.ts, lib/config/privacy.ts, components/privacy/PrivacyNotice.tsx, tests/e2e/password-reset.spec.ts and tests/e2e/auth.spec.ts. Check the local stack with `npm run stack:status`; never run `supabase status` unfiltered.
+3. Create the feature branch `feature/MOM-149-auth-emails` off an up-to-date `main`.
+4. Design before editing, then STOP for my OK: (a) the list of emails Momentum sends (sign-up confirmation, password reset, and any other the auth settings use, such as email change or password changed), and which get a template now; (b) each email's subject and full words: who it is from, why the person got it, the one button, the plain link written out, what happens if they ignore it; (c) each link's exact format, kept as the callback expects; (d) the HTML: inline styles only, readable with images off, no image, no tracking pixel, no link other than the action link; (e) the `/privacy` line naming the provider. Wait for my answer.
+5. Build as approved: the templates in `supabase/templates/`, each with its `subject` and `content_path` in `supabase/config.toml` for the local stack.
+6. Tests: a test per template that pins its link format, the plain link written out, the one button, and no `<img`, no tracking parameters and no other link; the privacy notice test names the provider; the sign-up and reset browser specs pass on the local stack with the new templates (Mailpit). `npm test` makes no network call.
+7. Run `npx tsc --noEmit`, `npm test`, `npm run build`, and `npx playwright test tests/e2e/auth.spec.ts tests/e2e/password-reset.spec.ts` (stop `npm run dev` first; reset the local database first).
+8. Print each template, its subject and where it goes (Supabase dashboard, Authentication, Emails, Templates, and which tab) for me to paste. Say plainly: paste only after `RECOVERY_COOKIE_SECRET` is in Vercel and MOM-122 is deployed; the reset template last. Add to docs/plans/.pending-live-checks.md: `- [ ] MOM-149: after MOM-122's deploy, paste each printed template in the Supabase dashboard; then MOM-123's walk sees the new emails`.
+9. No live Claude call in this block. Never run `vercel env`, and never ask for or print a credential.
+10. Do not edit BACKLOG.md. Put backlog notes in the Jira comment and the close-out. Say "Privacy impact" and the "Build time" line in the close-out. Comment on MOM-149 with the approved words, what changed and each acceptance criterion met or unmet; do not move it to Done.
+11. Commit with "feat(MOM-149): warmer, clearer auth emails, and the sender in the privacy notice". Do not merge into main and do not push.
+
+Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes (with no network call); the auth and reset browser specs pass on the local stack; each template printed for the dashboard paste; no credential or personal address anywhere; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented; committed on the feature branch.
+```
+
+* **User Verification Gate:**
+  - [ ] You approved each email's subject and words before any edit.
+  - [ ] Each email names Momentum, says why it came, has one button and the plain link, says what happens if ignored, and has no image or tracking (read the tests).
+  - [ ] `/privacy` names the email provider.
+  - [ ] You pasted the printed templates in the dashboard only after MOM-122 was deployed (the pending live check).
+
+---
+
+## Block 2.2: The Review's "Change" Leads to a Real Edit (MOM-146)
 
 * **Objective & Scope:** Size L (70 minutes or more after your design OK; split it if the design shows two parts). Layer 3 offers "Yes, I want to change it", but nothing edits a target, a priority or a goal's clash handling after setup, so the choice is only recorded (stored as `changed`). Build the edit for what layer 3 raises today: a target's floor and aim (and its shape where the adjustment is a re-baseline), a goal's priority, the clash handling. From the review, the choice opens the matching edit and returns to the sitting. A change takes effect from the person's next period and never re-grades a closed one (`lib/engine/baseline.ts`, §1.7). Not in scope: adding a goal (MOM-132), a kind of day's usual time and a task's size or date (MOM-138).
 * **Core Invariants to Protect:** *Claude never scores*: the edit is the person's, validated by code. *Re-baseline without re-grading*. *Service-layer RLS*: a new service in `lib/services/` (created by this block). *Plain words, a way out of every change*. *A transition settles in one render*.
@@ -275,43 +312,9 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 
 ---
 
-## Block 2.2: The Trial's Email Sender (MOM-122)
-
-* **Objective & Scope:** Size S (about 20 to 40 minutes after your choice). Only if you have chosen a sender; skip this block otherwise. Day 6 built the token reset link and its signed recovery cookie; what remains is yours in the dashboards, by the checklists on MOM-122 (custom SMTP, the template pasted after `RECOVERY_COOKIE_SECRET` is in Vercel, the hourly limit read). This block does the code side: `/privacy` names the sender (`SERVICES` in `lib/config/privacy.ts`), and with "no emails for the trial" the "Forgot password?" words change so they promise no email.
-* **Core Invariants to Protect:** *No credential in the repo, a log or this session*. *Production changes need your approval*. *The repo is public*.
-* **CLI Session Config:** Model: Sonnet | Effort: Medium
-
-#### Exact Copy-Paste Prompt for Claude Code CLI
-
-```text
-Finish MOM-122 for the chosen sender: the privacy notice names it, and the sign-in words match what the trial's email can do.
-
-Task Instructions:
-1. Read ticket MOM-122 in Jira first, with its 2026-10-30 close-out (the decision, the recovery cookie and the three dashboard checklists). Its acceptance criteria are the definition of done. If no sender has been chosen, say so and stop.
-2. Read CLAUDE.md, lib/config/privacy.ts, components/privacy/PrivacyNotice.tsx, components/auth/SignInForm.tsx, components/auth/ForgotPasswordForm.tsx, supabase/templates/recovery.html and app/auth/callback/reset/route.ts.
-3. Create the feature branch `feature/MOM-122-sender` off an up-to-date `main`.
-4. Ask me which option I chose and which dashboard steps are done (by name only; never ask for or print a credential, a key or a password). Then design, and STOP for my OK: (a) the `/privacy` line naming the sender; (b) for "no emails for the trial", the new words on "Forgot password?"; (c) what I check in the dashboard before the template is pasted (`RECOVERY_COOKIE_SECRET` in Vercel first, then the URL allow-list for `/auth/callback/reset`). Wait for my answer.
-5. Build as approved. Never run `vercel env` without my OK.
-6. Tests: the privacy notice test names the sender; a component test for any changed words. `npm test` makes no network call.
-7. Run `npx tsc --noEmit`, `npm test` and `npm run build`, and the auth browser specs if words changed (stop `npm run dev` first).
-8. Add to docs/plans/.pending-live-checks.md: `- [ ] MOM-122: after the deploy and the template paste, ask for a reset on one device and open the link on another; it works`.
-9. No live Claude call in this block.
-10. Do not edit BACKLOG.md. Put backlog notes in the Jira comment and the close-out. Say "Privacy impact" and the "Build time" line in the close-out. Comment on MOM-122 with the sender's category (never a credential), the hourly limit number I read, and each acceptance criterion met or unmet; do not move it to Done.
-11. Commit with "feat(MOM-122): name the trial's email sender in the privacy notice". Do not merge into main and do not push.
-
-Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm test passes (with no network call); no credential anywhere in the repo, a log or this session; committed with the type(MOM-X) format on the feature branch, not merged and not pushed; Jira commented; committed on the feature branch.
-```
-
-* **User Verification Gate:**
-  - [ ] You set the sender in the dashboard yourself; no credential appeared in the session.
-  - [ ] `/privacy` names the sender (or the words say no email, for that option).
-  - [ ] The hourly limit is recorded on the ticket as a number only.
-
----
-
 ## Block 2.3: Walk Sign-Up and Password Reset on Production (MOM-123)
 
-* **Objective & Scope:** Size S (about 20 to 40 minutes). Only after block 2.2, with a sender in place. Walk sign-up, email confirmation, sign-out and password reset on the deployed site with a disposable address you control, then delete that account in the dashboard so production holds one user again. Claude guides and records; you do every production step by hand.
+* **Objective & Scope:** Size S (about 20 to 40 minutes). The sender is live and the manual prerequisites are done by you (2026-10-30): `app.ownaccordlabs.com` is in Supabase URL Configuration (Site URL, plus a `https://app.ownaccordlabs.com/**` redirect entry), in the Cloudflare Turnstile widget's hostnames and in the Google OAuth client's redirect URIs, and `RECOVERY_COOKIE_SECRET` is in Vercel. Run it after MOM-122 is deployed and block 2.1's templates are pasted, so the walk sees the new emails. Walk sign-up, email confirmation, sign-out and password reset on `https://app.ownaccordlabs.com` with a disposable address you control, then delete that account in the dashboard so production holds one user again. Claude guides and records; you do every production step by hand.
 * **Core Invariants to Protect:** *Standing smoke-test account*: Claude never creates, edits or deletes users on production. *The repo is public*: the disposable address is never written to a committed file.
 * **CLI Session Config:** Model: Sonnet | Effort: Low
 
@@ -321,18 +324,19 @@ Definition of Done: feature branch off up-to-date main; tsc --noEmit passes; npm
 Run MOM-123: walk sign-up, confirmation, sign-out and password reset on production with a disposable second account, by hand.
 
 Task Instructions:
-1. Read ticket MOM-123 in Jira first, and MOM-122's 2026-10-30 close-out. Its acceptance criteria are the definition of done. If MOM-122's sender is not in place, say so and stop.
-2. No branch and no code unless a step fails. Give me the walk one step at a time and wait after each: (a) sign up on the deployed site with a disposable address I control; (b) confirm from the email (note which browser opened it); (c) sign in, see home, sign out; (d) ask for a password reset, open the link on another device, set a new password, sign in; (e) in the Supabase dashboard, delete the disposable account (Authentication, Users). Never ask for the address, a password or a link's token; I report each step as "worked" or what I saw.
-3. After step (e), count users with a count-only query, after my OK: `npx supabase db query --linked -o table "select count(*) as users from auth.users"` must say 1.
-4. If a step fails, stop, describe what I saw, and propose a fix as its own branch `feature/MOM-123-<short>` with my OK.
-5. No live Claude call in this block.
-6. Comment on MOM-123 with each step's result, the user count after, and each acceptance criterion met or unmet, with the "Build time" line; do not move it to Done. If no code changed, there is no commit; otherwise commit with "fix(MOM-123): <what the walk found>" on the feature branch.
+1. Read ticket MOM-123 in Jira first, and MOM-122's 2026-10-30 comments (the close-out and the sender facts). Its acceptance criteria are the definition of done. MOM-122 must already be in origin/main and deployed; stop if it is not. Ask me whether block 2.1's templates are pasted in the dashboard (if not, the walk sees the older emails; say so on the ticket).
+2. Confirm by name only that my prerequisites are done (never print a value): `app.ownaccordlabs.com` serves the app in Vercel; it is in Supabase URL Configuration (Site URL and a `https://app.ownaccordlabs.com/**` redirect entry), in the Turnstile widget's hostnames and in the Google OAuth client's redirect URIs; `RECOVERY_COOKIE_SECRET` is in Vercel. Then check the domain answers: `curl -s -I https://app.ownaccordlabs.com/ | grep -iE "^(HTTP|location)"` (expect 307 to `/login`).
+3. No branch and no code unless a step fails. Give me the walk one step at a time on `https://app.ownaccordlabs.com` and wait after each: (a) sign up with a disposable address I control (the Turnstile check passes on this hostname); (b) confirm from the email: it comes from "Momentum" at `hello@ownaccordlabs.com`, and its link lands back on `app.ownaccordlabs.com` (note which browser opened it); (c) sign in, see home, sign out; (d) ask for a password reset, open the link on another device, set a new password, sign in; (e) in the Supabase dashboard, delete the disposable account (Authentication, Users). Never ask for the address, a password or a link's token; I report each step as "worked" or what I saw.
+4. After step (e), count users with a count-only query, after my OK: `npx supabase db query --linked -o table "select count(*) as users from auth.users"` must say 1.
+5. If a step fails, stop, describe what I saw, and propose a fix as its own branch `feature/MOM-123-<short>` with my OK.
+6. No live Claude call in this block.
+7. Comment on MOM-123 with each step's result, the user count after, and each acceptance criterion met or unmet, with the "Build time" line; do not move it to Done. If no code changed, there is no commit; otherwise commit with "fix(MOM-123): <what the walk found>" on the feature branch.
 
 Definition of Done: the walk done by the owner with each step recorded; the disposable account deleted and production back to one user; Jira commented; any fix committed on the feature branch, not merged and not pushed.
 ```
 
 * **User Verification Gate:**
-  - [ ] You walked sign-up, confirmation, sign-out and reset on production, and each step is on the ticket.
+  - [ ] You walked sign-up, confirmation, sign-out and reset on `app.ownaccordlabs.com`, the emails came from "Momentum" at `hello@ownaccordlabs.com`, and each step is on the ticket.
   - [ ] You deleted the disposable account; the count says 1 user.
   - [ ] No address, password or token appears in the session or the repo.
 
@@ -383,7 +387,7 @@ Run after the last block of the day, or type `/day-end` and let it run these in 
 
 **Your log edits and branch switches.** If you hold uncommitted edits to `docs/FAILURE_LOG.md` or `docs/RAID_LOG.md` and a branch's copy of either file differs, a plain `git switch` aborts. Before each switch `/day-end` checks for this, says so in plain words, backs both files up, stashes them (`git stash push -- <the two files>`), switches and pops. If the pop conflicts, it stops, restores from the backup and asks you. It never stages a log file for this; only the entries you approve in step D are staged.
 
-**The trial.** Day 7 is the last build day before the family trial (Tue 2026-11-03). Whatever did not finish today goes first on the next build day, in the trial's go/no-go order: anything left of MOM-111's quick path, MOM-148, MOM-146, MOM-122 and MOM-123, then the rest. MOM-114 ships as "defaults only" for the trial. MOM-132, MOM-138 and the rest of MOM-124 come after the trial starts.
+**The trial.** Day 7 is the last build day before the family trial (Tue 2026-11-03). Whatever did not finish today goes first on the next build day, in the trial's go/no-go order: anything left of MOM-111's quick path, MOM-148, MOM-149, MOM-146 and MOM-123, then the rest. MOM-114 ships as "defaults only" for the trial. MOM-132, MOM-138 and the rest of MOM-124 come after the trial starts.
 
 ## A. Build and repository checks (PowerShell or Git Bash)
 
@@ -512,6 +516,8 @@ git branch -d <branch>                              # only -d, for each merged b
 npx vercel ls --prod                                # needs the Vercel CLI (npx works); otherwise check the deployment in the Vercel dashboard. The newest production deployment must reach "Ready"
 curl -s -I https://momentum-app-eight-chi.vercel.app/ | grep -iE "^(HTTP|location)"        # 307, with location: /login
 curl -s -I https://momentum-app-eight-chi.vercel.app/login | grep -iE "^(HTTP|location)"   # 200
+curl -s -I https://app.ownaccordlabs.com/ | grep -iE "^(HTTP|location)"                    # 307, with location: /login (the trial's address; the vercel.app address keeps working)
+curl -s -I https://app.ownaccordlabs.com/login | grep -iE "^(HTTP|location)"               # 200
 ```
 
 These use no output file and no format string. Git Bash rewrites a path such as `/dev/null` for the Windows `curl`, and `MSYS_NO_PATHCONV=1` then makes `curl` fail with a write error, so `-o /dev/null -w` is not used here.
@@ -526,9 +532,11 @@ These use no output file and no format string. Git Bash rewrites a path such as 
 
 | Item | Why it matters |
 | --- | --- |
-| **Build day 7, after N = 6; the trial starts Tue 2026-11-03** | Day 6 built every planned block but MOM-123 (waiting on an email sender); its pull requests merge after the 2026-10-30 day-end, MOM-30 first. Day 7 is the owner's pre-trial order, with no scope cuts. Anything that does not finish goes first on the next build day. |
-| **The family trial's go/no-go** | The quick path that keeps what was said (block 1), a way home on every phone page (block 4), the review's change leading somewhere (block 5), and the trial's email (blocks 6 and 7, or the owner's decision to run without emails). The dark vibrancy and the old-model leftovers on home are the owner's picks for what testers meet first. |
-| **The trial's email sender** | No domain yet on 2026-10-30. The options and dashboard checklists are on MOM-122: a bought domain with a provider, a dedicated Gmail sender (small trial only), or no emails for the trial (testers created by hand). `RECOVERY_COOKIE_SECRET` goes into Vercel before the reset template is pasted, or the token link shows the expired message. |
+| **Build day 7, after N = 6; the trial starts Tue 2026-11-03** | Day 6 built every planned block but MOM-123 (waiting on an email sender); its pull requests merge after the 2026-10-30 day-end, MOM-30 first. Day 7 starts tonight, 2026-10-30, and runs at the owner's pace into 2026-10-31, in the owner's pre-trial order, with no scope cuts. Anything that does not finish goes first on the next build day. |
+| **The family trial's go/no-go** | The quick path that keeps what was said (block 1), a way home on every phone page (block 4), the auth emails (block 5), the review's change leading somewhere (block 6) and the production sign-up walk (block 7). The dark vibrancy and the old-model leftovers on home are the owner's picks for what testers meet first. |
+| **The trial's email sender** | Live since 2026-10-30 (owner, through Company HQ): domain `ownaccordlabs.com`, Resend over SMTP, "Momentum" at `hello@ownaccordlabs.com`, SPF, DKIM and DMARC passing. `RECOVERY_COOKIE_SECRET` is in Vercel. MOM-122 moves to Done once its pull request merges (owner's OK); the hourly limit is still to be recorded on it. The templates (MOM-149) are pasted in the dashboard only after MOM-122 is deployed. |
+| **The trial's address** | `app.ownaccordlabs.com` is being added in Vercel; the `vercel.app` address keeps working. Supabase URL Configuration, the Turnstile hostnames and the Google OAuth redirect URIs already list it (owner, 2026-10-30). MOM-123's walk and step C's live checks use it. |
+| **Archive name** | This plan carries the date 2026-10-30, the night day 7 starts. `docs/plans/archive/2026-10-30.md` and `2026-10-30-2.md` already exist, so the next day-end archives it as `2026-10-30-3.md`. |
 | **Live Claude calls today** | Block 8 (MOM-113): about 3 to 6 calls, $0.10 cap, each with your OK. `npm test` never calls Claude. |
 | **MOM-114 is "defaults only" for the trial** | Owner decision, 2026-10-29. Two review messages send the person to "Open settings" to set their day end and planning day, but `/settings` holds only Account, Theme and Sign out: either those words change or the two fields come first (MOM-144's audit, in BACKLOG under MOM-114). |
 | **After the trial starts** | MOM-132 (add a goal or target after first setup), MOM-138 (a kind of day's usual time, a task's size or date), MOM-139, MOM-140, the rest of MOM-124, the rest of MOM-115. |
