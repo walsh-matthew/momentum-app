@@ -157,8 +157,10 @@ export type HomeHero =
   | { kind: 'deadlines'; items: MilestoneView[] };
 
 export type HomeScoreboard =
-  // No active goal in the goal model yet: nothing to show.
-  | { state: 'no_goals' }
+  // No active goal in the goal model: nothing to show. setupSaved is true when the person has a goal row that is not active (parked,
+  // archived), which still means their first setup is saved (MOM-143: home offers setup only when it is false). The builder always
+  // sets it; a missing value counts as not saved.
+  | { state: 'no_goals'; setupSaved?: boolean }
   // The time zone or the day end is not set, so today is not known and nothing can be graded.
   | { state: 'needs_day_anchors'; anchor: 'time_zone' | 'day_end'; reason: 'not_set' | 'invalid' }
   | {

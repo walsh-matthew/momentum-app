@@ -544,10 +544,11 @@ describe('never assume: a target waits for the anchor it needs, and only that ki
 
 describe('what is shown when there is nothing to grade', () => {
   it('no goals, or only a parked one, is no_goals', () => {
-    expect(buildHomeScoreboard(rows(), NOW)).toEqual({ state: 'no_goals' });
-    expect(buildHomeScoreboard(rows({ goals: [goal('g', { state: 'parked' })] }), NOW)).toEqual({ state: 'no_goals' });
+    // No goal row at all: setup is not saved (MOM-143 offers it). A parked goal is a saved setup, so none is offered.
+    expect(buildHomeScoreboard(rows(), NOW)).toEqual({ state: 'no_goals', setupSaved: false });
+    expect(buildHomeScoreboard(rows({ goals: [goal('g', { state: 'parked' })] }), NOW)).toEqual({ state: 'no_goals', setupSaved: true });
     // A parked goal may have no shape or start yet (migration 014); it is left off home, not graded.
-    expect(buildHomeScoreboard(rows({ goals: [goal('g', { state: 'parked', shape: null, start_date: null })] }), NOW)).toEqual({ state: 'no_goals' });
+    expect(buildHomeScoreboard(rows({ goals: [goal('g', { state: 'parked', shape: null, start_date: null })] }), NOW)).toEqual({ state: 'no_goals', setupSaved: true });
   });
 
   it('a goal with no targets and no milestones still has its card, and no hero', () => {

@@ -12,9 +12,11 @@ import { RebalanceNudge } from './RebalanceNudge';
 import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
 import { HomeScoreboardSection } from '@/components/home/HomeScoreboardSection';
 import { ReviewNotice } from '@/components/home/ReviewNotice';
+import { SetupLinkCard } from '@/components/home/SetupLinkCard';
 import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
 import { CHANNEL_PARAM, withChannelParam } from '@/lib/utils/channelParam';
 import { resolveChannel } from '@/lib/utils/channelViews';
+import { setupIsOffered, setupIsSaved } from '@/lib/utils/setupOffer';
 import { ALL_CHANNELS, type ChannelViews } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { HomeScoreboard } from '@/types/home';
@@ -65,6 +67,10 @@ export function AppShell({ views, connectedApps, moveChains, progress = [], user
   const burnoutRisk = channel.velocity?.risk ?? null;
   // The plan could not be read: the wizard and the rebalance drawer need data that is not there, so their buttons are disabled.
   const loadFailed = channel.feedState === 'load_failed';
+  // The way back to setup shows while the first setup is not saved (MOM-143). The feed's own "No goals yet" then stays out of its
+  // way, and it never shows to a person whose setup is saved, whatever the old model holds (MOM-115 retires it).
+  const setupOffered = setupIsOffered(home);
+  const hideNoGoals = setupOffered || setupIsSaved(home);
 
   // The address that selects a channel, for the goal cards' links. Built from the render's own search params, so
   // the server and the browser produce the same text.
@@ -101,6 +107,7 @@ export function AppShell({ views, connectedApps, moveChains, progress = [], user
               actionsDisabled={loadFailed}
             />
             {reviewPrompt !== undefined && <ReviewNotice prompt={reviewPrompt} />}
+            {setupOffered && <SetupLinkCard />}
             {home !== undefined && <HomeScoreboardSection home={home} plan={plan} />}
             <MainFeed
               feedState={channel.feedState}
@@ -110,6 +117,7 @@ export function AppShell({ views, connectedApps, moveChains, progress = [], user
               channelTitle={channelTitle}
               moveChains={moveChains}
               onNewGoal={() => setWizardOpen(true)}
+              hideNoGoals={hideNoGoals}
             />
             <GoalCards
               channels={views.channels}

@@ -265,7 +265,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
   const anchors = toAnchors(rows.settings);
 
   const goals = rows.goals.filter(isActiveGoal).sort(byCreated);
-  if (goals.length === 0) return { state: 'no_goals' };
+  if (goals.length === 0) return { state: 'no_goals', setupSaved: rows.goals.length > 0 };
   const goalById = new Map(goals.map((g) => [g.id, g]));
 
   // Today is the person's own day, which needs the time zone and the day end. A deadline period never asks for a week
