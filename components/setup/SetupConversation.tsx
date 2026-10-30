@@ -7,21 +7,20 @@ import { askSetupTurn, saveSetup } from '@/app/actions/setup';
 import { Button } from '@/components/ui/button';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
-import { UNREACHABLE_MESSAGE, awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer } from '@/lib/setup/session';
+import { ERROR_COPY, awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer, type RetryCause } from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
 import type { SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { FinalCard } from './FinalCard';
 import { PlaybackCard } from './PlaybackCard';
 import { QuestionCard } from './QuestionCard';
 import { QuickPathCard } from './QuickPathCard';
-import { RetryNotice, type RetryKind } from './RetryNotice';
+import { RetryNotice } from './RetryNotice';
+import { SetupAlert } from './SetupAlert';
 import { SetupButton } from './SetupButton';
 import { clearStoredSession, loadStoredSession, storeSession } from './setupStorage';
 
-// A request that never reached the server, or ran out of time on the way (MOM-111 round 2, finding 12).
-const NETWORK_ERROR = UNREACHABLE_MESSAGE;
-// After a reload (a phone can drop a background tab while Claude thinks), the answer is still there, waiting for a reply.
-const STILL_WAITING = 'Your answer is kept. It has not had a reply yet.';
+// A save that never reached the server (MOM-111 round 2, finding 12), in the error card's words (round 3b, finding 6).
+const SAVE_NETWORK_ERROR = `${ERROR_COPY.network.headline}. Nothing was saved yet. Check your connection, then try again.`;
 
 // The date on this device, as YYYY-MM-DD. Sent with each request as a suggestion for a start date (the server does not
 // know the person's time zone before setup has asked for it).
@@ -74,14 +73,16 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   const [session, setSession] = useState<SetupSession>(newSession);
   // Why the last request produced no turn (the wait, a failed reply, the quick path), when it did not.
   const [view, setView] = useState<Exclude<SetupTurnView, { kind: 'turn' }> | null>(null);
+  // A save that did not go through.
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<SetupSaved | null>(null);
   // The answer put back in the box by "Change my answer".
   const [draftAnswer, setDraftAnswer] = useState<string | undefined>(undefined);
-  // Why the last request produced no turn, for the error card's words and main button (MOM-111 round 2, findings 12, 14).
-  const [errorKind, setErrorKind] = useState<RetryKind>('unreachable');
+  // Why the last request got no answer at all, for the error card (MOM-111 round 2, findings 12, 14; round 3b): the network,
+  // or the server's own refusal (signed out, a conversation it could not read), whose words are its headline.
+  const [failure, setFailure] = useState<{ cause: RetryCause; headline?: string } | null>(null);
   // "Start again" asks first: on a phone a stray tap would otherwise clear a long conversation.
   const [confirmStartOver, setConfirmStartOver] = useState(false);
 
@@ -98,13 +99,12 @@ export function SetupConversation({ userId }: SetupConversationProps) {
 
   const ask = async (next: SetupSession) => {
     setBusy(true);
-    setError(null);
+    setFailure(null);
     setView(null);
     try {
       const result = await askSetupTurn({ ...next, today: localDate(), locale: browserLocale() });
       if (!result.ok) {
-        setErrorKind('unreachable');
-        setError(result.error);
+        setFailure({ cause: 'no_answer', headline: result.error });
       } else if (result.data.kind === 'turn') {
         const updated = withAssistantTurn(next, result.data.turn, result.data.spentTokens);
         setSession(updated);
@@ -113,8 +113,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         setView(result.data);
       }
     } catch {
-      setErrorKind('unreachable');
-      setError(NETWORK_ERROR);
+      setFailure({ cause: 'network' });
     } finally {
       setBusy(false);
     }
@@ -144,7 +143,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
       setSession(taken.session);
       setDraftAnswer(taken.text);
       setView(null);
-      setError(null);
+      setFailure(null);
     });
     storeSession(userId, taken.session);
   };
@@ -162,7 +161,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         setError(result.error);
       }
     } catch {
-      setError(NETWORK_ERROR);
+      setError(SAVE_NETWORK_ERROR);
     } finally {
       setSaving(false);
     }
@@ -173,6 +172,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     setSession(newSession());
     setView(null);
     setError(null);
+    setFailure(null);
     setDraftAnswer(undefined);
     setConfirmStartOver(false);
     setPhase('intro');
@@ -220,11 +220,6 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         <Button size="lg" onClick={start} disabled={busy} className="w-full sm:w-auto">
           {busy ? 'Starting…' : 'Start'}
         </Button>
-        {error && (
-          <p role="alert" className="text-sm text-danger">
-            {error}
-          </p>
-        )}
       </section>
     );
   }
@@ -248,12 +243,13 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   const turn = lastAssistantTurn(session);
   const waiting = awaitsClaude(session);
   const retry = () => void ask(session);
-  // Which error card: the server's reason for a failed turn, "couldn't reach" for a wait or a request that never got an
-  // answer, and "waiting" after a reload, when nothing went wrong (round 2, findings 12 and 14).
-  const kind: RetryKind = view?.kind === 'failed' ? view.reason : view?.kind === 'wait' ? 'unreachable' : error ? errorKind : 'waiting';
-  const noticeMessage = error ?? view?.message ?? STILL_WAITING;
+  // Which error card: the server's reason for a failed turn, 'wait' for the spacing limit, the network or the server's
+  // refusal, and 'unsent' after a reload, when nothing went wrong (round 2, findings 12 and 14). Each card shows one button
+  // (round 3, finding 6, owner decisions D1 and D2) and the shared alert look (round 3b).
+  const cause: RetryCause = view?.kind === 'failed' ? view.reason : view?.kind === 'wait' ? 'wait' : (failure?.cause ?? 'unsent');
 
-  // Nothing has been asked yet and no reply came (the very first one): there is no question to stay on.
+  // Nothing has been asked yet and no reply came (the very first one): there is no question to stay on, and no answer to
+  // change, so the card offers only Try again.
   if (turn === null) {
     if (busy) {
       return (
@@ -264,30 +260,22 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     }
     return (
       <section aria-labelledby="setup-retry" className="channel-card space-y-4 p-4">
-        <h2 id="setup-retry" className="text-lg font-semibold tracking-[-0.02em]">
-          That did not come through
-        </h2>
-        <RetryNotice kind={kind} message={noticeMessage} onRetry={retry} />
+        <RetryNotice cause={cause === 'stuck' || cause === 'unsent' ? 'no_answer' : cause} headline={failure?.headline} onRetry={retry} headingId="setup-retry" />
       </section>
     );
   }
 
-  // The person's answer waiting on a reply, and, when nothing is running, what they can do about it.
+  // The person's answer waiting on a reply, and, when nothing is running, what they can do about it. It shows under the
+  // question it belongs to, which stays on screen (round 3b, finding 7).
   const pending = waiting ? unansweredText(session) : null;
   const notice =
-    waiting && !busy ? (
-      <RetryNotice kind={kind} message={noticeMessage} onRetry={retry} onChangeAnswer={changeAnswer} />
-    ) : null;
+    waiting && !busy ? <RetryNotice cause={cause} headline={failure?.headline} onRetry={retry} onChangeAnswer={changeAnswer} /> : null;
   const today = localDate();
   const playbackOptions = { locale: browserLocale(), spokenTime: spokenTimes(turn.draft, session.transcript), today };
 
   return (
     <div className="space-y-3">
-      {error && !waiting && (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      )}
+      {error && !waiting && <SetupAlert headline={error} />}
       {turn.kind === 'playback' && turn.chunk !== null ? (
         <PlaybackCard
           chunk={turn.chunk}
@@ -298,7 +286,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         />
       ) : turn.kind === 'final' ? (
         <FinalCard
-          lines={renderFinal(shownModel(turn.draft, session.transcript))}
+          lines={renderFinal(shownModel(turn.draft, session.transcript), playbackOptions)}
           saving={saving || busy || waiting}
           error={null}
           onSave={() => void save(false)}

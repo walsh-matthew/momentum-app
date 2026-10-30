@@ -56,7 +56,7 @@ export function casualDateLabel(iso: string, today: string | null, options: Casu
 // "tomorrow" on their own, and the weekday with the date for any other day ("Monday, Nov 2"). Used on every word a setup card
 // shows, Claude's and code's. It reads a date written for a machine ("2026-10-29"), spelled in full ("October 29, 2026") or
 // short ("Oct 29", "Thursday, Oct 29"), with any "today, " or "tomorrow, " in front of it, so "Start today, Thursday, Oct 29?"
-// shows as "Start today?". The text a turn keeps still has the date written out: the check that the person accepted a
+// shows as written, with the weekday (round 3b). The text a turn keeps still has the date written out: the check that the person accepted a
 // suggested date reads it there (lib/setup/validate.ts). Month and weekday names are matched with their capital letter, so
 // "may" the word is never read as a month. A date with no year is read as the one nearest the person's today.
 const MONTH_ALT = [...MONTHS_LONG, ...MONTHS_SHORT, 'Sept'].join('|');
@@ -108,6 +108,9 @@ export function casualText(text: string, today: string | null): string {
       // A "today, " in front of a date that is not the person's today was wrong; the date is what counts, so it shows alone.
       const firstWord = capital || (!relative && offset === 0);
       const shown = firstWord ? words.charAt(0).toUpperCase() + words.slice(1) : words;
+      // "today, " written in front of today's date keeps the date too: "Start today, Friday, Oct 30?" (MOM-111 round 3b,
+      // finding 2), so the person sees which day today is. A date written alone that is today still reads "today".
+      if (relative && rel && rel.toLowerCase() === words) return `${lead}${shown}, ${casualDate(candidate, today, { relative: false })}`;
       return `${lead}${shown}`;
     },
   );

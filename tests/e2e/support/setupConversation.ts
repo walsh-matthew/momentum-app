@@ -3,11 +3,11 @@
 // app applies. The fake model replays Claude's side (fakeAnthropic.ts); the spec types the person's side. Every name, date
 // and number in it is invented.
 
-import { SETUP_CASES, type ScriptedCase } from '../../setup-evals/cases';
+import { READING_CASE_ID, SETUP_CASES, type ScriptedCase } from '../../setup-evals/cases';
 import type { FakeScript } from './fakeAnthropic';
 
 export const E2E_CASE_ID = 'run-i-what-do-you-mean-protected';
-// A deadline goal: its exact date is asked as a plain question, the one card run-i never shows (MOM-111 round 2 screenshots).
+// A deadline goal: its date is asked with no suggestion, the one card run-i never shows (MOM-111 round 2 screenshots).
 export const DATE_QUESTION_CASE_ID = 'run-a-deadline-only';
 
 function caseById(id: string): ScriptedCase {
@@ -21,5 +21,6 @@ export const dateQuestionCase = (): ScriptedCase => caseById(DATE_QUESTION_CASE_
 
 // The scripts the fake model serves, picked by the person's first answer; the first is the default.
 export function fakeScripts(): FakeScript[] {
-  return [e2eCase(), dateQuestionCase()].map((c) => ({ firstAnswer: c.person[0].say, turns: c.script }));
+  // The reading case (MOM-111 round 3b, finding 4): a goal that is not exercise, photographed as its own set.
+  return [e2eCase(), dateQuestionCase(), caseById(READING_CASE_ID)].map((c) => ({ firstAnswer: c.person[0].say, turns: c.script }));
 }

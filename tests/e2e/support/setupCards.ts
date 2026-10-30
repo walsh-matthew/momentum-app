@@ -23,4 +23,6 @@ export async function elementsOffScreen(page: Page): Promise<string[]> {
 }
 
 export const cardOf = (page: Page): Locator => page.locator(CARD).first();
+// The whole card the heading belongs to: its section, with the answers and buttons in it (round 3).
+export const sectionOf = (page: Page): Locator => page.locator('main section.channel-card').filter({ has: page.locator(CARD) }).first();
 export const headingOf = async (page: Page): Promise<string> => ((await cardOf(page).textContent()) ?? '').trim();

@@ -114,26 +114,26 @@ describe('a proposal (finding 8)', () => {
     render(<QuestionCard turn={turn({ kind: 'proposal', topic: 'start_date', say: '', question: 'Start Monday, Nov 9?', options: ['Today, Monday, Nov 2'] })} busy={false} onAnswer={onAnswer} today="2026-11-02" />);
     const yes = screen.getByRole('button', { name: 'Yes' });
     expect(yes.className).toContain('bg-primary');
-    // Today's date shows as "Today" alone (round 2, finding 3); the tap still sends the date written out.
-    const today = screen.getByRole('button', { name: 'Today' });
+    // Round 3b, finding 2: "today, " written in front keeps its date on screen; the tap still sends the date written out.
+    const today = screen.getByRole('button', { name: 'Today, Monday, Nov 2' });
     expect(today.className).not.toContain('bg-primary');
     fireEvent.click(yes);
     fireEvent.click(today);
     expect(onAnswer.mock.calls).toEqual([[PROPOSAL_YES_TEXT], ['Today, Monday, Nov 2']]);
   });
 
-  it.each(['start_date', 'end_date', 'deadline_date', 'parked_return'] as const)('a %s question opens the picker in place, and picking a date answers it', (topic) => {
+  it.each(['start_date', 'end_date', 'deadline_date', 'parked_return'] as const)('a %s question: "Pick a date" is the date field, and picking a date answers it', (topic) => {
     const onAnswer = vi.fn();
     render(<QuestionCard turn={turn({ topic, question: 'Which day would you like?' })} busy={false} onAnswer={onAnswer} today={TODAY} />);
     expect(screen.queryByRole('button', { name: 'Use this date' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: PICK_DATE }));
     fireEvent.change(screen.getByLabelText(PICK_DATE), { target: { value: '2026-11-12' } });
     expect(onAnswer).toHaveBeenCalledWith('Thursday, November 12, 2026');
   });
 
   it('no other question has a date picker', () => {
     render(<QuestionCard turn={turn({ topic: 'floor' })} busy={false} onAnswer={() => {}} today={TODAY} />);
-    expect(screen.queryByRole('button', { name: PICK_DATE })).toBeNull();
+    expect(screen.queryByLabelText(PICK_DATE)).toBeNull();
+    expect(document.querySelector('input[type="date"]')).toBeNull();
   });
 });
 

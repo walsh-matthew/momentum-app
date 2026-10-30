@@ -5,7 +5,7 @@
 // - nothing asks Claude until Start is tapped, and the device's date goes with the request as a suggestion;
 // - one question is on screen at a time (and at 390px nothing scrolls sideways);
 // - a part is played back and approved with a tap, and the conversation survives a reload in the same tab;
-// - (MOM-111) "Keep it as it is" in the change box approves a part, "Not sure what I mean?" sends "What do you mean?", and the
+// - (MOM-111) "Keep it as it is" in the change box approves a part, "What does this mean?" sends "What do you mean?", and the
 //   answer box and both buttons sit inside the screen at each width;
 // - (MOM-111 smoke-test round) at 390px nothing on any setup card scrolls sideways, no card shows a date as YYYY-MM-DD, a
 //   reload opens straight on the question, and while a reply is slow, or after replies are thrown away, the question stays
@@ -14,11 +14,17 @@
 // - after Save the goal's targets are there to log against, the tab's copy is gone, and a second setup is refused.
 // The scripted model is written for a fixed order, so the spec answers exactly the scripted lines. The spacing limit
 // (a second between one person's calls) can answer "wait"; the spec taps Try again, as a person would.
+//
+// Dates follow the person, not the machine running the test (PR #68 CI): once setup knows the person's time zone, the server
+// suggests their own today, so the spec works the expected date out the same way (personToday) instead of reading the
+// browser's date. E2E_UTC_AHEAD_OF_PERSON=1 runs the spec in the case that failed in CI: the browser on UTC at 03:00, when the
+// UTC date is already a day ahead of the scripted person's (America/Denver); the real clock still drives the server.
 
 import type { Locator, Page } from '@playwright/test';
-import { MACHINE_DATE } from '@/lib/dates/casual';
+import { MACHINE_DATE, dateInZone } from '@/lib/dates/casual';
 import { runSetupEval } from '@/lib/setup/evals';
-import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, TYPE_INSTEAD } from '@/lib/setup/session';
+import { personToday } from '@/lib/setup/relativeDates';
+import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, TYPE_INSTEAD, errorCopy } from '@/lib/setup/session';
 import { acceptsText } from '@/lib/setup/text';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
@@ -33,6 +39,18 @@ interface FakeLast {
   lastSetupUserText: string;
 }
 const fakeLast = async (): Promise<FakeLast> => (await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}/__fake/last`)).json() as Promise<FakeLast>;
+// Waits until no setup request has reached the fake model for a few seconds: every turn this test started has finished.
+async function fakeSettled(quietMs = 3000, maxMs = 60_000): Promise<void> {
+  const start = Date.now();
+  let count = (await fakeLast()).setupRequests;
+  let since = Date.now();
+  while (Date.now() - start < maxMs) {
+    await new Promise((r) => setTimeout(r, 500));
+    const now = (await fakeLast()).setupRequests;
+    if (now !== count) [count, since] = [now, Date.now()];
+    else if (Date.now() - since >= quietMs) return;
+  }
+}
 // Holds each fake answer back, or makes the next ones unusable (tests/e2e/support/fakeAnthropic.ts).
 const fakeControl = async (path: string): Promise<void> => {
   await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}${path}`, { method: 'POST' });
@@ -50,7 +68,18 @@ async function cardIsReadable(page: Page, width: number): Promise<void> {
   expect(text, 'no date on screen as YYYY-MM-DD').not.toMatch(MACHINE_DATE);
 }
 
-// The date on this machine as the app writes it (the browser's local date).
+// The browser's clock and time zone in the case CI failed in: UTC, at 03:00 on the day after the scripted person's today
+// (America/Denver is seven or six hours behind, so it is still the evening before there).
+const UTC_AHEAD = process.env.E2E_UTC_AHEAD_OF_PERSON === '1';
+const PERSON_ZONE = 'America/Denver';
+async function setBrowserClock(page: Page): Promise<void> {
+  if (!UTC_AHEAD) return;
+  const personDay = dateInZone(PERSON_ZONE) ?? '';
+  const next = new Date(Date.parse(`${personDay}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  await page.clock.setFixedTime(new Date(`${next}T03:00:00Z`));
+}
+
+// The date on this device as the app writes it (the browser's local date).
 const localDate = (page: Page) =>
   page.evaluate(() => {
     const now = new Date();
@@ -79,7 +108,8 @@ const headingOf = async (page: Page): Promise<string> => ((await cardOf(page).te
 // spacing limit's "wait" by tapping Try again, as the person would. Since MOM-111 finding 10 the wait shows under the card
 // being answered, which stays on screen, so a wait is an alert there rather than a card of its own.
 async function nextCard(page: Page, previous: string | null): Promise<{ id: string; heading: string }> {
-  const waitAlert = page.getByRole('alert').filter({ hasText: /wait a few seconds/ });
+  // The spacing limit's card (round 3b: the shared alert look, marked by its cause).
+  const waitAlert = page.locator('[data-retry-cause="wait"]');
   for (let attempt = 0; attempt < 8; attempt++) {
     await expect(cardOf(page)).toBeVisible();
     if (previous !== null) {
@@ -103,7 +133,8 @@ async function nextCard(page: Page, previous: string | null): Promise<{ id: stri
 
 for (const [name, width] of Object.entries(WIDTHS)) {
   test.describe(`at ${width}px (${name})`, () => {
-    test.use({ viewport: { width, height: 900 } });
+    test.use({ viewport: { width, height: 900 }, ...(UTC_AHEAD ? { timezoneId: 'UTC' } : {}) });
+    test.beforeEach(async ({ page }) => setBrowserClock(page));
 
     test('setup: a scripted conversation, approved part by part, saved once, and usable', async ({ page, context }) => {
       test.setTimeout(240_000);
@@ -167,7 +198,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           }
         } else {
           expect(card.id, `turn ${k} should be a question`).toBe('setup-question');
-          // "Not sure what I mean?" is on every question, inside the screen's width.
+          // "What does this mean?" is on every question, inside the screen's width.
           await inView(page, page.getByRole('button', { name: MEANING_LINK }));
           const yes = page.getByRole('button', { name: 'Yes', exact: true });
           if ((await page.getByLabel('Your answer').count()) > 0) {
@@ -208,9 +239,15 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(log.getByText(/No targets yet/)).toBeVisible();
       await log.close();
 
-      // The suggested start date was the browser's own date, labelled as a suggestion.
+      // The suggested start date, labelled as a suggestion: the person's own today. Once setup knows their time zone the
+      // server uses that zone's date, else the device's (lib/setup/relativeDates.ts personToday), so the expected date is
+      // worked out the same way, never read off the browser alone (PR #68 CI: a UTC browser after 00:00 UTC is a day ahead
+      // of America/Denver).
       const last = await fakeLast();
-      expect(last.lastSetupUserText).toContain(`Suggested start date (today's date on the person's device, a suggestion only): ${await localDate(page)}`);
+      const zone = report.draft.model.person.timeZone;
+      expect(zone, 'the scripted person gives a time zone').toBe(PERSON_ZONE);
+      const personDay = personToday(zone, await localDate(page), new Date());
+      expect(last.lastSetupUserText).toContain(`Suggested start date (today's date on the person's device, a suggestion only): ${personDay}`);
 
       await page.getByRole('button', { name: 'Save my setup' }).click();
       await expect(page.getByRole('heading', { name: 'Your setup is saved' })).toBeVisible();
@@ -256,16 +293,24 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         }
         expect((await nextCard(page, first)).heading).toBe(scripted.script[1].question ?? '');
 
-        // Thrown away three times: the question stays, with Try again and Change my answer.
+        // Thrown away three times: the question stays, with only Change my answer (round 3, finding 6).
         const second = page.getByRole('heading', { name: scripted.script[1].question ?? '' });
-        await fakeControl('/__fake/slow?ms=0');
+        // Each fake answer waits a little, so the tries inside the turn are not refused by the spacing limit (that "wait" is
+        // a technical card with only Try again).
+        await fakeControl('/__fake/slow?ms=1100');
         await fakeControl('/__fake/unusable?count=3');
         await spaced();
         await page.getByLabel('Your answer').fill('First try at this');
         await page.getByRole('button', { name: 'Send' }).click();
-        await expect(page.getByRole('alert')).toBeVisible();
+        const stuck = errorCopy('stuck', true);
+        await expect(page.locator('main').getByRole('alert')).toHaveText(`${stuck.headline}${stuck.line}`, { timeout: 30_000 });
+        // The service can stop before all three are used (the same shape error twice ends the turn), so the rest are disarmed
+        // here: a leftover one went to the cut-off request below, whose retry then landed in the next test (PR #68 CI).
+        await fakeControl('/__fake/slow?ms=0');
+        await fakeControl('/__fake/unusable?count=0');
         await expect(second).toBeVisible();
         await cardIsReadable(page, width);
+        await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
         await page.getByRole('button', { name: 'Change my answer' }).click();
         await expect(page.getByLabel('Your answer')).toHaveValue('First try at this');
 
@@ -288,6 +333,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       } finally {
         await fakeControl('/__fake/slow?ms=0');
         await fakeControl('/__fake/unusable?count=0');
+        // The request cut off by the reload is still running on the server; let it, and any retry, finish here, so no call of
+        // this test reaches the fake while the next one counts its own.
+        await fakeSettled();
       }
     });
   });

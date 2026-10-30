@@ -1,47 +1,50 @@
 'use client';
 
-import { CHANGE_ANSWER, TRY_AGAIN } from '@/lib/setup/session';
+import { CHANGE_ANSWER, SEND_AGAIN, TRY_AGAIN, errorCopy, type RetryCause } from '@/lib/setup/session';
+import { HelpLink } from './HelpLink';
+import { SetupAlert } from './SetupAlert';
 import { SetupButton } from './SetupButton';
 
-// Why no reply came (MOM-111 round 2, findings 12 and 14):
-// - 'stuck': replies were thrown away, or there was no time for another try. Saying it another way is the likely fix, so
-//   "Change my answer" is the main button.
-// - 'unreachable': Momentum or Claude could not be reached, or was busy. The answer is fine, so "Try again" is the main button.
-// - 'not_configured': setup cannot go on; trying again is all there is.
-// - 'waiting': not a failure. After a reload the answer is still there, waiting to be sent.
-export type RetryKind = 'stuck' | 'unreachable' | 'not_configured' | 'waiting';
-
 interface RetryNoticeProps {
-  kind: RetryKind;
-  // What happened, in plain words.
-  message: string;
+  // Why no reply came (lib/setup/session.ts RETRY_CAUSES).
+  cause: RetryCause;
   onRetry: () => void;
-  // Puts the person's last answer back in the box to edit. Absent when there is no answer to change.
+  // Puts the person's last answer back in the box, focused, to edit. Absent when there is no answer to change (the very first
+  // turn): then the card offers Try again, and never says the answer is saved.
   onChangeAnswer?: () => void;
+  // When the card stands alone (nothing was asked yet), its headline is the card's heading.
+  headingId?: string;
+  // The server's own words when it refused the request (signed out, a conversation it could not read): they replace the
+  // headline, and the cause's line is left out.
+  headline?: string;
 }
 
-// Shown under the card the person was answering when their answer got no reply (MOM-111 finding 10): the card stays on
-// screen, so they never lose the question. Its main button depends on why (round 2), and the other choice never looks
-// disabled.
-export function RetryNotice({ kind, message, onRetry, onChangeAnswer }: RetryNoticeProps) {
-  const retryLabel = kind === 'waiting' ? 'Send it again' : TRY_AGAIN;
-  const changeFirst = kind === 'stuck' && onChangeAnswer !== undefined;
-  const retry = (
-    <SetupButton key="retry" tone={changeFirst ? 'second' : 'main'} onClick={onRetry}>
-      {retryLabel}
-    </SetupButton>
-  );
-  const change = onChangeAnswer ? (
-    <SetupButton key="change" tone={changeFirst ? 'main' : 'second'} onClick={onChangeAnswer}>
-      {CHANGE_ANSWER}
-    </SetupButton>
-  ) : null;
+// Shown under the question the person was answering when their answer got no reply (MOM-111 finding 10; round 3b, finding
+// 7): the question stays on screen above it, so they know where they are. One shared alert look (finding 5), soft words
+// (finding 6), one button (round 3, finding 6), and "What does this mean?" saying what happened and why the button fixes it.
+export function RetryNotice({ cause, onRetry, onChangeAnswer, headingId, headline }: RetryNoticeProps) {
+  const hasAnswer = onChangeAnswer !== undefined;
+  const copy = errorCopy(cause, hasAnswer);
+  const change = copy.action === 'change' && onChangeAnswer !== undefined;
   return (
-    <div className="space-y-3" data-retry-kind={kind}>
-      <p role={kind === 'waiting' ? 'status' : 'alert'} className="text-base">
-        {message}
-      </p>
-      <div className="flex flex-col gap-2 sm:flex-row">{changeFirst ? [change, retry] : [retry, change]}</div>
+    <div data-retry-cause={cause}>
+      <SetupAlert
+        headline={headline ?? copy.headline}
+        line={headline ? null : copy.line}
+        headingId={headingId}
+        role={cause === 'unsent' ? 'status' : 'alert'}
+      >
+        {change ? (
+          <SetupButton tone="main" onClick={onChangeAnswer}>
+            {CHANGE_ANSWER}
+          </SetupButton>
+        ) : (
+          <SetupButton tone="main" onClick={onRetry}>
+            {copy.action === 'send' ? SEND_AGAIN : TRY_AGAIN}
+          </SetupButton>
+        )}
+        <HelpLink explain={copy.why} />
+      </SetupAlert>
     </div>
   );
 }

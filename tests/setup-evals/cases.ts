@@ -1,6 +1,6 @@
 // The setup eval set (MOM-111, design record §5.1): scripted conversations with personal details removed. Every name,
 // date and number here is invented. Each case pairs a scripted person with a scripted fake model, so `npm test` makes no
-// network call. Twelve cases are full conversations that must come out clean; eight are short conversations with one
+// network call. Thirteen cases are full conversations that must come out clean; eight are short conversations with one
 // deliberately bad turn, to show each hard rule's check catches what it should (and only that). The questions are written
 // the way setup should ask them (MOM-111): everyday words, a reason, and short examples where they help.
 
@@ -25,7 +25,8 @@ const SHAPE_Q = 'Does this keep going, run until a set date, or have a deadline?
 const IDEA_DETAIL = 'Big or small, in your own words.';
 const SHAPE_DETAIL = 'It decides how your plan is laid out: in stretches that keep going, up to an end date, or back from a deadline.';
 const BLOCK_Q = 'How many weeks should the first stretch run?';
-const FLOOR_Q = 'What is the least you would count as still on track each week?';
+// The fewest question names what is counted, in the person's words (MOM-111 round 3b, finding 1).
+const floorQ = (counted: string): string => `What's the fewest ${counted} in a week that still counts as on track?`;
 
 const done = (c: Omit<SetupEvalCase, 'person'>, s: Script): ScriptedCase => ({ ...c, person: s.person, script: s.turns });
 
@@ -50,12 +51,27 @@ interface HabitOptions {
   // 'whatDoYouMean': the person asks what the day-end question means, and Claude explains it before asking again.
   dayEnd: 'checkin' | 'ambiguousEarly' | 'whatDoYouMean';
   reminders?: boolean;
+  // What the goal is called and why it matters, as the person put it (round 3b, finding 4: a goal that is not exercise).
+  goalTitle?: string;
+  why?: { reply: string; text: string };
+  // What the person counts, in their own words: their reply, the target's title, the word options use, and the habit.
+  counted?: { reply: string; title: string; word: string; habit: string };
+  // The three starting ideas for the fewest, when the person asks for ideas; the second is the one they pick.
+  ideaNumbers?: [number, number, number];
 }
+
+const SESSIONS = { reply: 'Sessions.', title: 'Sessions', word: 'sessions', habit: 'Do a session' };
+const RUNS = { reply: 'Runs.', title: 'Runs', word: 'runs', habit: 'Go for a run' };
+export const READING_CASE_ID = 'run-r-reading-ideas';
 
 function habitCase(o: HabitOptions): ScriptedCase {
   const s = new Script();
   const early = o.weekStartEarly === true;
   const change = o.floor === 'changeAtApproval';
+  const title = o.goalTitle ?? 'Run more';
+  const why = o.why ?? { reply: 'It clears my head.', text: 'it clears my head' };
+  const counted = o.counted ?? SESSIONS;
+  const [lo, mid, hi] = o.ideaNumbers ?? [2, 3, 4];
 
   s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: o.idea });
   if (o.goals === 'two') {
@@ -89,7 +105,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
     // The first message already said why, so this turn records it and skips the question in one line.
     s.add({
       topic: 'breakup',
-      edit: (m) => m.goals.push(goal('g1', 'Run more', { why: 'it clears my head' })),
+      edit: (m) => m.goals.push(goal('g1', title, { why: why.text })),
       skipped: { topic: 'why', line: "You told me why it matters, so I'll skip that." },
       question: 'Is this one goal, or a few separate ones?',
       reply: 'Just this one.',
@@ -99,17 +115,17 @@ function habitCase(o: HabitOptions): ScriptedCase {
     s.add({
       topic: 'why',
       edit: (m) => {
-        m.goals.push(goal('g1', 'Run more'));
+        m.goals.push(goal('g1', title));
         if (early) m.person.weekStart = 1;
       },
       said: early ? ['person.weekStart'] : [],
       say: 'Knowing what it is for helps me shape the rest.',
       question: 'Why does this matter to you?',
-      reply: 'It clears my head.',
+      reply: why.reply,
     });
     s.add({
       topic: 'breakup',
-      edit: (m) => (goalOf(m, 'g1').why = 'it clears my head'),
+      edit: (m) => (goalOf(m, 'g1').why = why.text),
       question: 'Is this one goal, or a few separate ones?',
       reply: 'Only this one.',
     });
@@ -189,22 +205,22 @@ function habitCase(o: HabitOptions): ScriptedCase {
     accepted: o.goals === 'two' ? ['goals.g2.startDate'] : [],
     say: 'That way Momentum can show you how it is going from what you log.',
     question: 'What would you like to count to know this is going well?',
-    reply: 'Sessions.',
+    reply: counted.reply,
   });
 
   const addTarget = (m: SetupModel) => {
-    goalOf(m, 'g1').targets.push(target('t1', 'Sessions'));
+    goalOf(m, 'g1').targets.push(target('t1', counted.title));
   };
   const finishTarget = (floor: number) => (m: SetupModel) => {
     targetOf(m, 'g1', 't1').floor = floor;
-    goalOf(m, 'g1').items.push(item('i1', 'habit', 'Do a session', { targetKey: 't1' }));
+    goalOf(m, 'g1').items.push(item('i1', 'habit', counted.habit, { targetKey: 't1' }));
   };
   const floorPath = ['goals.g1.targets.t1.floor'];
 
   switch (o.floor) {
     case 'plain':
     case 'changeAtApproval':
-      s.add({ topic: 'floor', edit: addTarget, question: FLOOR_Q, reply: 'Two a week.' });
+      s.add({ topic: 'floor', edit: addTarget, question: floorQ(counted.word), reply: 'Two a week.' });
       s.playback('targets', 'Yes.', { edit: finishTarget(2), said: floorPath });
       break;
     case 'ideas':
@@ -213,30 +229,32 @@ function habitCase(o: HabitOptions): ScriptedCase {
         topic: 'floor',
         edit: addTarget,
         question: 'Do you have a number in mind, or would some starting ideas help?',
+        detail: `The fewest ${counted.word} in a week that still counts as on track.`,
         reply: 'Some ideas, please.',
       });
       s.add({
         kind: 'ideas',
         topic: 'floor',
         say: 'Here are some starting points.',
-        options: ['2 a week', '3 a week', '4 a week'],
+        detail: `${counted.title} a week, from what you said about where you are now.`,
+        options: [`At least ${lo} a week`, `At least ${mid} a week`, `At least ${hi} a week`],
         question: 'Which of these would you like to start from, or give your own?',
         reply: 'The second one works.',
       });
-      s.playback('targets', 'Yes.', { edit: finishTarget(3), accepted: floorPath });
+      s.playback('targets', 'Yes.', { edit: finishTarget(mid), accepted: floorPath });
       break;
     case 'ambiguous':
       s.add({
         topic: 'floor',
         edit: addTarget,
-        question: FLOOR_Q,
+        question: floorQ(counted.word),
         reply: { say: 'A few, I guess.', fits: false },
       });
       s.add({
         kind: 'interpretations',
         topic: 'floor',
         say: 'I am not sure which number that is.',
-        options: ['Two a week', 'Three a week', 'A different number'],
+        options: ['At least two a week', 'At least three a week', 'A different number'],
         question: 'Which of these is closest?',
         reply: 'The second one.',
       });
@@ -319,7 +337,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
 }
 
 // ---------------------------------------------------------------------------
-// A deadline-only goal: no week start, the exact date, and whether it can move
+// A deadline-only goal: no week start, the date, and whether it can move
 // ---------------------------------------------------------------------------
 
 interface DeadlineOptions {
@@ -358,7 +376,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
     topic: 'deadline_date',
     edit: (m) => (goalOf(m, 'g1').shape = 'project'),
     say: "That's the date we'll plan back from.",
-    question: 'What is the exact date it has to be done by?',
+    question: 'Which day does it have to be done by?',
     reply: o.dateReply,
   });
   const moveAsked = s.next;
@@ -505,7 +523,7 @@ function phoneCase(): ScriptedCase {
     question: 'What would you like to count to know running is going well?',
     reply: 'runs',
   });
-  s.add({ topic: 'floor', edit: (m) => goalOf(m, 'g1').targets.push(target('t1', 'Runs')), question: FLOOR_Q, reply: '2' });
+  s.add({ topic: 'floor', edit: (m) => goalOf(m, 'g1').targets.push(target('t1', 'Runs')), question: floorQ('runs'), reply: '2' });
   s.playback('targets', 'yes', {
     edit: (m) => {
       targetOf(m, 'g1', 't1').floor = 2;
@@ -599,7 +617,7 @@ const FIXTURES: ScriptedCase[] = [
     'gives starting ideas without offering the choice first',
     (s) => {
       s.add({ topic: 'idea', question: 'What would you like to work on?', reply: 'I want to run more.' });
-      s.add({ kind: 'ideas', topic: 'floor', options: ['2 a week', '3 a week'], question: 'Which of these would you like?' });
+      s.add({ kind: 'ideas', topic: 'floor', detail: 'Runs a week.', options: ['At least 2 a week', 'At least 3 a week'], question: 'Which of these would you like?' });
     },
     1,
   ),
@@ -663,7 +681,7 @@ export const SETUP_CASES: ScriptedCase[] = [
   ...FIXTURES,
   deadlineCase({
     id: 'run-a-deadline-only',
-    title: 'a deadline-only goal: exact date, can it move, and no week start',
+    title: 'a deadline-only goal: its date, can it move, and no week start',
     rules: ['one_question', 'assume_nothing', 'no_math'],
     goalTitle: 'Finish the quilt',
     idea: "Finish a quilt for my sister's wedding.",
@@ -687,6 +705,7 @@ export const SETUP_CASES: ScriptedCase[] = [
     floor: 'ideas',
     dayEnd: 'checkin',
     reminders: true,
+    counted: RUNS,
   }),
   habitCase({
     id: 'run-c-answered-already',
@@ -723,7 +742,7 @@ export const SETUP_CASES: ScriptedCase[] = [
   }),
   deadlineCase({
     id: 'run-g-relative-deadline',
-    title: 'a deadline given as "the week before X": the exact date is asked, never worked out',
+    title: 'a deadline given as "the week before X": the date is asked, never worked out',
     rules: ['assume_nothing', 'no_math'],
     goalTitle: 'Demo ready',
     idea: 'Get my demo ready the week before the conference.',
@@ -757,6 +776,7 @@ export const SETUP_CASES: ScriptedCase[] = [
     floor: 'ideas',
     dayEnd: 'checkin',
     reminders: true,
+    counted: RUNS,
   }),
   habitCase({
     id: 'run-j-what-do-you-mean-day-end',
@@ -778,4 +798,19 @@ export const SETUP_CASES: ScriptedCase[] = [
     dayEnd: 'checkin',
   }),
   phoneCase(),
+  // A goal that is not exercise (round 3b, finding 4): every option, detail and the final recap count "pages", the person's
+  // own word. The browser specs photograph it as its own set.
+  habitCase({
+    id: READING_CASE_ID,
+    title: "a reading goal: the ideas and the recap count pages, in the person's own word",
+    rules: ['choice_before_examples', 'no_math'],
+    idea: 'I want to read more books.',
+    goalTitle: 'Read more books',
+    why: { reply: 'It helps me unwind.', text: 'it helps me unwind' },
+    priorities: 'plain',
+    floor: 'ideas',
+    dayEnd: 'checkin',
+    counted: { reply: 'Pages.', title: 'Pages', word: 'pages', habit: 'Read' },
+    ideaNumbers: [50, 100, 150],
+  }),
 ];

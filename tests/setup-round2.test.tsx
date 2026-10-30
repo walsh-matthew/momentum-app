@@ -20,7 +20,7 @@ import { FinalCard } from '@/components/setup/FinalCard';
 import { PlaybackCard } from '@/components/setup/PlaybackCard';
 import { QuestionCard } from '@/components/setup/QuestionCard';
 import { QuickPathCard } from '@/components/setup/QuickPathCard';
-import { RetryNotice, type RetryKind } from '@/components/setup/RetryNotice';
+import { RetryNotice } from '@/components/setup/RetryNotice';
 import { MIN_CALL_MS, SETUP_TURN_BUDGET_MS, runCheckedTurn } from '@/lib/services/setup';
 import type { RunSetupTurnArgs, SetupTurnResult } from '@/lib/services/llm';
 import { checkDateLeadIn, checkOneQuestion, checkQuestionLength, checkTurn } from '@/lib/setup/checks';
@@ -31,7 +31,7 @@ import { OUTPUT_FEEDBACK, OUTPUT_PROBLEMS, shapeFeedback, shapeIssuesForLog } fr
 import { DRAFT_SHAPE_TEXT } from '@/lib/setup/prompt';
 import { durationEnd, durationIn, durationWeeks, isOnlyDuration, stretchLastDay } from '@/lib/setup/relativeDates';
 import { describeAt } from '@/lib/setup/schemaText';
-import { PROPOSAL_YES_TEXT, STUCK_MESSAGE, TYPE_INSTEAD } from '@/lib/setup/session';
+import { PICK_OTHER_DATE, PROPOSAL_YES_TEXT, TYPE_INSTEAD, errorText, type RetryCause } from '@/lib/setup/session';
 import { appsIn, sourceNote } from '@/lib/setup/sources';
 import { validateDraft } from '@/lib/setup/validate';
 import { AssistantTurnSchema, SetupDraftSchema, type AssistantTurn, type SetupDraft, type SetupSession, type Transcript } from '@/types/setup';
@@ -263,11 +263,12 @@ describe('A and C: a turn in the service', () => {
     expect(calls[0].timeoutMs).toBe(95_000);
   });
 
-  it('stops retrying when another call cannot fit, and ends in the stuck card instead of a network error', async () => {
+  it('stops retrying when another call cannot fit, and ends in the time-limit card instead of a network error', async () => {
     const { calls, deps } = clocked([{}, good], [SETUP_TURN_BUDGET_MS - MIN_CALL_MS + 1]);
     const view = await runCheckedTurn({ userId: 'u', session, deadlineMs: SETUP_TURN_BUDGET_MS }, deps);
     expect(calls).toHaveLength(1);
-    expect(view).toEqual({ kind: 'failed', reason: 'stuck', message: STUCK_MESSAGE, rejected: 1 });
+    // Round 3, finding 6: the time limit is a technical failure, with only "Try again".
+    expect(view).toEqual({ kind: 'failed', reason: 'timed_out', message: errorText('timed_out'), rejected: 1 });
   });
 
   it('also stops when the time left is shorter than the longest call so far', async () => {
@@ -434,10 +435,10 @@ describe('every card: at most one main button, one submit, and second choices th
 
   it.each([
     ['stuck', 'Change my answer'],
-    ['unreachable', 'Try again'],
-    ['waiting', 'Send it again'],
-  ] as [RetryKind, string][])('the %s error card leads with "%s"', (kind, main) => {
-    const { container } = render(<RetryNotice kind={kind} message="x" onRetry={() => {}} onChangeAnswer={() => {}} />);
+    ['network', 'Try again'],
+    ['unsent', 'Send it again'],
+  ] as [RetryCause, string][])('the %s error card leads with "%s"', (cause, main) => {
+    const { container } = render(<RetryNotice cause={cause} onRetry={() => {}} onChangeAnswer={() => {}} />);
     expect(mainCount(container)).toBe(1);
     expect(container.querySelector('[data-tone="main"]')?.textContent).toBe(main);
     expect(secondLooksEnabled(container)).toBe(true);
@@ -479,9 +480,11 @@ describe('findings 1, 4 and 9 on the screen', () => {
     const onAnswer = vi.fn();
     render(<QuestionCard turn={QUESTION_TURNS[6][1]} busy={false} onAnswer={onAnswer} today={TODAY} />);
     expect(screen.getByRole('button', { name: 'Yes' }).getAttribute('data-tone')).toBe('main');
-    expect(screen.getByRole('button', { name: 'Pick a different date' }).getAttribute('data-tone')).toBe('second');
+    // Round 3, finding 3: "Pick a different date" is the date field itself, so the only date field sits inside it.
+    const pick = screen.getByLabelText(PICK_OTHER_DATE);
+    expect(pick.closest('[data-picker="date"]')?.getAttribute('data-tone')).toBe('answer');
     expect(screen.queryByLabelText('Your answer')).toBeNull();
-    expect(document.querySelectorAll('input[type="date"]')).toHaveLength(0);
+    expect(document.querySelectorAll('input[type="date"]')).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Use this date' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
     expect(onAnswer).toHaveBeenCalledWith(PROPOSAL_YES_TEXT);

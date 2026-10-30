@@ -238,8 +238,8 @@ describe('takeSetupTurn: replies that are thrown away', () => {
   // MOM-111 round 2, findings 12 and 14: the reason picks the error card's words and its main button.
   it.each([
     ['refused', 'stuck'],
-    ['rate_limited', 'unreachable'],
-    ['unavailable', 'unreachable'],
+    ['rate_limited', 'busy'],
+    ['unavailable', 'no_answer'],
     ['not_configured', 'not_configured'],
   ] as const)('does not retry when Claude says %s, and says why: %s', async (reason, why) => {
     const full = await fullCase();
