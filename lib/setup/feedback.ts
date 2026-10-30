@@ -66,6 +66,8 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
     'Name what is counted in the person\'s own words, the ones they used for it ("workouts", "pages"), never a stock word they did not say.',
   'plain.date_asks':
     'A question that asks for a date shows no date in "question" or "detail". When a date is known, show it as a "proposal" they accept with Yes instead.',
+  'plain.options_say':
+    'On an ideas or interpretations turn, "say" is "" or one short line of a few words; the screen leads with its own line saying what the options are about.',
 };
 
 const DRAFT_CODES = new Set<ViolationCode>(['draft.no_source', 'draft.not_said', 'draft.not_accepted', 'draft.rule']);

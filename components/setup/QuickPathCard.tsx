@@ -1,5 +1,6 @@
 'use client';
 
+import { CARD_TEXT, CardLead } from './cardText';
 import { SetupAlert } from './SetupAlert';
 import { SetupButton } from './SetupButton';
 import type { PlaybackSection } from '@/types/setupScreen';
@@ -24,14 +25,15 @@ interface QuickPathCardProps {
 export function QuickPathCard({ message, sections, missing, canSave, saving, error, onSave, onStartOver }: QuickPathCardProps) {
   return (
     <section aria-labelledby="setup-quick-path" className="channel-card space-y-4 p-4">
-      <h2 id="setup-quick-path" className="text-lg font-semibold leading-snug tracking-[-0.02em]">
+      <CardLead id="setup-quick-path" leads={error === null}>
         Finish without more questions
-      </h2>
-      <p className="text-base">{message}</p>
+      </CardLead>
+      <p className={CARD_TEXT.body}>{message}</p>
+      {/* Section labels are muted notes: the card's title is its one bold line (round 3c, finding 1). */}
       {sections.map((section) => (
         <div key={section.chunk} className="space-y-1">
-          <h3 className="section-title">{section.title}</h3>
-          <ul className="space-y-1 text-base">
+          <h3 className={CARD_TEXT.note}>{section.title}</h3>
+          <ul className={`space-y-1 ${CARD_TEXT.body}`}>
             {section.lines.map((line, index) => (
               <li key={`${index}-${line}`} className="whitespace-pre-wrap">
                 {line}
@@ -42,8 +44,8 @@ export function QuickPathCard({ message, sections, missing, canSave, saving, err
       ))}
       {missing.length > 0 && (
         <div className="space-y-1">
-          <h3 className="section-title">Still needed before this can be saved</h3>
-          <ul className="ml-5 list-disc space-y-1 text-base">
+          <h3 className={CARD_TEXT.note}>Still needed before this can be saved</h3>
+          <ul className={`ml-5 list-disc space-y-1 ${CARD_TEXT.body}`}>
             {missing.map((line) => (
               <li key={line}>{line}</li>
             ))}

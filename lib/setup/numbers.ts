@@ -31,13 +31,13 @@ export function countedTarget(draft: SetupDraft, topic: SetupTopic): TargetDraft
 }
 
 // What is counted, in the person's words, as the number question says it: "workouts", "minutes of practice".
-export function countedThing(t: TargetDraft): string {
-  const words = countedWords(t.title);
+export function countedThing(t: TargetDraft, said: readonly string[] = []): string {
+  const words = countedWords(t.title, said);
   return t.measure === 'time' && !/\bminutes?\b/i.test(words) ? `minutes of ${words}` : words;
 }
 
 // The stretch the number covers: "in a week", or "by Friday, Nov 20" for a deadline.
-function stretch(t: TargetDraft, today: string | null): string {
+export function stretch(t: TargetDraft, today: string | null): string {
   return t.period.kind === 'deadline' ? `by ${casualDate(t.period.dueDate, today, { relative: false })}` : 'in a week';
 }
 

@@ -6,6 +6,7 @@ import { CHUNK_TITLES } from '@/lib/setup/quickPath';
 import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT } from '@/lib/setup/session';
 import type { SetupChunk } from '@/types/setup';
 import { AnswerBox } from './AnswerBox';
+import { CARD_TEXT, CardLead } from './cardText';
 import { SetupButton } from './SetupButton';
 
 interface PlaybackCardProps {
@@ -25,10 +26,8 @@ export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: Playba
 
   return (
     <section aria-labelledby="setup-playback" className="channel-card space-y-4 p-4">
-      <h2 id="setup-playback" className="text-lg font-semibold leading-snug tracking-[-0.02em]">
-        {CHUNK_TITLES[chunk]}: did I get this right?
-      </h2>
-      <ul className="space-y-2 text-base">
+      <CardLead id="setup-playback">{CHUNK_TITLES[chunk]}: did I get this right?</CardLead>
+      <ul className={`space-y-2 ${CARD_TEXT.body}`}>
         {lines.map((line, index) => (
           <li key={`${index}-${line}`} className="whitespace-pre-wrap">
             {line}
@@ -37,7 +36,7 @@ export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: Playba
       </ul>
       {changing ? (
         <div className="space-y-2">
-          <p className="text-base font-medium">{CHANGE_PROMPT}</p>
+          <p className={CARD_TEXT.body}>{CHANGE_PROMPT}</p>
           <AnswerBox
             label={CHANGE_PROMPT}
             submitLabel="Send the change"

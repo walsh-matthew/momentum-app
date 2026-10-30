@@ -31,6 +31,9 @@ export const PICK_DATE = 'Pick a date';
 export const PICK_OTHER_DATE = 'Pick a different date';
 export const TYPE_INSTEAD = 'Type it instead';
 
+// Under the lead line of a card of starting ideas or readings of an answer, in regular weight (MOM-111 round 3c, finding 2).
+export const PICK_ONE = 'Pick one or write your own.';
+
 // The error card's one button (MOM-111 round 3, finding 6).
 export const CHANGE_ANSWER = 'Change my answer';
 export const TRY_AGAIN = 'Try again';

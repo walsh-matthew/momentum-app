@@ -90,6 +90,7 @@ export const VIOLATION_CODES = [
   'choice.ideas_role',
   'choice.ideas_words',
   'plain.date_asks',
+  'plain.options_say',
 ] as const;
 export type ViolationCode = (typeof VIOLATION_CODES)[number];
 
@@ -416,10 +417,18 @@ function explains(turn: AssistantTurn, answer: PersonAnswer | null): boolean {
   return answer !== null && asksMeaning(answer.text);
 }
 
+// On a card of options (starting ideas, readings of an answer) code's own line leads, saying what the options are about
+// (lib/setup/optionsLead.ts, round 3c, finding 2), so Claude's lead-in is one short line or "".
+export const OPTIONS_SAY_MAX_CHARS = 60;
+
 export function checkLeadIn(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const say = turn.say.trim();
-  if (!say || !ASKING_KINDS.includes(turn.kind) || explains(turn, latestAnswer(ctx.transcript))) return [];
+  if (!say || !ASKING_KINDS.includes(turn.kind)) return [];
   const out: Violation[] = [];
+  if ((turn.kind === 'ideas' || turn.kind === 'interpretations') && (sentencesOf(say).length > 1 || say.length > OPTIONS_SAY_MAX_CHARS)) {
+    out.push(v('plain_words', 'plain.options_say', 'The lead-in on a card of options is longer than one short line.'));
+  }
+  if (explains(turn, latestAnswer(ctx.transcript))) return out;
   if (PREVIEWS.some((re) => re.test(say))) out.push(v('plain_words', 'plain.lead_in', 'The lead-in previews the question instead of reacting to the answer.'));
   else if (sentencesOf(say).length > 1 || say.length > LEAD_IN_MAX_CHARS) {
     out.push(v('plain_words', 'plain.lead_in', 'The lead-in is longer than one short line.'));

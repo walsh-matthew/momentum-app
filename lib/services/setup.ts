@@ -45,6 +45,7 @@ import { shownModel } from '@/lib/setup/paraphrase';
 import { spokenTimes } from '@/lib/setup/playback';
 import { personToday } from '@/lib/setup/relativeDates';
 import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
+import { personWords } from '@/lib/setup/said';
 import { errorText } from '@/lib/setup/session';
 import { sourceNote } from '@/lib/setup/sources';
 import { draftToRows, toSavePayload } from '@/lib/setup/rows';
@@ -153,6 +154,7 @@ function quickPathView(session: SetupSession, reason: QuickPathReason, message: 
       locale,
       spokenTime: spokenTimes(session.draft, session.transcript),
       today: today ?? null,
+      said: personWords(session.transcript),
     }),
     missing: describeMissing(session.draft.model, validation.issues),
     canSave: validation.ok,

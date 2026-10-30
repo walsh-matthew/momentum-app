@@ -320,21 +320,21 @@ describe('finding 5: the final recap names what is counted and the numbers, in w
   };
 
   it.each([
-    ['a least and an aim', target('t1', 'Workouts', { floor: 2, aspiration: 3 }), "You'll count workouts: at least 2 a week, aiming for 3."],
-    ['a least only', target('t1', 'Workouts', { floor: 2 }), "You'll count workouts: at least 2 a week."],
-    ['an aim only', target('t1', 'Pages', { aspiration: 50 }), "You'll count pages: aiming for 50 a week."],
-    ['no number', target('t1', 'Interviews', { role: 'outcome' }), "You'll count interviews each week."],
-    ['minutes', target('t1', 'Practice', { measure: 'time', floor: 90 }), "You'll count practice: at least 90 minutes a week."],
-    ['set days', target('t1', 'Swims', { floor: 2, period: { kind: 'day_slots', weekdays: [1, 4] } }), "You'll count swims: at least 2 a week on Monday and Thursday."],
-    ['a deadline', target('t1', 'Blocks sewn', { floor: 12, period: { kind: 'deadline', dueDate: '2026-12-15' } }), "You'll count blocks sewn: at least 12 by Tuesday, Dec 15."],
-    ['a checklist', target('t1', 'Wedding tasks', { measure: 'checklist', period: { kind: 'deadline', dueDate: '2027-06-14' } }), "You'll count wedding tasks: a checklist to work through by Monday, Jun 14, 2027."],
-    ['an app name', target('t1', 'Hevy sets', { floor: 10 }), "You'll count Hevy sets: at least 10 a week."],
+    ['a least and an aim', target('t1', 'Workouts', { floor: 2, aspiration: 3 }), 'Your goal: at least 2 workouts a week, aiming for 3.'],
+    ['a least only', target('t1', 'Workouts', { floor: 2 }), 'Your goal: at least 2 workouts a week.'],
+    ['an aim only', target('t1', 'Pages', { aspiration: 50 }), 'Your goal: aiming for 50 pages a week.'],
+    ['no number', target('t1', 'Interviews', { role: 'outcome' }), 'Your goal: interviews, counted each week.'],
+    ['minutes', target('t1', 'Practice', { measure: 'time', floor: 90 }), 'Your goal: at least 90 minutes of practice a week.'],
+    ['set days', target('t1', 'Swims', { floor: 2, period: { kind: 'day_slots', weekdays: [1, 4] } }), 'Your goal: at least 2 swims a week on Monday and Thursday.'],
+    ['a deadline', target('t1', 'Blocks sewn', { floor: 12, period: { kind: 'deadline', dueDate: '2026-12-15' } }), 'Your goal: at least 12 blocks sewn by Tuesday, Dec 15.'],
+    ['a checklist', target('t1', 'Wedding tasks', { measure: 'checklist', period: { kind: 'deadline', dueDate: '2027-06-14' } }), 'Your goal: a checklist of wedding tasks to work through by Monday, Jun 14, 2027.'],
+    ['an app name', target('t1', 'Hevy sets', { floor: 10 }), 'Your goal: at least 10 Hevy sets a week.'],
   ] as const)('%s', (_name, t, line) => {
     const lines = renderFinal(oneGoal(t), { today: TODAY });
     expect(lines[0]).toBe(line);
     for (const l of lines) {
       expect(l).toMatch(/^[A-Z].*[.]$/);
-      expect(l).not.toMatch(/you'll count\.?$/i);
+      expect(l).not.toMatch(/you'll count/i);
       expect(l).not.toMatch(MACHINE_DATE);
     }
   });
@@ -345,8 +345,8 @@ describe('finding 5: the final recap names what is counted and the numbers, in w
     a.targets.push(target('t1', 'Runs', { floor: 2, aspiration: 3 }));
     m.goals.push(a, goal('g2', 'Read more'), goal('g3', 'Paint', { state: 'parked' }));
     expect(renderFinal(m, { today: TODAY })).toEqual([
-      "For Run more, you'll count runs: at least 2 a week, aiming for 3.",
-      "For Read more, nothing is counted yet.",
+      'Run more: at least 2 runs a week, aiming for 3.',
+      'Read more: nothing is counted yet.',
       '1 goal set aside for now, with a way back.',
       'Everything can be changed on your settings page.',
     ]);
@@ -359,19 +359,19 @@ describe('finding 5: the final recap names what is counted and the numbers, in w
     m.goals.push(g);
     const lines = renderFinal(m);
     expect(lines).toHaveLength(FINAL_MAX_LINES);
-    expect(lines.at(-2)).toBe("And 4 more things you'll count.");
+    expect(lines.at(-2)).toBe('And 4 more things to count.');
   });
 
   it('the final card shows the lines as they are written', () => {
     const lines = renderFinal(oneGoal(target('t1', 'Workouts', { floor: 2, aspiration: 3 })), { today: TODAY });
     render(<FinalCard lines={lines} saving={false} error={null} onSave={() => {}} onChange={() => {}} />);
-    expect(screen.getByText("You'll count workouts: at least 2 a week, aiming for 3.")).toBeTruthy();
+    expect(screen.getByText('Your goal: at least 2 workouts a week, aiming for 3.')).toBeTruthy();
   });
 
   it('a deadline task in the draft does not change the recap', () => {
     const m = oneGoal(target('t1', 'Workouts', { floor: 2 }));
     m.goals[0].items.push(item('i1', 'deadline_task', 'Sign up', { dueDate: '2026-11-20' }));
-    expect(renderFinal(m)[0]).toBe("You'll count workouts: at least 2 a week.");
+    expect(renderFinal(m)[0]).toBe('Your goal: at least 2 workouts a week.');
   });
 });
 

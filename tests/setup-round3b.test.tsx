@@ -248,7 +248,7 @@ describe('finding 4: the counted thing is the person\'s own word', () => {
     const shown = c.script.flatMap((t) => [t.detail ?? '', ...t.options]).join(' ');
     expect(shown).not.toMatch(/sessions/i);
     const last = c.script[c.script.length - 1];
-    expect(renderFinal(last.draft.model)[0]).toBe("You'll count pages: at least 100 a week.");
+    expect(renderFinal(last.draft.model)[0]).toBe('Your goal: at least 100 pages a week.');
   });
 });
 

@@ -15,16 +15,19 @@
 // date card is saved closed and right after the tap, the phone's own picker being outside the page; the checks prove
 // nothing opens in place.
 //
+// Every card on screen, on every step of every walk and on the iPhone profile, has exactly one bold line (font-weight 600 or
+// more) and nothing heavier (round 3c, finding 1): the check runs with the screen-edge check in fits().
+//
 // Screenshots are written only when SETUP_SCREENSHOT_DIR names a folder (outside the repo); without it the checks still run.
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { devices, type Page } from '@playwright/test';
-import { APPROVE_TEXT, CHANGE_ANSWER, MEANING_LINK, MEANING_TEXT, PICK_DATE, PICK_OTHER_DATE, PROPOSAL_YES_TEXT, SEND_AGAIN, TRY_AGAIN, TYPE_INSTEAD, errorCopy, pickedDateText, type RetryCause } from '@/lib/setup/session';
+import { APPROVE_TEXT, CHANGE_ANSWER, MEANING_LINK, MEANING_TEXT, PICK_DATE, PICK_ONE, PICK_OTHER_DATE, PROPOSAL_YES_TEXT, SEND_AGAIN, TRY_AGAIN, TYPE_INSTEAD, errorCopy, pickedDateText, type RetryCause } from '@/lib/setup/session';
 import { READING_CASE_ID, SETUP_CASES, type ScriptedCase } from '../setup-evals/cases';
 import { expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
-import { CARD, cardOf, elementsOffScreen, headingOf, sectionOf } from './support/setupCards';
+import { CARD, cardOf, cardTypes, elementsOffScreen, headingOf, sectionOf } from './support/setupCards';
 import { dateQuestionCase, e2eCase } from './support/setupConversation';
 
 const SHOTS = process.env.SETUP_SCREENSHOT_DIR;
@@ -50,9 +53,20 @@ function shooter(set: string) {
   };
 }
 
+// Every card on screen fits, and has one bold line with nothing heavier (round 3c, finding 1).
 async function fits(page: Page, what: string): Promise<void> {
   expect(await elementsOffScreen(page), `${what}: nothing sits past the screen edge`).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), `${what}: no sideways scroll`).toBe(false);
+  await oneBoldLine(page, what);
+}
+
+async function oneBoldLine(page: Page, what: string): Promise<void> {
+  const cards = await cardTypes(page);
+  expect(cards.length, `${what}: a card is on screen`).toBeGreaterThan(0);
+  for (const c of cards) {
+    expect(c.bold, `${what} (${c.card}): exactly one bold line`).toHaveLength(1);
+    expect(c.heaviest.weight, `${what} (${c.card}): nothing heavier than "${c.bold[0]}" (heaviest: "${c.heaviest.text}")`).toBeLessThanOrEqual(c.boldWeight);
+  }
 }
 
 async function kindOf(page: Page): Promise<CardKind> {
@@ -121,16 +135,23 @@ const pause = (page: Page) => page.waitForTimeout(1200);
 // One scripted conversation, start to final, a screenshot of every new kind of card (or of every card, for the reading set).
 async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name: string) => Promise<void>, opts: { everyCard: boolean; errors: boolean }) {
   await page.goto('/setup');
+  await fits(page, 'intro');
   await page.getByRole('button', { name: 'Start' }).click();
   let heading = await nextCard(page, null);
   const seen = new Set<CardKind>();
   let errorsShown = false;
   let stuckShown = false;
+  // The ideas card's lead line, in code's words (round 3c, finding 2).
+  let ideasLead: string | null = null;
 
   for (const { say: line } of scripted.person) {
     await expect(page.locator(CARD)).toHaveCount(1);
     const kind = await kindOf(page);
     await fits(page, kind);
+    if (kind === 'ideas') {
+      ideasLead = heading;
+      await expect(sectionOf(page).getByText(PICK_ONE, { exact: true })).toBeVisible();
+    }
     if (opts.everyCard || !seen.has(kind)) await shot(page, kind);
     seen.add(kind);
     if (kind !== 'playback' && kind !== 'final') await expect(page.getByRole('button', { name: MEANING_LINK })).toHaveCount(1);
@@ -208,7 +229,7 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
   await fits(page, 'final');
   await shot(page, 'final');
   seen.add('final');
-  return { seen, errorsShown: errorsShown && stuckShown };
+  return { seen, errorsShown: errorsShown && stuckShown, ideasLead };
 }
 
 test.describe('at 390px (phone)', () => {
@@ -218,12 +239,13 @@ test.describe('at 390px (phone)', () => {
     test.setTimeout(420_000);
     await signUpAndConfirm(page, 'setup-cards');
     try {
-      const { seen, errorsShown } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
+      const { seen, errorsShown, ideasLead } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
       expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options'].sort());
       expect(errorsShown).toBe(true);
-      // Finding 5: the recap names what is counted, in whole sentences.
+      expect(ideasLead).toBe('Some starting points for the fewest runs in a week');
+      // Round 3, finding 5; round 3c, finding 3: the recap reads as the person's goal, in whole sentences.
       const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
-      expect(recap[0]).toMatch(/^You'll count runs: at least \d+ a week\.$/);
+      expect(recap[0]).toMatch(/^Your goal: at least \d+ runs a week\.$/);
     } finally {
       await resetFake();
     }
@@ -235,9 +257,10 @@ test.describe('at 390px (phone)', () => {
     test.setTimeout(300_000);
     const reading = SETUP_CASES.find((c) => c.id === READING_CASE_ID)!;
     await signUpAndConfirm(page, 'setup-reading');
-    await walk(page, reading, shooter('reading'), { everyCard: true, errors: false });
+    const { ideasLead } = await walk(page, reading, shooter('reading'), { everyCard: true, errors: false });
+    expect(ideasLead).toBe('Some starting points for the fewest pages in a week');
     const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
-    expect(recap[0]).toBe("You'll count pages: at least 100 a week.");
+    expect(recap[0]).toBe('Your goal: at least 100 pages a week.');
     await expect(page.locator('main')).not.toContainText(/sessions/i);
   });
 });

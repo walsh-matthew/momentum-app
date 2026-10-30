@@ -5,10 +5,12 @@ import { flushSync } from 'react-dom';
 import { casualText } from '@/lib/dates/casual';
 import { DATE_TOPICS } from '@/lib/setup/codeTurns';
 import { numberHelp } from '@/lib/setup/numbers';
-import { MEANING_TEXT, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
+import { optionsLead } from '@/lib/setup/optionsLead';
+import { MEANING_TEXT, PICK_ONE, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import type { AssistantTurn } from '@/types/setup';
 import { AnswerBox } from './AnswerBox';
 import { AnswerChoice } from './AnswerChoice';
+import { CARD_TEXT, CardLead } from './cardText';
 import { DateAnswer } from './DateAnswer';
 import { HelpLink } from './HelpLink';
 
@@ -27,15 +29,17 @@ interface QuestionCardProps {
   notice?: ReactNode;
   // Words to put back in the box ("Change my answer"): it opens with them selected, focused (round 2, finding 13).
   initialText?: string;
+  // Everything the person has said, so the counted thing in an ideas card's lead keeps their capitals (round 3c).
+  said?: readonly string[];
 }
 
 // One question, and nothing else on screen (docs/DOMAIN_MODEL.md §2.1 rule 1). Claude's words come from the validated turn,
-// with any written date made casual. In order: the lead-in right above the question; the question itself in bold, the core
-// ask only; under it, in regular weight, the detail line with its examples and its reason (round 2, finding 1); the answers
-// the person can tap; and the answer box with its one Send (round 2, finding 8). A date question or a date confirmation uses
-// the one date layout (components/setup/DateAnswer.tsx, round 2 findings 4 and 9). Every tap sends the person's own words,
-// as they would type them; the rule checks read them like any other answer.
-export function QuestionCard({ turn, busy, onAnswer, today, pending = null, notice = null, initialText }: QuestionCardProps) {
+// with any written date made casual. In order: the lead-in right above the question, muted; the question itself, the card's
+// one bold line (round 3c, finding 1), the core ask only; under it, in regular weight, the detail line with its examples and
+// its reason (round 2, finding 1); the answers the person can tap; and the answer box with its one Send (round 2, finding 8).
+// A date question or a date confirmation uses the one date layout (components/setup/DateAnswer.tsx, round 2 findings 4 and
+// 9). Every tap sends the person's own words, as they would type them; the rule checks read them like any other answer.
+export function QuestionCard({ turn, busy, onAnswer, today, pending = null, notice = null, initialText, said = [] }: QuestionCardProps) {
   const numbered = turn.kind === 'ideas' || turn.kind === 'interpretations';
   const words = (text: string) => casualText(text, today);
   // Nothing can be tapped while an answer waits on its reply, so a second answer can never follow the first.
@@ -47,19 +51,26 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
   // "What does this mean?": on a number question, code's own words on the fewest and the aim, with the person's counted thing
   // (round 3b, finding 1); on any other card, it asks Claude to explain.
   const help = { explain: numberHelp(turn.draft, turn.topic, today), onAsk: () => onAnswer(MEANING_TEXT) };
+  // A card of starting ideas or readings of an answer leads with code's own line, naming what the options are about, then
+  // "Pick one or write your own." (round 3c, finding 2). Claude's question is then not shown: the lead says it.
+  const lead = optionsLead(turn, today, said);
+  const heading = lead ?? (turn.question ? words(turn.question) : null);
+  // Under an error card the error's headline is the one bold line; the question stays above it, in regular weight.
+  const errorLeads = pending !== null && !busy && notice !== null;
 
   return (
     <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4">
-      {turn.skipped && <p className="text-sm text-muted">{words(turn.skipped.line)}</p>}
+      {turn.skipped && <p className={CARD_TEXT.note}>{words(turn.skipped.line)}</p>}
       <div className="space-y-1">
-        {turn.say && <p className="text-lg leading-snug font-normal">{words(turn.say)}</p>}
-        {turn.question && (
-          <h2 id="setup-question" className="text-lg font-semibold leading-snug tracking-[-0.02em]">
-            {words(turn.question)}
-          </h2>
+        {turn.say && <p className={CARD_TEXT.secondary}>{words(turn.say)}</p>}
+        {heading && (
+          <CardLead id="setup-question" leads={!errorLeads}>
+            {heading}
+          </CardLead>
         )}
+        {lead && <p className={CARD_TEXT.body}>{PICK_ONE}</p>}
         {turn.detail && (
-          <p data-slot="question-detail" className="text-base leading-snug font-normal text-foreground/80">
+          <p data-slot="question-detail" className={CARD_TEXT.secondary}>
             {words(turn.detail)}
           </p>
         )}
