@@ -257,7 +257,7 @@ test.describe('at 390px (phone)', () => {
       const { seen, errorsShown, ideasLead, ideasDetail, ideasOptions } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
       expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options'].sort());
       expect(errorsShown).toBe(true);
-      expect(ideasLead).toBe('How many runs make a week count, even a hard one?');
+      expect(ideasLead).toBe('In a hard week, how many runs would still count?');
       expect(ideasDetail).toBe('You said you run about 2 times a week now.');
       expect(ideasOptions.length).toBeGreaterThan(1);
       for (const option of ideasOptions) expect(option).toMatch(/^\d\. At least \d+ runs a week$/);
@@ -276,7 +276,7 @@ test.describe('at 390px (phone)', () => {
     const reading = SETUP_CASES.find((c) => c.id === READING_CASE_ID)!;
     await signUpAndConfirm(page, 'setup-reading');
     const { ideasLead, ideasDetail, ideasOptions } = await walk(page, reading, shooter('reading'), { everyCard: true, errors: false });
-    expect(ideasLead).toBe('How many pages make a week count, even a hard one?');
+    expect(ideasLead).toBe('In a hard week, how many pages would still count?');
     expect(ideasDetail).toBe('You said you read about 50 pages a week now.');
     expect(ideasOptions.length).toBeGreaterThan(1);
     for (const option of ideasOptions) expect(option).toMatch(/^\d\. At least \d+ pages a week$/);
@@ -308,7 +308,7 @@ test.describe('at 390px (phone)', () => {
     const quick = page.locator('section[aria-labelledby="setup-quick-path"]');
     await expect(quick).toBeVisible({ timeout: 30_000 });
     const needed = quick.locator('ul.list-disc li');
-    await expect(needed.filter({ hasText: 'How many workouts make a week count, even a hard one?' })).toHaveCount(1);
+    await expect(needed.filter({ hasText: 'In a hard week, how many workouts would still count?' })).toHaveCount(1);
     await expect(quick).not.toContainText(/least you aim for/i);
     await fits(page, 'quick path');
     await shooter('quick-path')(page, 'missing-floor');

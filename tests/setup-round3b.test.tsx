@@ -82,10 +82,10 @@ const asked = (over: Partial<AssistantTurn> = {}): Transcript[number] => ({ role
 describe('finding 1: a number question names the counted thing and whether it is the fewest or the aim', () => {
   it.each([
     // Round 3c: in everyday words, never "fewest" or "aim" on their own.
-    ['floor', counting('Workouts'), 'How many workouts make a week count, even a hard one?'],
+    ['floor', counting('Workouts'), 'In a hard week, how many workouts would still count?'],
     ['aspiration', counting('Workouts', { floor: 2 }), 'How many workouts a week are you hoping for?'],
-    ['floor', counting('Pages'), 'How many pages make a week count, even a hard one?'],
-    ['floor', counting('Practice', { measure: 'time' }), 'How many minutes of practice make a week count, even a hard one?'],
+    ['floor', counting('Pages'), 'In a hard week, how many pages would still count?'],
+    ['floor', counting('Practice', { measure: 'time' }), 'In a hard week, how many minutes of practice would still count?'],
     ['floor', counting('Blocks sewn', { period: { kind: 'deadline', dueDate: '2026-12-15' } }), 'How many blocks sewn by Tuesday, Dec 15 would still count as on track?'],
   ] as const)('a bare %s question becomes "%s"', (topic, draft, words) => {
     const shown = normalizeNumberTurn(turn({ topic, draft, question: 'What number feels right?' }), TODAY);
@@ -94,8 +94,8 @@ describe('finding 1: a number question names the counted thing and whether it is
 
   it('always shows code\'s words, even when Claude\'s already name the thing (round 3c: "fewest" read as jargon)', () => {
     const own = turn({ question: "What's the fewest workouts a week you'd still call on track?" });
-    expect(normalizeNumberTurn(own, TODAY).question).toBe('How many workouts make a week count, even a hard one?');
-    const same = turn({ question: 'How many workouts make a week count, even a hard one?' });
+    expect(normalizeNumberTurn(own, TODAY).question).toBe('In a hard week, how many workouts would still count?');
+    const same = turn({ question: 'In a hard week, how many workouts would still count?' });
     expect(normalizeNumberTurn(same, TODAY)).toBe(same);
   });
 
@@ -130,7 +130,7 @@ describe('finding 1: a number question names the counted thing and whether it is
     fireEvent.click(links[0]);
     if (NUMBER_TOPICS.has(topic)) {
       expect(onAnswer).not.toHaveBeenCalled();
-      const words = screen.getByText(/The first number is how many workouts make a week count, even a hard one/);
+      const words = screen.getByText(/The first number is how many workouts would still count in a hard week/);
       expect(words.textContent).toContain("The second is how many you're hoping for");
       expect(words.textContent).not.toMatch(/fewest|\baim\b/i);
       expect(words.textContent).toBe(numberHelp(draft, topic, TODAY));

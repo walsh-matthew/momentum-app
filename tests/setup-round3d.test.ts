@@ -1,7 +1,8 @@
 // MOM-111 round 3d, from the owner's review of round 3c. Three wording fixes, each in the one builder every card uses, and a
 // sweep over every counted thing and every scripted case so no screen is fixed alone:
-// 1. The verb of a number question agrees with the counted thing ("How many workouts make a week count", a singular thing
-//    keeps "makes"); lib/setup/numbers.ts decides it from one word, the head word.
+// 1. The weekly floor question reads "In a hard week, how many workouts would still count?" (the first wording, "How many
+//    workouts make a week count, even a hard one?", read as "a hard what, the week or the run?"). Its verb agrees with nothing,
+//    so makeVerb (the first word or the head word decides "make" or "makes") is kept and tested but no question uses it now.
 // 2. The quick path's missing-floor line is that same question, in the same words.
 // 3. An idea button for a number names the counted thing ("At least 2 workouts a week").
 // Pure: no model, no database, no network.
@@ -54,8 +55,8 @@ const THINGS: [title: string, verb: 'make' | 'makes'][] = [
   ['Practice', 'makes'],
 ];
 
-describe('the verb of a number question (finding a)', () => {
-  // The verb is "make" when the first word or the head word is plural.
+describe('the weekly floor question and the make/makes helper (finding a)', () => {
+  // The helper: the verb is "make" when the first word or the head word is plural.
   it.each([
     ['workouts', 'workouts', 'workouts', 'make'],
     ['strength workouts', 'strength', 'workouts', 'make'],
@@ -76,38 +77,38 @@ describe('the verb of a number question (finding a)', () => {
     expect(makeVerb(thing)).toBe(verb);
   });
 
-  it.each(THINGS)('"%s" asks with "%s", in the question and in the help', (title, verb) => {
+  it.each(THINGS)('"%s": the same question for every counted thing, in the question and in the help', (title, verb) => {
+    expect(makeVerb(title)).toBe(verb);
     const t = target('t1', title);
     const thing = countedThing(t);
-    expect(numberQuestion('floor', t, TODAY)).toBe(`How many ${thing} ${verb} a week count, even a hard one?`);
-    // The help names the same verb.
-    const help = numberHelp(draftWith(t), 'floor', TODAY);
-    expect(help).toContain(`how many ${thing} ${verb} a week count`);
+    expect(numberQuestion('floor', t, TODAY)).toBe(`In a hard week, how many ${thing} would still count?`);
+    expect(numberHelp(draftWith(t), 'floor', TODAY)).toContain(`The first number is how many ${thing} would still count in a hard week`);
   });
 
   it('reads the owner\'s examples', () => {
-    expect(numberQuestion('floor', target('t1', 'Workouts'), TODAY)).toBe('How many workouts make a week count, even a hard one?');
+    expect(numberQuestion('floor', target('t1', 'Workouts'), TODAY)).toBe('In a hard week, how many workouts would still count?');
     expect(numberQuestion('floor', target('t1', 'Practice', { measure: 'time' }), TODAY)).toBe(
-      'How many minutes of practice make a week count, even a hard one?',
+      'In a hard week, how many minutes of practice would still count?',
     );
   });
 
-  // "outdoors" ends in "s", so the rule says "make"; the sentence is not good English ("How much time outdoors makes a week
-  // count" would be). Pinned as it is, not patched: it is in the close-out. Counted in minutes (measure time) it reads well.
+  // A mass noun still asks "how many" ("how much time outdoors" would be better English). Pinned as it is, not patched: it is
+  // in the close-out. Counted in minutes (measure time) it reads well.
   it('shows what "time outdoors" produces', () => {
     expect(headWord('time outdoors')).toBe('outdoors');
-    expect(numberQuestion('floor', target('t1', 'Time outdoors'), TODAY)).toBe('How many time outdoors make a week count, even a hard one?');
+    expect(numberQuestion('floor', target('t1', 'Time outdoors'), TODAY)).toBe('In a hard week, how many time outdoors would still count?');
     expect(numberQuestion('floor', target('t1', 'Time outdoors', { measure: 'time' }), TODAY)).toBe(
-      'How many minutes of time outdoors make a week count, even a hard one?',
+      'In a hard week, how many minutes of time outdoors would still count?',
     );
   });
 
-  it('a deadline number has no verb to agree', () => {
+  it('a deadline number and the aim question keep their wording', () => {
+    expect(numberQuestion('aspiration', target('t1', 'Workouts'), TODAY)).toBe('How many workouts a week are you hoping for?');
     const t = target('t1', 'Blocks sewn', { period: { kind: 'deadline', dueDate: '2026-11-20' } as TargetDraft['period'] });
     expect(numberQuestion('floor', t, TODAY)).toMatch(/^How many blocks sewn by .+ would still count as on track\?$/);
   });
 
-  it('every scripted case and step: the number question, the options lead and the help agree with the counted thing', () => {
+  it('every scripted case and step: the number question and the options lead are the one question, with the counted thing', () => {
     let checked = 0;
     for (const c of SETUP_CASES) {
       for (const step of c.script) {
@@ -118,27 +119,29 @@ describe('the verb of a number question (finding a)', () => {
         const text = step.kind === 'ideas' || step.kind === 'interpretations' ? optionsLead(step, TODAY) : normalizeNumberTurn(step, TODAY).question;
         if (!text || t.period.kind === 'deadline' || step.topic === 'aspiration') continue;
         const thing = countedThing(t);
-        expect(text.replace(/^For [^,]+, h/, 'H')).toBe(`How many ${thing} ${makeVerb(thing)} a week count, even a hard one?`);
+        expect(text.replace(/^For [^,]+, i/, 'I')).toBe(`In a hard week, how many ${thing} would still count?`);
         checked += 1;
       }
     }
     expect(checked).toBeGreaterThan(10);
   });
 
-  it('no source file still words it with "makes" after "how many"', () => {
+  it('no file in lib/ still has "even a hard one", or "how many" followed by a verb and "a week count"', () => {
     const walk = (dir: string): string[] =>
       readdirSync(dir).flatMap((f) => {
         const p = join(dir, f);
         return statSync(p).isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(f) ? [p] : [];
       });
-    const offenders = walk(join(process.cwd(), 'lib'))
-      .filter((p) => /[Hh]ow many [^?`'"\n]* makes a week count/.test(readFileSync(p, 'utf8')))
+    const files = walk(join(process.cwd(), 'lib'));
+    expect(files.length).toBeGreaterThan(50);
+    const offenders = files
+      .filter((p) => /even a hard one|[Hh]ow many [^?`'"\n]* makes? a week count/.test(readFileSync(p, 'utf8')))
       .map((p) => p.replace(process.cwd(), ''));
     expect(offenders).toEqual([]);
   });
 
-  it('the detail line keeps "that makes": its verb agrees with "number"', () => {
-    expect(numberAbout('floor', target('t1', 'Workouts'), TODAY)).toBe('The number of workouts that makes a week count, even a hard one.');
+  it('the detail line of an offer of ideas says it as a statement', () => {
+    expect(numberAbout('floor', target('t1', 'Workouts'), TODAY)).toBe('The number of workouts that would still count in a hard week.');
   });
 });
 
@@ -152,12 +155,12 @@ describe('the quick path\'s missing-floor line (finding b)', () => {
   });
 
   it('reads the owner\'s example', () => {
-    expect(missingFloor(target('t1', 'Workouts'))).toEqual(['How many workouts make a week count, even a hard one?']);
+    expect(missingFloor(target('t1', 'Workouts'))).toEqual(['In a hard week, how many workouts would still count?']);
   });
 
   it('uses the person\'s own capital and a deadline as a date', () => {
     expect(missingFloor(target('t1', 'Spanish lessons'), { said: ['I want to do Spanish lessons'] })).toEqual([
-      'How many Spanish lessons make a week count, even a hard one?',
+      'In a hard week, how many Spanish lessons would still count?',
     ]);
     const due = target('t1', 'Blocks sewn', { period: { kind: 'deadline', dueDate: '2026-11-20' } as TargetDraft['period'] });
     expect(missingFloor(due, { today: TODAY })).toEqual([numberQuestion('floor', due, TODAY)]);
@@ -168,7 +171,7 @@ describe('the quick path\'s missing-floor line (finding b)', () => {
     const fields = ['floor', 'sources', 'unit', 'role', 'aspiration'];
     const lines = fields.flatMap((f) => describeMissing(draftWith(t).model, [{ path: `goals.g1.targets.t1.${f}`, message: 'x', code: 'rule' as const }]));
     for (const line of lines) expect(line).not.toMatch(/\b(fewest|floor|aim|aspiration|target|baseline)\b/i);
-    expect(lines).toContain('How many workouts make a week count, even a hard one?');
+    expect(lines).toContain('In a hard week, how many workouts would still count?');
   });
 });
 

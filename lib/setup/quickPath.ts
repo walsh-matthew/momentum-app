@@ -56,7 +56,7 @@ function describeIssue(model: SetupModel, issue: DraftIssue, words: MissingWords
       switch (parts[4]) {
         // The same question, in the same words, as the number card (lib/setup/numbers.ts); round 3d.
         case 'floor':
-          return target ? numberQuestion('floor', target, words.today ?? null, words.said ?? []) : `The number that makes a week count for ${name}.`;
+          return target ? numberQuestion('floor', target, words.today ?? null, words.said ?? []) : `The number that would still count in a hard week for ${name}.`;
         case 'sources':
           return `Where ${name} is tracked.`;
         case 'unit':

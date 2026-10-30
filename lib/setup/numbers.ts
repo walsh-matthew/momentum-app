@@ -32,7 +32,9 @@ export function countedThing(t: TargetDraft, said: readonly string[] = []): stri
   return t.measure === 'time' && !/\bminutes?\b/i.test(words) ? `minutes of ${words}` : words;
 }
 
-// Whether a counted thing takes "make" or "makes" (MOM-111 round 3d). Two words decide: the first word of the counted thing
+// Whether a counted thing takes "make" or "makes" (MOM-111 round 3d). No question uses it since the weekly floor question became
+// "In a hard week, how many <thing> would still count?" (its verb is "would", which agrees with nothing), but a sentence that
+// puts the verb right after the thing can use it. Two words decide: the first word of the counted thing
 // and its head word, which is the word before the first " of " ("minutes of practice" -> "minutes"), else its last word
 // ("strength workouts" -> "workouts", "yoga class" -> "class"). The verb is "make" when either is plural, so "pages read" and
 // "miles run" (plural first word, verb last) and "strength workouts" (plural last word) all say "make". A word is plural when
@@ -57,22 +59,22 @@ const dueWords = (t: TargetDraft, today: string | null): string | null =>
 
 // The number question in everyday words, the one wording builder for every counted thing (MOM-111 round 3c, wording fix): it
 // asks what the number is for, with the person's counted thing, and never says "fewest", "floor", "aim" or "target" on their
-// own. "How many pages make a week count, even a hard one?", "How many pages a week are you hoping for?"; for a deadline,
+// own. "In a hard week, how many pages would still count?", "How many pages a week are you hoping for?"; for a deadline,
 // "How many blocks sewn by Friday, Nov 20 would still count as on track?" and "... are you hoping for?". It is the bold line
 // of a number question, and of an ideas or options card about that number.
 export function numberQuestion(topic: NumberTopic, t: TargetDraft, today: string | null, said: readonly string[] = []): string {
   const thing = countedThing(t, said);
   const due = dueWords(t, today);
-  if (topic === 'floor') return due ? `How many ${thing} by ${due} would still count as on track?` : `How many ${thing} ${makeVerb(thing)} a week count, even a hard one?`;
+  if (topic === 'floor') return due ? `How many ${thing} by ${due} would still count as on track?` : `In a hard week, how many ${thing} would still count?`;
   return due ? `How many ${thing} by ${due} are you hoping for?` : `How many ${thing} a week are you hoping for?`;
 }
 
-// The same number said as a statement, for the detail line of an offer of ideas about it: "The number of pages that makes a
-// week count, even a hard one."
+// The same number said as a statement, for the detail line of an offer of ideas about it: "The number of pages that would
+// still count in a hard week."
 export function numberAbout(topic: NumberTopic, t: TargetDraft, today: string | null, said: readonly string[] = []): string {
   const thing = countedThing(t, said);
   const due = dueWords(t, today);
-  if (topic === 'floor') return due ? `The number of ${thing} by ${due} that would still count as on track.` : `The number of ${thing} that makes a week count, even a hard one.`;
+  if (topic === 'floor') return due ? `The number of ${thing} by ${due} that would still count as on track.` : `The number of ${thing} that would still count in a hard week.`;
   return due ? `The number of ${thing} by ${due} you're hoping for.` : `The number of ${thing} a week you're hoping for.`;
 }
 
@@ -90,7 +92,7 @@ export function numberHelp(draft: SetupDraft, topic: SetupTopic | null, today: s
     );
   }
   return (
-    `The first number is how many ${thing} ${makeVerb(thing)} a week count, even a hard one: a week at that number is still a good week. ` +
+    `The first number is how many ${thing} would still count in a hard week: a week at that number is still a good week. ` +
     `The second is how many you're hoping for, if you want one. You can set both, or only the first.`
   );
 }
