@@ -458,6 +458,62 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner.
 - **Led to:** A rule: one labeled answer per form question.
 
+### F-067 · 2026-10-29 · build tool
+- **Asked:** Fix the findings from the owner's phone smoke test of guided setup (MOM-111, round 1).
+- **What went wrong:** The round passed every test while the setup cards' layout on a phone was plainly wrong.
+- **Why:** The tests checked the text on each card, not its layout or visual weight, so nothing failed when the screen looked wrong.
+- **Caught by:** The owner's phone run and screenshot review.
+- **Led to:** A rule: every changed setup card gets a screenshot review at 390px before merge, plus sweep tests for layout and weight.
+
+### F-068 · 2026-10-29 · build tool
+- **Asked:** Build setup fix round 3 (MOM-111), with a browser test for each fix.
+- **What went wrong:** A setup browser test passed for the wrong reason: the fake model's retry timing made it pass, not the behavior the test named.
+- **Why:** The test's pass condition could be met by a side effect of the fake, so it never showed the behavior itself.
+- **Caught by:** The build session while building round 3.
+- **Led to:** A fix in that round.
+
+### F-069 · 2026-10-29 · build tool
+- **Asked:** Keep the setup browser spec green in CI (MOM-111, round 3 pull request).
+- **What went wrong:** A setup browser test depended on the time of day. It compared the browser's date, which is UTC in CI, with the person's own date, so it went red only after UTC midnight (evenings, Pacific time).
+- **Why:** The test assumed the browser's date and the person's date are the same day.
+- **Caught by:** CI on the round 3 pull request.
+- **Led to:** A fix, plus a CI switch that runs the spec once with UTC a day ahead of the person.
+
+### F-070 · 2026-10-29 · build tool (advising thread)
+- **Asked:** Advise the build sessions through the day's setup fix rounds.
+- **What went wrong:** Three wrong calls in one day: it called a schema failure a rule failure, it had backwards which parts of setup the model writes and which the code writes, and it put a grammar slip into a paste.
+- **Why:** It answered from its picture of the system instead of checking the diagnosis and the code first, and it did not reread a paste before sending it.
+- **Caught by:** The build session's diagnosis, the owner's question and the owner's review.
+- **Led to:** No rule; noted.
+
+### F-071 · 2026-10-29 · build tool (coordinator thread)
+- **Asked:** Keep the project's quick-links page current.
+- **What went wrong:** It listed a finished thread under "open threads".
+- **Why:** "Open" was not defined, so a thread that had finished stayed on the list.
+- **Caught by:** The owner.
+- **Led to:** A rule: list only threads that are working, blocked or waiting for review.
+
 ## In-product failures
 
-None recorded yet. The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
+The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
+
+### F-064 · 2026-10-29 · in-product
+- **Asked:** Guided setup on production (MOM-111), the standing account's first run: after "Is getting in shape one goal for you, or does it break into several goals?", the person answered "2 goals".
+- **What went wrong:** The setup stopped there. Claude's natural next question, naming the two goals, was treated by the skip-answered check as asking the topic again, so three replies in a row were thrown away (each logged as `{ category: 'rules', rules: ['skip_answered'] }`).
+- **Why:** The check marks a topic answered as soon as one question on it got a reply, and only exempts clarifying turns (ideas, interpretations). A follow-up question on the same topic, right after the person answered, was not exempt. Step 3's prompt also never said to ask what the goals are, so the turn's topic tag was not fixed.
+- **Caught by:** The production logs, after the owner's phone test.
+- **Led to:** A fix in this session (MOM-111): a question on the same topic right after the person answered it counts as a follow-up, and step 3 now says to ask what the goals are as its own `breakup` question.
+
+### F-065 · 2026-10-29 · in-product
+- **Asked:** Guided setup on production (MOM-111), the standing account's first run: at a part's playback ("is this right?") the person tapped "Change something", then decided not to change anything.
+- **What went wrong:** The screen offered only a text box with no way back, so they typed "nothing". Claude asked what they meant, and they replied "I don't want to change anything". Every reply after that was thrown away (9 rejections across 3 tries, all `{ category: 'rules' }` on `chunked_playback`, one also on `choice_before_examples`), and each try spent 3 Claude calls. 9 Claude calls were wasted and the person was stuck.
+- **Why:** The change box had no "back" control. The approval check accepts a part only when Claude's previous turn is that part's playback and `acceptsText` reads the reply as a yes, and `acceptsText` rejects any message with "no", "not", "don't" or "change", so "no change" could not approve; after the clarifying question the previous turn was no longer the playback either. A thrown-away reply is asked for again with the same input, so the retries could not succeed.
+- **Caught by:** The owner's phone test and the production logs.
+- **Led to:** A fix in this session (MOM-111, branch feature/MOM-111-playback-no-change).
+
+### F-066 · 2026-10-29 · in-product
+- **Asked:** Guided setup on production (MOM-111), the owner's live run on a phone.
+- **What went wrong:** The questions and the playback were not clear. Step 4 asked "what needs protecting" and the owner had to ask what it meant. Claude's clarifying replies were thrown away seven times (`skip_answered`), and an explanation with examples would also have broken `choice_before_examples`, so asking what a question means had no allowed answer and setup ended at Try again. The goals playback read "because To stay healthy for my family..", the person's words pasted in as typed, and the only way out of a change was a small "Never mind" link.
+- **Why:** The build turned the two setup tabletops' judgment into hard rules and terse step summaries, and the rules forbade what made the tabletops clear: short examples inside a question, a few words on why it asks, a same-topic clarification, and a playback restated in the second person. The step summaries used the model's own words (protected, floor, block), which Claude repeated to the person.
+- **Caught by:** The owner's phone test and the production logs.
+- **Led to:** A fix in this session (MOM-111, branch feature/MOM-111-setup-clarity), and a new standing rule: the plain-language principle in `docs/DOMAIN_MODEL.md` §2.1 (everyday words with a reason and examples, playback restated not parroted, a way out of every change, "what do you mean?" always answered), enforced by tests on every step summary, example question and card.
