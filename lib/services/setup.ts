@@ -39,12 +39,13 @@ import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, onlyPlainWords, type Violation } from '@/lib/setup/checks';
 import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
+import { normalizeNumberTurn } from '@/lib/setup/numbers';
 import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog } from '@/lib/setup/feedback';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { spokenTimes } from '@/lib/setup/playback';
 import { personToday } from '@/lib/setup/relativeDates';
 import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
-import { BUSY_MESSAGE, NO_ANSWER_MESSAGE, STUCK_MESSAGE, TIMED_OUT_MESSAGE } from '@/lib/setup/session';
+import { errorText } from '@/lib/setup/session';
 import { sourceNote } from '@/lib/setup/sources';
 import { draftToRows, toSavePayload } from '@/lib/setup/rows';
 import { validateDraft } from '@/lib/setup/validate';
@@ -86,23 +87,19 @@ const SAVE_FAILED = 'Could not save your setup. Nothing was saved.';
 // lib/setup/session.ts so the screen says the same for a request that never reached the server. A technical failure says
 // which one: Claude busy, Claude not answering, or the turn's time limit (a call that ran to its timeout, or no time left for
 // another try). Only an answer whose replies were all thrown away is 'stuck'.
-export const SETUP_FAILURE_MESSAGES = {
-  not_configured: "Claude isn't set up on the server yet, so setup can't go on. Nothing was saved.",
-  refused: STUCK_MESSAGE,
-  rate_limited: BUSY_MESSAGE,
-  unavailable: NO_ANSWER_MESSAGE,
-  timed_out: TIMED_OUT_MESSAGE,
-  unusable: STUCK_MESSAGE,
-} as const;
-
-const FAILURE_REASONS: Record<keyof typeof SETUP_FAILURE_MESSAGES, SetupFailedReason> = {
+const FAILURE_REASONS = {
   not_configured: 'not_configured',
   refused: 'stuck',
-  rate_limited: 'unreachable',
-  unavailable: 'unreachable',
-  timed_out: 'unreachable',
+  rate_limited: 'busy',
+  unavailable: 'no_answer',
+  timed_out: 'timed_out',
   unusable: 'stuck',
-};
+} as const satisfies Record<string, SetupFailedReason>;
+
+// The error card's words for each way a turn fails, as one text (round 3b: the card itself shows ERROR_COPY by reason).
+export const SETUP_FAILURE_MESSAGES = Object.fromEntries(
+  Object.entries(FAILURE_REASONS).map(([why, reason]) => [why, errorText(reason)]),
+) as Record<keyof typeof FAILURE_REASONS, string>;
 
 const failed = (why: keyof typeof SETUP_FAILURE_MESSAGES, rejected: number): SetupTurnView => ({
   kind: 'failed',
@@ -218,11 +215,12 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   let plainRetried = false;
   let lastSignature: string | null = null;
   let longestCallMs = 0;
-  // A date question shown with code's suggestion or code's wording (round 3, finding 2), kept only when it breaks no hard or
-  // draft rule; otherwise Claude's own checked turn is shown.
+  // A date question shown with code's suggestion or code's wording (round 3, finding 2; round 3b, finding 2), and a number
+  // question that names what is counted and which number it asks for (round 3b, finding 1), kept only when it breaks no hard
+  // or draft rule; otherwise Claude's own checked turn is shown.
   const shown = (claude: AssistantTurn): AssistantTurn => {
-    const dated = normalizeDateTurn(claude, session.transcript, session.draft, personDay);
-    return dated !== claude && checkTurn(dated, context).every((x) => x.rule === 'plain_words') ? dated : claude;
+    const rewritten = normalizeNumberTurn(normalizeDateTurn(claude, session.transcript, session.draft, personDay), personDay ?? null);
+    return rewritten !== claude && checkTurn(rewritten, context).every((x) => x.rule === 'plain_words') ? rewritten : claude;
   };
   for (let attempt = 0; attempt <= MAX_REPLY_RETRIES; attempt++) {
     const remaining = deadlineMs - nowMs();

@@ -200,8 +200,8 @@ function ideasFromInterpretations(): ScriptedCase {
   s.add({
     kind: 'ideas',
     topic: 'floor',
-    detail: 'Sessions a week, from what you said about where you are now.',
-    options: ['2 sessions a week', '3 sessions a week'],
+    detail: 'The fewest a week that still counts as on track, as starting points.',
+    options: ['At least 2 a week', 'At least 3 a week'],
     question: 'Which of these would you like to start from, or give your own?',
   });
   return done({ id: 'smoke-14-ideas-from-interpretations', title: 'a tapped "starting ideas" interpretation lets the ideas through', rules: ['choice_before_examples'], expect: { violations: [] } }, s);

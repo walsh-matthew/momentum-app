@@ -262,7 +262,7 @@ export const FINAL_MAX_LINES = 6;
 
 // What is counted, after "You'll count": "workouts", not "Workouts". A first word in capitals or with a capital inside it
 // ("PT", "iPad"), or an app's name ("Hevy"), keeps its capitals.
-const countedWords = (title: string): string => {
+export const countedWords = (title: string): string => {
   const words = itemOf(title);
   const first = words.match(/^[A-Za-z]+/)?.[0] ?? '';
   const name = [...PROVIDER_NAMES.values()].some((n) => n.split(' ')[0] === first);

@@ -35,11 +35,12 @@ describe('casualDate', () => {
 
 describe('casualText, for Claude\'s words in setup', () => {
   // MOM-111 round 2, finding 3: "today" and "tomorrow" stand alone; the weekday and date only for other days.
-  it('says today and tomorrow on their own, however the date was written', () => {
+  it('says today and tomorrow for a date written alone, and keeps the date after a "today, " written in front', () => {
     expect(casualText('Start on 2026-10-29?', TODAY)).toBe('Start today?');
-    expect(casualText('Start today, Thursday, Oct 29?', TODAY)).toBe('Start today?');
-    expect(casualText('Start tomorrow, Friday, Oct 30?', TODAY)).toBe('Start tomorrow?');
-    expect(casualText('Today, Thursday, Oct 29', TODAY)).toBe('Today');
+    // MOM-111 round 3b, finding 2: "Start today, Friday, Oct 30?" shows which day today is.
+    expect(casualText('Start today, Thursday, Oct 29?', TODAY)).toBe('Start today, Thursday, Oct 29?');
+    expect(casualText('Start tomorrow, Friday, Oct 30?', TODAY)).toBe('Start tomorrow, Friday, Oct 30?');
+    expect(casualText('Today, Thursday, Oct 29', TODAY)).toBe('Today, Thursday, Oct 29');
     expect(casualText('Thursday, Oct 29 works.', TODAY)).toBe('Today works.');
     expect(casualText('Thursday, October 29, 2026', TODAY)).toBe('Today');
     // A "today" in front of a date that is not today was wrong: the date is what counts.

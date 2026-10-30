@@ -60,6 +60,12 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
     'Write each option that has a number with what is counted, in the person\'s words, and its period ("2 sessions a week"), never a bare number or "3 a week".',
   'choice.ideas_scale':
     'Do not list a fixed run of numbers. Give two to four options that follow the goal and how often it happens, from what the person said.',
+  'choice.ideas_role':
+    'On a question about the fewest that still counts, start each option with a number "At least" ("At least 2 a week"); on a question about the aim, start it "Aiming for" ("Aiming for 3 a week").',
+  'choice.ideas_words':
+    'Name what is counted in the person\'s own words, the ones they used for it ("workouts", "pages"), never a stock word they did not say.',
+  'plain.date_asks':
+    'A question that asks for a date shows no date in "question" or "detail". When a date is known, show it as a "proposal" they accept with Yes instead.',
 };
 
 const DRAFT_CODES = new Set<ViolationCode>(['draft.no_source', 'draft.not_said', 'draft.not_accepted', 'draft.rule']);

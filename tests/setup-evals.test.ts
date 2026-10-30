@@ -31,9 +31,9 @@ const byId = (id: string): ScriptedCase => {
 };
 
 describe('the eval set', () => {
-  it('has twenty cases: twelve full conversations and one fixture per hard rule', () => {
-    expect(SETUP_CASES).toHaveLength(20);
-    expect(SETUP_CASES.filter((c) => c.expect === 'clean')).toHaveLength(12);
+  it('has twenty-one cases: thirteen full conversations (round 3b adds a reading goal) and one fixture per hard rule', () => {
+    expect(SETUP_CASES).toHaveLength(21);
+    expect(SETUP_CASES.filter((c) => c.expect === 'clean')).toHaveLength(13);
     expect(SETUP_CASES.filter((c) => c.expect !== 'clean').map((c) => c.rules[0]).sort()).toEqual([...HARD_RULE_IDS].sort());
   });
 

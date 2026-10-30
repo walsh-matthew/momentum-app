@@ -114,8 +114,8 @@ describe('a proposal (finding 8)', () => {
     render(<QuestionCard turn={turn({ kind: 'proposal', topic: 'start_date', say: '', question: 'Start Monday, Nov 9?', options: ['Today, Monday, Nov 2'] })} busy={false} onAnswer={onAnswer} today="2026-11-02" />);
     const yes = screen.getByRole('button', { name: 'Yes' });
     expect(yes.className).toContain('bg-primary');
-    // Today's date shows as "Today" alone (round 2, finding 3); the tap still sends the date written out.
-    const today = screen.getByRole('button', { name: 'Today' });
+    // Round 3b, finding 2: "today, " written in front keeps its date on screen; the tap still sends the date written out.
+    const today = screen.getByRole('button', { name: 'Today, Monday, Nov 2' });
     expect(today.className).not.toContain('bg-primary');
     fireEvent.click(yes);
     fireEvent.click(today);

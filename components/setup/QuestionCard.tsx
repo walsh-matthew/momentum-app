@@ -4,11 +4,13 @@ import { useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { casualText } from '@/lib/dates/casual';
 import { DATE_TOPICS } from '@/lib/setup/codeTurns';
-import { MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
+import { numberHelp } from '@/lib/setup/numbers';
+import { MEANING_TEXT, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import type { AssistantTurn } from '@/types/setup';
 import { AnswerBox } from './AnswerBox';
 import { AnswerChoice } from './AnswerChoice';
 import { DateAnswer } from './DateAnswer';
+import { HelpLink } from './HelpLink';
 
 interface QuestionCardProps {
   // An asking turn: a question, the offer of ideas, ideas, interpretations or a proposal.
@@ -42,7 +44,9 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
   // A proposal shows Yes first; the text box opens from a small link, so the card keeps one main button.
   const [typing, setTyping] = useState(initialText !== undefined);
 
-  const help = { label: MEANING_LINK, onClick: () => onAnswer(MEANING_TEXT) };
+  // "What does this mean?": on a number question, code's own words on the fewest and the aim, with the person's counted thing
+  // (round 3b, finding 1); on any other card, it asks Claude to explain.
+  const help = { explain: numberHelp(turn.draft, turn.topic, today), onAsk: () => onAnswer(MEANING_TEXT) };
 
   return (
     <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4">
@@ -104,7 +108,7 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
 
           {pending === null &&
             (turn.kind === 'proposal' && !typing ? (
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
                 <button
                   type="button"
                   disabled={locked}
@@ -113,14 +117,7 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
                 >
                   {TYPE_INSTEAD}
                 </button>
-                <button
-                  type="button"
-                  disabled={locked}
-                  onClick={help.onClick}
-                  className="text-sm text-muted underline underline-offset-4 hover:text-foreground disabled:opacity-50"
-                >
-                  {MEANING_LINK}
-                </button>
+                <HelpLink disabled={locked} explain={help.explain} onAsk={help.onAsk} />
               </div>
             ) : (
               <AnswerBox

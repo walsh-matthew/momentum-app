@@ -385,7 +385,7 @@ describe('playback is rendered from the draft', () => {
     const { draft } = await finished('run-b-habit-ideas');
     const lines = (c: (typeof SETUP_CHUNKS)[number]) => renderPlayback(draft.model, c).join('\n');
     expect(lines('goals')).toBe('Goal: Run more, because it clears your head.');
-    expect(lines('targets')).toContain('Sessions: at least 3 a week.');
+    expect(lines('targets')).toContain('Runs: at least 3 a week.');
     expect(lines('planning')).toContain('Your day ends at 21:00, the time you check in; your day still runs from midnight to midnight.');
     expect(lines('planning')).toContain('Your week starts on Monday.');
     expect(lines('talk')).toContain('Momentum talks to you gently.');

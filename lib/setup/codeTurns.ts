@@ -233,23 +233,48 @@ export function suggestedDate(topic: SetupTopic, transcript: Transcript, draft: 
   return null;
 }
 
-// A date question Claude wrote, as the person sees it: the date confirmation when code has a suggestion, otherwise Claude's
-// question, in code's words when it asked for an "exact date". Any other turn is returned as it is. The service shows the
-// result only when it passes the checks (lib/services/setup.ts).
+// A date in a text: written out ("Friday, Nov 20", "2026-11-20", "11/20") or "today" / "tomorrow".
+export const hasDate = (text: string | null | undefined): boolean => !!text && (datesIn(text).length > 0 || /\b(today|tomorrow)\b/i.test(text));
+
+// A proposal's other answer that only repeats "Pick a different date", which the date card always shows ("Pick another day",
+// "I already started earlier"): the round 3 live run's start-date proposal carried both.
+const PICKER_LIKE = /\b(pick|choose|select|another|different|other|earlier)\b[^.]*\b(day|date)\b|\balready started\b/i;
+
+// Never show a date and then ask for one (MOM-111 round 3b, finding 2): on a date question or a date proposal the lead-in
+// shows no date, and a question that asks for a date shows none in its question or detail. Code's suggestion, when it has
+// one, is the question itself.
+export const showsDateAndAsks = (turn: AssistantTurn): boolean =>
+  turn.topic !== null &&
+  DATE_TOPICS.has(turn.topic) &&
+  (hasDate(turn.say) || (turn.kind === 'question' && (hasDate(turn.question) || hasDate(turn.detail))));
+
+// A date question Claude wrote, as the person sees it: the date confirmation when code has a suggestion ("Start today,
+// Friday, Oct 30?", "Done by Friday, Nov 20?"), otherwise Claude's question, in code's words when it asked for an "exact
+// date" or showed a date; a lead-in with a date is dropped; a date proposal's other answers keep no repeat of the picker. Any
+// other turn is returned as it is. The service shows the result only when it passes the checks (lib/services/setup.ts).
 export function normalizeDateTurn(turn: AssistantTurn, transcript: Transcript, draft: SetupDraft, today: string | undefined): AssistantTurn {
-  if (turn.kind !== 'question' || turn.topic === null || !DATE_TOPICS.has(turn.topic) || !today) return turn;
+  if (turn.topic === null || !DATE_TOPICS.has(turn.topic) || !today) return turn;
+  if (turn.kind !== 'question' && turn.kind !== 'proposal') return turn;
   const ask = ASK_THE_DAY[turn.topic];
   const proposal = PROPOSAL_WORDS[turn.topic];
   if (!ask || !proposal) return turn;
-  // Claude's reason, unless it has none or asks for an "exact date": then code's.
-  const detail = turn.detail !== null && !EXACT_DATE.test(turn.detail) ? turn.detail : ask.detail;
+  const say = hasDate(turn.say) ? '' : turn.say;
+  if (turn.kind === 'proposal') {
+    const options = turn.options.filter((o) => !PICKER_LIKE.test(o) || hasDate(o));
+    return say === turn.say && options.length === turn.options.length ? turn : { ...turn, say, options };
+  }
+  // Claude's reason, unless it has none, asks for an "exact date" or shows a date: then code's.
+  const detail = turn.detail !== null && !EXACT_DATE.test(turn.detail) && !hasDate(turn.detail) ? turn.detail : ask.detail;
   const date = suggestedDate(turn.topic, transcript, draft, today);
   if (date) {
-    // The text keeps the date written out, so the person's yes accepts a value the turn showed; the screen shows it casually.
-    return { ...turn, kind: 'proposal', question: proposal(date === today ? `today, ${date}` : date), detail, options: [] };
+    // Written the casual way with its weekday, which is also how the person's yes is read as accepting it
+    // (lib/setup/validate.ts reads the month and day); "today, " in front keeps the weekday on screen (lib/dates/casual.ts).
+    const words = casualDate(date, today, { relative: false });
+    return { ...turn, say, kind: 'proposal', question: proposal(date === today ? `today, ${words}` : words), detail, options: [] };
   }
-  const question = EXACT_DATE.test(turn.question ?? '') ? ask.question : turn.question;
-  return question === turn.question && detail === turn.detail ? turn : { ...turn, question, detail };
+  const q = turn.question ?? '';
+  const question = EXACT_DATE.test(q) || hasDate(q) ? ask.question : turn.question;
+  return question === turn.question && detail === turn.detail && say === turn.say ? turn : { ...turn, say, question, detail };
 }
 
 // What code does with the person's newest answer, given their today (YYYY-MM-DD). Null when it has nothing to add.

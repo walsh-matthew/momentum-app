@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { MAX_PERSON_CHARS } from '@/types/setup';
+import { HelpLink } from './HelpLink';
 import { SetupButton } from './SetupButton';
 
 // The placeholder on every setup answer box (MOM-111 finding 1).
@@ -17,8 +18,9 @@ interface AnswerBoxProps {
   onSubmit: (text: string) => void;
   // A second button beside the send button, the same size (for example "Keep it as it is" in the change box).
   secondary?: { label: string; onClick: () => void };
-  // A small muted link under Send (for example "What does this mean?" on a question).
-  help?: { label: string; onClick: () => void };
+  // "What does this mean?" under Send, small and muted (components/setup/HelpLink.tsx): code's own explanation, shown in
+  // place, or a way to ask Claude.
+  help?: { explain?: string | null; onAsk?: () => void };
   // Words already in the box when it opens: the person's last answer, put back to edit ("Change my answer").
   initialText?: string;
   // Focus the box as it opens, with any words in it selected, so a phone shows its keyboard (round 2, finding 13). The tap
@@ -102,16 +104,7 @@ export function AnswerBox({
           </SetupButton>
         )}
       </div>
-      {help && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={help.onClick}
-          className="block text-sm text-muted underline underline-offset-4 hover:text-foreground disabled:opacity-50"
-        >
-          {help.label}
-        </button>
-      )}
+      {help && <HelpLink disabled={busy} explain={help.explain} onAsk={help.onAsk} />}
     </form>
   );
 }

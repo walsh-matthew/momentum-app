@@ -1,53 +1,53 @@
-// Every kind of guided setup card on a phone (MOM-111 round 2, findings 5 and the screenshot step; round 3): at 390px,
-// nothing on any card sits past the screen's edge, element by element, with the date picker tapped on the date cards; and
-// each kind of card is saved as a screenshot so the owner can look at it before the merge. The fake model of
+// Every kind of guided setup card on a phone (MOM-111 round 2, finding 5 and the screenshot step; round 3; round 3b): at
+// 390px, nothing on any card sits past the screen's edge, element by element; and the cards are saved as screenshots, numbered
+// in the order a person sees them, so the owner can look at them before the merge. The fake model of
 // tests/e2e/support/fakeAnthropic.ts answers as Claude (no paid call, no key): run-i gives a question, a question with an
-// option to tap, a date confirmation, starting ideas, the playbacks and the final card; run-a gives a date question with
-// nothing to suggest. The stuck-reply card comes from replies the fake makes unusable, the busy card from the fake's 429, and
-// the network card from a request the browser never lets out.
+// option to tap, a date confirmation, starting ideas, the playbacks and the final card; the reading case is the same walk for
+// a goal that is not exercise (round 3b, finding 4); run-a gives a date question with nothing to suggest.
 //
-// Round 3: "Pick a date" is the date field itself (finding 3), so its "-picker-open" screenshot is the card right after the
-// tap, with the phone's own picker (outside the page) open over it; the help link reads "What does this mean?" (finding 4);
-// and every error card has one button (finding 6).
+// Every error card is shown in place, under the question it belongs to (round 3b, findings 5 to 7): stuck (replies the fake
+// makes unusable), busy (the fake's 429), no answer (its 500), not configured (its 401), the time limit (the server's own busy
+// answer relabelled on its way to the browser, since a real time limit takes 270 seconds), the network (a request the browser
+// never lets out) and an unsent answer (a reload while the reply is on its way).
+//
+// The date picker shots use Playwright's iPhone profile (round 3b, finding 3) on Chromium, the browser installed here. On that
+// profile headless Chromium draws no calendar of its own when the field is tapped (on the desktop profile it did), so each
+// date card is saved closed and right after the tap, the phone's own picker being outside the page; the checks prove
+// nothing opens in place.
 //
 // Screenshots are written only when SETUP_SCREENSHOT_DIR names a folder (outside the repo); without it the checks still run.
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Page } from '@playwright/test';
-import {
-  APPROVE_TEXT,
-  BUSY_MESSAGE,
-  CHANGE_ANSWER,
-  MEANING_LINK,
-  MEANING_TEXT,
-  PICK_DATE,
-  PICK_OTHER_DATE,
-  PROPOSAL_YES_TEXT,
-  STUCK_MESSAGE,
-  TRY_AGAIN,
-  TYPE_INSTEAD,
-  UNREACHABLE_MESSAGE,
-  pickedDateText,
-} from '@/lib/setup/session';
+import { devices, type Page } from '@playwright/test';
+import { APPROVE_TEXT, CHANGE_ANSWER, MEANING_LINK, MEANING_TEXT, PICK_DATE, PICK_OTHER_DATE, PROPOSAL_YES_TEXT, SEND_AGAIN, TRY_AGAIN, TYPE_INSTEAD, errorCopy, pickedDateText, type RetryCause } from '@/lib/setup/session';
+import { READING_CASE_ID, SETUP_CASES, type ScriptedCase } from '../setup-evals/cases';
 import { expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
 import { CARD, cardOf, elementsOffScreen, headingOf, sectionOf } from './support/setupCards';
 import { dateQuestionCase, e2eCase } from './support/setupConversation';
 
 const SHOTS = process.env.SETUP_SCREENSHOT_DIR;
-const ORDER = ['question', 'question-with-options', 'date-question', 'date-confirmation', 'ideas', 'playback', 'final', 'stuck-error', 'network-error', 'busy-error'] as const;
-type CardKind = (typeof ORDER)[number];
+type CardKind = 'question' | 'question-with-options' | 'date-question' | 'date-confirmation' | 'ideas' | 'playback' | 'final';
 
 const fakeControl = async (path: string): Promise<void> => {
   await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}${path}`, { method: 'POST' });
 };
+const resetFake = async (): Promise<void> => {
+  await fakeControl('/__fake/unusable?count=0');
+  await fakeControl('/__fake/slow?ms=0');
+  await fakeControl('/__fake/fail?count=0');
+};
 
-async function shot(page: Page, kind: CardKind, suffix = ''): Promise<void> {
-  if (!SHOTS) return;
-  mkdirSync(SHOTS, { recursive: true });
-  const n = String(ORDER.indexOf(kind) + 1).padStart(2, '0');
-  await page.screenshot({ path: join(SHOTS, `${n}-${kind}${suffix}.png`), fullPage: true });
+// Screenshots numbered in the order they are taken, which is the order a person sees the cards: "<set>-01-question.png".
+function shooter(set: string) {
+  let n = 0;
+  return async (page: Page, name: string): Promise<void> => {
+    if (!SHOTS) return;
+    mkdirSync(SHOTS, { recursive: true });
+    n += 1;
+    await page.screenshot({ path: join(SHOTS, `${set}-${String(n).padStart(2, '0')}-${name}.png`), fullPage: true });
+  };
 }
 
 async function fits(page: Page, what: string): Promise<void> {
@@ -67,16 +67,16 @@ async function kindOf(page: Page): Promise<CardKind> {
 
 // The next card after the one with heading `previous`, getting past the spacing limit's "wait" as the person would.
 async function nextCard(page: Page, previous: string | null): Promise<string> {
-  const waitAlert = page.getByRole('alert').filter({ hasText: /wait a few seconds/ });
+  const waitCard = page.locator('[data-retry-cause="wait"]');
   for (let attempt = 0; attempt < 8; attempt++) {
     await expect(cardOf(page)).toBeVisible();
     if (previous !== null) {
-      await expect.poll(async () => ((await waitAlert.count()) > 0 ? 'wait' : await headingOf(page)), { message: 'waiting for the next card' }).not.toBe(previous);
+      await expect.poll(async () => ((await waitCard.count()) > 0 ? 'wait' : await headingOf(page)), { message: 'waiting for the next card' }).not.toBe(previous);
     }
-    if ((await waitAlert.count()) > 0) {
+    if ((await waitCard.count()) > 0) {
       await page.waitForTimeout(1200);
       await page.getByRole('button', { name: TRY_AGAIN }).click();
-      await expect(waitAlert).toBeHidden();
+      await expect(waitCard).toBeHidden();
       continue;
     }
     return headingOf(page);
@@ -100,156 +100,204 @@ async function answer(page: Page, line: string): Promise<void> {
   }
 }
 
-// The error card's buttons: exactly the one named (finding 6).
-async function onlyButton(page: Page, name: string): Promise<void> {
-  const other = name === CHANGE_ANSWER ? TRY_AGAIN : CHANGE_ANSWER;
-  await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('data-tone', 'main');
-  await expect(page.getByRole('button', { name: other, exact: true })).toHaveCount(0);
+// The error card for `cause`, in place: the question above it, the alert look, its words, its one button, and its help.
+async function errorCard(page: Page, cause: RetryCause, heading: string): Promise<void> {
+  const copy = errorCopy(cause, true);
+  const card = page.locator(`[data-retry-cause="${cause}"]`);
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(cardOf(page)).toHaveText(heading);
+  await expect(card.locator('[data-slot="setup-alert"]')).toHaveClass(/border-warn/);
+  await expect(card.getByRole(cause === 'unsent' ? 'status' : 'alert')).toHaveText(`${copy.headline}${copy.line ?? ''}`);
+  const only = copy.action === 'change' ? CHANGE_ANSWER : copy.action === 'send' ? SEND_AGAIN : TRY_AGAIN;
+  await expect(card.locator('button[data-tone]')).toHaveText([only]);
+  // The question sits above the card it belongs to.
+  const [q, a] = await Promise.all([cardOf(page).boundingBox(), card.boundingBox()]);
+  expect((q?.y ?? 0) < (a?.y ?? 0), `${cause}: the question is above the error card`).toBe(true);
+  await fits(page, `${cause} error`);
 }
 
-// On a date card, "Pick a date" is the one date field (finding 3): tapping it opens the browser's own picker, outside the
-// page, and adds nothing to the card. The screenshot is the card right after the tap.
-async function withPickerTapped(page: Page, kind: CardKind): Promise<void> {
-  const field = page.getByLabel(kind === 'date-confirmation' ? PICK_OTHER_DATE : PICK_DATE, { exact: true });
-  const card = sectionOf(page);
-  await expect(card.locator('input[type="date"]')).toHaveCount(1);
-  await expect(card.locator('[data-picker="date"] input[type="date"]')).toHaveCount(1);
-  const before = await card.locator('*').count();
-  await field.click();
-  await expect(field).toBeFocused();
-  expect(await card.locator('*').count(), `${kind}: nothing opens in place`).toBe(before);
-  await fits(page, `${kind} with the picker tapped`);
-  await shot(page, kind, '-picker-open');
-  await page.keyboard.press('Escape');
+const pause = (page: Page) => page.waitForTimeout(1200);
+
+// One scripted conversation, start to final, a screenshot of every new kind of card (or of every card, for the reading set).
+async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name: string) => Promise<void>, opts: { everyCard: boolean; errors: boolean }) {
+  await page.goto('/setup');
+  await page.getByRole('button', { name: 'Start' }).click();
+  let heading = await nextCard(page, null);
+  const seen = new Set<CardKind>();
+  let errorsShown = false;
+  let stuckShown = false;
+
+  for (const { say: line } of scripted.person) {
+    await expect(page.locator(CARD)).toHaveCount(1);
+    const kind = await kindOf(page);
+    await fits(page, kind);
+    if (opts.everyCard || !seen.has(kind)) await shot(page, kind);
+    seen.add(kind);
+    if (kind !== 'playback' && kind !== 'final') await expect(page.getByRole('button', { name: MEANING_LINK })).toHaveCount(1);
+
+    if (opts.errors && kind === 'question' && line !== MEANING_TEXT && seen.size >= 2 && !stuckShown) {
+      // Stuck: every reply thrown away. Each fake answer waits a little, so the tries are not refused by the spacing limit.
+      stuckShown = true;
+      await fakeControl('/__fake/slow?ms=1100');
+      await fakeControl('/__fake/unusable?count=3');
+      await pause(page);
+      await answer(page, line);
+      await errorCard(page, 'stuck', heading);
+      await shot(page, 'error-stuck');
+      await resetFake();
+      await page.getByRole('button', { name: CHANGE_ANSWER }).click();
+      await expect(page.getByLabel('Your answer')).toHaveValue(line);
+      await expect(page.getByLabel('Your answer')).toBeFocused();
+      await pause(page);
+    } else if (opts.errors && kind === 'question' && line !== MEANING_TEXT && stuckShown && !errorsShown) {
+      // Every technical card, one after another on the same question, each answered with Try again.
+      errorsShown = true;
+      await fakeControl('/__fake/fail?status=429&count=1');
+      await pause(page);
+      await answer(page, line);
+      await errorCard(page, 'busy', heading);
+      await shot(page, 'error-busy');
+      for (const [status, cause] of [
+        [500, 'no_answer'],
+        [401, 'not_configured'],
+      ] as const) {
+        await fakeControl(`/__fake/fail?status=${status}&count=1`);
+        await pause(page);
+        await page.getByRole('button', { name: TRY_AGAIN }).click();
+        await errorCard(page, cause, heading);
+        await shot(page, `error-${cause.replace('_', '-')}`);
+      }
+      // The time limit: the server's busy answer, relabelled on its way back.
+      await fakeControl('/__fake/fail?status=429&count=1');
+      await page.route('**/setup', async (route) => {
+        if (route.request().method() !== 'POST') return route.continue();
+        const res = await route.fetch();
+        await route.fulfill({ response: res, body: (await res.text()).replaceAll('"reason":"busy"', '"reason":"timed_out"') });
+      });
+      await pause(page);
+      await page.getByRole('button', { name: TRY_AGAIN }).click();
+      await errorCard(page, 'timed_out', heading);
+      await shot(page, 'error-time-limit');
+      await page.unroute('**/setup');
+      // The network: the request never leaves the browser.
+      await page.route('**/setup', (route) => (route.request().method() === 'POST' ? route.abort() : route.continue()));
+      await pause(page);
+      await page.getByRole('button', { name: TRY_AGAIN }).click();
+      await errorCard(page, 'network', heading);
+      await shot(page, 'error-network');
+      await page.unroute('**/setup');
+      // Unsent: the page reloads while the reply is on its way.
+      await fakeControl('/__fake/slow?ms=4000');
+      await pause(page);
+      await page.getByRole('button', { name: TRY_AGAIN }).click();
+      await page.waitForTimeout(800);
+      await page.reload();
+      await errorCard(page, 'unsent', heading);
+      await shot(page, 'error-unsent');
+      await fakeControl('/__fake/slow?ms=0');
+      await page.waitForTimeout(4500);
+      await page.getByRole('button', { name: SEND_AGAIN }).click();
+      heading = await nextCard(page, heading);
+      continue;
+    }
+    await answer(page, line);
+    heading = await nextCard(page, heading);
+  }
+
+  expect(await kindOf(page)).toBe('final');
+  await fits(page, 'final');
+  await shot(page, 'final');
+  seen.add('final');
+  return { seen, errorsShown: errorsShown && stuckShown };
 }
 
 test.describe('at 390px (phone)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('every kind of setup card fits the screen, element by element, and is saved as a screenshot', async ({ page }) => {
-    test.setTimeout(300_000);
-    const scripted = e2eCase();
+  test('every kind of setup card, and every error card in place, fits the screen and is saved as a screenshot', async ({ page }) => {
+    test.setTimeout(420_000);
     await signUpAndConfirm(page, 'setup-cards');
-    await page.goto('/setup');
-    await page.getByRole('button', { name: 'Start' }).click();
-    let heading = await nextCard(page, null);
-    const seen = new Set<CardKind>();
-    let stuckShown = false;
-    let networkShown = false;
-    let busyShown = false;
-
     try {
-      for (const { say: line } of scripted.person) {
-        await expect(page.locator(CARD)).toHaveCount(1);
-        const kind = await kindOf(page);
-        await fits(page, kind);
-        if (!seen.has(kind)) {
-          seen.add(kind);
-          await shot(page, kind);
-          if (kind === 'date-confirmation' || kind === 'date-question') await withPickerTapped(page, kind);
-        }
-        if (kind !== 'playback' && kind !== 'final') await expect(page.getByRole('button', { name: MEANING_LINK })).toHaveCount(1);
-
-        if (kind === 'question' && line !== MEANING_TEXT && seen.size >= 2 && !stuckShown) {
-          // The stuck-reply card: the replies were thrown away, so the answer could not be understood: only "Change my
-          // answer". Each fake answer waits a little, so the tries inside one turn are not refused by the spacing limit.
-          stuckShown = true;
-          await fakeControl('/__fake/slow?ms=1100');
-          await fakeControl('/__fake/unusable?count=3');
-          await page.waitForTimeout(1200);
-          await answer(page, line);
-          await expect(page.locator('main').getByRole('alert')).toHaveText(STUCK_MESSAGE, { timeout: 30_000 });
-          await onlyButton(page, CHANGE_ANSWER);
-          await fits(page, 'stuck-error');
-          await shot(page, 'stuck-error');
-          await fakeControl('/__fake/unusable?count=0');
-          await fakeControl('/__fake/slow?ms=0');
-          // The answer comes back in the box, selected and focused, ready to change.
-          await page.getByRole('button', { name: CHANGE_ANSWER }).click();
-          await expect(page.getByLabel('Your answer')).toHaveValue(line);
-          await expect(page.getByLabel('Your answer')).toBeFocused();
-          await page.waitForTimeout(1200);
-        } else if (kind === 'question' && line !== MEANING_TEXT && stuckShown && !networkShown) {
-          // The network card: the request never leaves the browser, so only "Try again", and the answer is safe.
-          networkShown = true;
-          await page.route('**/setup', (route) => (route.request().method() === 'POST' ? route.abort() : route.continue()));
-          await answer(page, line);
-          await expect(page.locator('main').getByRole('alert')).toHaveText(UNREACHABLE_MESSAGE);
-          await onlyButton(page, TRY_AGAIN);
-          await fits(page, 'network-error');
-          await shot(page, 'network-error');
-          await page.unroute('**/setup');
-          await page.waitForTimeout(1200);
-          await page.getByRole('button', { name: TRY_AGAIN }).click();
-          heading = await nextCard(page, heading);
-          continue;
-        } else if (kind === 'question' && line !== MEANING_TEXT && networkShown && !busyShown) {
-          // The busy card: Claude answered 429, a technical failure, so only "Try again".
-          busyShown = true;
-          await fakeControl('/__fake/busy?count=1');
-          await page.waitForTimeout(1200);
-          await answer(page, line);
-          await expect(page.locator('main').getByRole('alert')).toHaveText(BUSY_MESSAGE, { timeout: 30_000 });
-          await onlyButton(page, TRY_AGAIN);
-          await fits(page, 'busy-error');
-          await shot(page, 'busy-error');
-          await fakeControl('/__fake/busy?count=0');
-          await page.waitForTimeout(1200);
-          await page.getByRole('button', { name: TRY_AGAIN }).click();
-          heading = await nextCard(page, heading);
-          continue;
-        }
-        await answer(page, line);
-        heading = await nextCard(page, heading);
-      }
+      const { seen, errorsShown } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
+      expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options'].sort());
+      expect(errorsShown).toBe(true);
+      // Finding 5: the recap names what is counted, in whole sentences.
+      const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
+      expect(recap[0]).toMatch(/^You'll count runs: at least \d+ a week\.$/);
     } finally {
-      await fakeControl('/__fake/unusable?count=0');
-      await fakeControl('/__fake/slow?ms=0');
-      await fakeControl('/__fake/busy?count=0');
+      await resetFake();
     }
-
-    expect(await kindOf(page)).toBe('final');
-    await fits(page, 'final');
-    seen.add('final');
-    await shot(page, 'final');
-    // Finding 5: the recap names what is counted, in whole sentences, never a title with nothing after it.
-    const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
-    expect(recap.some((l) => /^You'll count .+: .+\.$|^You'll count .+ each week\.$/.test(l)), recap.join(' | ')).toBe(true);
-    expect(recap.every((l) => !/: \d+ things? you'll count\.$/.test(l))).toBe(true);
-    expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options'].sort());
-    expect(stuckShown && networkShown && busyShown).toBe(true);
     // The approval line is the person's own words, and the save is still a tap away: nothing is saved here.
     expect(APPROVE_TEXT).toBe('Yes, that is right.');
   });
 
-  test('a date question with nothing to suggest: one "Pick a date" that is the date field, and picking a date answers it', async ({ page }) => {
-    test.setTimeout(180_000);
-    const scripted = dateQuestionCase();
-    await signUpAndConfirm(page, 'setup-date-question');
-    await page.goto('/setup');
-    await page.getByRole('button', { name: 'Start' }).click();
-    let heading = await nextCard(page, null);
-    for (const { say: line } of scripted.person) {
-      const kind = await kindOf(page);
-      await fits(page, kind);
+  test('a goal that is not exercise: every card of the reading conversation counts "pages", the person\'s own word', async ({ page }) => {
+    test.setTimeout(300_000);
+    const reading = SETUP_CASES.find((c) => c.id === READING_CASE_ID)!;
+    await signUpAndConfirm(page, 'setup-reading');
+    await walk(page, reading, shooter('reading'), { everyCard: true, errors: false });
+    const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
+    expect(recap[0]).toBe("You'll count pages: at least 100 a week.");
+    await expect(page.locator('main')).not.toContainText(/sessions/i);
+  });
+});
+
+// The date cards on Playwright's iPhone profile (finding 3), on Chromium. Its own browser type (WebKit) is not installed here.
+const { defaultBrowserType: _webkit, ...iPhone } = devices['iPhone 13'];
+
+test.describe('date cards on an iPhone profile', () => {
+  test.use(iPhone);
+
+  // The picker is the answer itself: one date field inside it, nothing opening in place, and choosing a date answers.
+  async function pickerCard(page: Page, kind: 'date-question' | 'date-confirmation', shot: (page: Page, name: string) => Promise<void>) {
+    const field = page.getByLabel(kind === 'date-confirmation' ? PICK_OTHER_DATE : PICK_DATE, { exact: true });
+    const card = sectionOf(page);
+    await expect(card.locator('input[type="date"]')).toHaveCount(1);
+    const trigger = card.locator('[data-picker="date"]');
+    await expect(trigger).toHaveAttribute('data-slot', 'answer-choice');
+    await expect(trigger.locator('[data-slot="picker-icon"]')).toHaveCount(1);
+    // The same width as the other answers on the card.
+    const other = card.locator('button[data-slot="answer-choice"]').first();
+    if ((await other.count()) > 0) expect((await trigger.boundingBox())?.width).toBe((await other.boundingBox())?.width);
+    await fits(page, kind);
+    await shot(page, kind);
+    const before = await card.locator('*').count();
+    await field.tap();
+    expect(await card.locator('*').count(), `${kind}: nothing opens in place`).toBe(before);
+    await shot(page, `${kind}-picker-tapped`);
+    await page.keyboard.press('Escape');
+  }
+
+  test('the date confirmation and the date question, closed and with the picker tapped', async ({ page }) => {
+    test.setTimeout(300_000);
+    const shot = shooter('iphone');
+    await signUpAndConfirm(page, 'setup-iphone-dates');
+    for (const [scripted, kind] of [
+      [e2eCase(), 'date-confirmation'],
+      [dateQuestionCase(), 'date-question'],
+    ] as const) {
       if (kind === 'date-question') {
-        // Finding 2: never an "exact date".
-        await expect(sectionOf(page)).not.toContainText(/exact (date|day)/i);
-        await expect(page.locator('[data-picker="date"]')).toHaveAttribute('data-tone', 'main');
-        await expect(page.getByRole('button', { name: TYPE_INSTEAD })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Use this date' })).toHaveCount(0);
-        await shot(page, 'date-question');
-        await withPickerTapped(page, kind);
-        // Choosing a date answers the question: it is sent as the person's answer ("Saturday, June 5, 2027"), which the card
-        // shows the casual way under the question while it waits.
+        await page.getByRole('button', { name: 'Start again' }).click();
+        await page.getByRole('button', { name: 'Yes, start again' }).click();
+      } else {
+        await page.goto('/setup');
+      }
+      await page.getByRole('button', { name: 'Start' }).click();
+      let heading = await nextCard(page, null);
+      for (const { say: line } of scripted.person) {
+        if ((await kindOf(page)) === kind) break;
+        await answer(page, line);
+        heading = await nextCard(page, heading);
+      }
+      expect(await kindOf(page)).toBe(kind);
+      // Finding 2: a date question shows no date and never asks for an "exact date".
+      if (kind === 'date-question') await expect(sectionOf(page)).not.toContainText(/exact (date|day)/i);
+      await pickerCard(page, kind, shot);
+      if (kind === 'date-question') {
         expect(pickedDateText('2027-06-05')).toBe('Saturday, June 5, 2027');
         await page.getByLabel(PICK_DATE, { exact: true }).fill('2027-06-05');
         await expect(sectionOf(page).getByText('Saturday, Jun 5, 2027', { exact: true })).toBeVisible();
-        return;
       }
-      await answer(page, line);
-      heading = await nextCard(page, heading);
     }
-    throw new Error('The date question never came.');
   });
 });

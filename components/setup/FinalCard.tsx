@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { flushSync } from 'react-dom';
 import { CHANGE_PROMPT, KEEP_IT } from '@/lib/setup/session';
 import { AnswerBox } from './AnswerBox';
+import { SetupAlert } from './SetupAlert';
 import { SetupButton } from './SetupButton';
 
 interface FinalCardProps {
@@ -31,11 +32,7 @@ export function FinalCard({ lines, saving, error, onSave, onChange }: FinalCardP
         ))}
       </ul>
       <p className="text-sm text-muted">Nothing is saved until you tap Save.</p>
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      )}
+      {error && <SetupAlert headline={error} />}
       {changing ? (
         <div className="space-y-2">
           <p className="text-base font-medium">{CHANGE_PROMPT}</p>

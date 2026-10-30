@@ -26,7 +26,8 @@ import { unsaidActivities } from './activities';
 import { answeredTopics, changedLeafPaths, chunkSlice, freeTextLeaves } from './leaves';
 import { FINAL_MAX_LINES, renderFinal } from './playback';
 import { answerWords, latestAnswer, personWords, type PersonAnswer } from './said';
-import { DATE_TOPICS } from './codeTurns';
+import { DATE_TOPICS, hasDate } from './codeTurns';
+import { NUMBER_OPTION_LEADS, NUMBER_TOPICS } from './numbers';
 import { ASKED_ONCE_TOPICS, DAY_END_SAY, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
 import { acceptsText, asksForIdeas, asksMeaning, datesIn, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas, withoutDateWeekdays } from './text';
 import { validateDraft } from './validate';
@@ -86,6 +87,9 @@ export const VIOLATION_CODES = [
   'choice.ideas_context',
   'choice.ideas_bare',
   'choice.ideas_scale',
+  'choice.ideas_role',
+  'choice.ideas_words',
+  'plain.date_asks',
 ] as const;
 export type ViolationCode = (typeof VIOLATION_CODES)[number];
 
@@ -458,12 +462,16 @@ export function checkQuestionLength(turn: AssistantTurn): Violation[] {
 }
 
 // On a date question or a date proposal the date is in the question; a lead-in that says it again is noise (round 2,
-// findings 4 and 9).
+// findings 4 and 9). And never a date shown and then asked for (round 3b, finding 2): a question that asks for a date shows
+// none, in its question or its detail; a date code or the conversation has is shown as a proposal instead.
 export function checkDateLeadIn(turn: AssistantTurn): Violation[] {
-  if (turn.topic === null || !DATE_TOPICS.has(turn.topic) || !turn.say.trim()) return [];
-  return datesIn(turn.say).length > 0 || /\b(today|tomorrow)\b/i.test(turn.say)
-    ? [v('plain_words', 'plain.date_lead_in', 'The lead-in repeats the date the question shows.')]
-    : [];
+  if (turn.topic === null || !DATE_TOPICS.has(turn.topic)) return [];
+  const out: Violation[] = [];
+  if (hasDate(turn.say)) out.push(v('plain_words', 'plain.date_lead_in', 'The lead-in repeats the date the question shows.'));
+  if (turn.kind === 'question' && (hasDate(turn.question) || hasDate(turn.detail))) {
+    out.push(v('plain_words', 'plain.date_asks', 'The question shows a date and then asks for one.'));
+  }
+  return out;
 }
 
 // Option lists (MOM-111 round 3, finding 1, owner decision D4). In the owner's screenshots the starting ideas read "2 a week,
@@ -489,13 +497,32 @@ export function bareNumberOption(option: string): boolean {
 }
 export const SCALE_MIN_OPTIONS = 5;
 
-export function checkOptionList(turn: AssistantTurn): Violation[] {
+// Round 3b, finding 1: on a question about the fewest or the aim, an option with a number says which one it sets ("At least
+// 2 a week", "Aiming for 3 a week"); the question above it names what is counted. Finding 4: the counted thing in options
+// and their detail is the person's own word, never a stock one ("sessions" when they count workouts).
+const COUNT_NOUNS =
+  /\b(sessions?|workouts?|runs?|walks?|rides?|swims?|classes|class|lessons?|pages?|books?|chapters?|articles?|steps|reps|sets|laps?|miles?|kilometers?|dollars?|meals?|posts?|songs?|words?|problems?|applications?|drinks?|cigarettes?)\b/gi;
+const nounStem = (word: string): string => word.toLowerCase().replace(/(es|s)$/, '');
+
+export function checkOptionList(turn: AssistantTurn, ctx?: TurnContext): Violation[] {
   const out: Violation[] = [];
   if ((turn.kind === 'ideas' || turn.kind === 'offer_ideas') && !(turn.detail ?? '').trim()) {
     out.push(v('plain_words', 'choice.ideas_context', 'The ideas have no detail line saying what they count.'));
   }
+  const numberTopic = turn.topic !== null && NUMBER_TOPICS.has(turn.topic) ? (turn.topic as keyof typeof NUMBER_OPTION_LEADS) : null;
+  if (ctx && (LISTING_KINDS.includes(turn.kind) || turn.kind === 'offer_ideas') && turn.topic !== 'metric') {
+    const said = personWords(ctx.transcript).join(' \n ').toLowerCase();
+    const shown = [...turn.options, turn.detail ?? ''].join(' \n ');
+    const unsaid = new Set([...shown.matchAll(COUNT_NOUNS)].map((m) => nounStem(m[1])).filter((s) => !new RegExp(`\\b${s}`).test(said)));
+    if (unsaid.size > 0) out.push(v('plain_words', 'choice.ideas_words', `The options count "${[...unsaid].join('", "')}", which the person has not said.`));
+  }
   if (!LISTING_KINDS.includes(turn.kind)) return out;
-  if (turn.options.some(bareNumberOption)) out.push(v('plain_words', 'choice.ideas_bare', 'An option is a bare number, with nothing saying what is counted.'));
+  // "At least 2 a week" on a fewest question says what it sets, and the question names the thing: not bare.
+  const bare = turn.options.filter((o) => bareNumberOption(o) && !(numberTopic && NUMBER_OPTION_LEADS[numberTopic].test(o)));
+  if (bare.length > 0) out.push(v('plain_words', 'choice.ideas_bare', 'An option is a bare number, with nothing saying what is counted.'));
+  if (numberTopic && turn.options.some((o) => numbersIn(o, { skipOne: true }).length > 0 && !NUMBER_OPTION_LEADS[numberTopic].test(o))) {
+    out.push(v('plain_words', 'choice.ideas_role', `An option on the ${numberTopic === 'floor' ? 'fewest' : 'aim'} question does not say which number it sets.`));
+  }
   const firsts = turn.options.map((o) => numbersIn(o, { skipOne: true })[0]).filter((n): n is number => n !== undefined);
   const sorted = [...firsts].sort((a, b) => a - b);
   if (sorted.length >= SCALE_MIN_OPTIONS && sorted.every((n, i) => i === 0 || n === sorted[i - 1] + 1)) {

@@ -18,7 +18,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { MACHINE_DATE } from '@/lib/dates/casual';
 import { runSetupEval } from '@/lib/setup/evals';
-import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, STUCK_MESSAGE, TYPE_INSTEAD } from '@/lib/setup/session';
+import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, TYPE_INSTEAD, errorCopy } from '@/lib/setup/session';
 import { acceptsText } from '@/lib/setup/text';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
@@ -79,7 +79,8 @@ const headingOf = async (page: Page): Promise<string> => ((await cardOf(page).te
 // spacing limit's "wait" by tapping Try again, as the person would. Since MOM-111 finding 10 the wait shows under the card
 // being answered, which stays on screen, so a wait is an alert there rather than a card of its own.
 async function nextCard(page: Page, previous: string | null): Promise<{ id: string; heading: string }> {
-  const waitAlert = page.getByRole('alert').filter({ hasText: /wait a few seconds/ });
+  // The spacing limit's card (round 3b: the shared alert look, marked by its cause).
+  const waitAlert = page.locator('[data-retry-cause="wait"]');
   for (let attempt = 0; attempt < 8; attempt++) {
     await expect(cardOf(page)).toBeVisible();
     if (previous !== null) {
@@ -265,7 +266,8 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         await spaced();
         await page.getByLabel('Your answer').fill('First try at this');
         await page.getByRole('button', { name: 'Send' }).click();
-        await expect(page.locator('main').getByRole('alert')).toHaveText(STUCK_MESSAGE, { timeout: 30_000 });
+        const stuck = errorCopy('stuck', true);
+        await expect(page.locator('main').getByRole('alert')).toHaveText(`${stuck.headline}${stuck.line}`, { timeout: 30_000 });
         await fakeControl('/__fake/slow?ms=0');
         await expect(second).toBeVisible();
         await cardIsReadable(page, width);

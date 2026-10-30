@@ -17,9 +17,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DateAnswer } from '@/components/setup/DateAnswer';
 import { FinalCard } from '@/components/setup/FinalCard';
 import { QuestionCard } from '@/components/setup/QuestionCard';
-import { RetryNotice, type RetryKind } from '@/components/setup/RetryNotice';
+import { RetryNotice } from '@/components/setup/RetryNotice';
 import { MACHINE_DATE } from '@/lib/dates/casual';
-import { SETUP_FAILURE_MESSAGES, SETUP_TURN_BUDGET_MS, runCheckedTurn } from '@/lib/services/setup';
+import { SETUP_TURN_BUDGET_MS, runCheckedTurn } from '@/lib/services/setup';
 import type { RunSetupTurnArgs, SetupTurnResult } from '@/lib/services/llm';
 import type { ModelSetupResult } from '@/lib/ai/setup';
 import { SCALE_MIN_OPTIONS, bareNumberOption, checkOptionList, checkTurn } from '@/lib/setup/checks';
@@ -29,19 +29,18 @@ import { RETRY_FEEDBACK } from '@/lib/setup/feedback';
 import { FINAL_MAX_LINES, renderFinal } from '@/lib/setup/playback';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import {
-  BUSY_MESSAGE,
   CHANGE_ANSWER,
   MEANING_LINK,
   MEANING_TEXT,
-  NO_ANSWER_MESSAGE,
   PICK_DATE,
   PICK_OTHER_DATE,
   PROPOSAL_YES_TEXT,
+  RETRY_CAUSES,
   SEND_AGAIN,
-  STUCK_MESSAGE,
-  TIMED_OUT_MESSAGE,
   TRY_AGAIN,
   TYPE_INSTEAD,
+  errorText,
+  type RetryCause,
 } from '@/lib/setup/session';
 import { SETUP_STEPS } from '@/lib/setup/steps';
 import type { AssistantTurn, SetupTopic, Transcript, TurnKind } from '@/types/setup';
@@ -58,7 +57,7 @@ const turn = (over: Partial<AssistantTurn> = {}): AssistantTurn => ({
   say: '',
   question: 'Which of these would you like to start from?',
   detail: null,
-  topic: 'floor',
+  topic: 'target',
   options: [],
   draft: emptyDraft(),
   ...over,
@@ -144,14 +143,14 @@ const shapeThen = (answer: string): Transcript => [asked({ topic: 'shape', quest
 describe('finding 2: a date question leads with the date code or the conversation gives', () => {
   it('a start date always suggests the person\'s today', () => {
     const shown = normalizeDateTurn(dateQ('start_date', 'Which day would you like to start?'), shapeThen('It keeps going.'), emptyDraft(), TODAY);
-    expect(shown).toMatchObject({ kind: 'proposal', question: `Start today, ${TODAY}?`, options: [] });
+    expect(shown).toMatchObject({ kind: 'proposal', question: 'Start today, Thursday, Oct 29?', options: [] });
   });
 
   it.each([
-    ['deadline_date', 'It has a deadline, December 15.', 'Done by 2026-12-15?'],
-    ['deadline_date', 'A deadline in two weeks.', 'Done by 2026-11-12?'],
-    ['end_date', 'It runs until March 1.', 'Run until 2027-03-01?'],
-    ['parked_return', 'Bring it back on 1/15/2027, I think.', 'Bring it back on 2027-01-15?'],
+    ['deadline_date', 'It has a deadline, December 15.', 'Done by Tuesday, Dec 15?'],
+    ['deadline_date', 'A deadline in two weeks.', 'Done by Thursday, Nov 12?'],
+    ['end_date', 'It runs until March 1.', 'Run until Monday, Mar 1, 2027?'],
+    ['parked_return', 'Bring it back on 1/15/2027, I think.', 'Bring it back on Friday, Jan 15, 2027?'],
   ] as const)('a %s question after "%s" becomes "%s"', (topic, answer, question) => {
     expect(normalizeDateTurn(dateQ(topic), shapeThen(answer), emptyDraft(), TODAY)).toMatchObject({ kind: 'proposal', question });
   });
@@ -205,7 +204,7 @@ describe('finding 2: a date question leads with the date code or the conversatio
     const transcript = shapeThen('It has a deadline, December 15.');
     const { deps } = fakeModel([dateQ('deadline_date')]);
     const view = await runCheckedTurn({ userId: 'u', session: { transcript, draft: emptyDraft(), spentTokens: 0 }, today: TODAY, deadlineMs: SETUP_TURN_BUDGET_MS }, deps);
-    expect(view).toMatchObject({ kind: 'turn', rejected: 0, turn: { kind: 'proposal', question: 'Done by 2026-12-15?', detail: 'We plan back from that day.' } });
+    expect(view).toMatchObject({ kind: 'turn', rejected: 0, turn: { kind: 'proposal', question: 'Done by Tuesday, Dec 15?', detail: 'We plan back from that day.' } });
     if (view.kind !== 'turn') throw new Error('no turn');
     expect(checkTurn(view.turn, { transcript, prevDraft: emptyDraft() })).toEqual([]);
   });
@@ -234,7 +233,7 @@ describe('finding 2: a date question leads with the date code or the conversatio
 describe('finding 3: "Pick a date" opens the phone\'s own date picker; nothing opens in place', () => {
   const layouts = DATE_TOPIC_LIST.flatMap((topic) => [
     [`${topic}, no suggestion`, turn({ topic, question: 'Which day?' }), PICK_DATE, 'main'] as const,
-    [`${topic}, suggested`, turn({ kind: 'proposal', topic, question: 'On Monday, Nov 2?' }), PICK_OTHER_DATE, 'second'] as const,
+    [`${topic}, suggested`, turn({ kind: 'proposal', topic, question: 'On Monday, Nov 2?' }), PICK_OTHER_DATE, 'answer'] as const,
   ]);
 
   it.each(layouts)('%s: the button is the one date field, and choosing a date answers', (_name, t, label, tone) => {
@@ -381,46 +380,45 @@ describe('finding 5: the final recap names what is counted and the numbers, in w
 // ---------------------------------------------------------------------------
 
 describe('finding 6: every error card shows one button, never both', () => {
-  const KINDS: [RetryKind, string, string][] = [
-    ['stuck', STUCK_MESSAGE, CHANGE_ANSWER],
-    ['unreachable', BUSY_MESSAGE, TRY_AGAIN],
-    ['unreachable', NO_ANSWER_MESSAGE, TRY_AGAIN],
-    ['unreachable', TIMED_OUT_MESSAGE, TRY_AGAIN],
-    ['unreachable', "We couldn't reach Momentum just now. Your answer is safe.", TRY_AGAIN],
-    ['not_configured', SETUP_FAILURE_MESSAGES.not_configured, TRY_AGAIN],
-    ['waiting', 'Your answer is kept. It has not had a reply yet.', SEND_AGAIN],
+  const CAUSES: [RetryCause, string][] = [
+    ['stuck', CHANGE_ANSWER],
+    ['network', TRY_AGAIN],
+    ['busy', TRY_AGAIN],
+    ['wait', TRY_AGAIN],
+    ['no_answer', TRY_AGAIN],
+    ['timed_out', TRY_AGAIN],
+    ['not_configured', TRY_AGAIN],
+    ['unsent', SEND_AGAIN],
   ];
 
-  it.each(KINDS)('a %s card ("%s") shows only "%s"', (kind, message, only) => {
+  it('every cause has a card', () => expect(CAUSES.map(([c]) => c).sort()).toEqual([...RETRY_CAUSES].sort()));
+
+  it.each(CAUSES)('a %s card shows only "%s"', (cause, only) => {
     const onRetry = vi.fn();
     const onChangeAnswer = vi.fn();
-    const { container } = render(<RetryNotice kind={kind} message={message} onRetry={onRetry} onChangeAnswer={onChangeAnswer} />);
-    const buttons = [...container.querySelectorAll('button')];
+    const { container } = render(<RetryNotice cause={cause} onRetry={onRetry} onChangeAnswer={onChangeAnswer} />);
+    const buttons = [...container.querySelectorAll('button[data-tone]')];
     expect(buttons.map((b) => b.textContent)).toEqual([only]);
     expect(buttons[0].getAttribute('data-tone')).toBe('main');
-    expect(screen.getByText(message)).toBeTruthy();
     fireEvent.click(buttons[0]);
     expect(only === CHANGE_ANSWER ? onChangeAnswer : onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('a stuck card with no answer to change (the very first turn) offers Try again alone', () => {
-    const { container } = render(<RetryNotice kind="stuck" message={STUCK_MESSAGE} onRetry={() => {}} />);
-    expect([...container.querySelectorAll('button')].map((b) => b.textContent)).toEqual([TRY_AGAIN]);
-  });
-
-  it('the stuck message says in plain words the answer could not be understood', () => {
-    expect(STUCK_MESSAGE).toBe("I couldn't make sense of that answer. Could you say it another way?");
+    const { container } = render(<RetryNotice cause="stuck" onRetry={() => {}} />);
+    expect([...container.querySelectorAll('button[data-tone]')].map((b) => b.textContent)).toEqual([TRY_AGAIN]);
   });
 
   it.each([
-    ['rate_limited', BUSY_MESSAGE, 'unreachable', 1_000],
-    ['unavailable', NO_ANSWER_MESSAGE, 'unreachable', 1_000],
-    ['unavailable', TIMED_OUT_MESSAGE, 'unreachable', SETUP_TURN_BUDGET_MS],
-    ['refused', STUCK_MESSAGE, 'stuck', 1_000],
-  ] as const)('the service: a %s answer says "%s" (%s)', async (reason, message, kind, ms) => {
+    ['rate_limited', 'busy', 1_000],
+    ['unavailable', 'no_answer', 1_000],
+    ['unavailable', 'timed_out', SETUP_TURN_BUDGET_MS],
+    ['refused', 'stuck', 1_000],
+    ['not_configured', 'not_configured', 1_000],
+  ] as const)('the service: a %s answer is the %s card', async (reason, cause, ms) => {
     const { deps } = fakeModel([{ failed: reason }], [ms]);
     const view = await runCheckedTurn({ userId: 'u', session: { transcript: [said('Run more')], draft: emptyDraft(), spentTokens: 0 }, deadlineMs: SETUP_TURN_BUDGET_MS }, deps);
-    expect(view).toEqual({ kind: 'failed', reason: kind, message, rejected: 0 });
+    expect(view).toEqual({ kind: 'failed', reason: cause, message: errorText(cause), rejected: 0 });
   });
 });
 

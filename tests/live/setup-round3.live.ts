@@ -4,10 +4,11 @@
 // so `npm run eval:setup:pilot` alone never starts it, and like the pilot it never runs in `npm test` or CI.
 //
 //   MOM111_ROUND3=1 npx vitest run --config vitest.live.config.mts tests/live/setup-round3.live.ts
+//   (MOM111_MAX_COST_USD=1 sets a lower cap; round 3b ran with $1.)
 //
 // The same safety rails as the pilot (lib/ai/setupLive.ts): the local Supabase stack only, a throwaway account deleted at the
-// end, and a stop-loss: the run stops itself once the estimated cost passes MAX_COST_USD (checked after each turn, so it can
-// pass it by at most one turn's calls). It runs from the start to the turn after the source answer.
+// end, and a cap: before each turn the run stops itself when the cost so far plus the dearest turn so far could pass
+// MAX_COST_USD, and after each turn when it has. It runs from the start to the turn after the source answer.
 // The report (each turn's outcome, thrown-away replies with their codes, replies shown after their plain-words retry, seconds,
 // tokens and cost) goes to the system temp folder; it holds Claude's questions and the owner's scripted answers, no key and no
 // address.
@@ -27,7 +28,7 @@ import type { AssistantTurn, SetupSession, SetupTopic } from '@/types/setup';
 
 const RUN = process.env.MOM111_ROUND3 === '1';
 const TODAY = '2026-10-29';
-const MAX_COST_USD = 2;
+const MAX_COST_USD = Number(process.env.MOM111_MAX_COST_USD) > 0 ? Number(process.env.MOM111_MAX_COST_USD) : 2;
 const SOURCE_REPLY = "Heavy for lifts and I'll log my runs myself";
 
 // The owner's answers from round 2, by what the question is about, each used once in this order.
@@ -97,8 +98,13 @@ describe.skipIf(!RUN)('MOM-111 round 3: the owner\'s path, live', () => {
     let fillers = 0;
 
     // One turn, live, logged. Returns the session after it, or null when no turn came.
+    let dearestTurn = 0;
     const take = async (session: SetupSession, answered: string | null): Promise<SetupSession | null> => {
       const before = await usage();
+      if (before.cost + dearestTurn > MAX_COST_USD) {
+        stoppedBy = `cap: the next turn could pass $${MAX_COST_USD}`;
+        return null;
+      }
       const warnFrom = warnings.length;
       const started = Date.now();
       const view = await runCheckedTurn({ userId, session, today: TODAY, locale: 'en-US', deadlineMs: Date.now() + SETUP_TURN_BUDGET_MS });
@@ -124,6 +130,7 @@ describe.skipIf(!RUN)('MOM-111 round 3: the owner\'s path, live', () => {
         shownAfterPlainRetry: plainShown.flatMap((w) => (w.fields.codes as string[]) ?? []),
         seconds: Math.round((Date.now() - started) / 1000),
       });
+      dearestTurn = Math.max(dearestTurn, after.cost - before.cost);
       if (after.cost > MAX_COST_USD) stoppedBy = `stop-loss: estimated cost passed $${MAX_COST_USD}`;
       if (view.kind !== 'turn') {
         stoppedBy ??= `no turn: ${view.kind}${view.kind === 'failed' ? ` (${view.reason})` : ''}`;
@@ -168,6 +175,7 @@ describe.skipIf(!RUN)('MOM-111 round 3: the owner\'s path, live', () => {
       supabase: 'local',
       today: TODAY,
       turns,
+      capUsd: MAX_COST_USD,
       thrownAwayTotal: turns.reduce((s, t) => s + t.thrownAway, 0),
       fillerAnswers: fillers,
       stoppedBy,

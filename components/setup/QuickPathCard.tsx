@@ -1,5 +1,6 @@
 'use client';
 
+import { SetupAlert } from './SetupAlert';
 import { SetupButton } from './SetupButton';
 import type { PlaybackSection } from '@/types/setupScreen';
 
@@ -49,11 +50,7 @@ export function QuickPathCard({ message, sections, missing, canSave, saving, err
           </ul>
         </div>
       )}
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      )}
+      {error && <SetupAlert headline={error} />}
       <div className="flex flex-col gap-2 sm:flex-row">
         <SetupButton tone="main" disabled={!canSave || saving} onClick={onSave}>
           {saving ? 'Saving…' : 'Save what I have'}
