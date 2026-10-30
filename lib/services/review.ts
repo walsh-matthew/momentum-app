@@ -5,7 +5,7 @@
 // recaps a later entry has changed since (RAID R-26).
 //
 // Nothing here writes a weekly_reviews row (lib/services/reviewRecords.ts does, from block 3.3's finish button) or
-// calls Claude (block 3.3).
+// calls Claude (lib/services/reviewReflection.ts does, only when the person taps for a line).
 //
 // The week closes early when the planning day is the week's own last day: the engine calls that week open until the
 // day after, so the review asks it about the day after (reviewAsOf) and the recap says it counts through that day.
@@ -28,7 +28,7 @@ import {
   specProblem,
   weeklyReviewWindow,
 } from '@/lib/engine';
-import { DEFAULT_REVIEW_DEPTH, DEFAULT_TONE } from '@/lib/home/defaults';
+import { DEFAULT_REVIEW_DEPTH, DEFAULT_REVIEW_PLANNING, DEFAULT_TONE } from '@/lib/home/defaults';
 import { parseStoredRecap } from '@/lib/review/storedRecap';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { PersonPriority, PersonSettingsRow, WeeklyReviewRow } from '@/types/database.types';
@@ -67,7 +67,7 @@ const REVIEWS_COMPARED = 4;
 
 export type ReviewSettingsRead = Pick<
   PersonSettingsRow,
-  'time_zone' | 'week_start' | 'day_end' | 'planning_weekday' | 'review_depth' | 'slipping_periods' | 'tone'
+  'time_zone' | 'week_start' | 'day_end' | 'planning_weekday' | 'review_depth' | 'review_planning' | 'slipping_periods' | 'tone'
 >;
 export type PriorityRead = Pick<PersonPriority, 'id' | 'label'>;
 export type ReviewRead = Pick<WeeklyReviewRow, 'id' | 'week_start' | 'week_end' | 'recap' | 'adjustment_kind' | 'adjustment_outcome' | 'finished_at'>;
@@ -195,7 +195,7 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
   if (window === null) return { state: 'not_due', tone, today, planningWeekday, last: reviews[0] ?? null, changes };
 
   const finished = reviews.find((r) => r.window.start === window.start);
-  if (finished) return { state: 'reviewed', tone, today, review: finished, changes };
+  if (finished) return { state: 'reviewed', tone, today, review: finished, changes, planning: rows.settings?.review_planning ?? DEFAULT_REVIEW_PLANNING };
 
   const priorities: PriorityLine[] = rows.priorities.map((p) => ({ id: p.id, label: p.label }));
   const facts = buildLayer1Facts(scoreboard, window);
@@ -249,7 +249,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
   const [settings, goals, targets, items, steps, corrections, snapshots, priorities, reviews, entries] = await Promise.all([
     supabase
       .from('person_settings')
-      .select('time_zone, week_start, day_end, planning_weekday, review_depth, slipping_periods, tone')
+      .select('time_zone, week_start, day_end, planning_weekday, review_depth, review_planning, slipping_periods, tone')
       .eq('user_id', userId)
       .maybeSingle(),
     supabase.from('goals').select('id, title, state, shape, start_date, end_date, created_at').eq('user_id', userId),

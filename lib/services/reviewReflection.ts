@@ -5,7 +5,8 @@
 
 import { buildReflectionFacts } from '@/lib/review/reflection';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { runReviewLine, type ReviewLineResult, type RunReviewLineDeps } from './llm';
+import type { ReviewLineResult } from '@/types/review';
+import { runReviewLine, type RunReviewLineDeps } from './llm';
 import type { ServiceResult } from './result';
 import { getWeeklyReviewFacts, type WeeklyReviewFactsDeps } from './review';
 

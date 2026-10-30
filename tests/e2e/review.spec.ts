@@ -7,12 +7,24 @@
 // - the last-day case says in words that the recap counts through today (RAID I-11),
 // - a finished review reads back as it was said, with a later entry shown under "Since this recap" and never in its place (R-26),
 // - a person who has not chosen their planning day, has no time zone, or is not on their planning day gets no review, and
-//   nothing is guessed.
+//   nothing is guessed,
+// - (block 3.3) the whole sitting through the real screen, server actions, services, budget and database, with the FAKE model of
+//   tests/e2e/support/fakeAnthropic.ts answering as Claude (no paid call, no key): nothing is asked of Claude until the person
+//   taps, the request carries only their target title, one finish stores the review once with their choice, and a reply that
+//   fails code's checks is replaced by a plain line from Momentum; the review depth and the planning setting are followed.
 // Any 5xx response from the app fails the spec.
 
 import type { Page } from '@playwright/test';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
-import { REVIEW_TITLES, laToday, seedReview, shiftDay } from './support/reviewSeed';
+import { FAKE_MODEL_PORT } from './support/localStack';
+import { REVIEW_TITLES, laToday, readFinishedReviews, seedReview, shiftDay } from './support/reviewSeed';
+
+// What the fake model has been asked (tests/e2e/support/fakeAnthropic.ts): how many weekly-review lines, and the facts of the newest.
+const fakeLast = async (): Promise<{ reviewRequests: number; lastReviewFacts: string }> =>
+  (await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}/__fake/last`)).json() as Promise<{ reviewRequests: number; lastReviewFacts: string }>;
+const fakeReviewMode = async (mode: 'good' | 'bad'): Promise<void> => {
+  await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}/__fake/review?mode=${mode}`, { method: 'POST' });
+};
 
 function watchForServerErrors(page: Page): () => string[] {
   const errors: string[] = [];
@@ -71,9 +83,12 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(priorities.getByText('In your own words. They have no score.')).toBeVisible();
       await expect(page.locator('main')).not.toContainText('%');
       await expect(page.locator('main')).not.toContainText('counts through today');
-      await expect(page.locator('main').getByRole('button')).toHaveCount(0);
-      // No Claude call: layer 2's offer and layer 3's adjustment are not on this screen yet.
-      await expect(page.locator('main')).not.toContainText(/reflect|adjust|re-baseline/i);
+      // The recap itself asks for nothing. What follows it (the sitting) is where anything is asked.
+      await expect(page.getByRole('region', { name: "This week's recap" }).getByRole('button')).toHaveCount(0);
+      // A week that ended at the floor raises nothing for layer 3, and no line is asked for until the person taps.
+      await expect(page.getByText('Nothing to adjust this week.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Get a one-line look back from Claude' })).toBeVisible();
+      await expect(page.getByRole('radiogroup')).toHaveCount(0);
 
       const main = await page.locator('main').boundingBox();
       if (width === WIDTHS.phone) {
@@ -86,8 +101,123 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       }
       expect(serverErrors()).toEqual([]);
     });
+
+    test('the whole sitting: a line when asked for, one question, one finish, then the week plan (MOM-113 block 3.3)', async ({ page }) => {
+      const serverErrors = watchForServerErrors(page);
+      const email = await signUpAndConfirm(page, `sitting-${width}`);
+      // No workout in the reviewed week or the two before it: the floor is missed three weeks running, so layer 3 raises the
+      // slipping check-in.
+      const seed = await seedReview(email, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, week: 'none' });
+      await fakeReviewMode('good');
+      const before = (await fakeLast()).reviewRequests;
+
+      await page.goto('/review');
+      await page.waitForLoadState('networkidle');
+
+      // Layer 2 is there to ask for, and nothing has been asked of Claude.
+      const lineCard = page.getByRole('region', { name: 'A one-line look back' });
+      await expect(lineCard.getByText(/Optional\. Claude writes one plain sentence about your week/)).toBeVisible();
+      expect((await fakeLast()).reviewRequests).toBe(before);
+
+      // Layer 3: the engine's one question with three equal choices; the finish waits for one of them.
+      const question = page.getByRole('region', { name: 'One thing to decide' });
+      await expect(question.getByRole('heading', { name: `Want to change anything about “${REVIEW_TITLES.workouts}”?` })).toBeVisible();
+      await expect(question.getByText(/weeks in a row/)).toBeVisible();
+      await expect(question.getByRole('radio')).toHaveCount(3);
+      await expect(page.getByRole('button', { name: 'Finish review' })).toBeDisabled();
+      await expect(page.getByText('Choose one of the three above to finish.')).toBeVisible();
+      if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
+
+      // Tap for the line: one request, which carries the person's own target title and nothing about the goal, a priority or a number.
+      await lineCard.getByRole('button', { name: 'Get a one-line look back from Claude' }).click();
+      await expect(lineCard.getByText(`You kept ${REVIEW_TITLES.workouts} going through the week.`)).toBeVisible();
+      await expect(lineCard.getByText('From Claude.')).toBeVisible();
+      await expect(lineCard.getByRole('button')).toHaveCount(0);
+      const after = await fakeLast();
+      expect(after.reviewRequests).toBe(before + 1);
+      expect(after.lastReviewFacts).toContain(REVIEW_TITLES.workouts);
+      expect(after.lastReviewFacts).not.toContain(REVIEW_TITLES.goal);
+      expect(after.lastReviewFacts).not.toContain(REVIEW_TITLES.priority);
+      expect(after.lastReviewFacts).not.toMatch(/\d/);
+
+      // Choose, and be told plainly that nothing in the app changed.
+      await question.getByRole('radio', { name: 'Yes, I want to change it' }).click();
+      await expect(question.getByText("Noted. Changing a target isn't in the app yet, so nothing was changed.")).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Finish review' })).toBeEnabled();
+      if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
+
+      // Finish once. The page reads back as a finished review, and planning follows in the same sitting as a link.
+      await page.getByRole('button', { name: 'Finish review' }).click();
+      await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+      const next = page.getByRole('region', { name: 'Plan your week' });
+      await expect(next.getByText("Your review is done. Next, choose what you'll do on which days.")).toBeVisible();
+      await expect(next.getByRole('link', { name: 'Plan your week' })).toHaveAttribute('href', '/plan');
+      await expect(page.locator('main').getByRole('button')).toHaveCount(0);
+      if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
+
+      // Stored once, with the choice, for kill criterion 4; a reload offers nothing to finish again.
+      expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: 'slipping_check_in', adjustment_outcome: 'changed' }]);
+      await page.reload();
+      await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
+      expect(serverErrors()).toEqual([]);
+    });
   });
 }
+
+test.describe('the sitting in the situations a person can be in (390px)', () => {
+  test.use({ viewport: { width: WIDTHS.phone, height: 900 } });
+
+  test('a reply that fails the checks twice is replaced by a plain line from Momentum, and says so', async ({ page }) => {
+    const serverErrors = watchForServerErrors(page);
+    const email = await signUpAndConfirm(page, 'sitting-fallback');
+    const seed = await seedReview(email, { closesEarly: false, planning: 'today', timeZone: LA, finished: false });
+    await fakeReviewMode('bad');
+    try {
+      const before = (await fakeLast()).reviewRequests;
+      await page.goto('/review');
+      await page.waitForLoadState('networkidle');
+      const lineCard = page.getByRole('region', { name: 'A one-line look back' });
+      await lineCard.getByRole('button', { name: 'Get a one-line look back from Claude' }).click();
+      await expect(lineCard.getByText("From Momentum. Claude's line didn't pass our checks, so this one is plain.")).toBeVisible();
+      await expect(lineCard.getByText('Here is how your week ended against your own targets.')).toBeVisible();
+      // The first reply and its one retry, and no more.
+      expect((await fakeLast()).reviewRequests).toBe(before + 2);
+      await expect(lineCard).not.toContainText(/\d/);
+      expect(await overflowOfReview(page)).toBe(0);
+
+      // Nothing was raised for layer 3, so the review finishes with no choice, and stores none.
+      await expect(page.getByText('Nothing to adjust this week.')).toBeVisible();
+      await page.getByRole('button', { name: 'Finish review' }).click();
+      await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+      expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: null, adjustment_outcome: null }]);
+    } finally {
+      await fakeReviewMode('good');
+    }
+    expect(serverErrors()).toEqual([]);
+  });
+
+  test('a person who chose the recap only is offered no line, and one who chose to plan separately is not pushed to plan', async ({ page }) => {
+    const serverErrors = watchForServerErrors(page);
+    const email = await signUpAndConfirm(page, 'sitting-recaponly');
+    await seedReview(email, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, reviewDepth: 'recap_only', reviewPlanning: 'separate' });
+    const before = (await fakeLast()).reviewRequests;
+
+    await page.goto('/review');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('region', { name: 'A one-line look back' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Get a one-line look back from Claude' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Finish review' }).click();
+
+    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+    const next = page.getByRole('region', { name: 'Plan your week' });
+    await expect(next.getByText("You chose to plan your week separately, so it's there when you want it.")).toBeVisible();
+    await expect(next.getByRole('link', { name: 'Open your week plan' })).toHaveAttribute('href', '/plan');
+    await expect(next.getByRole('heading')).toHaveCount(0);
+    expect((await fakeLast()).reviewRequests).toBe(before);
+    expect(serverErrors()).toEqual([]);
+  });
+});
 
 test.describe('the other situations a person can be in (390px)', () => {
   test.use({ viewport: { width: WIDTHS.phone, height: 900 } });

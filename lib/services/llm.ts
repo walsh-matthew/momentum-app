@@ -31,6 +31,7 @@ import { requestSetupTurnFromModel, SETUP_MODEL, type ModelSetupDeps, type Model
 import type { ModelUsage } from '@/lib/ai/usage';
 import { REFLECTION_FALLBACK_LINES, REFLECTION_RETRY_NOTES, readReflectionReply, type ReflectionFacts } from '@/lib/review/reflection';
 import type { LlmFeature, LlmOutcome, Tables } from '@/types/database.types';
+import type { ReviewLineResult, ReviewLineUnavailable } from '@/types/review';
 import type { SetupDraft, Transcript } from '@/types/setup';
 import type { ServiceResult } from './result';
 
@@ -372,8 +373,6 @@ export interface ReviewBudget {
 
 export const REVIEW_BUDGET: ReviewBudget = { maxCallsPer24h: 4, maxCallsPerAsk: 2 };
 
-export type ReviewLineUnavailable = 'review_budget' | 'shared_cap' | 'person_cap' | 'too_soon' | 'unchecked' | 'model';
-
 const REVIEW_CONTINUES = 'Your review goes on without it.';
 
 export const REVIEW_LINE_MESSAGES: Record<ReviewLineUnavailable, string> = {
@@ -384,11 +383,6 @@ export const REVIEW_LINE_MESSAGES: Record<ReviewLineUnavailable, string> = {
   unchecked: `Claude's usage limits could not be checked, so no line was asked for. ${REVIEW_CONTINUES}`,
   model: `Claude could not write a line just now. ${REVIEW_CONTINUES}`,
 };
-
-export type ReviewLineResult =
-  // `source` says who wrote it: 'claude', or 'fallback' when code did after Claude's reply failed its checks twice.
-  | { kind: 'line'; line: string; source: 'claude' | 'fallback'; calls: number }
-  | { kind: 'unavailable'; reason: ReviewLineUnavailable; message: string };
 
 export interface RunReviewLineArgs {
   // From the verified session. Never from a request.

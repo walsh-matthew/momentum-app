@@ -75,6 +75,9 @@ describe('dark is unchanged', () => {
     '.ctl-border', '.ctl-20', '.ctl-30', '.ctl-45', '.primary-hover:hover',
     '.answer-choice', '.answer-choice:hover:not(:disabled)', '.answer-choice:active:not(:disabled)', '.field-input',
     '.card-title',
+    // MOM-113 block 3.3: the weekly review's sitting after the recap. Written after the light palette, with tokens only, on the
+    // shared card surface, so they have no pre-palette form to compare.
+    '.review-sitting', '.review-card', '.review-card .home-note', '.review-card .review-line', '.review-choices', '.review-card .review-after',
   ]);
   const isSharedCard = (r: CssRule) => r.selector.startsWith('.card-surface,');
 
