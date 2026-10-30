@@ -126,9 +126,9 @@ describe('each part, played back in the second person', () => {
     m.goals.push(g, goal('g2', 'Quilt', { shape: 'project', endDate: '2027-06-14', startDate: '2026-10-27' }));
     expect(renderPlayback(m, 'targets', { today: TODAY })).toEqual([
       'Get fit keeps going, starting Tuesday, Oct 27, with a first stretch of 10 weeks.',
-      '  Gym sessions: at least 2 a week, aiming for 4.',
+      '  Get fit: at least 2 gym sessions a week, aiming for 4.',
       "  Interviews: counted each week. It isn't fully in your hands, so it's shown to you, never judged.",
-      '  Practice: at least 90 minutes a week. Only entries of 20 minutes or more count.',
+      '  Get fit: at least 90 minutes of practice a week. Only entries of 20 minutes or more count.',
       'Quilt has a deadline of Monday, Jun 14, 2027, starting Tuesday, Oct 27.',
     ]);
   });
@@ -204,7 +204,7 @@ describe('each part, played back in the second person', () => {
     g.targets.push(target('t1', 'Credits'));
     m.goals.push(g, goal('g2', 'Paint', { state: 'parked' }));
     expect(renderFinal(m)).toEqual([
-      "You'll count credits each week.",
+      'Your goal: credits, counted each week.',
       '1 goal set aside for now, with a way back.',
       'Everything can be changed on your settings page.',
     ]);

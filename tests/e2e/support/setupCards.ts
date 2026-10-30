@@ -22,6 +22,36 @@ export async function elementsOffScreen(page: Page): Promise<string[]> {
   });
 }
 
+// The type on every card on screen (MOM-111 round 3c, finding 1): each setup card (its section, or an alert standing on its
+// own outside one), with every visible element that holds words of its own, the ones set bold (font-weight 600 or more),
+// the bold weight, and the heaviest weight on the card.
+export interface CardType {
+  card: string;
+  bold: string[];
+  boldWeight: number;
+  heaviest: { weight: number; text: string };
+}
+export async function cardTypes(page: Page): Promise<CardType[]> {
+  return page.evaluate(() => {
+    const sections = [...document.querySelectorAll('main section.channel-card')];
+    const loose = [...document.querySelectorAll('main [data-slot="setup-alert"]')].filter((el) => !el.closest('section.channel-card'));
+    return [...sections, ...loose].map((card) => {
+      const texts = [card, ...card.querySelectorAll('*')]
+        .filter((el) => {
+          if (el.closest('.sr-only')) return false;
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 && r.height === 0) return false;
+          return [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '');
+        })
+        .map((el) => ({ weight: Number(getComputedStyle(el).fontWeight), text: (el.textContent ?? '').trim().slice(0, 60) }));
+      const bold = texts.filter((t) => t.weight >= 600);
+      const heaviest = texts.reduce((a, b) => (b.weight > a.weight ? b : a), { weight: 0, text: '' });
+      const label = card.getAttribute('aria-labelledby') ?? card.getAttribute('data-slot') ?? card.tagName.toLowerCase();
+      return { card: label, bold: bold.map((t) => t.text), boldWeight: bold[0]?.weight ?? 0, heaviest };
+    });
+  });
+}
+
 export const cardOf = (page: Page): Locator => page.locator(CARD).first();
 // The whole card the heading belongs to: its section, with the answers and buttons in it (round 3).
 export const sectionOf = (page: Page): Locator => page.locator('main section.channel-card').filter({ has: page.locator(CARD) }).first();

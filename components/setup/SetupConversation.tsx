@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { askSetupTurn, saveSetup } from '@/app/actions/setup';
-import { Button } from '@/components/ui/button';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
+import { personWords } from '@/lib/setup/said';
 import { ERROR_COPY, awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer, type RetryCause } from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
 import type { SetupSaved, SetupTurnView } from '@/types/setupScreen';
@@ -16,7 +16,8 @@ import { QuestionCard } from './QuestionCard';
 import { QuickPathCard } from './QuickPathCard';
 import { RetryNotice } from './RetryNotice';
 import { SetupAlert } from './SetupAlert';
-import { SetupButton } from './SetupButton';
+import { SetupButton, setupButtonClasses } from './SetupButton';
+import { CARD_TEXT, CardLead } from './cardText';
 import { clearStoredSession, loadStoredSession, storeSession } from './setupStorage';
 
 // A save that never reached the server (MOM-111 round 2, finding 12), in the error card's words (round 3b, finding 6).
@@ -183,18 +184,16 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   if (phase === 'saved' && saved) {
     return (
       <section aria-labelledby="setup-saved" className="channel-card space-y-4 p-4">
-        <h2 id="setup-saved" className="text-lg font-semibold tracking-[-0.02em]">
-          Your setup is saved
-        </h2>
-        <p className="text-base">
+        <CardLead id="setup-saved">Your setup is saved</CardLead>
+        <p className={CARD_TEXT.body}>
           {saved.goals} {saved.goals === 1 ? 'goal' : 'goals'} and {saved.targets} {saved.targets === 1 ? 'thing' : 'things'} to
           count are ready. You can log your progress now.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Link href="/log" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground">
+          <Link href="/log" className={setupButtonClasses('main')}>
             Log an entry
           </Link>
-          <Link href="/" className="inline-flex min-h-12 items-center justify-center rounded-lg border border-input px-5 text-sm font-medium">
+          <Link href="/" className={setupButtonClasses('second')}>
             Back to home
           </Link>
         </div>
@@ -205,10 +204,8 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   if (phase === 'intro') {
     return (
       <section aria-labelledby="setup-intro" className="channel-card space-y-4 p-4">
-        <h2 id="setup-intro" className="text-lg font-semibold tracking-[-0.02em]">
-          Let&apos;s set up your goals
-        </h2>
-        <p className="text-base">
+        <CardLead id="setup-intro">Let&apos;s set up your goals</CardLead>
+        <p className={CARD_TEXT.body}>
           A short conversation with Claude, one question at a time. If a question isn&apos;t clear, just ask what it means. Nothing
           is saved until you approve it at the end. What you
           type is sent to Claude (Anthropic); the{' '}
@@ -217,9 +214,9 @@ export function SetupConversation({ userId }: SetupConversationProps) {
           </Link>{' '}
           has the details.
         </p>
-        <Button size="lg" onClick={start} disabled={busy} className="w-full sm:w-auto">
+        <SetupButton tone="main" onClick={start} disabled={busy}>
           {busy ? 'Starting…' : 'Start'}
-        </Button>
+        </SetupButton>
       </section>
     );
   }
@@ -271,7 +268,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   const notice =
     waiting && !busy ? <RetryNotice cause={cause} headline={failure?.headline} onRetry={retry} onChangeAnswer={changeAnswer} /> : null;
   const today = localDate();
-  const playbackOptions = { locale: browserLocale(), spokenTime: spokenTimes(turn.draft, session.transcript), today };
+  const playbackOptions = { locale: browserLocale(), spokenTime: spokenTimes(turn.draft, session.transcript), today, said: personWords(session.transcript) };
 
   return (
     <div className="space-y-3">
@@ -303,6 +300,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
           pending={pending}
           notice={notice}
           initialText={draftAnswer}
+          said={playbackOptions.said}
         />
       )}
       {/* A question card shows these itself, under the answer it is waiting on. */}

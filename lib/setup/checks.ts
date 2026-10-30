@@ -27,7 +27,9 @@ import { answeredTopics, changedLeafPaths, chunkSlice, freeTextLeaves } from './
 import { FINAL_MAX_LINES, renderFinal } from './playback';
 import { answerWords, latestAnswer, personWords, type PersonAnswer } from './said';
 import { DATE_TOPICS, hasDate } from './codeTurns';
-import { NUMBER_OPTION_LEADS, NUMBER_TOPICS } from './numbers';
+import { NUMBER_OPTION_LEADS, NUMBER_TOPICS, countedTarget } from './numbers';
+import { optionsLead } from './optionsLead';
+import { ideasDetailQuotes, jargonIn, vagueSource } from './plainCard';
 import { ASKED_ONCE_TOPICS, DAY_END_SAY, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
 import { acceptsText, asksForIdeas, asksMeaning, datesIn, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas, withoutDateWeekdays } from './text';
 import { validateDraft } from './validate';
@@ -90,6 +92,9 @@ export const VIOLATION_CODES = [
   'choice.ideas_role',
   'choice.ideas_words',
   'plain.date_asks',
+  'plain.options_say',
+  'plain.jargon',
+  'plain.unquoted_source',
 ] as const;
 export type ViolationCode = (typeof VIOLATION_CODES)[number];
 
@@ -416,10 +421,22 @@ function explains(turn: AssistantTurn, answer: PersonAnswer | null): boolean {
   return answer !== null && asksMeaning(answer.text);
 }
 
+// On a card of options (starting ideas, readings of an answer) code's own line leads, saying what the options are about
+// (lib/setup/optionsLead.ts, round 3c, finding 2), and Claude's lead-in is not shown. Where code has no words for the topic,
+// Claude's question leads and its lead-in is shown: then it is one short line or "".
+export const OPTIONS_SAY_MAX_CHARS = 60;
+
 export function checkLeadIn(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const say = turn.say.trim();
-  if (!say || !ASKING_KINDS.includes(turn.kind) || explains(turn, latestAnswer(ctx.transcript))) return [];
+  if (!say || !ASKING_KINDS.includes(turn.kind)) return [];
   const out: Violation[] = [];
+  const options = turn.kind === 'ideas' || turn.kind === 'interpretations';
+  // Whether code leads does not depend on the date: only a deadline's wording does.
+  if (options && optionsLead(turn, null) !== null) return [];
+  if (options && (sentencesOf(say).length > 1 || say.length > OPTIONS_SAY_MAX_CHARS)) {
+    out.push(v('plain_words', 'plain.options_say', 'The lead-in on a card of options is longer than one short line.'));
+  }
+  if (explains(turn, latestAnswer(ctx.transcript))) return out;
   if (PREVIEWS.some((re) => re.test(say))) out.push(v('plain_words', 'plain.lead_in', 'The lead-in previews the question instead of reacting to the answer.'));
   else if (sentencesOf(say).length > 1 || say.length > LEAD_IN_MAX_CHARS) {
     out.push(v('plain_words', 'plain.lead_in', 'The lead-in is longer than one short line.'));
@@ -506,8 +523,9 @@ const nounStem = (word: string): string => word.toLowerCase().replace(/(es|s)$/,
 
 export function checkOptionList(turn: AssistantTurn, ctx?: TurnContext): Violation[] {
   const out: Violation[] = [];
-  if ((turn.kind === 'ideas' || turn.kind === 'offer_ideas') && !(turn.detail ?? '').trim()) {
-    out.push(v('plain_words', 'choice.ideas_context', 'The ideas have no detail line saying what they count.'));
+  // Starting ideas need no detail line: code's line above them says what they count (round 3c). An offer of ideas does.
+  if (turn.kind === 'offer_ideas' && !(turn.detail ?? '').trim()) {
+    out.push(v('plain_words', 'choice.ideas_context', 'The offer of ideas has no detail line saying what they would count.'));
   }
   const numberTopic = turn.topic !== null && NUMBER_TOPICS.has(turn.topic) ? (turn.topic as keyof typeof NUMBER_OPTION_LEADS) : null;
   if (ctx && (LISTING_KINDS.includes(turn.kind) || turn.kind === 'offer_ideas') && turn.topic !== 'metric') {
@@ -531,7 +549,36 @@ export function checkOptionList(turn: AssistantTurn, ctx?: TurnContext): Violati
   return out;
 }
 
-export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn, checkOptionList] as const;
+// Everyday words (round 3c, wording fix; lib/setup/plainCard.ts): Claude's words as a card shows them hold no "fewest",
+// "floor", "aspiration" or "baseline" the person never said, and never point at an earlier step by name ("where you are now")
+// without the fact itself; the detail line of starting ideas quotes a value the person said, or is null. Words a card does
+// not show are not read: an ideas or options card that code's line leads hides Claude's lead-in and question, a number
+// question is always in code's words, and an offer of ideas about a number gets code's detail line.
+function shownByCard(turn: AssistantTurn): string[] {
+  const options = turn.kind === 'ideas' || turn.kind === 'interpretations';
+  const codeLeads = options && optionsLead(turn, null) !== null;
+  const number = turn.topic !== null && NUMBER_TOPICS.has(turn.topic) && countedTarget(turn.draft, turn.topic) !== null;
+  const out = [turn.skipped?.line ?? '', ...turn.options];
+  if (!codeLeads) out.push(turn.say);
+  if (!codeLeads && !(number && turn.kind === 'question')) out.push(turn.question ?? '');
+  if (!(number && turn.kind === 'offer_ideas')) out.push(turn.detail ?? '');
+  return out.filter((t) => t.trim() !== '');
+}
+
+export function checkEverydayWords(turn: AssistantTurn, ctx: TurnContext): Violation[] {
+  if (!ASKING_KINDS.includes(turn.kind)) return [];
+  const said = personWords(ctx.transcript);
+  const shown = shownByCard(turn);
+  const out: Violation[] = [];
+  const jargon = new Set(shown.flatMap((t) => jargonIn(t, said)));
+  if (jargon.size > 0) out.push(v('plain_words', 'plain.jargon', `The card would show "${[...jargon].join('", "')}", which the person has not said.`));
+  if (shown.some((t) => vagueSource(t, said)) || (turn.kind === 'ideas' && !ideasDetailQuotes(turn.detail, said))) {
+    out.push(v('plain_words', 'plain.unquoted_source', 'A line points at what the person said without quoting it.'));
+  }
+  return out;
+}
+
+export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn, checkOptionList, checkEverydayWords] as const;
 
 // ---------------------------------------------------------------------------
 // All of it

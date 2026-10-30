@@ -19,6 +19,7 @@ import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval, violationsOf } from '@/lib/setup/evals';
 import { RETRY_FEEDBACK, failingPaths, retryFeedback } from '@/lib/setup/feedback';
 import { PLAIN_PATH_FORMS, freeTextLeaves } from '@/lib/setup/leaves';
+import { optionsLead } from '@/lib/setup/optionsLead';
 import { paraphraseAddsNothing, shownModel } from '@/lib/setup/paraphrase';
 import { renderPlayback } from '@/lib/setup/playback';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
@@ -206,8 +207,12 @@ describe('a lead-in only reacts to the last answer (finding 4)', () => {
     "I'll now ask about your schedule.",
     'One more question about this.',
     'Moving on to the timing.',
-  ])('"%s" is a preview, caught on every kind of asking turn', (say) => {
-    for (const kind of ASKING_KINDS) expect(codes(checkLeadIn(turn({ kind, say }), c)), kind).toEqual(['plain.lead_in']);
+  ])('"%s" is a preview, caught on every kind of asking turn that shows it', (say) => {
+    // A card of options that code's own line leads shows no lead-in, so there is nothing to catch (round 3c).
+    for (const kind of ASKING_KINDS) {
+      const t = turn({ kind, say });
+      expect(codes(checkLeadIn(t, c)), kind).toEqual(optionsLead(t, null) === null ? ['plain.lead_in'] : []);
+    }
   });
 
   it('lets a short reaction through, and stops one longer than one short line', () => {

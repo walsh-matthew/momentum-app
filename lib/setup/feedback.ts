@@ -54,18 +54,23 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
     'Name no activity (exercising, working out, running, lifting, the gym and the like) the person has not said. Use their own words, or general ones like moving more.',
   'plain.question_long': 'Keep "question" to the core ask, in at most about 12 words; move the examples and the reason into "detail".',
   'plain.date_lead_in': 'On a date question or a date proposal, "say" is "" or a short reaction that does not repeat the date; the question shows it.',
-  'choice.ideas_context':
-    'Give an offer of ideas, and starting ideas, a "detail" line saying what the options count and that they are starting points, from what the person said.',
+  'choice.ideas_context': 'Give an offer of ideas a "detail" line saying what the ideas would count, in the person\'s words.',
   'choice.ideas_bare':
     'Write each option that has a number with what is counted, in the person\'s words, and its period ("2 sessions a week"), never a bare number or "3 a week".',
   'choice.ideas_scale':
     'Do not list a fixed run of numbers. Give two to four options that follow the goal and how often it happens, from what the person said.',
   'choice.ideas_role':
-    'On a question about the fewest that still counts, start each option with a number "At least" ("At least 2 a week"); on a question about the aim, start it "Aiming for" ("Aiming for 3 a week").',
+    'On a question about the least that still counts, start each option with a number "At least" ("At least 2 a week"); on a question about the number hoped for, start it "Aiming for" ("Aiming for 3 a week").',
   'choice.ideas_words':
     'Name what is counted in the person\'s own words, the ones they used for it ("workouts", "pages"), never a stock word they did not say.',
   'plain.date_asks':
     'A question that asks for a date shows no date in "question" or "detail". When a date is known, show it as a "proposal" they accept with Yes instead.',
+  'plain.jargon':
+    'Never write "fewest", "floor", "aspiration" or "baseline" (unless the person said the word): say what the number is for in everyday words ("How many pages makes a week count, even a hard one?").',
+  'plain.unquoted_source':
+    'Never point at an earlier answer by name ("where you are now", "your baseline", "from what you said"). Quote the fact in the person\'s own words ("You said you read about 50 pages a week now."), or leave it out; the "detail" of starting ideas is that quote or null.',
+  'plain.options_say':
+    'On an ideas or interpretations turn, "say" is "" or one short line of a few words; the screen leads with its own line saying what the options are about.',
 };
 
 const DRAFT_CODES = new Set<ViolationCode>(['draft.no_source', 'draft.not_said', 'draft.not_accepted', 'draft.rule']);

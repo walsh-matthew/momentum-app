@@ -14,7 +14,7 @@ interface AnswerChoiceProps {
 // An answer the person can tap instead of typing, on every setup card: a starting idea, an interpretation, a proposal's Yes
 // or its other answer (MOM-111 findings 2 and 13). It looks like an answer, not a link, and its words wrap and sit to the
 // left, so a long option never runs off a phone's screen (the shared Button keeps its text on one line). Same 44px touch
-// target as the rest of the app.
+// target as the rest of the app. Regular weight: the card's lead is its one bold line (round 3c, finding 1).
 //
 // While a reply loads every answer fades the same way (MOM-111 round 2, finding 2): the main one drops its fill, so a faded
 // green button never looks like the one that was picked. What was sent shows under the question instead.
@@ -38,7 +38,7 @@ export function AnswerChoice({ children, disabled, onClick, tone = 'answer' }: A
 export function answerChoiceClasses(tone: AnswerChoiceProps['tone'], disabled: boolean): string {
   const filled = tone === 'main' && !disabled;
   return cn(
-    'flex min-h-11 w-full items-center justify-start rounded-lg border px-4 py-2 text-left text-base font-medium whitespace-normal break-words transition-colors select-none disabled:pointer-events-none disabled:opacity-50',
+    'flex min-h-11 w-full items-center justify-start rounded-lg border px-4 py-2 text-left text-base font-normal whitespace-normal break-words transition-colors select-none disabled:pointer-events-none disabled:opacity-50',
     filled
       ? 'border-transparent bg-primary text-primary-foreground hover:bg-primary/85'
       : 'border-foreground/20 bg-foreground/[0.04] text-foreground hover:bg-foreground/[0.08]',

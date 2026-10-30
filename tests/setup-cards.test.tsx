@@ -13,6 +13,7 @@ import { QuickPathCard } from '@/components/setup/QuickPathCard';
 import { MACHINE_DATE } from '@/lib/dates/casual';
 import { emptyDraft } from '@/lib/setup/draft';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
+import { optionsLead } from '@/lib/setup/optionsLead';
 import { quickPathSections } from '@/lib/setup/quickPath';
 import { MEANING_LINK, MEANING_TEXT, PICK_DATE, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import { SETUP_CHUNKS, type AssistantTurn, type TurnKind } from '@/types/setup';
@@ -47,13 +48,16 @@ describe('the question card, on every kind of asking turn (findings 1 to 3)', ()
     render(<QuestionCard turn={forKind(kind)} busy={false} onAnswer={() => {}} today={TODAY} />);
     // A proposal opens its box from a small link, so Yes stays the one main button (round 2, finding 8).
     if (kind === 'proposal') fireEvent.click(screen.getByRole('button', { name: TYPE_INSTEAD }));
-    const lead = screen.getByText('Got it, one goal.');
-    const question = screen.getByRole('heading', { name: 'Does this keep going with no end date?' });
+    // A card of options leads with code's line instead of Claude's question and lead-in (round 3c, finding 2).
+    const codeLead = optionsLead(forKind(kind), TODAY);
+    const lead = screen.queryByText('Got it, one goal.');
+    if (codeLead) expect(lead).toBeNull();
+    const question = screen.getByRole('heading', { name: codeLead ?? 'Does this keep going with no end date?' });
     const box = screen.getByLabelText('Your answer');
     const send = screen.getByRole('button', { name: 'Send' });
     const help = screen.getByRole('button', { name: MEANING_LINK });
     const answers = document.querySelectorAll('[data-slot="answer-choice"]');
-    expect(ascending(order(lead, question, ...answers, box, send, help))).toBe(true);
+    expect(ascending(order(...(lead ? [lead] : []), question, ...answers, box, send, help))).toBe(true);
     // No full-width "What do you mean?" button any more: a small muted link.
     expect(screen.queryByRole('button', { name: MEANING_TEXT })).toBeNull();
     expect(help.className).toMatch(/text-sm/);
@@ -61,15 +65,17 @@ describe('the question card, on every kind of asking turn (findings 1 to 3)', ()
     expect((box as HTMLTextAreaElement).placeholder).toBe('Type your answer');
   });
 
-  it('puts the lead-in right above the question, the same size, in regular weight', () => {
+  it('puts the lead-in right above the question, in regular weight and muted, under the bold question (round 3c)', () => {
     render(<QuestionCard turn={turn()} busy={false} onAnswer={() => {}} today={TODAY} />);
     const lead = screen.getByText('Got it, one goal.');
     const question = screen.getByRole('heading', { name: 'Does this keep going with no end date?' });
     expect(lead.parentElement).toBe(question.parentElement);
     expect(lead.parentElement?.className).toContain('space-y-1');
-    expect(lead.className).toContain('text-lg');
-    expect(question.className).toContain('text-lg');
+    expect(lead.className).toContain('text-base');
+    expect(lead.className).toContain('text-foreground/80');
     expect(lead.className).toContain('font-normal');
+    expect(question.className).toContain('text-lg');
+    expect(question.className).toContain('font-semibold');
   });
 
   it('gives the box a visible border, a lighter fill and a focus ring, and dims Send only while the box is empty', () => {
@@ -168,8 +174,10 @@ describe('no date reaches a setup screen as YYYY-MM-DD (finding 7)', () => {
         />,
       );
       expect(container.textContent).not.toMatch(MACHINE_DATE);
-      // Today's date reads "today" alone (round 2, finding 3); another day keeps its weekday.
-      expect(container.textContent).toContain('Start today?');
+      // Today's date reads "today" alone (round 2, finding 3); another day keeps its weekday. A card of options leads with
+      // code's own line instead of the question (round 3c, finding 2).
+      if (kind !== 'ideas' && kind !== 'interpretations') expect(container.textContent).toContain('Start today?');
+      else expect(container.textContent).toContain('1. Today');
       expect(container.textContent).toContain('Monday, Nov 2');
       cleanup();
     }
