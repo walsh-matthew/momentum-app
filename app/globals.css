@@ -413,7 +413,8 @@ button:disabled {
 /* ---- Brand ---------------------------------------------------------------------------------------------- */
 
 .momentum-mark {
-  margin-top: -4px;
+  margin-top: -6px;
+  padding-right: 0.13em;
   font-family: Georgia, serif;
   font-size: 25px;
   font-style: italic;
