@@ -253,15 +253,17 @@ describe('going over the per-setup budget', () => {
     expect(result.kind).toBe('answered');
   });
 
-  it('says what happened in plain words and offers the quick path with nothing saved', () => {
+  it('says what happened in one plain sentence per reason, and promises no default', () => {
     for (const message of Object.values(SETUP_QUICK_PATH_MESSAGES)) {
-      // In everyday words (MOM-111): the person is offered to save now, with defaults they can change, not "the quick path".
-      expect(message).toMatch(/save it now; anything not set yet starts from a sensible default you can change later/);
-      expect(message).not.toMatch(/quick path/);
-      expect(message).toMatch(/Nothing is saved until you approve it/);
-      expect(message).toMatch(/what you have told me so far/);
+      // What happened only: what to do next is the card's (components/setup/QuickPathCard.tsx). No default is ever applied.
+      expect(message).not.toMatch(/quick path|default|sensible/i);
+      expect(message.split('.').length).toBe(2);
     }
-    expect(SETUP_QUICK_PATH_MESSAGES.over_turns).toMatch(/used its share of Claude's time/);
+    expect(SETUP_QUICK_PATH_MESSAGES.over_turns).toBe("This setup has used up the questions Claude gets for one setup, so it can't ask any more.");
+    expect(SETUP_QUICK_PATH_MESSAGES.over_tokens).toBe(SETUP_QUICK_PATH_MESSAGES.over_turns);
+    expect(SETUP_QUICK_PATH_MESSAGES.shared_cap).toBe("Claude is at its shared limit for everyone right now, so it can't ask any more questions.");
+    expect(SETUP_QUICK_PATH_MESSAGES.person_cap).toBe("Claude can't take more requests from you right now.");
+    expect(SETUP_QUICK_PATH_MESSAGES.unchecked).toBe("Claude's usage limits could not be checked, so setup can't go on with Claude.");
   });
 });
 

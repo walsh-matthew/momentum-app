@@ -82,7 +82,7 @@ const CARDS: [string, () => ReactElement][] = [
   ['the final card with a save error', () => <FinalCard lines={renderFinal(model())} saving={false} error="Nothing was saved yet." onSave={() => {}} onChange={() => {}} />],
   [
     'the quick path',
-    () => <QuickPathCard message="Setup has stopped asking." sections={quickPathSections(model())} missing={['A time zone']} canSave={false} saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
+    () => <QuickPathCard reason="over_turns" message="Setup has stopped asking." sections={quickPathSections(model())} missing={['A time zone']} canSave={false} saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
   ],
   ...RETRY_CAUSES.map((cause): [string, () => ReactElement] => [
     `the ${cause} error card under its question`,

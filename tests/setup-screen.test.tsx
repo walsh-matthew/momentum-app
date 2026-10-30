@@ -427,7 +427,8 @@ describe('the quick path', () => {
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     answerWith('Run more');
-    await screen.findByRole('heading', { name: 'Finish without more questions' });
+    const missing = view.data.kind === 'quick_path' ? view.data.missing.length > 0 : false;
+    await screen.findByRole('heading', { name: missing ? "Setup can't be saved yet" : 'Your setup is ready to save' });
   }
 
   it('shows the message, every part collected, and saves only on a tap, as the approval of what is shown', async () => {
@@ -449,7 +450,11 @@ describe('the quick path', () => {
     expect(screen.getByRole('heading', { name: 'Still needed before this can be saved' })).toBeTruthy();
     expect(screen.getByText('Your time zone.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Save what I have' }) as HTMLButtonElement).disabled).toBe(true);
+    // Start again clears everything, so it asks first (MOM-111, quick-path card); only the second tap clears.
     fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
+    expect(screen.getByText('Start again? What you have said so far will be cleared.')).toBeTruthy();
+    expect(window.sessionStorage.getItem(KEY)).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, start again' }));
     await screen.findByRole('heading', { name: /set up your goals/i });
     expect(window.sessionStorage.getItem(KEY)).toBeNull();
   });

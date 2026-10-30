@@ -3,7 +3,7 @@
 // Claude: every part played back, and a list, in plain words, of what the draft still lacks before it can be saved. Pure.
 
 import { SETUP_CHUNKS, type SetupChunk, type SetupModel } from '@/types/setup';
-import type { PlaybackSection } from '@/types/setupScreen';
+import type { PlaybackSection, QuickPathReason } from '@/types/setupScreen';
 import { numberQuestion } from './numbers';
 import { renderPlayback, type PlaybackOptions } from './playback';
 import type { DraftIssue } from './validate';
@@ -107,4 +107,33 @@ export function describeMissing(model: SetupModel, issues: DraftIssue[], words: 
     if (line) seen.add(line);
   }
   return [...seen];
+}
+
+// Whether waiting helps (MOM-111, quick-path card): the shared limit, a per-person limit and a limit check that failed all lift on
+// their own, and the person's answers stay in their tab until then. A setup's own budget does not: that setup can not ask more.
+export function quickPathCanWait(reason: QuickPathReason): boolean {
+  return reason === 'shared_cap' || reason === 'person_cap' || reason === 'unchecked';
+}
+
+// The words of the quick-path card besides what happened (the server's sentence for the reason) and the playback. Written by
+// code, in everyday words, so the person knows what to do next before any button. No default is ever applied, so an incomplete
+// setup is never saved, and the way forward is stated, not promised.
+export const QUICK_PATH_WORDS = {
+  readyTitle: 'Your setup is ready to save',
+  missingTitle: "Setup can't be saved yet",
+  intro: 'Here is everything you told me so far.',
+  readyNext: "Look it over. If it's right, tap \"Save what I have\". Nothing is saved until you do.",
+  missingWait:
+    "Setup can't be saved without the items above, and Claude can't ask for them right now. Wait a little, then reload this page: your answers stay in this tab and setup picks up where it stopped. Or tap \"Start again\" to begin a new setup; that clears the answers here.",
+  missingNoWait:
+    "Setup can't be saved without the items above, and this setup can't ask for them any more. Tap \"Start again\" to begin a new setup; that clears the answers here.",
+  saveOff: 'Save is off until the items above are set.',
+  confirmStartOver: 'Start again? What you have said so far will be cleared.',
+  confirmYes: 'Yes, start again',
+  confirmNo: 'Keep what I have',
+} as const;
+
+export function quickPathNext(reason: QuickPathReason, complete: boolean): string {
+  if (complete) return QUICK_PATH_WORDS.readyNext;
+  return quickPathCanWait(reason) ? QUICK_PATH_WORDS.missingWait : QUICK_PATH_WORDS.missingNoWait;
 }
