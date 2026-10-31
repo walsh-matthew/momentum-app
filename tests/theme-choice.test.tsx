@@ -56,7 +56,9 @@ describe('the Settings control', () => {
     document.documentElement.dataset.theme = 'dark';
     fireEvent.click(radio('Light'));
     expect(await screen.findByRole('alert')).toBeTruthy();
-    await waitFor(() => expect(radio('Dark').getAttribute('aria-checked')).toBe('true'));
+    // The settled state (MOM-96): the choice is back and the buttons can be tapped again, not only the alert.
+    const dark = (await screen.findByRole('radio', { name: 'Dark', checked: true })) as HTMLButtonElement;
+    expect(dark.disabled).toBe(false);
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 

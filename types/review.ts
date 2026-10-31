@@ -3,7 +3,7 @@
 // and composes. The recap screen (components/review/) lays out what is here; nothing on it is a number Claude made
 // (principle 9). The finished review's record (migration 018) holds a StoredRecap, written once and never rewritten.
 
-import type { ReviewAdjustmentKind, ReviewAdjustmentOutcome, StartingPointKind, Tone } from '@/types/database.types';
+import type { ReviewAdjustmentKind, ReviewAdjustmentOutcome, ReviewPlanningMode, StartingPointKind, Tone } from '@/types/database.types';
 import type { TargetCardView } from '@/types/home';
 import type { Layer1TargetFact, LayerThreeAdjustment, LocalDate, ReviewedValue, ReviewWindow, Weekday } from '@/types/scoreboard';
 
@@ -76,7 +76,8 @@ export type WeeklyReviewFacts =
   // `today` in each of the states below is the person's own date, so a date on screen reads the casual way (MOM-111 finding 7).
   | { state: 'not_due'; tone: Tone; today: LocalDate; planningWeekday: Weekday; last: StoredReview | null; changes: RecapChange[] }
   // Today is the planning day and this week's review is already finished: the record as it was said, and the changes since.
-  | { state: 'reviewed'; tone: Tone; today: LocalDate; review: StoredReview; changes: RecapChange[] }
+  // `planning` is the person's setting for planning the week in the same sitting or separately (MOM-113 block 3.3).
+  | { state: 'reviewed'; tone: Tone; today: LocalDate; review: StoredReview; changes: RecapChange[]; planning: ReviewPlanningMode }
   | {
       state: 'ready';
       tone: Tone;
@@ -87,13 +88,23 @@ export type WeeklyReviewFacts =
       recap: StoredRecap;
       // Every priority the person named, named whether or not anything was logged against it this week.
       priorities: PriorityLine[];
-      // Whether layer 2's one-line reflection offer is shown at all, per the review depth setting. The words of
-      // the offer itself are written later (block 3.3); this is only whether to ask.
+      // Whether layer 2's one-line look back is offered at all, per the review depth setting. The line itself is asked for
+      // only when the person taps for it (lib/services/reviewReflection.ts); this is only whether to show the button.
       offerReflection: boolean;
       adjustment: LayerThreeAdjustment | null;
       // Earlier finished reviews that a later entry has changed since.
       changes: RecapChange[];
     };
+
+// Why Claude's one-line look back (layer 2) was not asked for, or came back as no line: each ends in a plain sentence that says the
+// review goes on without it (lib/services/llm.ts, REVIEW_LINE_MESSAGES).
+export type ReviewLineUnavailable = 'review_budget' | 'shared_cap' | 'person_cap' | 'too_soon' | 'unchecked' | 'model';
+
+// What one ask for the review's line comes to (lib/services/llm.ts, runReviewLine): a line, with who wrote it ('claude', or
+// 'fallback' when code did after Claude's reply failed its checks twice), or the plain reason there is none. Not stored.
+export type ReviewLineResult =
+  | { kind: 'line'; line: string; source: 'claude' | 'fallback'; calls: number }
+  | { kind: 'unavailable'; reason: ReviewLineUnavailable; message: string };
 
 // What home shows about the review: nothing, a way in when it is due, or a way back to the finished one.
 export type ReviewPrompt = { state: 'none' } | { state: 'due' } | { state: 'reviewed' };

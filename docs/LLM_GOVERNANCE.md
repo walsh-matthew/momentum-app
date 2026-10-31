@@ -1,6 +1,6 @@
 # Claude calls: limits, caps, usage log, SDK and fallback decision
 
-MOM-73. Covers the places the app calls Claude: the rebalance proposal ("Ask Claude to review", `lib/ai/rebalance.ts`), the goal wizard's week 1 plan (`lib/ai/taskPlan.ts`) and, since MOM-128, a turn of guided setup (`lib/ai/setup.ts`), which has limits of its own: see [Guided setup](#guided-setup-mom-128). Code: `lib/services/llm.ts`. Database: migration `011_llm_usage_logs.sql` (and `014_setup_budget.sql`, which adds the `setup` feature), checked by `supabase/verify/011_llm_usage_logs.sql` and `014_setup_budget.sql`.
+MOM-73. Covers the places the app calls Claude: the rebalance proposal ("Ask Claude to review", `lib/ai/rebalance.ts`), the goal wizard's week 1 plan (`lib/ai/taskPlan.ts`), since MOM-128 a turn of guided setup (`lib/ai/setup.ts`), which has limits of its own: see [Guided setup](#guided-setup-mom-128), and since MOM-113 the weekly review's one line (`lib/ai/review.ts`), also with its own: see [The weekly review's one line](#the-weekly-reviews-one-line-mom-113). Code: `lib/services/llm.ts`. Database: migration `011_llm_usage_logs.sql` (and `014_setup_budget.sql`, which adds the `setup` feature), checked by `supabase/verify/011_llm_usage_logs.sql` and `014_setup_budget.sql`.
 
 The rest of this page, up to "Guided setup", describes the rebalance and week 1 plan and is unchanged by MOM-128.
 
@@ -52,7 +52,7 @@ The text is composed on the server and shown as it is: the wizard prints the mes
 
 ## What is recorded, and who can see it
 
-Table `llm_usage_logs`, one row per call: `user_id`, `feature` (`rebalance`, `week_one_plan` or `setup`), `model` (a model id, at most 100 characters), `input_tokens`, `output_tokens`, `latency_ms`, `outcome` (`pending`, `ok`, `refused`, `provider_rate_limited`, `unavailable`, `bad_output`, `not_configured`), `created_at`.
+Table `llm_usage_logs`, one row per call: `user_id`, `feature` (`rebalance`, `week_one_plan`, `setup` or `weekly_review`), `model` (a model id, at most 100 characters), `input_tokens`, `output_tokens`, `latency_ms`, `outcome` (`pending`, `ok`, `refused`, `provider_rate_limited`, `unavailable`, `bad_output`, `not_configured`), `created_at`.
 
 **No prompt and no answer, anywhere.** The table has no column that could carry either (no json, bytea, array or long-text column), the service passes only the fields above, and the tests read both the rows and the source to check it. The only text columns hold a fixed word or a model id.
 
@@ -155,9 +155,27 @@ From the Claude API price table cached 2026-10-06 (check it is current): `claude
 
 `npm run eval:setup:pilot` runs one full scripted case against the real model through `runSetupTurn()`, which makes real, paid calls. It is not part of `npm test` or CI. It will not run unless the Supabase address it uses is `127.0.0.1` or `localhost`: it ignores every Supabase value in `.env.local` (which points at production), takes the local stack's own address and keys from `npx supabase start`, and reads only the Anthropic key from `.env.local`. It stops by itself past an estimated $6, and a reply that is not a valid turn is asked for again up to twice, with every such reply counted in the report. `tests/setup-live.test.ts` proves the refusal.
 
+## The weekly review's one line (MOM-113)
+
+Layer 2 of the weekly review (`docs/DOMAIN_MODEL.md` §3.1) is one plain sentence about the week, written by Claude and checked by code. Code: `runReviewLine()` in `lib/services/llm.ts`, the call in `lib/ai/review.ts`, the facts and the checks in `lib/review/reflection.ts`, and the service the screen uses, `getReviewLine()` in `lib/services/reviewReflection.ts`. `lib/ai/review.ts` is imported by `lib/services/llm.ts` only, and a test checks that.
+
+| Rule | What it does | Where |
+|---|---|---|
+| **Only on a tap** | A line is asked for when the person taps for it. Opening `/review` makes no call. | the screen (block 3.3 part B) |
+| **Its own budget** | At most 4 `weekly_review` calls per person in any 24 hours, read from `llm_usage_logs` before each call, so it holds across page loads and instances. One ask is at most 2 calls: the first, and one retry. | `REVIEW_BUDGET` |
+| **The usual limits underneath** | The database's own checks stay atomic: 1 second between a person's calls (the database's minimum, so a retry is not blocked), the person's 20 calls across every feature, and the one hard shared cap of 200. | `REVIEW_LIMITS` |
+| **Fails to "no line"** | A limit, an unreachable counter, a refusal, an outage or a missing key leaves the review going on without a line, with a plain sentence saying so. A reply that fails its checks twice is replaced by a line written by code, labelled as Momentum's. | `REVIEW_LINE_MESSAGES`, `REFLECTION_FALLBACK_LINES` |
+| **Nothing stored** | The line is not saved. A finished review stores the recap (migration 018), not Claude's words. | |
+
+**What is sent** (pinned field by field in `lib/config/privacy.ts` `PROMPTS.review`, by `tests/review-prompt-fields.test.ts`): the tone setting, the person's own target titles, where each target ended as a few words, what it reached, the pattern kinds, the trend's direction, and on a retry code's fixed note about the rule the last try broke. Not sent: counts, units, dates, goal titles, priorities, ids, email. Claude is given no number to repeat.
+
+**What is refused before a line is shown** (`checkReflectionLine`): more than one sentence, a question, a digit or number word, a score, grade or percentage, and an ask ("try", "consider", "should", "make sure" and the like, matched as whole words). The person's own target titles, as sent, are exempt from the number and ask checks, because a title can say "Run 5k" or "Try a new recipe"; the words around a title are checked in full.
+
+**Model and price.** `REVIEW_MODEL` is `claude-sonnet-5-5` (words only, so the smaller model): $2 per million input tokens and $10 per million output tokens, the same as the table above, re-checked against the Claude API reference on 2026-10-30 (its price table is cached 2026-10-06). A call sends about 1,200 tokens at most (the system prompt and up to 20 targets) and may write up to 400, so a call costs under a cent (at most about $0.0064) and a whole ask (two calls) under two cents. Thinking is off (`between_tools`; `disabled` is refused by this model) because one sentence needs none and thinking tokens would count against the 400. Server-side fallbacks stay off, for the reasons above: a refusal is a refusal, not a different model's answer.
+
 ## Changing a limit
 
-Edit `LLM_LIMITS` in `lib/services/llm.ts` (rebalance and week 1 plan) or `SETUP_LIMITS` and `SETUP_BUDGET` (guided setup). Nothing in the database holds the numbers; the function takes them as arguments. The 24 hour window is fixed in the SQL function (a new migration is needed to change it). The user-facing wording reads the numbers, so the cap in the message follows the constant.
+Edit `LLM_LIMITS` in `lib/services/llm.ts` (rebalance and week 1 plan), `SETUP_LIMITS` and `SETUP_BUDGET` (guided setup), or `REVIEW_LIMITS` and `REVIEW_BUDGET` (the weekly review's line). Nothing in the database holds the numbers; the function takes them as arguments. The 24 hour window is fixed in the SQL function (a new migration is needed to change it). The user-facing wording reads the numbers, so the cap in the message follows the constant.
 
 ## Known gaps (also in BACKLOG.md)
 

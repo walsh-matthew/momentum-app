@@ -12,12 +12,16 @@
 // - a week that has closed reads as "that week", and a slipping run is not pointed at the review the person is in.
 
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReviewNotice } from '@/components/home/ReviewNotice';
 import { ReviewScreen } from '@/components/review/ReviewScreen';
 import { changeLine, closedEarlyLine, closedEarlyReviewedLine, crossingLine, fullWeekdayName, levelWords, weekLabel } from '@/components/review/wording';
 import { parseStoredRecap } from '@/lib/review/storedRecap';
 import type { RecapChange, RecapTarget, StoredRecap, StoredReview, WeeklyReviewFacts } from '@/types/review';
+
+// The sitting on a ready review is a client component: it needs the router and the two actions, none of which this file calls.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock('@/app/actions/review', () => ({ askForReviewLine: vi.fn(), finishReview: vi.fn() }));
 
 afterEach(cleanup);
 
@@ -125,7 +129,7 @@ describe('the last-day decision is said in words (RAID I-11)', () => {
   });
 
   it('says it on a finished review read back later, in the past tense', () => {
-    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review({ recap: recap({ closedEarly: true }) }), changes: [] });
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review({ recap: recap({ closedEarly: true }) }), changes: [], planning: 'one_sitting' });
     expect(screen.getByText(closedEarlyReviewedLine(WINDOW))).toBeTruthy();
     expect(closedEarlyReviewedLine(WINDOW)).toBe(
       'This recap counted through Sunday, the last day of the week. Anything logged for a day in that week after you finished shows below under Since this recap.',
@@ -157,6 +161,7 @@ describe('a later entry is said against the stored recap, in plain words (RAID R
       today: TODAY,
       review: review(),
       changes: [change(), change({ weekStart: '2026-10-12', weekEnd: '2026-10-18', targetId: 't2', title: 'Reading' })],
+      planning: 'one_sitting',
     });
     const section = screen.getByRole('heading', { name: 'Since this recap' }).closest('section') as HTMLElement;
     const weeks = within(section).getAllByText(/^Week of /).map((el) => el.textContent);
@@ -165,7 +170,7 @@ describe('a later entry is said against the stored recap, in plain words (RAID R
   });
 
   it('shows no such section when nothing changed', () => {
-    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review(), changes: [] });
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review(), changes: [], planning: 'one_sitting' });
     expect(screen.queryByRole('heading', { name: 'Since this recap' })).toBeNull();
   });
 
@@ -176,7 +181,7 @@ describe('a later entry is said against the stored recap, in plain words (RAID R
 
   it('shows the stored numbers as they were said, not the live ones', () => {
     // The record says 1; a later entry makes it 3. The card is drawn from the record, the change from both.
-    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review({ recap: recap({ goals: [{ id: 'g1', title: 'Stay fit', targets: [target({ counted: 1, level: 'partway', remainingToFloor: 2, remainingToAspiration: 4 })] }] }) }), changes: [change()] });
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review({ recap: recap({ goals: [{ id: 'g1', title: 'Stay fit', targets: [target({ counted: 1, level: 'partway', remainingToFloor: 2, remainingToAspiration: 4 })] }] }) }), changes: [change()], planning: 'one_sitting' });
     const goal = screen.getByRole('region', { name: 'Stay fit' });
     expect(within(goal).getByText('Partway · 2 to floor')).toBeTruthy();
     expect(within(goal).queryByText('Floor met')).toBeNull();
@@ -251,16 +256,24 @@ describe('the recap (layer 1)', () => {
     expect(screen.getByText('No target finished a week in this period, so there is nothing to recap. Nothing here is a miss.')).toBeTruthy();
   });
 
-  it('asks for nothing: no buttons, no form fields, and no question', () => {
-    const { container } = show(ready({ recap: recap({ priorities: [{ id: 'p1', label: 'Family time' }], closedEarly: true }), changes: [change()] }));
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
-    expect(container.querySelectorAll('input, select, textarea, form')).toHaveLength(0);
-    expect(container.textContent).not.toContain('?');
+  it('asks for nothing: no buttons, no form fields, and no question inside the recap itself', () => {
+    show(ready({ recap: recap({ priorities: [{ id: 'p1', label: 'Family time' }], closedEarly: true }), changes: [change()] }));
+    // The recap is layer 1; the sitting that follows it (tests/review-sitting.test.tsx) is where anything is asked.
+    const recapRegion = screen.getByRole('region', { name: "This week's recap" });
+    expect(within(recapRegion).queryAllByRole('button')).toHaveLength(0);
+    expect(recapRegion.querySelectorAll('input, select, textarea, form')).toHaveLength(0);
+    expect(recapRegion.textContent).not.toContain('?');
   });
 
-  it('shows the layer 2 offer and the layer 3 adjustment nowhere: they are block 3.3', () => {
+  it('puts what follows the recap after it, in the order of the layers: the line, the one question, the finish', () => {
     show(ready({ offerReflection: true, adjustment: { kind: 'slipping_check_in', targetId: 't1', periods: 2 } }));
-    expect(screen.queryByText(/reflect|adjust|check-in|re-baseline/i)).toBeNull();
+    const order = ["This week's recap", 'A one-line look back', 'One thing to decide', 'Finish your review'];
+    const positions = order.map((name) => {
+      const el = screen.getByRole('region', { name });
+      return Array.from(document.body.querySelectorAll('section')).indexOf(el as HTMLElement);
+    });
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    expect(new Set(positions).size).toBe(4);
   });
 
   it('puts a number nowhere that the engine did not give: no percentages', () => {
@@ -308,10 +321,36 @@ describe('the states before a review exists', () => {
 
 describe('the finished review', () => {
   it('says when it was finished and that it stays as it was said, and never asks again', () => {
-    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review(), changes: [] });
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review(), changes: [], planning: 'one_sitting' });
     expect(screen.getByText('You finished this review on Mon, Oct 26. It stays as it was said.')).toBeTruthy();
     expect(screen.queryAllByRole('button')).toHaveLength(0);
     expect(screen.queryByText(/start|begin|review again/i)).toBeNull();
+  });
+
+  it('is followed by the week plan in the same sitting, as a link into /plan and nothing planned for the person', () => {
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review(), changes: [], planning: 'one_sitting' });
+    const next = screen.getByRole('region', { name: 'Plan your week' });
+    expect(within(next).getByRole('heading', { name: 'Plan your week' })).toBeTruthy();
+    expect(within(next).getByText("Your review is done. Next, choose what you'll do on which days.")).toBeTruthy();
+    expect(within(next).getByRole('link', { name: 'Plan your week' }).getAttribute('href')).toBe('/plan');
+    expect(within(next).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('leaves planning for later, with one quiet line and a way in, when the person chose to plan separately', () => {
+    show({ state: 'reviewed', tone: 'middle', today: TODAY, review: review(), changes: [], planning: 'separate' });
+    const next = screen.getByRole('region', { name: 'Plan your week' });
+    expect(within(next).getByText("You chose to plan your week separately, so it's there when you want it.")).toBeTruthy();
+    expect(within(next).getByRole('link', { name: 'Open your week plan' }).getAttribute('href')).toBe('/plan');
+    expect(within(next).queryByRole('heading')).toBeNull();
+    expect(screen.queryByText(/Next, choose/)).toBeNull();
+  });
+
+  it('puts no planning step on a review that is not finished or not due', () => {
+    show(ready());
+    expect(screen.queryByRole('region', { name: 'Plan your week' })).toBeNull();
+    cleanup();
+    show({ state: 'not_due', tone: 'middle', today: TODAY, planningWeekday: 1, last: review(), changes: [] });
+    expect(screen.queryByRole('region', { name: 'Plan your week' })).toBeNull();
   });
 });
 

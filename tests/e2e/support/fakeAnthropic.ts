@@ -16,11 +16,18 @@
 // - POST /__fake/fail?status=S&count=N answers the next N setup requests with the API's own error for status S: 429 (rate
 //   limited: the busy card), 500 (a failed call: the no-answer card) or 401 (a rejected key: the not-configured card), so a
 //   spec can see every error card (MOM-111 round 3, finding 6; round 3b). It resets with count=0.
+// - A request whose system prompt is the weekly review line's (MOM-113 block 3.3) gets one plain sentence naming the first
+//   target in the facts it was sent: "You kept <title> going through the week." GET /__fake/last also reports how many such
+//   requests there have been and the facts of the newest, so a spec can check nothing is asked until a tap and what was sent.
+//   POST /__fake/review?mode=bad makes the next replies a sentence with a number in it (code's checks refuse it, so the
+//   retry and then the line written by code can be seen); ?mode=good (the default) puts it back.
 
 import { createServer, type Server } from 'node:http';
 import type { AssistantTurn } from '../../../types/setup';
 
 const SETUP_PROMPT_START = 'You guide one person through setting up their goals in Momentum';
+const REVIEW_PROMPT_START = "You write one short line for a person's weekly review";
+const REVIEW_FACTS_HEADER = 'Facts about the week, as JSON:';
 
 interface MessagesBody {
   model?: string;
@@ -60,6 +67,9 @@ export function startFakeAnthropic(port: number, scripts: readonly FakeScript[])
   let unusableLeft = 0;
   let failLeft = 0;
   let failStatus = 429;
+  let reviewRequests = 0;
+  let lastReviewFacts = '';
+  let reviewMode: 'good' | 'bad' = 'good';
 
   const server: Server = createServer((req, res) => {
     const send = (status: number, body: unknown) => {
@@ -68,18 +78,19 @@ export function startFakeAnthropic(port: number, scripts: readonly FakeScript[])
     };
 
     if (req.method === 'GET' && req.url === '/__fake/last') {
-      send(200, { setupRequests, lastSetupUserText });
+      send(200, { setupRequests, lastSetupUserText, reviewRequests, lastReviewFacts });
       return;
     }
     if (req.method === 'POST' && req.url?.startsWith('/__fake/')) {
       const url = new URL(req.url, 'http://127.0.0.1');
+      if (url.pathname === '/__fake/review') reviewMode = url.searchParams.get('mode') === 'bad' ? 'bad' : 'good';
       if (url.pathname === '/__fake/slow') slowMs = Math.max(0, Number(url.searchParams.get('ms')) || 0);
       if (url.pathname === '/__fake/unusable') unusableLeft = Math.max(0, Number(url.searchParams.get('count')) || 0);
       if (url.pathname === '/__fake/fail') {
         failLeft = Math.max(0, Number(url.searchParams.get('count')) || 0);
         failStatus = Number(url.searchParams.get('status')) || 429;
       }
-      send(200, { slowMs, unusableLeft, failLeft, failStatus });
+      send(200, { slowMs, unusableLeft, failLeft, failStatus, reviewMode });
       return;
     }
     if (req.method !== 'POST' || !req.url?.startsWith('/v1/messages')) {
@@ -95,6 +106,30 @@ export function startFakeAnthropic(port: number, scripts: readonly FakeScript[])
         body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as MessagesBody;
       } catch {
         send(400, { type: 'error', error: { type: 'invalid_request_error', message: 'bad json' } });
+        return;
+      }
+      if (typeof body.system === 'string' && body.system.startsWith(REVIEW_PROMPT_START)) {
+        reviewRequests += 1;
+        const text = lastUserText(body);
+        const factsLine = text.split('\n').find((_line, i, lines) => lines[i - 1] === REVIEW_FACTS_HEADER) ?? '';
+        lastReviewFacts = factsLine;
+        let title = 'your targets';
+        try {
+          title = (JSON.parse(factsLine) as { targets: { title: string }[] }).targets[0].title;
+        } catch {
+          // Not the facts we expect: the sentence still names something, and the spec will see what was sent.
+        }
+        const line = reviewMode === 'bad' ? 'You lifted on 3 days.' : `You kept ${title} going through the week.`;
+        send(200, {
+          id: `msg_fake_review_${reviewRequests}`,
+          type: 'message',
+          role: 'assistant',
+          model: body.model ?? 'fake',
+          content: [{ type: 'text', text: JSON.stringify({ line }) }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 600, output_tokens: 40 },
+        });
         return;
       }
       if (typeof body.system !== 'string' || !body.system.startsWith(SETUP_PROMPT_START)) {

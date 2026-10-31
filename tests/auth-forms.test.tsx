@@ -278,6 +278,16 @@ describe('the signed-in indicator', () => {
     expect(header.getByRole('link', { name: 'Settings and account' }).getAttribute('href')).toBe('/settings');
   });
 
+  it('the mobile header keeps a long address whole for a screen reader, though it is shortened on screen', () => {
+    const long = 'a-very-long-throwaway-address-for-390-px-screens-abcdef@example.com';
+    render(<MobileHeader active="dashboard" userEmail={long} />);
+    const header = within(screen.getByRole('banner'));
+    // The row is cut off by CSS (an ellipsis), not in the markup: the text a screen reader reads, and the title, hold all of it.
+    const row = header.getByText(`Signed in as ${long}`);
+    expect(row.textContent).toBe(`Signed in as ${long}`);
+    expect(row.getAttribute('title')).toBe(long);
+  });
+
   it('the mobile header shows no account row when there is no session', () => {
     render(<MobileHeader active="dashboard" />);
     const header = within(screen.getByRole('banner'));

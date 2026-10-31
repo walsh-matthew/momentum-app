@@ -117,7 +117,8 @@ button:disabled {
 /* ---- Brand ---------------------------------------------------------------------------------------------- */
 
 .momentum-mark {
-  margin-top: -4px;
+  margin-top: -6px;
+  padding-right: 0.13em;
   font-family: Georgia, serif;
   font-size: 25px;
   font-style: italic;
@@ -1083,6 +1084,9 @@ button:disabled {
   .mobile-account {
     display: flex;
     flex: 0 0 100%;
+    /* A flex item never shrinks below its content, so without this a long address held the row, and the page, wider than the screen. */
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     justify-content: space-between;
     gap: 10px;

@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import type { ReviewPlanningMode } from '@/types/database.types';
 import type { WeeklyReviewFacts } from '@/types/review';
+import { adjustmentView } from './adjustmentWording';
 import { ChangesSince, RecapBody } from './RecapBody';
+import { ReviewSitting } from './ReviewSitting';
+import { PLAN_HEADING, PLAN_LINK, PLAN_NEXT, PLAN_SEPARATE, PLAN_SEPARATE_LINK } from './sittingWording';
 import { closedEarlyLine, closedEarlyReviewedLine, finishedWhen, fullWeekdayName, weekLabel } from './wording';
 
 interface ReviewScreenProps {
@@ -25,9 +29,35 @@ function Message({ children, to }: { children: ReactNode; to?: { href: string; l
   );
 }
 
-// The weekly review's layer 1 recap, read only (MOM-113 block 3.2). It shows what the server built from the engine's facts
-// and the person's own record, and decides nothing itself: no review appears before the person has set the day their week
-// starts and the day they plan it in, and nothing is guessed. Layer 2's offer and layer 3's one adjustment are block 3.3.
+// What follows a finished review (docs/DOMAIN_MODEL.md §3, §4.1 "Review and planning"): planning in the same sitting by default,
+// which is a link to the week plan, or one quiet line when the person chose to plan separately. Nothing is planned for them.
+function PlanNext({ mode }: { mode: ReviewPlanningMode }) {
+  return (
+    <section aria-label="Plan your week" className="home-notice review-card">
+      {mode === 'one_sitting' ? (
+        <>
+          <h2 className="card-title">{PLAN_HEADING}</h2>
+          <p className="home-note">{PLAN_NEXT}</p>
+          <Link href="/plan" className="review-link">
+            {PLAN_LINK}
+          </Link>
+        </>
+      ) : (
+        <>
+          <p className="home-note">{PLAN_SEPARATE}</p>
+          <Link href="/plan" className="review-link">
+            {PLAN_SEPARATE_LINK}
+          </Link>
+        </>
+      )}
+    </section>
+  );
+}
+
+// The weekly review (MOM-113). Layer 1's recap is what the server built from the engine's facts and the person's own record;
+// on a review that is due, layer 2's one-line look back (only when they tap for it), layer 3's one question and the finish
+// follow it (components/review/ReviewSitting.tsx). It decides nothing itself: no review appears before the person has set the
+// day their week starts and the day they plan it in, and nothing is guessed.
 export function ReviewScreen({ facts }: ReviewScreenProps) {
   switch (facts.state) {
     case 'no_goals':
@@ -79,9 +109,17 @@ export function ReviewScreen({ facts }: ReviewScreenProps) {
             <RecapBody recap={facts.review.recap} tone={facts.tone} today={facts.today} />
           </section>
           <ChangesSince changes={facts.changes} today={facts.today} />
+          <PlanNext mode={facts.planning} />
         </>
       );
-    case 'ready':
+    case 'ready': {
+      const titles = new Map(facts.recap.goals.flatMap((g) => g.targets.map((t) => [t.id, t.title] as const)));
+      const adjustment =
+        facts.adjustment === null
+          ? null
+          : adjustmentView(facts.adjustment, { target: (id) => titles.get(id) ?? null, item: () => null });
+      // A line needs something to look back on: a recap with no target in it has nothing to say.
+      const offerLine = facts.offerReflection && titles.size > 0;
       return (
         <>
           <section aria-label="This week's recap">
@@ -90,7 +128,9 @@ export function ReviewScreen({ facts }: ReviewScreenProps) {
             <RecapBody recap={facts.recap} tone={facts.tone} today={facts.today} />
           </section>
           <ChangesSince changes={facts.changes} today={facts.today} />
+          <ReviewSitting offerLine={offerLine} adjustment={adjustment} />
         </>
       );
+    }
   }
 }

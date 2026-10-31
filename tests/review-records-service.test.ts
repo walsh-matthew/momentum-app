@@ -43,6 +43,29 @@ function steadyPerson() {
 
 const records = () => gm.tables.weekly_reviews;
 
+describe('the planning setting rides along on a finished review (MOM-113 block 3.3)', () => {
+  // Planning follows the review in the same sitting by default, or is left for the person when they chose to split them.
+  const finishedWith = async (planning: Record<string, unknown>) => {
+    slippingPerson();
+    gm.tables.person_settings[0] = { ...gm.tables.person_settings[0], ...planning };
+    expect((await recordFinishedReview('declined', { now: () => CASE_B_NOW })).ok).toBe(true);
+    const read = await getWeeklyReviewFacts({ now: () => CASE_B_NOW });
+    if (!read.ok || read.data.state !== 'reviewed') throw new Error('not reviewed');
+    return read.data;
+  };
+
+  it('is one sitting when the person has not chosen', async () => {
+    expect((await finishedWith({ review_planning: null })).planning).toBe('one_sitting');
+  });
+
+  it('is what the person chose', async () => {
+    expect((await finishedWith({ review_planning: 'separate' })).planning).toBe('separate');
+    resetGoalModel({ id: ME });
+    gm.dbNow = new Date(CASE_B_NOW).toISOString();
+    expect((await finishedWith({ review_planning: 'one_sitting' })).planning).toBe('one_sitting');
+  });
+});
+
 describe('recordFinishedReview: a finished review is stored once', () => {
   it('stores what the recap said, the week, the adjustment offered and the choice, with the database\'s time', async () => {
     const mine = slippingPerson();

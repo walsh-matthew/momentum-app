@@ -28,8 +28,12 @@ export function ThemeChoice({ initial }: ThemeChoiceProps) {
     startTransition(async () => {
       const result = await setThemeChoice(next).catch(() => ({ ok: false }));
       if (!result.ok) {
-        setFailed(true);
-        setChoice(before);
+        // A state update after an await is not part of the transition (React 19), so it is wrapped again: the alert, the
+        // choice put back and the buttons ready again show in the same render.
+        startTransition(() => {
+          setFailed(true);
+          setChoice(before);
+        });
         if (before === 'system') delete root.dataset.theme;
         else root.dataset.theme = before;
       }

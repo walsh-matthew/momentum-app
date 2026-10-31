@@ -1,7 +1,8 @@
 // Limits, caps and usage logging for every Claude call (MOM-73, docs/LLM_GOVERNANCE.md). Server-side only.
 //
-// Every place the app calls Claude (the rebalance proposal, the wizard's week 1 plan and, since MOM-128, a turn of guided
-// setup through runSetupTurn() below) goes through runWithinBudget(). It does three things around the call:
+// Every place the app calls Claude (the rebalance proposal, the wizard's week 1 plan, since MOM-128 a turn of guided
+// setup through runSetupTurn() below and, since MOM-113, the weekly review's one line through runReviewLine()) goes through
+// runWithinBudget(). It does three things around the call:
 //   1. BEFORE: reserve_llm_call() (migration 011) checks three limits in the database and, if they pass, inserts a
 //      'pending' usage row in the same transaction. The limits are therefore the same for every serverless instance
 //      and survive a cold start. If one trips, the model is NOT called and the result says which one and when the
@@ -25,9 +26,12 @@ import 'server-only';
 import { z } from 'zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { requestReviewLineFromModel, REVIEW_MODEL, type ModelReviewDeps } from '@/lib/ai/review';
 import { requestSetupTurnFromModel, SETUP_MODEL, type ModelSetupDeps, type ModelSetupResult } from '@/lib/ai/setup';
 import type { ModelUsage } from '@/lib/ai/usage';
+import { REFLECTION_FALLBACK_LINES, REFLECTION_RETRY_NOTES, readReflectionReply, type ReflectionFacts } from '@/lib/review/reflection';
 import type { LlmFeature, LlmOutcome, Tables } from '@/types/database.types';
+import type { ReviewLineResult, ReviewLineUnavailable } from '@/types/review';
 import type { SetupDraft, Transcript } from '@/types/setup';
 import type { ServiceResult } from './result';
 
@@ -45,6 +49,10 @@ export const LLM_LIMITS = {
 } as const;
 
 export type LlmLimits = { [K in keyof typeof LLM_LIMITS]: number };
+
+// The spacing limit is at most 20 seconds, so "a few seconds" is accurate for it. Declared up here because the review's message
+// table below is built when the module loads.
+export const TOO_SOON_MESSAGE = 'Please wait a few seconds before asking again.';
 
 // Which limit stopped a call. Same words as the `reason` reserve_llm_call() returns.
 export const LLM_LIMIT_KINDS = ['too_soon', 'user_daily', 'overall_daily'] as const;
@@ -224,18 +232,16 @@ export function setupBudgetStatus(
 // Why setup stopped using Claude and offered the quick path instead.
 export type SetupQuickPathReason = 'over_turns' | 'over_tokens' | 'shared_cap' | 'person_cap' | 'unchecked';
 
-// What the person is offered: what they have said so far (played back by code from the validated draft), then the quick
-// path, which is sensible defaults they can see and change. Nothing is saved until they approve (DOMAIN_MODEL §2.3).
-const QUICK_PATH_OFFER =
-  'Here is what you have told me so far. You can check it and save it now; anything not set yet starts from a sensible default you can change later. Nothing is saved until you approve it.';
-
+// What happened, in one sentence, for each reason setup stopped using Claude. The card (components/setup/QuickPathCard.tsx) adds
+// what the person has said so far, played back by code, and what to do next. No default is ever applied: the quick path saves
+// what was said when it is complete, and otherwise names what is missing (DOMAIN_MODEL §2.3, "never assume").
 export const SETUP_QUICK_PATH_MESSAGES: Record<SetupQuickPathReason, string> = {
-  over_turns: `This setup has used its share of Claude's time. ${QUICK_PATH_OFFER}`,
-  over_tokens: `This setup has used its share of Claude's time. ${QUICK_PATH_OFFER}`,
-  shared_cap: `Claude is at its shared limit for everyone right now. ${QUICK_PATH_OFFER}`,
+  over_turns: "This setup has used up the questions Claude gets for one setup, so it can't ask any more.",
+  over_tokens: "This setup has used up the questions Claude gets for one setup, so it can't ask any more.",
+  shared_cap: "Claude is at its shared limit for everyone right now, so it can't ask any more questions.",
   // Unreachable while per-person limits are log-only, but it must say something true if the sentinel is ever reached.
-  person_cap: `Claude cannot take more requests from you right now. ${QUICK_PATH_OFFER}`,
-  unchecked: `Claude's usage limits could not be checked, so setup cannot go on with Claude. ${QUICK_PATH_OFFER}`,
+  person_cap: "Claude can't take more requests from you right now.",
+  unchecked: "Claude's usage limits could not be checked, so setup can't go on with Claude.",
 };
 
 export type SetupTurnResult =
@@ -333,6 +339,160 @@ export async function runSetupTurn(args: RunSetupTurnArgs, deps: RunSetupTurnDep
 }
 
 // ---------------------------------------------------------------------------
+// The weekly review's one line (MOM-113 block 3.3, docs/LLM_GOVERNANCE.md)
+// ---------------------------------------------------------------------------
+//
+// Layer 2 of the weekly review is one plain sentence about the week, written by Claude and checked by code
+// (lib/review/reflection.ts). It has its own budget, measured the same way as setup's: every call is a 'weekly_review' row in
+// llm_usage_logs, and the cap below is read from that log, so it holds across page loads and serverless instances.
+//
+// - A line is asked for only when the person taps for it, so opening /review costs nothing.
+// - One ask is at most 2 calls: the first, and one retry with code's fixed note about the rule the reply broke.
+// - A person's `weekly_review` calls are capped at 4 in any 24 hours, so about two asks. The count is a read before each call
+//   (two taps at the very same moment could pass it together); the database's own checks after it are atomic: the 1 second
+//   spacing, the person's daily cap across every feature, and the one hard shared cap.
+// - A reply that still fails its checks after the retry is replaced by a line written by code, labelled as Momentum's.
+// - Any limit that stops a call, or a failed call, leaves the review going on without a line. Nothing is saved from a line.
+
+export const REVIEW_LIMITS: LlmLimits = {
+  // The smallest the database accepts, as for setup: a retry follows the first call within a second or two, so a longer spacing
+  // would block it. A double tap is stopped by the button being off while a request is out, and by the 4-call count below.
+  minIntervalSeconds: 1,
+  userDailyCap: LLM_LIMITS.userDailyCap,
+  overallDailyCap: LLM_LIMITS.overallDailyCap,
+};
+
+export interface ReviewBudget {
+  // `weekly_review` calls per person in any 24 hours.
+  maxCallsPer24h: number;
+  // Calls in one ask: the first and one retry.
+  maxCallsPerAsk: number;
+}
+
+export const REVIEW_BUDGET: ReviewBudget = { maxCallsPer24h: 4, maxCallsPerAsk: 2 };
+
+const REVIEW_CONTINUES = 'Your review goes on without it.';
+
+export const REVIEW_LINE_MESSAGES: Record<ReviewLineUnavailable, string> = {
+  review_budget: `You have already asked Claude for a line today. ${REVIEW_CONTINUES}`,
+  shared_cap: `Claude is at its shared limit for everyone right now. ${REVIEW_CONTINUES}`,
+  person_cap: `${dailyLimitClause('user_daily')}. ${REVIEW_CONTINUES}`,
+  too_soon: TOO_SOON_MESSAGE,
+  unchecked: `Claude's usage limits could not be checked, so no line was asked for. ${REVIEW_CONTINUES}`,
+  model: `Claude could not write a line just now. ${REVIEW_CONTINUES}`,
+};
+
+export interface RunReviewLineArgs {
+  // From the verified session. Never from a request.
+  userId: string;
+  facts: ReflectionFacts;
+  // Tests and the eval runner only. The app uses the constants above.
+  model?: string;
+  limits?: LlmLimits;
+  budget?: ReviewBudget;
+}
+
+export interface RunReviewLineDeps extends BudgetDeps {
+  modelDeps?: ModelReviewDeps;
+  // Swappable in tests so no network call is made.
+  requestLine?: typeof requestReviewLineFromModel;
+  // Waits out the spacing before a retry (milliseconds). Swappable in tests so no test sleeps.
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const unavailable = (reason: ReviewLineUnavailable): ReviewLineResult => ({ kind: 'unavailable', reason, message: REVIEW_LINE_MESSAGES[reason] });
+
+// How many review calls this person has made in the last 24 hours, or null when that cannot be read (the call is then not made).
+async function countReviewCalls(userId: string, nowMs: number): Promise<number | null> {
+  let admin: ReturnType<typeof createSupabaseAdminClient>;
+  try {
+    admin = createSupabaseAdminClient();
+  } catch {
+    console.error('[llm] review calls could not be counted: no service-role client');
+    return null;
+  }
+  const { data, error } = await admin
+    .from('llm_usage_logs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('feature', 'weekly_review')
+    .gte('created_at', new Date(nowMs - DAY_MS).toISOString())
+    .limit(100);
+  if (error) {
+    console.error('[llm] review calls could not be counted', { code: error.code ?? 'none' });
+    return null;
+  }
+  return data.length;
+}
+
+// One ask for the review's line: the budget check, the reservation under 'weekly_review', the call, the record, the reply's
+// checks, and at most one retry. Everything that makes it stop is a value, not a throw.
+export async function runReviewLine(args: RunReviewLineArgs, deps: RunReviewLineDeps = {}): Promise<ReviewLineResult> {
+  const budget = args.budget ?? REVIEW_BUDGET;
+  const model = args.model ?? REVIEW_MODEL;
+  const requestLine = deps.requestLine ?? requestReviewLineFromModel;
+  const nowMs = deps.nowMs ?? Date.now;
+  const titles = args.facts.targets.map((t) => t.title);
+
+  let feedback: string[] = [];
+  let calls = 0;
+  let rejected = 0;
+  // After a reply that failed its checks, a limit that stops the retry is not "unavailable": code's own line takes its place.
+  // A refusal or an outage after a good call is.
+  const stopped = (reason: ReviewLineUnavailable): ReviewLineResult =>
+    rejected === 0 ? unavailable(reason) : { kind: 'line', line: REFLECTION_FALLBACK_LINES[args.facts.tone], source: 'fallback', calls };
+
+  // A retry can land inside the 1 second spacing when the first call was quick; it waits that second out, once.
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  let waited = false;
+
+  for (let attempt = 0; attempt < budget.maxCallsPerAsk; attempt++) {
+    const used = await countReviewCalls(args.userId, nowMs());
+    if (used === null) return stopped('unchecked');
+    if (used >= budget.maxCallsPer24h) return stopped('review_budget');
+
+    const budgeted = await runWithinBudget(
+      {
+        userId: args.userId,
+        feature: 'weekly_review',
+        model,
+        limits: args.limits ?? REVIEW_LIMITS,
+        call: () => requestLine({ facts: args.facts, retryFeedback: feedback }, { ...deps.modelDeps, model }),
+        report: reportModelResult,
+      },
+      deps,
+    );
+    if (budgeted.kind === 'unchecked') return stopped('unchecked');
+    if (budgeted.kind === 'limited') {
+      if (budgeted.limit === 'too_soon' && rejected > 0 && !waited) {
+        waited = true;
+        await sleep(budgeted.retryAfterSeconds * 1000);
+        attempt--;
+        continue;
+      }
+      return stopped(budgeted.limit === 'too_soon' ? 'too_soon' : budgeted.limit === 'overall_daily' ? 'shared_cap' : 'person_cap');
+    }
+    calls++;
+
+    const result = budgeted.result;
+    if (!result.ok) {
+      // Only an unreadable reply is worth another try; a refusal, a missing key or an outage will not change in a second.
+      if (result.reason !== 'bad_output') return unavailable('model');
+      rejected++;
+      feedback = [REFLECTION_RETRY_NOTES.unreadable];
+      continue;
+    }
+    const checked = readReflectionReply(result.raw, titles);
+    if (checked.ok) return { kind: 'line', line: checked.line, source: 'claude', calls };
+    rejected++;
+    feedback = [REFLECTION_RETRY_NOTES[checked.problem]];
+  }
+  return { kind: 'line', line: REFLECTION_FALLBACK_LINES[args.facts.tone], source: 'fallback', calls };
+}
+
+// ---------------------------------------------------------------------------
 // Reading usage
 // ---------------------------------------------------------------------------
 
@@ -374,9 +534,6 @@ export function describeWait(seconds: number): string {
   const hours = Math.ceil(s / 3600);
   return hours === 1 ? 'in about 1 hour' : `in about ${hours} hours`;
 }
-
-// The spacing limit is at most 20 seconds, so "a few seconds" is accurate for it.
-export const TOO_SOON_MESSAGE = 'Please wait a few seconds before asking again.';
 
 // What happened, for the two daily limits, without a final full stop so a caller can continue the sentence.
 export function dailyLimitClause(limit: 'user_daily' | 'overall_daily', limits: LlmLimits = LLM_LIMITS): string {
