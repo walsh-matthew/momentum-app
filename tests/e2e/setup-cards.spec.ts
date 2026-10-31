@@ -344,14 +344,15 @@ test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
     await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.missingTitle })).toBeVisible();
     await expect(quick.getByText("This setup has used up the questions Claude gets for one setup, so it can't ask any more.", { exact: true })).toBeVisible();
     await expect(quick.getByText(QUICK_PATH_WORDS.intro, { exact: true })).toBeVisible();
-    await expect(quick.getByText(QUICK_PATH_WORDS.missingNoWait, { exact: true })).toBeVisible();
+    // Every missing item can be set on the card (MOM-111), so it says so instead of "start again".
+    await expect(quick.getByText(QUICK_PATH_WORDS.fillIn, { exact: true })).toBeVisible();
     await expect(quick.getByText(QUICK_PATH_WORDS.saveOff, { exact: true })).toBeVisible();
     await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeDisabled();
     // The words come before the buttons.
-    const [words, buttons] = await Promise.all([quick.getByText(QUICK_PATH_WORDS.missingNoWait, { exact: true }).boundingBox(), quick.getByRole('button', { name: 'Save what I have' }).boundingBox()]);
+    const [words, buttons] = await Promise.all([quick.getByText(QUICK_PATH_WORDS.fillIn, { exact: true }).boundingBox(), quick.getByRole('button', { name: 'Save what I have' }).boundingBox()]);
     expect((words?.y ?? 0) < (buttons?.y ?? 0)).toBe(true);
-    // Round 3d: the missing number is the number question itself, and nothing promises a default.
-    await expect(quick.locator('ul li').filter({ hasText: 'In a hard week, how many workouts would still count?' })).toHaveCount(1);
+    // Round 3d: the missing number is the number question itself, now with its own box, and nothing promises a default.
+    await expect(quick.locator('[data-fill-in]').filter({ hasText: 'In a hard week, how many workouts would still count?' })).toHaveCount(1);
     await expect(quick).not.toContainText(/least you aim for|default/i);
     await expectRealLists(quick);
     await fits(page, 'quick path, missing');
@@ -387,6 +388,82 @@ test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
     await expectRealLists(quick);
     await fits(page, 'quick path, ready');
     await shooter('quick-path')(page, 'ready');
+  });
+
+  // From a limit stop to a saved setup (MOM-111): the person sets each missing item on the card, nothing they said is lost, and
+  // Save turns on only when the last one is set. Every control is used the way a person would: the time zone from the list, a
+  // time, a weekday, today as a suggestion, a shape, a number and a source. The screenshots are the empty card, the card
+  // part-filled and the card ready to save, in the colour scheme the run uses (E2E_COLOR_SCHEME) and at the run's width.
+  test('from a limit stop, the person fills in what is missing and saves; what they said is kept', async ({ page }) => {
+    test.setTimeout(240_000);
+    const scheme = process.env.E2E_COLOR_SCHEME === 'dark' ? 'dark' : 'light';
+    const draft = emptyDraft();
+    draft.model.goals.push({ ...goal('g1', 'Get stronger and keep it up through the whole winter season'), targets: [target('t1', 'Workouts')] });
+    const claude = { kind: 'question', chunk: null, skipped: null, say: '', question: 'Anything else?', detail: null, topic: 'idea', options: [], draft };
+    const transcript = Array.from({ length: 40 }, () => [{ role: 'assistant', turn: claude }, { role: 'person', text: 'That is all.' }]).flat();
+    const quick = await openQuickPath(page, `setup-quick-path-fill-${scheme}-${SHOT_WIDTH}`, { transcript, draft, spentTokens: 0 });
+    const shoot = shooter('quick-path-fill-in');
+    const shot = (name: string) => shoot(page, `${name}-${scheme}-${SHOT_WIDTH}`);
+
+    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.missingTitle })).toBeVisible();
+    await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeDisabled();
+    const stored = async (): Promise<{ transcript: { role: string; text?: string }[] }> =>
+      page.evaluate((prefix) => JSON.parse(window.sessionStorage.getItem(Object.keys(window.sessionStorage).find((k) => k.startsWith(prefix)) ?? '') ?? 'null'), SETUP_STORAGE_PREFIX);
+    const said = (await stored()).transcript;
+    expect(said).toHaveLength(80);
+    await fits(page, 'quick path fill-in, empty');
+    await shot('01-empty');
+
+    // Set each item the way its control asks, until Save is on. Every group is found by what it is for.
+    const save = quick.getByRole('button', { name: 'Save what I have' });
+    let filled = 0;
+    for (let guard = 0; guard < 20 && (await save.isDisabled()); guard++) {
+      const group = quick.locator('[data-fill-in]').first();
+      const id = (await group.getAttribute('data-fill-in')) ?? '';
+      const line = (await group.locator('p').first().textContent()) ?? '';
+      if (id === 'person.timeZone') {
+        await group.getByRole('searchbox', { name: QUICK_PATH_WORDS.searchZones }).fill('london');
+        await group.getByRole('button', { name: 'Europe/London' }).click();
+      } else if (id === 'person.dayEnd') {
+        await group.getByLabel(line).fill('21:00');
+        await group.getByRole('button', { name: QUICK_PATH_WORDS.setItem }).click();
+      } else if (id === 'person.weekStart') {
+        await group.getByRole('button', { name: 'Monday' }).click();
+      } else if (id.endsWith('.startDate')) {
+        await group.getByRole('button', { name: /^Use today/ }).click();
+      } else if (id.endsWith('.shape')) {
+        await group.getByRole('button', { name: 'It keeps going' }).click();
+      } else if (id.endsWith('.floor')) {
+        await group.getByLabel(line).fill('3');
+        await group.getByRole('button', { name: QUICK_PATH_WORDS.setItem }).click();
+      } else if (id.endsWith('.sources')) {
+        await group.getByRole('button', { name: "I'll log it myself" }).click();
+      } else {
+        throw new Error(`no step for the item ${id}`);
+      }
+      // The item leaves the card once it is set.
+      await expect(quick.locator(`[data-fill-in="${id}"]`)).toHaveCount(0);
+      filled += 1;
+      if (filled === 2) {
+        await fits(page, 'quick path fill-in, part-filled');
+        await shot('02-part-filled');
+      }
+    }
+    expect(filled, 'something was filled in').toBeGreaterThan(2);
+    await expect(save).toBeEnabled();
+    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.readyTitle })).toBeVisible();
+    await expect(quick).not.toContainText(/default/i);
+    await fits(page, 'quick path fill-in, ready');
+    await shot('03-ready');
+
+    // Nothing they said is lost: the conversation is the same one with each item's question and answer added to the end.
+    const after = (await stored()).transcript;
+    expect(after.slice(0, 80)).toEqual(said);
+    expect(after).toHaveLength(80 + 2 * filled);
+    expect(after.some((m) => m.text === 'Europe/London')).toBe(true);
+
+    await save.click();
+    await expect(page.getByRole('heading', { name: 'Your setup is saved' })).toBeVisible({ timeout: 30_000 });
   });
 });
 
