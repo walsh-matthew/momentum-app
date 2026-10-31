@@ -42,13 +42,13 @@ describe('what was said, one line each', () => {
 
   it("a goal's timeframe is one sentence with its name, and says nothing while neither the start nor the shape is set", () => {
     const bare = goal('g1', 'Get stronger', { targets: [target('t1', 'Workouts')] });
-    expect(textOf(recapSections(model((m) => m.goals.push(bare)), OPTIONS))).not.toContain('Get stronger starts today and keeps going.');
+    expect(textOf(recapSections(model((m) => m.goals.push(bare)), OPTIONS)).join(' ')).not.toMatch(/starts/);
     const ongoing = goal('g1', 'Get stronger', { startDate: TODAY, shape: 'ongoing' });
-    expect(textOf(recapSections(model((m) => m.goals.push(ongoing)), OPTIONS))).toEqual(['Get stronger starts today and keeps going.']);
+    expect(textOf(recapSections(model((m) => m.goals.push(ongoing)), OPTIONS))).toEqual(['Get stronger starts Friday, Oct 30 and keeps going.']);
     const finite = goal('g1', 'Get stronger', { startDate: TODAY, shape: 'finite', endDate: '2026-12-15' });
-    expect(textOf(recapSections(model((m) => m.goals.push(finite)), OPTIONS))).toEqual(['Get stronger starts today and ends on Tuesday, Dec 15.']);
+    expect(textOf(recapSections(model((m) => m.goals.push(finite)), OPTIONS))).toEqual(['Get stronger starts Friday, Oct 30 and ends Tuesday, Dec 15.']);
     const startOnly = goal('g1', 'Get stronger', { startDate: TODAY });
-    expect(textOf(recapSections(model((m) => m.goals.push(startOnly)), OPTIONS))).toEqual(['Get stronger starts today.']);
+    expect(textOf(recapSections(model((m) => m.goals.push(startOnly)), OPTIONS))).toEqual(['Get stronger starts Friday, Oct 30.']);
   });
 
   it('says where each thing is tracked, in the person\'s own terms', () => {
@@ -71,6 +71,30 @@ describe('what was said, one line each', () => {
     const lines = textOf(recapSections(model((m) => { m.person.timeZone = 'Europe/London'; m.person.weekStart = 1; }), OPTIONS));
     expect(lines).toEqual(["You're on London time.", 'Your week starts on Monday.']);
     expect(lines.join('\n')).not.toContain('Europe/London');
+  });
+
+  it('shows a date as the date itself, never as "today", "tomorrow" or "yesterday", whatever day it is in the person\'s time zone', () => {
+    const g = goal('g1', 'Get stronger', {
+      startDate: '2026-10-30',
+      shape: 'finite',
+      endDate: '2026-10-31',
+      targets: [target('t1', 'Pages', { period: { kind: 'deadline', dueDate: '2026-10-31' }, floor: 40 })],
+      items: [item('sew', 'deadline_task', 'Sew the quilt', { dueDate: '2026-10-30', dateCanMove: true })],
+    });
+    // A time zone ahead of the device: the person's today can be the 31st when the device's date, and so the start date, is the 30th.
+    // Whatever their today is, the dates read as dates.
+    for (const today of ['2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01']) {
+      const lines = textOf(recapSections(model((m) => m.goals.push(g)), { ...OPTIONS, today }));
+      expect(lines.join('\n'), `today is ${today}`).not.toMatch(/\b(today|tomorrow|yesterday)\b/i);
+      expect(lines, `today is ${today}`).toContain('Get stronger starts Friday, Oct 30 and ends Saturday, Oct 31.');
+      expect(lines.join('\n'), `today is ${today}`).toContain('by Saturday, Oct 31');
+      expect(lines, `today is ${today}`).toContain('Due by Friday, Oct 30: Sew the quilt. The date can move.');
+    }
+  });
+
+  it('a goal that is set aside says when it comes back as a date too', () => {
+    const g = goal('g1', 'Learn Spanish', { state: 'parked', returnWhen: { kind: 'date', date: '2026-10-31' } });
+    expect(textOf(recapSections(model((m) => m.goals.push(g)), { ...OPTIONS, today: '2026-10-31' }))).toEqual(['Set aside for now. It comes back on Saturday, Oct 31.']);
   });
 
   it('what matters to the person says Momentum will keep it in mind, never "I\'ll"', () => {
@@ -112,7 +136,7 @@ describe('one list, nothing twice, nothing empty', () => {
     const sections = recapSections(model((m) => { m.goals.push(g); m.person.weekStart = 1; }), OPTIONS);
     expect(sections.map((s) => s.id)).toEqual([goalStepId(g), DAYS_STEP_ID]);
     expect(sections[0].lines.map((l) => [l.stepId, l.text])).toEqual([
-      [goalStepId(g), 'Get stronger starts today and keeps going.'],
+      [goalStepId(g), 'Get stronger starts Friday, Oct 30 and keeps going.'],
       [targetStepId(g, g.targets[0]), 'Even in a hard week: at least 3 workouts a week.'],
     ]);
     expect(sections[0].subjects).toEqual([goalStepId(g), targetStepId(g, g.targets[0])]);

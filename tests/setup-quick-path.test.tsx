@@ -118,7 +118,7 @@ describe('the top of the card, and the reason, once', () => {
   });
 
   it('shows no reason on the ready screen, where nothing is left to answer', () => {
-    card({ steps: [], sections: [section('goal:g1', 'Get stronger', ['Get stronger starts today and keeps going.'])] });
+    card({ steps: [], sections: [section('goal:g1', 'Get stronger', ['Get stronger starts Friday, Oct 30 and keeps going.'])] });
     expect(screen.getByRole('heading', { name: QUICK_PATH_WORDS.readyTop })).toBeTruthy();
     for (const reason of [QUICK_PATH_WORDS.reasonLimit, QUICK_PATH_WORDS.reasonWait]) expect(screen.queryByText(reason)).toBeNull();
   });
@@ -171,12 +171,12 @@ describe('the empty state: step 1, a question in place, nothing dimmed', () => {
 
   it('says nothing twice: not the goal, not a line, not a question', () => {
     const lines = [
-      { text: 'Get stronger starts today and keeps going.', stepId: 'goal:g1' },
+      { text: 'Get stronger starts Friday, Oct 30 and keeps going.', stepId: 'goal:g1' },
       { text: "You'll count workouts each week.", stepId: 'target:g1.t1' },
     ];
     card({ sections: [{ id: 'goal:g1', title: 'Get stronger', lines, subjects: ['goal:g1', 'target:g1.t1'], names: { 'goal:g1': 'Get stronger', 'target:g1.t1': 'Workouts' } }, section('days', 'Your days')] });
     for (const phrase of ['Get stronger', START.line, SHAPE.line]) expect(text().split(phrase).length - 1, phrase).toBe(phrase === 'Get stronger' ? 2 : 1);
-    // "Get stronger" is the step's name and, once, in the line that says it starts today: never a repeated heading or a goal list.
+    // "Get stronger" is the step's name and, once, in the line that says when it starts: never a repeated heading or a goal list.
     expect(screen.getAllByRole('heading', { name: 'Get stronger' })).toHaveLength(1);
   });
 });
@@ -192,7 +192,7 @@ describe('one step on, and back', () => {
       id: 'goal:g1',
       title: 'Get stronger',
       lines: [
-        { text: 'Get stronger starts today and keeps going.', stepId: 'goal:g1' },
+        { text: 'Get stronger starts Friday, Oct 30 and keeps going.', stepId: 'goal:g1' },
         { text: "You'll count workouts each week.", stepId: 'target:g1.t1' },
       ],
       subjects: ['goal:g1', 'target:g1.t1'],
@@ -205,7 +205,7 @@ describe('one step on, and back', () => {
     card({ steps: answeredFirst(), sections: sections() });
     expect(screen.getByRole('heading', { name: 'Almost done: 2 quick steps and your setup is saved' })).toBeTruthy();
     expect(screen.getByText('2 of 3')).toBeTruthy();
-    const confirmation = screen.getByText('✓ Get stronger starts today and keeps going.');
+    const confirmation = screen.getByText('✓ Get stronger starts Friday, Oct 30 and keeps going.');
     const heading = screen.getByRole('heading', { name: 'Workouts' });
     // Above the step's heading in the page, and not inside it.
     expect(confirmation.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -220,7 +220,7 @@ describe('one step on, and back', () => {
     const callout = document.querySelector(`[data-fill-in="${FLOOR.id}"]`) as HTMLElement;
     expect(own.compareDocumentPosition(callout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The goal's own line is the small ✓ line above, once, and not repeated under this step.
-    expect(screen.getAllByText(/Get stronger starts today/)).toHaveLength(1);
+    expect(screen.getAllByText(/Get stronger starts Friday, Oct 30/)).toHaveLength(1);
   });
 
   it('does not say an answer twice: once a step has an answer, its lines give way to the answers shown below', () => {
@@ -310,7 +310,7 @@ describe('the last step: Save my setup', () => {
 
 describe('the ready screen', () => {
   const sections = () => [
-    section('goal:g1', 'Get stronger', ['Get stronger starts today and keeps going.', 'Even in a hard week: at least 3 workouts a week.', 'You log workouts yourself.']),
+    section('goal:g1', 'Get stronger', ['Get stronger starts Friday, Oct 30 and keeps going.', 'Even in a hard week: at least 3 workouts a week.', 'You log workouts yourself.']),
     section('days', 'Your days', ["You're on London time.", 'You check in at 9:00 PM.', 'Your week starts on Monday.']),
   ];
 
@@ -363,21 +363,21 @@ describe('the ready screen', () => {
       id: 'goal:g1',
       title: 'Get stronger',
       lines: [
-        { text: 'Get stronger starts today and keeps going.', stepId: 'goal:g1' },
+        { text: 'Get stronger starts Friday, Oct 30 and keeps going.', stepId: 'goal:g1' },
         { text: 'Even in a hard week: at least 3 workouts a week.', stepId: 'target:g1.t1' },
       ],
       subjects: ['goal:g1', 'target:g1.t1'],
       names: { 'goal:g1': 'Get stronger', 'target:g1.t1': 'Workouts' },
     };
     card({ steps: [], sections: [goalSection] });
-    expect(screen.getByText('Starts today and keeps going.')).toBeTruthy();
-    expect(screen.queryByText(/^Get stronger starts today/)).toBeNull();
+    expect(screen.getByText('Starts Friday, Oct 30 and keeps going.')).toBeTruthy();
+    expect(screen.queryByText(/^Get stronger starts Friday/)).toBeNull();
     expect(screen.getAllByText(/Get stronger/)).toHaveLength(1);
     cleanup();
     // On a phone, the step before is one small line that names it.
     const steps = [step('goal:g1', 'Get stronger', [{ ...START, answered: true, answer: '2026-10-30' }], 'goal:g1'), step('target:g1.t1', 'Workouts', [FLOOR], 'goal:g1')];
     card({ steps, sections: [goalSection] });
-    expect(screen.getByText('✓ Get stronger starts today and keeps going.')).toBeTruthy();
+    expect(screen.getByText('✓ Get stronger starts Friday, Oct 30 and keeps going.')).toBeTruthy();
   });
 
   it('has no Back when nothing was answered on the card: there is no step to go back to', () => {

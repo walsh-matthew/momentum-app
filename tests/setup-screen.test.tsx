@@ -414,7 +414,7 @@ describe('when a turn does not come', () => {
 
 describe('the quick path', () => {
   const sections: RecapSection[] = [
-    { id: 'goal:g1', title: 'Get stronger', lines: [{ text: 'Get stronger starts today and keeps going.', stepId: 'goal:g1' }], subjects: ['goal:g1'], names: { 'goal:g1': 'Get stronger' } },
+    { id: 'goal:g1', title: 'Get stronger', lines: [{ text: 'Get stronger starts Friday, Oct 30 and keeps going.', stepId: 'goal:g1' }], subjects: ['goal:g1'], names: { 'goal:g1': 'Get stronger' } },
     { id: 'days', title: 'Your days', lines: [{ text: 'You check in at 9:00 PM.', stepId: 'days' }], subjects: ['days'], names: { days: 'Your days' } },
   ];
   const quick = (over: Partial<Extract<SetupTurnView, { kind: 'quick_path' }>> = {}): { ok: true; data: SetupTurnView } => ({

@@ -29,11 +29,15 @@ export interface PlaybackOptions {
   // Everything the person has said (lib/setup/said.ts personWords), so a counted thing keeps the capitals they gave it
   // ("Spanish lessons", round 3c). Without it, a counted thing's first word is lowercased unless it is a name.
   said?: readonly string[];
+  // Write every date as the date itself ("Friday, Oct 30"), never as "today", "tomorrow" or "yesterday" (MOM-111, the quick path's
+  // recap): a date the person chose on their device can be a day away from "today" in the time zone they pick later, so a word
+  // that moves with the clock can read wrongly. Left off, a date reads as it always has in the playback.
+  absoluteDates?: boolean;
 }
 
 // A date in the playback, the one way the app writes dates (MOM-111 round 2, finding 3): "today" or "tomorrow" on their own,
 // otherwise "Thursday, Nov 5", spelled, so it is never read in the wrong order.
-export const dateWords = (iso: string, options: PlaybackOptions): string => casualDate(iso, options.today ?? null);
+export const dateWords = (iso: string, options: PlaybackOptions): string => casualDate(iso, options.today ?? null, { relative: options.absoluteDates !== true });
 // "on Thursday, Nov 5", or "today" alone ("comes back on today" does not read).
 export const onDate = (iso: string, options: PlaybackOptions): string => {
   const words = dateWords(iso, options);

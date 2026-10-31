@@ -316,7 +316,7 @@ describe('a wide screen shows every step in one list', () => {
       id: 'goal:g',
       title: 'Get stronger',
       lines: [
-        { text: 'Get stronger starts today and keeps going.', stepId: 'goal:g' },
+        { text: 'Get stronger starts Friday, Oct 30 and keeps going.', stepId: 'goal:g' },
         { text: "You'll count workouts each week.", stepId: 'target:g.t' },
       ],
       subjects: ['goal:g', 'target:g.t'],

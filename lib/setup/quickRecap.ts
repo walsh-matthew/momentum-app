@@ -16,7 +16,6 @@ import {
   dateWords,
   describePeriod,
   describeReturn,
-  onDate,
   plural,
   renderPlayback,
   weekdayName,
@@ -32,10 +31,10 @@ export const itemStepId = (g: GoalDraft, i: WorkItemDraft): string => `item:${g.
 export const DAYS_STEP_ID = 'days';
 export const TALK_SECTION_ID = 'talk';
 
-// "starts today", "starts on Friday, Nov 20"; nothing when there is no start date.
-const startsWords = (g: GoalDraft, options: PlaybackOptions): string | null => (g.startDate ? `starts ${onDate(g.startDate, options)}` : null);
+// "starts Friday, Nov 20"; nothing when there is no start date. Always the date itself, never "today" (see PlaybackOptions.absoluteDates).
+const startsWords = (g: GoalDraft, options: PlaybackOptions): string | null => (g.startDate ? `starts ${dateWords(g.startDate, options)}` : null);
 
-// A goal's timeframe as one sentence: "Get stronger starts today and keeps going." Null while neither the start nor the shape is set.
+// A goal's timeframe as one sentence: "Get stronger starts Friday, Oct 30 and keeps going." Null while neither the start nor the shape is set.
 function shapeLine(g: GoalDraft, options: PlaybackOptions): string | null {
   const title = titleOf(g.title);
   const start = startsWords(g, options);
@@ -45,7 +44,7 @@ function shapeLine(g: GoalDraft, options: PlaybackOptions): string | null {
       return `${title} ${start ? `${start} and keeps going` : 'keeps going'}${first}.`;
     }
     case 'finite': {
-      const end = g.endDate ? `ends ${onDate(g.endDate, options)}` : null;
+      const end = g.endDate ? `ends ${dateWords(g.endDate, options)}` : null;
       const parts = [start, end].filter((p): p is string => p !== null);
       return parts.length > 0 ? `${title} ${listOf(parts)}.` : null;
     }
@@ -122,7 +121,9 @@ function daysLines(model: SetupModel, options: PlaybackOptions): string[] {
 
 // Every section the card can show. `hosts` are the ids of the sections a missing item will be shown in, so a section with nothing
 // said yet still exists to hold its question; any other section with no line is left out.
-export function recapSections(model: SetupModel, options: PlaybackOptions = {}, hosts: readonly string[] = []): RecapSection[] {
+export function recapSections(model: SetupModel, given: PlaybackOptions = {}, hosts: readonly string[] = []): RecapSection[] {
+  // Every date in this recap is the date itself, so it reads the same whatever time zone the person picks.
+  const options: PlaybackOptions = { ...given, absoluteDates: true };
   const sections: RecapSection[] = [];
   const keep = (section: RecapSection): void => {
     if (section.lines.length > 0 || hosts.includes(section.id)) sections.push(section);
