@@ -44,6 +44,9 @@ describe('the Settings control', () => {
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(radio('Light').getAttribute('aria-checked')).toBe('true');
     await waitFor(() => expect(setThemeChoice).toHaveBeenCalledWith('light'));
+    // The settled state (MOM-96): the save is called before its transition ends, and the buttons stay disabled until it does, so a
+    // tap before then is dropped. Under a full run's load that tap came too early (day-end 2026-10-31).
+    await waitFor(() => expect((radio('Match my device') as HTMLButtonElement).disabled).toBe(false));
 
     fireEvent.click(radio('Match my device'));
     expect(document.documentElement.dataset.theme).toBeUndefined();
