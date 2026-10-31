@@ -47,19 +47,18 @@ describe.each(['dark', 'light'] as const)('%s theme', (theme) => {
   });
 
   // The quick path's choices (MOM-111, components/setup/AnswerChoice.tsx choiceClasses): the answers a person did not choose are plain,
-  // the card's own colour with a border; the one they chose is filled with the accent and a check mark. Both have to read in both
-  // themes: the words of each at 4.5:1, the check on the fill (a graphic, 3:1, and it is the button's own text colour, so 4.5:1), the
-  // fill itself as a shape against the card (3:1), and the border of a plain one as an edge (3:1).
+  // no fill and the accent border every unchosen choice has (MOM-145, `.answer-choice`); the one they chose is filled with the accent
+  // and a check mark. Both have to read in both themes: the words of each at 4.5:1, the check on the fill (a graphic, 3:1, and it is
+  // the button's own text colour, so 4.5:1), the fill itself as a shape against the card (3:1), and the border of a plain one as an
+  // edge (3:1).
   it('a chosen answer reads, and stands out from a plain one: the words, the check, the fill and the edge', () => {
     const card = colourOf(theme, '--card-fill');
     // Chosen: the accent fill with its own text colour (and its check, which draws in that colour).
     expect(contrast(colourOf(theme, '--primary-foreground'), colourOf(theme, '--primary')), 'the chosen answer\'s words and check on the fill').toBeGreaterThanOrEqual(4.5);
     expect(contrast(colourOf(theme, '--primary'), card), 'the chosen answer\'s fill against the card').toBeGreaterThanOrEqual(3);
-    // Plain: the ordinary text colour on the card, and the control border (never fainter than --ctl-min) as an edge against it.
+    // Plain: the ordinary text colour on the card, and the accent border as an edge against it.
     expect(contrast(colourOf(theme, '--foreground'), card), 'a plain answer\'s words on the card').toBeGreaterThanOrEqual(4.5);
-    const ctl45 = Math.max(0.45, Number(resolve('var(--ctl-min)', THEMES[theme]).replace('%', '')) / 100);
-    const edge = over({ rgb: colourOf(theme, '--foreground'), alpha: ctl45 }, card);
-    expect(contrast(edge, card), 'a plain answer\'s border against the card').toBeGreaterThanOrEqual(3);
+    expect(contrast(colourOf(theme, '--accent'), card), 'a plain answer\'s border against the card').toBeGreaterThanOrEqual(3);
     // And the two look different: the chosen fill is far from the card, the plain answer is the card.
     expect(contrast(colourOf(theme, '--primary'), card)).toBeGreaterThan(contrast(card, card));
   });

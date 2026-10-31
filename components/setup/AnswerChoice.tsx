@@ -50,15 +50,15 @@ export function ChoiceMark({ className }: { className?: string }) {
   return <Check aria-hidden="true" data-slot="choice-check" className={cn('size-4 shrink-0', className)} />;
 }
 
-// The look of a choice that can be come back to: plain (the card's colour, a border that reaches 3:1) or chosen (the accent fill,
-// the same filled look as the card's main button, so it reads at 4.5:1 in both themes and is a shape of its own against the card).
-// tests/theme-contrast.test.ts pins both.
+// The look of a choice that can be come back to: plain (no fill, the accent border every unchosen choice has since MOM-145, 3:1
+// against the card) or chosen (the accent fill, the same filled look as the card's main button, so it reads at 4.5:1 in both themes
+// and is a shape of its own against the card). tests/theme-contrast.test.ts pins both.
 // `compact` is for a cell in a grid (the days of the week): centred, with little padding, so the check and the word both fit.
 export function choiceClasses(selected: boolean, disabled: boolean, compact = false): string {
   return cn(
     'flex min-h-11 w-full items-center rounded-lg border py-2 text-base font-normal whitespace-normal break-words transition-colors select-none disabled:pointer-events-none disabled:opacity-50',
     compact ? 'justify-center gap-1 px-1 text-center' : 'justify-start gap-3 px-4 text-left',
-    selected ? 'border-transparent bg-primary text-primary-foreground primary-hover' : 'ctl-45 bg-transparent text-foreground hover:bg-secondary',
+    selected ? 'border-transparent bg-primary text-primary-foreground primary-hover' : 'answer-choice text-foreground',
   );
 }
 

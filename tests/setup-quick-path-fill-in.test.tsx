@@ -194,10 +194,10 @@ describe('a chosen answer cannot be mistaken for the others', () => {
         expect(b.getAttribute('data-selected')).toBe('true');
       }
       for (const b of off) {
-        // Plain: no tint, a control border, the ordinary text colour, and no check.
-        expect(b.className, `${i.id} ${b.textContent}`).toMatch(/\bbg-transparent\b/);
-        expect(b.className, `${i.id} ${b.textContent}`).toMatch(/\bctl-45\b/);
-        expect(b.className, `${i.id} ${b.textContent}`).not.toMatch(/\banswer-choice\b|\bbg-primary\b/);
+        // Plain: the unchosen look every choice has since MOM-145 (no fill, the accent border), the ordinary text colour, and no check.
+        expect(b.className, `${i.id} ${b.textContent}`).toMatch(/\banswer-choice\b/);
+        expect(b.className, `${i.id} ${b.textContent}`).toMatch(/\btext-foreground\b/);
+        expect(b.className, `${i.id} ${b.textContent}`).not.toMatch(/\bctl-45\b|\bbg-primary\b/);
         expect(b.querySelector('[data-slot="choice-check"]'), `${i.id} ${b.textContent}`).toBeNull();
         expect(b.getAttribute('data-selected')).toBe('false');
       }
