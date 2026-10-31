@@ -428,7 +428,7 @@ describe('every card: at most one main button, one submit, and second choices th
     const final = render(<FinalCard lines={['One goal.']} saving={false} error={null} onSave={() => {}} onChange={() => {}} />);
     expect(mainCount(final.container)).toBe(1);
     cleanup();
-    const quick = render(<QuickPathCard message="Done." sections={[]} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />);
+    const quick = render(<QuickPathCard reason="over_turns" message="Done." sections={[]} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />);
     expect(mainCount(quick.container)).toBe(1);
     expect(secondLooksEnabled(quick.container)).toBe(true);
   });

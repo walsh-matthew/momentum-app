@@ -225,6 +225,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   if (view?.kind === 'quick_path') {
     return (
       <QuickPathCard
+        reason={view.reason}
         message={view.message}
         sections={view.sections}
         missing={view.missing}

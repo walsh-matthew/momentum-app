@@ -197,7 +197,7 @@ describe('no date reaches a setup screen as YYYY-MM-DD (finding 7)', () => {
     expect(final.container.textContent).not.toMatch(MACHINE_DATE);
     cleanup();
     const quick = render(
-      <QuickPathCard message="Done." sections={quickPathSections(m, { today: TODAY })} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
+      <QuickPathCard reason="over_turns" message="Done." sections={quickPathSections(m, { today: TODAY })} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
     );
     expect(quick.container.textContent).not.toMatch(MACHINE_DATE);
     expect(quick.container.textContent).toContain('Monday, Jun 14, 2027');

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { buildSetupMessages } from '@/lib/ai/setup';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval } from '@/lib/setup/evals';
+import { numberQuestion } from '@/lib/setup/numbers';
 import { CHUNK_TITLES, describeMissing, quickPathSections } from '@/lib/setup/quickPath';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import {
@@ -124,7 +125,7 @@ describe('the quick path', () => {
       'Which day your week starts.',
       `A start date for "${goal.title}".`,
       `Where "${target.title}" is tracked.`,
-      `The least you aim for with "${target.title}".`,
+      numberQuestion('floor', target, null),
       'At least one goal.',
       'Something in your answers needs another look.',
     ]);

@@ -7,6 +7,7 @@ import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT } from '@/lib/setup/session';
 import type { SetupChunk } from '@/types/setup';
 import { AnswerBox } from './AnswerBox';
 import { CARD_TEXT, CardLead } from './cardText';
+import { PlaybackLines } from './PlaybackLines';
 import { SetupButton } from './SetupButton';
 
 interface PlaybackCardProps {
@@ -27,13 +28,7 @@ export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: Playba
   return (
     <section aria-labelledby="setup-playback" className="channel-card space-y-4 p-4">
       <CardLead id="setup-playback">{CHUNK_TITLES[chunk]}: did I get this right?</CardLead>
-      <ul className={`space-y-2 ${CARD_TEXT.body}`}>
-        {lines.map((line, index) => (
-          <li key={`${index}-${line}`} className="whitespace-pre-wrap">
-            {line}
-          </li>
-        ))}
-      </ul>
+      <PlaybackLines lines={lines} gap="loose" />
       {changing ? (
         <div className="space-y-2">
           <p className={CARD_TEXT.body}>{CHANGE_PROMPT}</p>

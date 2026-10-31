@@ -157,7 +157,7 @@ function quickPathView(session: SetupSession, reason: QuickPathReason, message: 
       today: today ?? null,
       said: personWords(session.transcript),
     }),
-    missing: describeMissing(session.draft.model, validation.issues),
+    missing: describeMissing(session.draft.model, validation.issues, { today: today ?? null, said: personWords(session.transcript) }),
     canSave: validation.ok,
   };
 }
@@ -338,7 +338,7 @@ export async function saveApprovedSetup(raw: unknown, quickPath: unknown = false
   const session = quickPath === true ? withAllApproved(parsed.data) : parsed.data;
   const rows = draftToRows(session.draft, session.transcript);
   if (!rows.ok) {
-    const missing = describeMissing(session.draft.model, rows.issues);
+    const missing = describeMissing(session.draft.model, rows.issues, { said: personWords(session.transcript) });
     return { ok: false, error: `This setup can't be saved yet.${missing.length > 0 ? ` Still needed: ${missing.join(' ')}` : ''} Nothing was saved.` };
   }
 
