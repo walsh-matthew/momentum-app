@@ -500,6 +500,55 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The day-end's step A full test run.
 - **Led to:** A fix in this session (MOM-113, MOM-30: the update after the `await` is wrapped in the start function again, and the tests wait for the ready button), and MOM-147 for the 10 call sites on `main`.
 
+### F-073 · 2026-10-30 · build tool (advising thread)
+- **Asked:** Review the screenshots of the quick path's fill-in (MOM-111).
+- **What went wrong:** The review covered layout and missed the reading problems the owner saw at once: the recap repeated what was said, the gaps were not called out as gaps, the ending trapped the person, and the chosen answer's button was ambiguous.
+- **Why:** It looked at pixels before reading the words as the person who meets the screen.
+- **Caught by:** The owner.
+- **Led to:** A rule: a screen review reads the words top to bottom as a tester first and checks layout second, and Claude pre-reviews the screenshots that way before the owner sees them.
+
+### F-074 · 2026-10-31 · build tool
+- **Asked:** Make dark mode less olive (MOM-145).
+- **What went wrong:** The first fix removed the colour along with the olive; the owner's word was that it "lost all color".
+- **Why:** It fixed the symptom by taking away the thing the change was for.
+- **Caught by:** The owner.
+- **Led to:** A fix in this session (unchosen choices outlined in lime, the chosen one solid lime).
+
+### F-075 · 2026-10-30 · build tool
+- **Asked:** Report the setup transcript bound (MOM-111).
+- **What went wrong:** The close-out said the bound was 122 messages while the code worked out 162 (82 plus 2 for each of 40 items).
+- **Why:** It reported what the bound was meant to be, not what the code computed.
+- **Caught by:** The advising thread.
+- **Led to:** A fix in this session (`MAX_FILL_INS` 20, so the bound is 122, and a test pins it).
+
+### F-076 · 2026-10-31 · build tool
+- **Asked:** Report the block's build time (MOM-145).
+- **What went wrong:** The close-out first gave a made-up "95 min".
+- **Why:** It filled a required field with a guess instead of saying the time was not measured.
+- **Caught by:** The build tool itself, before the comment was final.
+- **Led to:** A fix in this session (the line says "not measured" when the block was not timed).
+
+### F-077 · 2026-10-31 · build tool
+- **Asked:** Decide when a change made from the weekly review takes effect (MOM-146).
+- **What went wrong:** The first rule skipped the week that had just started, so a review on Saturday said the change starts the Saturday after, against `docs/DOMAIN_MODEL.md`'s "change next week".
+- **Why:** It designed from the code's period logic, not from the binding doc.
+- **Caught by:** The advising thread.
+- **Led to:** A fix in this session: a change takes effect from the period right after the reviewed one, and never in a closed one.
+
+### F-078 · 2026-10-31 · build tool
+- **Asked:** Give every signed-in page a way home and Sign out on a phone (MOM-148).
+- **What went wrong:** The back row put a Sign out button inside `<main>` on five pages, and three browser tests already on `main` (the review's end and finished review, the plan with no time zone) say those pages have nothing to tap. The block ran only its own header spec, so CI's full run would have gone red on the pull request.
+- **Why:** It checked the spec it wrote, not the specs of the pages it changed; with the full local suite out of reach on this machine, "CI is the gate" was read as "nothing else to run", although CI runs only after the day-end push.
+- **Caught by:** Day-end step A, running the affected specs on the branches stacked in merge order.
+- **Led to:** A fix in this session (the row is page navigation before `<main>`, owner's choice), and the step A practice noted on MOM-124.
+
+### F-079 · 2026-10-31 · build tool
+- **Asked:** Test the theme control's choices (MOM-30), the same family as F-072.
+- **What went wrong:** The test tapped a second choice while the first save's transition was still pending, so the disabled button dropped the tap. It failed in a full run and passed alone, twice now (MOM-111's block saw it on 2026-10-30 and called it load-dependent).
+- **Why:** The test waited for the save to be called, not for the settled state; F-072's fix added the settled wait to the failure test only, not to this one.
+- **Caught by:** Day-end step A's full run.
+- **Led to:** A fix in this session (the test waits for the buttons to be ready), recorded on MOM-147.
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).

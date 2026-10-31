@@ -3,6 +3,7 @@
 import { Loader2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { logTapEntry } from '@/app/actions/entries';
+import { busyProps } from '@/lib/forms/mainButton';
 import type { LogDay, LogTarget } from '@/types/entries';
 import { DayPicker } from './DayPicker';
 import { EntryFeedback } from './EntryFeedback';
@@ -25,9 +26,8 @@ export function TapControl({ target, days = null }: TapControlProps) {
       {days && <DayPicker days={days} value={day} onChange={setDay} disabled={pending} name={target.title} />}
       <button
         type="button"
-        disabled={pending}
-        onClick={() => run(() => (day === null ? logTapEntry(target.id) : logTapEntry(target.id, day)), () => setDay(null))}
-        className="flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+        {...busyProps<HTMLButtonElement>(pending, () => run(() => (day === null ? logTapEntry(target.id) : logTapEntry(target.id, day)), () => setDay(null)))}
+        className="flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
       >
         {pending ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : <Plus className="size-5" aria-hidden="true" />}
         <span>{pending ? 'Saving…' : `Log one: ${target.title}`}</span>

@@ -49,7 +49,7 @@ export function FinalCard({ lines, saving, error, onSave, onChange }: FinalCardP
         </div>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <SetupButton tone="main" disabled={saving} onClick={onSave}>
+          <SetupButton tone="main" busy={saving} onClick={onSave}>
             {saving ? 'Saving…' : 'Save my setup'}
           </SetupButton>
           <SetupButton tone="second" disabled={saving} onClick={() => flushSync(() => setChanging(true))}>

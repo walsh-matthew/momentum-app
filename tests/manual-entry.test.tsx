@@ -116,19 +116,20 @@ describe('the tap', () => {
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
   });
 
-  it('is disabled while saving, so a double tap logs once', async () => {
+  it('is busy while saving (solid, aria-busy, never disabled), so a double tap logs once', async () => {
     const pending = deferred<typeof ok>();
     actions.tap.mockReturnValue(pending.promise);
     render(<TapControl target={target()} />);
 
     const button = screen.getByRole('button', { name: /Log one: Workouts/ });
     fireEvent.click(button);
-    await waitFor(() => expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(true));
+    await waitFor(() => expect(screen.getByRole('button').getAttribute('aria-busy')).toBe('true'));
+    expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button'));
     expect(actions.tap).toHaveBeenCalledTimes(1);
 
     pending.resolve(ok);
-    await waitFor(() => expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(screen.getByRole('button').getAttribute('aria-busy')).toBeNull());
   });
 
   it("shows the service's refusal in words, such as no time zone", async () => {
@@ -143,7 +144,7 @@ describe('the tap', () => {
     render(<TapControl target={target()} />);
     fireEvent.click(screen.getByRole('button'));
     expect((await screen.findByRole('alert')).textContent).toBe(ENTRY_NETWORK_ERROR);
-    await waitFor(() => expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(screen.getByRole('button').getAttribute('aria-busy')).toBeNull());
   });
 });
 
@@ -167,7 +168,14 @@ describe('the number', () => {
     await waitFor(() => expect(input.value).toBe(''));
   });
 
-  it.each(['', '   ', 'abc', '0', '0.0', '-3', '1e3', '12 km', '1.2.3'])('refuses "%s" without calling the server', (text) => {
+  it.each(['', '   '])('has no button while the field is empty (%j): one number, so nothing to tap yet (MOM-145)', (text) => {
+    render(<NumberControl target={quantity} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
+    expect(screen.queryByRole('button', { name: 'Log it' })).toBeNull();
+    expect(actions.number).not.toHaveBeenCalled();
+  });
+
+  it.each(['abc', '0', '0.0', '-3', '1e3', '12 km', '1.2.3'])('refuses "%s" without calling the server', (text) => {
     render(<NumberControl target={quantity} />);
     fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
     fireEvent.click(screen.getByRole('button', { name: 'Log it' }));
@@ -542,7 +550,14 @@ describe('typed minutes', () => {
     await waitFor(() => expect(actions.minutes).toHaveBeenCalledWith('t-3', 30, '2026-10-26'));
   });
 
-  it.each(['', '  ', 'abc', '0', '1.5', '1,5', '-3', '1e3', '45 min', '4 5'])('refuses "%s" without calling the server', (text) => {
+  it.each(['', '  '])('has no button while the field is empty (%j) (MOM-145)', (text) => {
+    render(<MinutesControl target={time} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
+    expect(screen.queryByRole('button', { name: 'Log minutes' })).toBeNull();
+    expect(actions.minutes).not.toHaveBeenCalled();
+  });
+
+  it.each(['abc', '0', '1.5', '1,5', '-3', '1e3', '45 min', '4 5'])('refuses "%s" without calling the server', (text) => {
     render(<MinutesControl target={time} />);
     fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
     fireEvent.click(screen.getByRole('button', { name: 'Log minutes' }));

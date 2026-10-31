@@ -55,6 +55,23 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       await shot(page, 'review', width);
     });
 
+    // MOM-145: the plain callout of a form that is missing something, on sign-in and on the review's one question.
+    test('the missing-field callouts: sign-in and the review', async ({ page }) => {
+      test.setTimeout(240_000);
+      await page.goto('/login');
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Enter your email address' })).toHaveText('Enter your email address to continue.');
+      await shot(page, 'signin-missing', width);
+
+      const reviewer = await signUpAndConfirm(page, `shots-missing-${THEME}-${width}`);
+      await seedReview(reviewer, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, week: 'none', reviewDepth: 'full' });
+      await page.goto('/review');
+      await page.getByRole('button', { name: 'Finish review' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Choose one first.' })).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      await shot(page, 'review-missing', width);
+    });
+
     // The goal wizard and the rebalance drawer are not reachable from home any more (MOM-115), so there is no shot of either.
     test('home for a brand-new account', async ({ page }) => {
       await signUpAndConfirm(page, `shots-home-${THEME}-${width}`);
