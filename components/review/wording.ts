@@ -4,8 +4,9 @@
 // request (principle 8): the recap asks for nothing.
 
 import { formatDay, formatNumber } from '@/components/home/wording';
+import { levelWords } from '@/lib/review/levelWords';
 import type { RecapChange, RecapCrossing } from '@/types/review';
-import type { Level, LocalDate } from '@/types/scoreboard';
+import type { LocalDate } from '@/types/scoreboard';
 
 const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 export const fullWeekdayName = (weekday: number): string => WEEKDAY_FULL[weekday] ?? '';
@@ -33,11 +34,8 @@ export function closedEarlyReviewedLine(window: { end: LocalDate }): string {
   return `This recap counted through ${fullDayName(window.end)}, the last day of the week. Anything logged for a day in that week after you finished shows below under Since this recap.`;
 }
 
-// Where a target stood, in words: never a bare level name, and a target that is not graded never gets a level word.
-export function levelWords(value: { level: Level | null; graded: boolean }): string {
-  if (!value.graded || value.level === null) return 'tracked, not judged';
-  return { none: 'not started', partway: 'partway', floor: 'floor met', aspiration: 'aspiration reached' }[value.level];
-}
+// Where a target stood, in words. Lives in lib/review so the facts sent for Claude's one line use the same words.
+export { levelWords };
 
 // One line under "Since this recap": what the recap said, what the engine reads now for the same week, and why. Both
 // numbers are the engine's; the record itself is not changed.

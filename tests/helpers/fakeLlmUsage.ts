@@ -219,6 +219,10 @@ class UsageQuery {
     this.filters.push((r) => (r as unknown as Record<string, unknown>)[col] === val);
     return this;
   }
+  gte(col: string, val: string) {
+    this.filters.push((r) => String((r as unknown as Record<string, unknown>)[col]) >= val);
+    return this;
+  }
   order(col: string, opts: { ascending?: boolean } = {}) {
     this.ordering = { col: col as keyof UsageRow, ascending: opts.ascending ?? true };
     return this;

@@ -242,6 +242,23 @@ export const PROMPTS = {
     leavesOut: 'other saved goals or tasks, their ids, or your email',
     note: null,
   },
+  // The weekly review's one-line look back (MOM-113 block 3.3): field by field, against what lib/ai/review.ts's
+  // reviewPromptFacts() really sends (tests/review-prompt-fields.test.ts). Claude gets words, not numbers: where a target ended
+  // as a few words, never a count, a unit or a date. It is asked for only when you tap for it, and the line is not stored.
+  review: {
+    title: "The weekly review's one-line look back",
+    sends: [
+      { field: 'tone', words: 'the tone you chose for how Momentum talks to you' },
+      { field: 'targets.title', words: 'the titles of your targets, as you typed them' },
+      { field: 'targets.level', words: 'where each target ended the week, in a few words (like "floor met" or "partway")' },
+      { field: 'targets.crossings', words: 'which of your levels a target reached that week, by name' },
+      { field: 'targets.patterns', words: 'whether a target is slipping, holding or hitting its aspiration week after week' },
+      { field: 'targets.trend', words: 'whether a target is trending up, steady or down' },
+      { field: 'retryFeedback', words: 'when its last try at a line was not usable, which rule it broke, in fixed words' },
+    ],
+    leavesOut: 'counts, dates, units, goal titles, your priorities, ids or your email',
+    note: 'Only when you tap for the line. It is not saved.',
+  },
 } as const satisfies Record<string, PromptNotice>;
 
 export const NEVER_SENT = "your email, your passwords or tokens, other people's data, or workout and calendar details";

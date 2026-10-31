@@ -37,6 +37,12 @@ export interface ReviewSeedOptions {
   timeZone: string | null;
   // A finished review's record for the reviewed week, saying the workouts count was 1 (partway) when the live count is 2.
   finished: boolean;
+  // 'floor' (the default): two workouts in the reviewed week, at the floor, so nothing is raised for layer 3. 'none': no workout
+  // in it, so the floor is missed three weeks running and layer 3 raises a slipping check-in (MOM-113 block 3.3).
+  week?: 'floor' | 'none';
+  // The review depth and the way review and planning go together, as the person chose them. Unset: not chosen (the defaults).
+  reviewDepth?: 'recap_only' | 'recap_offer' | 'full';
+  reviewPlanning?: 'one_sitting' | 'separate';
 }
 
 export interface ReviewSeed {
@@ -73,6 +79,8 @@ export async function seedReview(email: string, options: ReviewSeedOptions): Pro
       week_start: toDb(weekStartsOn),
       day_end: options.timeZone === null ? null : '00:00:00',
       planning_weekday: options.planning === null ? null : toDb(planningWeekday),
+      review_depth: options.reviewDepth ?? null,
+      review_planning: options.reviewPlanning ?? null,
     });
     if (settings.error) throw new Error(`Could not seed the person's settings (code ${settings.error.code}).`);
   }
@@ -118,8 +126,10 @@ export async function seedReview(email: string, options: ReviewSeedOptions): Pro
     value: 1,
     evidence: { via: 'seed' },
   });
-  const written = await supabase.from('entries').insert([entry(shiftDay(window.start, 1)), entry(shiftDay(window.start, 2))]);
-  if (written.error) throw new Error(`Could not seed the entries (code ${written.error.code}).`);
+  if ((options.week ?? 'floor') === 'floor') {
+    const written = await supabase.from('entries').insert([entry(shiftDay(window.start, 1)), entry(shiftDay(window.start, 2))]);
+    if (written.error) throw new Error(`Could not seed the entries (code ${written.error.code}).`);
+  }
 
   if (options.finished) {
     // What the recap said when it was finished: one workout, partway. Two are logged now, so a later entry changed the week.
@@ -168,4 +178,19 @@ export async function seedReview(email: string, options: ReviewSeedOptions): Pro
   // Local scope only: the default (global) revokes every session the account has, including the browser's.
   await supabase.auth.signOut({ scope: 'local' });
   return { window, today, weekday };
+}
+
+// The finished reviews a throwaway account has stored, read back as that person through row level security with the local anon
+// key (never the service role): how many, and the one adjustment each offered with the choice made. Nothing else is read.
+export async function readFinishedReviews(email: string): Promise<Array<{ week_start: string; adjustment_kind: string | null; adjustment_outcome: string | null }>> {
+  const { serverEnv } = readLocalStackEnv();
+  const supabase = createClient<Database>(serverEnv.NEXT_PUBLIC_SUPABASE_URL, serverEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const signedIn = await supabase.auth.signInWithPassword({ email, password: PASSWORD });
+  if (signedIn.error || !signedIn.data.user) throw new Error('Could not sign the throwaway account in to read its reviews.');
+  const rows = await supabase.from('weekly_reviews').select('week_start, adjustment_kind, adjustment_outcome').order('week_start');
+  await supabase.auth.signOut({ scope: 'local' });
+  if (rows.error) throw new Error(`Could not read the finished reviews (code ${rows.error.code}).`);
+  return rows.data;
 }

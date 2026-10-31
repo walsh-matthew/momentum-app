@@ -440,6 +440,9 @@ button:disabled {
 /* The title of a card (MOM-30, round 4): the first heading of every card is semibold at one size, in both themes. A heading that is a
    card's title uses this class; tests/theme-cards.test.ts fails for a heading that is neither this nor a listed exception. */
 .card-title {
+  /* The text colour, not whatever the card inherits: a card on the quiet notice surface (.home-notice) sets a muted colour, and its
+     title must not turn grey with it (MOM-113 block 3.3: the weekly review's cards and "Since this recap"). */
+  color: var(--foreground);
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.035em;
@@ -964,6 +967,39 @@ button:disabled {
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+/* The rest of the weekly review's sitting after the recap (MOM-113 block 3.3). Each step is a card on the shared surface above
+   (.home-notice), with a .card-title, so layer 2's line, layer 3's one question and the finish read as separate steps: a
+   celebration is never in the same card as a request. Controls reuse the answer-choice and primary looks (MOM-30). */
+.review-sitting {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+.review-card {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin: 0;
+}
+.review-card .home-note {
+  margin-top: 0;
+}
+/* Two classes, so they win over ".home-notice p { color: inherit }" (the quiet notice surface mutes its paragraphs). */
+.review-card .review-line {
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.review-choices {
+  display: grid;
+  gap: 8px;
+}
+.review-card .review-after {
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.45;
 }
 /* ---- The week plan and the "Your plan" card (MOM-112 block 2) --------------------------------------------------------
    The person's own choice of which things to do on which days. A day is a button of at least 44px, seven to a row, so a
