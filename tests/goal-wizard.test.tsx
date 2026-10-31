@@ -142,6 +142,17 @@ describe('the steps', () => {
     expect(actions.create).not.toHaveBeenCalled();
   });
 
+  it('the missing-plan callout goes once the person makes a plan, so it never says "make a plan" beside one (MOM-145)', async () => {
+    openWizard();
+    await goToReview();
+    await click('Create goal');
+    expect(wizard().getByRole('alert').textContent).toBe('Make a week 1 plan first: generate one, or use the starter plan.');
+    await click('Use the starter plan instead');
+    expect(wizard().queryByText('Make a week 1 plan first: generate one, or use the starter plan.')).toBeNull();
+    expect(wizard().queryByRole('alert')).toBeNull();
+    expect(actions.create).not.toHaveBeenCalled();
+  });
+
   it('Cancel on the first step closes it', async () => {
     const onClose = vi.fn();
     openWizard({ onClose });

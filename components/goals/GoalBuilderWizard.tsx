@@ -143,6 +143,8 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
     const input = parsed.data;
     const forKey = inputKey;
     setPlanError(null);
+    // The person is acting on the callout, so it goes: the plan's own result or error is what shows next.
+    setMissing(null);
     startGenerating(async () => {
       const result = await generateWeekOnePlanAction(input);
       if (!result.ok) {
@@ -157,6 +159,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
   function useStarterPlan() {
     if (!parsed.ok || inputKey === null) return;
     setPlanError(null);
+    setMissing(null);
     setDraft({ plan: buildStubTaskPlan(parsed.data), source: 'starter', model: null, forKey: inputKey });
   }
 
