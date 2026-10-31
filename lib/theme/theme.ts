@@ -24,3 +24,18 @@ export function storedTheme(value: string | null | undefined): StoredTheme | nul
 export function isThemeChoice(value: unknown): value is ThemeChoice {
   return value === 'system' || value === 'light' || value === 'dark';
 }
+
+// The colour of the browser's own chrome (MOM-145), the page's background in each theme (--background in app/globals.css; a test
+// keeps the two together). With a stored choice the chrome takes that theme's colour whatever the device says; with none it
+// follows the device, one colour per prefers-color-scheme.
+export const THEME_CHROME_COLOR: Record<StoredTheme, string> = { light: '#edefe6', dark: '#050806' };
+
+export type ChromeColor = string | { media: string; color: string }[];
+
+export function chromeColor(theme: StoredTheme | null): ChromeColor {
+  if (theme) return THEME_CHROME_COLOR[theme];
+  return [
+    { media: '(prefers-color-scheme: light)', color: THEME_CHROME_COLOR.light },
+    { media: '(prefers-color-scheme: dark)', color: THEME_CHROME_COLOR.dark },
+  ];
+}

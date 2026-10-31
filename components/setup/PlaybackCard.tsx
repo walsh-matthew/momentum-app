@@ -43,7 +43,7 @@ export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: Playba
         </div>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <SetupButton tone="main" disabled={busy} onClick={() => onApprove(APPROVE_TEXT)}>
+          <SetupButton tone="main" busy={busy} onClick={() => onApprove(APPROVE_TEXT)}>
             {busy ? 'Thinking…' : 'Yes, that is right'}
           </SetupButton>
           <SetupButton tone="second" disabled={busy} onClick={() => flushSync(() => setChanging(true))}>

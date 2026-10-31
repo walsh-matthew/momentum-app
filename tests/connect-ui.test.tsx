@@ -170,7 +170,10 @@ describe('the Hevy key form', () => {
     expect(input.required).toBe(true);
     expect(input.value).toBe('');
     expect(card('Hevy').getByText(/stored on the server and never shown again/)).toBeTruthy();
-    expect(card('Hevy').getByRole('button', { name: 'Connect Hevy' })).toBeTruthy();
+    // One field, so the button is not there until the field has a key (MOM-145); it never shows disabled.
+    expect(card('Hevy').queryByRole('button', { name: 'Connect Hevy' })).toBeNull();
+    fireEvent.change(input, { target: { value: KEY } });
+    expect((card('Hevy').getByRole('button', { name: 'Connect Hevy' }) as HTMLButtonElement).disabled).toBe(false);
     expect(actions.saveHevy).not.toHaveBeenCalled();
   });
 
@@ -209,8 +212,11 @@ describe('the Hevy key form', () => {
     fireEvent.change(keyField(), { target: { value: KEY } });
     fireEvent.click(card('Hevy').getByRole('button', { name: 'Connect Hevy' }));
 
+    // Busy, not disabled (MOM-145): it stays solid, says so, and a second tap does nothing.
     const busy = await card('Hevy').findByRole('button', { name: 'Saving…' });
-    expect((busy as HTMLButtonElement).disabled).toBe(true);
+    expect((busy as HTMLButtonElement).disabled).toBe(false);
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    fireEvent.click(busy);
     resolve({ error: null, notice: 'Hevy is connected.' });
     expect((await card('Hevy').findByRole('status')).textContent).toBe('Hevy is connected.');
     expect(actions.saveHevy).toHaveBeenCalledTimes(1);
@@ -220,6 +226,8 @@ describe('the Hevy key form', () => {
     renderCards([account('hevy', 'needs_reauth', { lastError: 'No refresh token is stored.' }), account('google_calendar', 'not_connected')]);
     const hevy = card('Hevy');
     expect(hevy.getByText('Needs reconnect')).toBeTruthy();
+    expect(hevy.queryByRole('button', { name: 'Reconnect Hevy' })).toBeNull();
+    fireEvent.change(keyField(), { target: { value: KEY } });
     expect(hevy.getByRole('button', { name: 'Reconnect Hevy' })).toBeTruthy();
   });
 

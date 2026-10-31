@@ -5,7 +5,7 @@
 
    Token names. This repo's names are kept, mapped onto the wireframe palette, so existing classes keep working:
      background / foreground  page and text
-     panel                    card and panel surfaces (the wireframe's --card)
+     card-fill                the surface of every card (MOM-30)
      border                   hairlines
      muted                    secondary TEXT (the wireframe's --muted-foreground; its --muted is a surface)
      accent                   the lime accent (the wireframe's --primary)
@@ -15,24 +15,20 @@
   color-scheme: light dark;
   --background: oklch(0.13 0.009 155);
   --foreground: oklch(0.96 0.012 110);
-  --panel: oklch(0.18 0.011 155);
   --border: oklch(1 0 0 / 8%);
   --muted: oklch(0.7 0.018 145);
   --accent: #c6f36d;
 
-  --card: var(--panel);
   --card-foreground: var(--foreground);
   --primary: var(--accent);
   --primary-foreground: oklch(0.18 0.035 130);
   --secondary: oklch(0.22 0.012 155);
   --secondary-foreground: oklch(0.92 0.01 110);
   --destructive: oklch(0.65 0.2 25);
-  --input: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 38%);
   --ring: oklch(0.89 0.18 125 / 60%);
   --radius: 0.85rem;
 
-  --surface-raised: #1b201f;
-  --surface-soft: #171c1b;
   --lime: #c6f36d;
   --channel: #a8baff;
   --streak: #f4c27e;
@@ -55,17 +51,12 @@
   /* How strong a glow is (1 in dark), and the least alpha an interactive control's border may have (0 in dark; light raises
      it so the border reaches 3:1). */
   --glow: 1;
-  --ctl-min: 0%;
+  --ctl-min: 38%;
   /* One surface for every card and section block (MOM-30): the same fill, border and shadow on every screen. */
-  --card-fill: oklch(0.275 0.012 155);
-  --card-line: oklch(1 0 0 / 16%);
+  --card-fill: oklch(0.2 0.012 155);
+  --card-line: oklch(1 0 0 / 24%);
   --card-shadow: inset 0 1px oklch(1 0 0 / 5%);
-  /* A tappable answer is the accent as a tinted fill and a border, deeper on hover and while pressed; an answer box is a plain field
-     sunk into the card (MOM-30, round 3). Percentages are how much of the accent shows. */
-  --choice-line: 45%;
-  --choice-tint: 12%;
-  --choice-hover: 20%;
-  --choice-press: 30%;
+  /* An answer box is a plain field sunk into the card (MOM-30, round 3). */
   --field-fill: oklch(0.13 0.009 155);
   --field-shadow: inset 0 1px 3px oklch(0 0 0 / 45%);
   /* The accent fill on hover: 85% of it over what is behind in dark (what hover:bg-primary/85 was), a little deeper in light. */
@@ -115,7 +106,6 @@
     color-scheme: light;
     --background: oklch(0.948 0.012 115);
     --foreground: oklch(0.22 0.02 150);
-    --panel: oklch(1 0 0);
     --border: oklch(0 0 0 / 10%);
     --muted: oklch(0.5 0.022 150);
     --accent: oklch(0.52 0.135 132);
@@ -125,8 +115,6 @@
     --destructive: oklch(0.5 0.17 25);
     --input: oklch(0 0 0 / 58%);
     --ring: oklch(0.52 0.135 132 / 60%);
-    --surface-raised: oklch(1 0 0);
-    --surface-soft: oklch(1 0 0);
     --lime: oklch(0.52 0.135 132);
     --channel: oklch(0.46 0.14 265);
     --streak: oklch(0.47 0.105 65);
@@ -148,10 +136,6 @@
     --card-fill: oklch(1 0 0);
     --card-line: oklch(0.22 0.02 150 / 16%);
     --card-shadow: 0 1px 2px oklch(0.22 0.02 150 / 10%), 0 6px 16px oklch(0.22 0.02 150 / 7%);
-    --choice-line: 85%;
-    --choice-tint: 18%;
-    --choice-hover: 26%;
-    --choice-press: 36%;
     --field-fill: oklch(1 0 0);
     --field-shadow: inset 0 1px 3px oklch(0.22 0.02 150 / 18%);
     --hover-primary: 86%;
@@ -193,7 +177,6 @@
   color-scheme: light;
   --background: oklch(0.948 0.012 115);
   --foreground: oklch(0.22 0.02 150);
-  --panel: oklch(1 0 0);
   --border: oklch(0 0 0 / 10%);
   --muted: oklch(0.5 0.022 150);
   --accent: oklch(0.52 0.135 132);
@@ -203,8 +186,6 @@
   --destructive: oklch(0.5 0.17 25);
   --input: oklch(0 0 0 / 58%);
   --ring: oklch(0.52 0.135 132 / 60%);
-  --surface-raised: oklch(1 0 0);
-  --surface-soft: oklch(1 0 0);
   --lime: oklch(0.52 0.135 132);
   --channel: oklch(0.46 0.14 265);
   --streak: oklch(0.47 0.105 65);
@@ -226,10 +207,6 @@
   --card-fill: oklch(1 0 0);
   --card-line: oklch(0.22 0.02 150 / 16%);
   --card-shadow: 0 1px 2px oklch(0.22 0.02 150 / 10%), 0 6px 16px oklch(0.22 0.02 150 / 7%);
-  --choice-line: 85%;
-  --choice-tint: 18%;
-  --choice-hover: 26%;
-  --choice-press: 36%;
   --field-fill: oklch(1 0 0);
   --field-shadow: inset 0 1px 3px oklch(0.22 0.02 150 / 18%);
   --hover-primary: 86%;
@@ -273,12 +250,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-panel: var(--panel);
   --color-border: var(--border);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
 
-  --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
@@ -287,8 +262,6 @@
   --color-destructive: var(--destructive);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-surface-raised: var(--surface-raised);
-  --color-surface-soft: var(--surface-soft);
   --color-lime: var(--lime);
   --color-channel: var(--channel);
   --color-streak: var(--streak);
@@ -351,8 +324,8 @@ button:disabled {
 
 /* Component classes sit in the components layer so a Tailwind utility on the same element still wins. */
 @layer components {
-/* The border of an interactive control (MOM-30): the same alpha as before in dark (--ctl-min is 0%), and never fainter than
-   --ctl-min in light, so the edge of a field or a button reaches 3:1 against its surface. */
+/* The border of an interactive control (MOM-30, MOM-145): never fainter than --ctl-min (38% in dark, 58% in light), so the edge of a
+   field or a button reaches 3:1 against its surface in both themes. */
 .ctl-border {
   border-color: rgb(var(--ink) / max(8%, var(--ctl-min)));
 }
@@ -366,20 +339,21 @@ button:disabled {
   border-color: color-mix(in oklab, var(--foreground) max(45%, var(--ctl-min)), transparent);
 }
 
-/* A tappable answer (MOM-30, round 3): it looks like a button, so it is never mistaken for the answer box. A tinted accent fill and
-   an accent border; deeper while the pointer is over it (only where there is a pointer, so a touch does not leave it stuck) and
-   deeper again while it is pressed. */
+/* A tappable answer that is not chosen (MOM-30 round 3, MOM-145): no fill, a full-strength accent border (lime in dark, the deeper green
+   in light; 3:1 against the card) and the ordinary text colour, so the one that is chosen (the solid accent fill) is the only filled
+   one. A tint of the accent as a fill looked olive on the dark card. A faint accent wash on hover (only where there is a pointer, so a
+   touch does not leave it stuck) and a deeper one while pressed. */
 .answer-choice {
-  border-color: color-mix(in oklab, var(--accent) var(--choice-line), transparent);
-  background-color: color-mix(in oklab, var(--accent) var(--choice-tint), transparent);
+  border-color: var(--accent);
+  background-color: transparent;
 }
 @media (hover: hover) {
   .answer-choice:hover:not(:disabled) {
-    background-color: color-mix(in oklab, var(--accent) var(--choice-hover), transparent);
+    background-color: color-mix(in oklab, var(--accent) 10%, transparent);
   }
 }
 .answer-choice:active:not(:disabled) {
-  background-color: color-mix(in oklab, var(--accent) var(--choice-press), transparent);
+  background-color: color-mix(in oklab, var(--accent) 18%, transparent);
 }
 /* The answer box: a plain field with no tint. In dark it is the page's colour sunk into the card; in light it is the card's own white
    (the 3:1 control border and the inset shadow make it a field). */
@@ -1156,13 +1130,18 @@ button:disabled {
   min-height: 44px;
   align-items: center;
   justify-self: start;
-  border: 1px solid rgb(var(--lime-rgb) / 35%);
+  border: 1px solid var(--accent);
   border-radius: 999px;
-  background: rgb(var(--lime-rgb) / 9%);
+  background: transparent;
   padding: 0 16px;
-  color: var(--lime);
+  color: var(--foreground);
   font-size: 13px;
   font-weight: 600;
+}
+@media (hover: hover) {
+  .plan-button:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--accent) 10%, transparent);
+  }
 }
 .plan-button:disabled {
   opacity: 0.55;
@@ -1189,7 +1168,7 @@ button:disabled {
   min-height: 44px;
   border: 1px solid rgb(var(--ink) / max(14%, var(--ctl-min)));
   border-radius: 12px;
-  background: var(--surface-raised);
+  background: var(--field-fill);
   padding: 0 10px;
   color: var(--foreground);
   font-size: 13px;

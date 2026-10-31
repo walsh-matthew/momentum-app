@@ -3,6 +3,7 @@
 import { useActionState, useState, useTransition } from 'react';
 import { disconnectApp, saveHevyApiKey } from '@/app/actions/integrations';
 import { Button } from '@/components/ui/button';
+import { MainButton } from '@/components/ui/MainButton';
 import type { IntegrationCatalogEntry } from '@/lib/integrations/catalog';
 import type { ConnectFormState, ConnectionStatus, IntegrationAccount } from '@/types/integrations';
 import { HevySyncControl } from './HevySyncControl';
@@ -32,8 +33,10 @@ interface HevyKeyFormProps {
 // React state, not echoed back, and the field is emptied after every submit.
 function HevyKeyForm({ reconnect }: HevyKeyFormProps) {
   const [state, action, pending] = useActionState(saveHevyApiKey, NO_STATE);
+  // Only whether there is a key, never the key itself: the button shows once the field has something in it (MOM-145).
+  const [hasKey, setHasKey] = useState(false);
   return (
-    <form action={action} className="mt-3 flex flex-col gap-2">
+    <form action={action} onReset={() => setHasKey(false)} className="mt-3 flex flex-col gap-2">
       <label htmlFor="hevy-api-key" className="text-xs font-medium">
         Hevy API key
       </label>
@@ -46,14 +49,17 @@ function HevyKeyForm({ reconnect }: HevyKeyFormProps) {
         required
         minLength={8}
         aria-describedby="hevy-key-help"
+        onChange={(event) => setHasKey(event.target.value.length > 0)}
         className="min-h-11 rounded-lg border ctl-45 bg-background px-3 text-base text-foreground"
       />
       <p id="hevy-key-help" className="text-xs text-muted">
         Paste your key here. It is stored on the server and never shown again.
       </p>
-      <Button type="submit" disabled={pending} className="self-start">
-        {pending ? 'Saving…' : reconnect ? 'Reconnect Hevy' : 'Connect Hevy'}
-      </Button>
+      {hasKey && (
+        <MainButton type="submit" busy={pending} busyLabel="Saving…" className="self-start">
+          {reconnect ? 'Reconnect Hevy' : 'Connect Hevy'}
+        </MainButton>
+      )}
       {state.error && (
         <p role="alert" className="text-sm text-danger">
           {state.error}
