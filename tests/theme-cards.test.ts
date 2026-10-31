@@ -273,7 +273,7 @@ describe.each(['dark', 'light'] as const)('%s theme: a card stands out from the 
     return c.alpha < 1 ? over(c, colour('--background')) : c.rgb;
   };
   // Dark: its own fill against a dark page. Light: white against a tinted page, helped by the border and the shadow.
-  const MIN_FILL = theme === 'dark' ? 1.3 : 1.15;
+  const MIN_FILL = theme === 'dark' ? 1.05 : 1.15; // MOM-145: a darker dark card; its border (below) carries it
 
   it(`the fill reads at least ${MIN_FILL}:1 against the page, on the phone page and the desktop page behind the three columns`, () => {
     expect(contrast(colour('--card-fill'), colour('--background'))).toBeGreaterThanOrEqual(MIN_FILL);

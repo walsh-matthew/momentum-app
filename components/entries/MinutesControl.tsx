@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { logMinutesEntry } from '@/app/actions/entries';
+import { busyProps } from '@/lib/forms/mainButton';
 import type { LogDay, LogTarget } from '@/types/entries';
 import { DayPicker } from './DayPicker';
 import { EntryFeedback } from './EntryFeedback';
@@ -60,13 +61,15 @@ export function MinutesControl({ target, days = null }: MinutesControlProps) {
           onChange={(event) => setText(event.target.value)}
           className="min-h-14 min-w-0 flex-1 rounded-2xl border ctl-border bg-secondary px-4 text-lg text-foreground placeholder:text-muted"
         />
-        <button
-          type="submit"
-          disabled={pending}
-          className="min-h-14 min-w-28 rounded-2xl border ctl-border px-4 text-base font-semibold transition-transform active:scale-[0.98] disabled:opacity-60"
-        >
-          {pending ? 'Saving…' : 'Log minutes'}
-        </button>
+        {text.trim().length > 0 && (
+          <button
+            type="submit"
+            {...busyProps<HTMLButtonElement>(pending)}
+            className="min-h-14 min-w-28 rounded-2xl border ctl-border px-4 text-base font-semibold transition-transform active:scale-[0.98]"
+          >
+            {pending ? 'Saving…' : 'Log minutes'}
+          </button>
+        )}
       </div>
       <EntryFeedback error={error} notice={notice} />
     </form>

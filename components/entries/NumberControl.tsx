@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { logNumberEntry } from '@/app/actions/entries';
+import { busyProps } from '@/lib/forms/mainButton';
 import type { LogDay, LogTarget } from '@/types/entries';
 import { DayPicker } from './DayPicker';
 import { EntryFeedback } from './EntryFeedback';
@@ -61,13 +62,16 @@ export function NumberControl({ target, days = null }: NumberControlProps) {
           onChange={(event) => setText(event.target.value)}
           className="min-h-16 min-w-0 flex-1 rounded-2xl border ctl-border bg-secondary px-4 text-lg text-foreground placeholder:text-muted"
         />
-        <button
-          type="submit"
-          disabled={pending}
-          className="min-h-16 min-w-24 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
-        >
-          {pending ? 'Saving…' : 'Log it'}
-        </button>
+        {/* One number: the button is not there until there is one (MOM-145). Enter in the field still logs it. */}
+        {text.trim().length > 0 && (
+          <button
+            type="submit"
+            {...busyProps<HTMLButtonElement>(pending)}
+            className="min-h-16 min-w-24 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+          >
+            {pending ? 'Saving…' : 'Log it'}
+          </button>
+        )}
       </div>
       <EntryFeedback error={error} notice={notice} />
     </form>
