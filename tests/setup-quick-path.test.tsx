@@ -197,7 +197,7 @@ describe('"your answers stay in this tab and setup picks up where it stopped": p
   const turnView = (turn: AssistantTurn): { ok: true; data: SetupTurnView } => ({ ok: true, data: { kind: 'turn', turn, spentTokens: 1000, rejected: 0 } });
   const limitView = (reason: QuickPathReason): { ok: true; data: SetupTurnView } => ({
     ok: true,
-    data: { kind: 'quick_path', reason, message: SETUP_QUICK_PATH_MESSAGES[reason], sections: SECTIONS, missing: MISSING, canSave: false },
+    data: { kind: 'quick_path', reason, message: SETUP_QUICK_PATH_MESSAGES[reason], sections: SECTIONS, missing: MISSING, items: [], canSave: false },
   });
 
   it('a limit stops setup; after a reload the same conversation is still there, and one tap carries on from it when Claude can answer', async () => {

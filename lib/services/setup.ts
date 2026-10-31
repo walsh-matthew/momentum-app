@@ -45,6 +45,7 @@ import { shownModel } from '@/lib/setup/paraphrase';
 import { normalizePlainTurn } from '@/lib/setup/plainCard';
 import { spokenTimes } from '@/lib/setup/playback';
 import { personToday } from '@/lib/setup/relativeDates';
+import { applyFillIn, fillInItems } from '@/lib/setup/fillIn';
 import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
 import { personWords } from '@/lib/setup/said';
 import { errorText } from '@/lib/setup/session';
@@ -54,6 +55,7 @@ import { validateDraft } from '@/lib/setup/validate';
 import type { Json } from '@/types/database.types';
 import {
   AssistantTurnSchema,
+  MAX_PERSON_CHARS,
   PersonLocaleSchema,
   SETUP_CHUNKS,
   SetupSessionSchema,
@@ -61,7 +63,7 @@ import {
   type AssistantTurn,
   type SetupSession,
 } from '@/types/setup';
-import type { QuickPathReason, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import type { QuickPathReason, QuickPathState, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { runSetupTurn } from './llm';
 import type { ServiceResult } from './result';
 
@@ -144,22 +146,50 @@ const withAllApproved = (session: SetupSession): SetupSession => ({
 
 // The playback here is written on the server, so a clock time uses the locale the browser sent; without one, the time reads
 // as the person gave it (lib/setup/playback.ts).
-function quickPathView(session: SetupSession, reason: QuickPathReason, message: string, locale: string | undefined, today: string | undefined): SetupTurnView {
+function quickPathState(session: SetupSession, locale: string | undefined, today: string | undefined): QuickPathState {
   const shown = withAllApproved(session);
   const validation = validateDraft(shown.draft, shown.transcript, 'final');
+  const words = { today: today ?? null, said: personWords(session.transcript) };
   return {
-    kind: 'quick_path',
-    reason,
-    message,
     sections: quickPathSections(shownModel(session.draft, session.transcript), {
       locale,
       spokenTime: spokenTimes(session.draft, session.transcript),
       today: today ?? null,
-      said: personWords(session.transcript),
+      said: words.said,
     }),
-    missing: describeMissing(session.draft.model, validation.issues, { today: today ?? null, said: personWords(session.transcript) }),
+    missing: describeMissing(session.draft.model, validation.issues, words),
+    items: fillInItems(session.draft.model, validation.issues, words),
     canSave: validation.ok,
   };
+}
+
+function quickPathView(session: SetupSession, reason: QuickPathReason, message: string, locale: string | undefined, today: string | undefined): SetupTurnView {
+  return { kind: 'quick_path', reason, message, ...quickPathState(session, locale, today) };
+}
+
+const FillRequestSchema = z.strictObject({
+  session: SetupSessionSchema,
+  itemId: z.string().min(1).max(200),
+  value: z.string().max(MAX_PERSON_CHARS),
+  how: z.enum(['said', 'accepted']),
+  today: SuggestedDateSchema.optional().catch(undefined),
+  locale: PersonLocaleSchema.optional().catch(undefined),
+});
+
+// One item the person filled in on the quick path card (MOM-111): the session with the value in it, the way an answer to Claude
+// would put it there (lib/setup/fillIn.ts), and the card's new state. No Claude call. The items come from the session sent, worked
+// out here, never from the request; the value is checked by its kind and by the same validator as every setup.
+export async function fillQuickPathItem(raw: unknown): Promise<ServiceResult<QuickPathState & { session: SetupSession }>> {
+  const parsed = FillRequestSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: BAD_REQUEST };
+  const user = await signedInUserId();
+  if (!user.ok) return user;
+  const { session, itemId, value, how, today, locale } = parsed.data;
+
+  const before = quickPathState(session, locale, today);
+  const filled = applyFillIn(session, before.items, { itemId, value, how, today });
+  if (!filled.ok) return { ok: false, error: filled.error };
+  return { ok: true, data: { session: filled.session, ...quickPathState(filled.session, locale, today) } };
 }
 
 // The next turn of Claude's, checked. `raw` is the conversation so far, as the browser sent it.

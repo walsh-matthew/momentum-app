@@ -337,7 +337,10 @@ export type Transcript = TranscriptMessage[];
 // server treats it as untrusted input: these bounds keep a forged one from making a request (and its cost) larger than a
 // real setup can be. 40 assistant turns is the setup budget (lib/services/llm.ts); a person message is at most this long.
 export const MAX_PERSON_CHARS = 2000;
-export const MAX_TRANSCRIPT_MESSAGES = 82;
+// 82 is the budget's 40 assistant turns and 41 answers. The quick path adds a question and an answer for each item the person
+// fills in (lib/setup/fillIn.ts), at most MAX_FILL_INS of them, and they must still fit after a spent budget.
+export const MAX_FILL_INS = 40;
+export const MAX_TRANSCRIPT_MESSAGES = 82 + 2 * MAX_FILL_INS;
 export const MAX_SPENT_TOKENS = 100_000_000;
 
 export const TranscriptMessageSchema = z.discriminatedUnion('role', [

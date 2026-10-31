@@ -31,7 +31,7 @@ export interface MissingWords {
 // One validator issue as a thing the person has not told us yet. The validator's own messages are written for Claude
 // ("Ask the time zone before a target is saved"), so they are not shown. The `approved.*` issues are skipped: saving from
 // the quick path is the person's approval of every part shown.
-function describeIssue(model: SetupModel, issue: DraftIssue, words: MissingWords): string | null {
+export function describeIssue(model: SetupModel, issue: DraftIssue, words: MissingWords): string | null {
   const parts = issue.path.split('.');
   if (parts[0] === 'approved') return null;
   if (parts[0] === 'person') {
@@ -127,13 +127,22 @@ export const QUICK_PATH_WORDS = {
     "Setup can't be saved without the items above, and Claude can't ask for them right now. Wait a little, then reload this page: your answers stay in this tab and setup picks up where it stopped. Or tap \"Start again\" to begin a new setup; that clears the answers here.",
   missingNoWait:
     "Setup can't be saved without the items above, and this setup can't ask for them any more. Tap \"Start again\" to begin a new setup; that clears the answers here.",
+  fillIn:
+    "Claude can't ask for the items above right now, so you can set them here. When they are all set, tap \"Save what I have\". Nothing is saved until you do.",
+  fillStays: 'What you set here stays in this tab until you save.',
+  setItem: 'Set',
+  searchZones: 'Search time zones',
+  noZones: 'No time zone matches that.',
+  fillFailed: "That didn't go through. Nothing was changed. Try again.",
   saveOff: 'Save is off until the items above are set.',
   confirmStartOver: 'Start again? What you have said so far will be cleared.',
   confirmYes: 'Yes, start again',
   confirmNo: 'Keep what I have',
 } as const;
 
-export function quickPathNext(reason: QuickPathReason, complete: boolean): string {
+// `fillable` is true when every missing item can be set on the card: then the card says so instead of waiting or starting again.
+export function quickPathNext(reason: QuickPathReason, complete: boolean, fillable = false): string {
   if (complete) return QUICK_PATH_WORDS.readyNext;
+  if (fillable) return QUICK_PATH_WORDS.fillIn;
   return quickPathCanWait(reason) ? QUICK_PATH_WORDS.missingWait : QUICK_PATH_WORDS.missingNoWait;
 }

@@ -3,20 +3,22 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { askSetupTurn, saveSetup } from '@/app/actions/setup';
+import { askSetupTurn, fillQuickPathItemAction, saveSetup } from '@/app/actions/setup';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
 import { ERROR_COPY, awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer, type RetryCause } from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
-import type { SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import type { FillInItem, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { FinalCard } from './FinalCard';
 import { PlaybackCard } from './PlaybackCard';
 import { QuestionCard } from './QuestionCard';
 import { QuickPathCard } from './QuickPathCard';
+import type { FillHow } from './QuickPathFillIn';
 import { RetryNotice } from './RetryNotice';
 import { SetupAlert } from './SetupAlert';
 import { SetupButton, setupButtonClasses } from './SetupButton';
+import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
 import { CARD_TEXT, CardLead } from './cardText';
 import { clearStoredSession, loadStoredSession, storeSession } from './setupStorage';
 
@@ -36,6 +38,15 @@ function localDate(): string {
 // quick path, which the server writes.
 function browserLocale(): string | undefined {
   return typeof navigator === 'undefined' ? undefined : navigator.language || undefined;
+}
+
+// The time zone this device reports, offered on the quick path as the one suggestion for the person's time zone.
+function deviceTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
 }
 
 // Claude's newest turn anywhere in the conversation, or null before it has spoken.
@@ -77,6 +88,9 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   // A save that did not go through.
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // An item being set on the quick path card, and why one was refused.
+  const [filling, setFilling] = useState(false);
+  const [fillError, setFillError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<SetupSaved | null>(null);
   // The answer put back in the box by "Change my answer".
@@ -168,12 +182,35 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     }
   };
 
+  // Sets one missing item on the quick path card (MOM-111). The server works out the new session and the card's new state, so a
+  // refused value changes nothing; the answer is kept in this tab exactly like any other.
+  const fill = async (item: FillInItem, value: string, how: FillHow) => {
+    setFilling(true);
+    setFillError(null);
+    try {
+      const result = await fillQuickPathItemAction({ session, itemId: item.id, value, how, today: localDate(), locale: browserLocale() });
+      if (result.ok) {
+        const { session: updated, ...state } = result.data;
+        setSession(updated);
+        storeSession(userId, updated);
+        setView((current) => (current?.kind === 'quick_path' ? { ...current, ...state } : current));
+      } else {
+        setFillError(result.error);
+      }
+    } catch {
+      setFillError(QUICK_PATH_WORDS.fillFailed);
+    } finally {
+      setFilling(false);
+    }
+  };
+
   const startOver = () => {
     clearStoredSession(userId);
     setSession(newSession());
     setView(null);
     setError(null);
     setFailure(null);
+    setFillError(null);
     setDraftAnswer(undefined);
     setConfirmStartOver(false);
     setPhase('intro');
@@ -234,6 +271,11 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         error={error}
         onSave={() => void save(true)}
         onStartOver={startOver}
+        items={view.items}
+        deviceZone={deviceTimeZone()}
+        filling={filling}
+        fillError={fillError}
+        onFill={(item, value, how) => void fill(item, value, how)}
       />
     );
   }

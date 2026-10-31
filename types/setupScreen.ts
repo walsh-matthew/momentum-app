@@ -14,6 +14,33 @@ export interface PlaybackSection {
   lines: string[];
 }
 
+// One thing the quick path card lets the person fill in (MOM-111, DOMAIN_MODEL §2.3). `id` is the path of the draft value it
+// sets; `line` is the card's own words for it, the same line the "still needed" list used, and the question the transcript
+// records. `kind` picks the control. `suggestion` names the one suggestion code can show for it, or null for none (the floor,
+// the day end, the week start, the unit and the source never get one: they are the person's to set).
+export type FillInKind = 'timeZone' | 'time' | 'weekday' | 'number' | 'text' | 'date' | 'choice' | 'yesNo';
+export type FillInSuggestion = 'device_time_zone' | 'today';
+export interface FillInChoice {
+  value: string;
+  label: string;
+}
+export interface FillInItem {
+  id: string;
+  line: string;
+  kind: FillInKind;
+  choices: FillInChoice[];
+  suggestion: FillInSuggestion | null;
+}
+
+// What the quick path card shows, besides why setup stopped: every part played back, what is still missing in words, what of it
+// the person can fill in here, and whether it can be saved as it is.
+export interface QuickPathState {
+  sections: PlaybackSection[];
+  missing: string[];
+  items: FillInItem[];
+  canSave: boolean;
+}
+
 export type SetupTurnView =
   // Claude's next turn, already checked. A playback or final turn carries none of Claude's words: the screen writes it with
   // renderPlayback()/renderFinal() from the turn's validated draft (the same pure functions the server checked it with, so a
@@ -22,7 +49,7 @@ export type SetupTurnView =
   | { kind: 'turn'; turn: AssistantTurn; spentTokens: number; rejected: number }
   // Claude is no longer used for this setup: what was collected so far (all written by code), what is still missing, and
   // whether it can be saved as it is. Nothing is saved until the person taps.
-  | { kind: 'quick_path'; reason: QuickPathReason; message: string; sections: PlaybackSection[]; missing: string[]; canSave: boolean }
+  | ({ kind: 'quick_path'; reason: QuickPathReason; message: string } & QuickPathState)
   // Two requests landed within a second of each other: ask again.
   | { kind: 'wait'; message: string; retryAfterSeconds: number }
   // Claude could not give a usable reply. What the person said is kept. `reason` picks the error card's words and its one

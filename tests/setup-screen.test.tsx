@@ -419,7 +419,7 @@ describe('the quick path', () => {
   }));
   const quick = (over: Partial<Extract<SetupTurnView, { kind: 'quick_path' }>> = {}): { ok: true; data: SetupTurnView } => ({
     ok: true,
-    data: { kind: 'quick_path', reason: 'over_turns', message: 'This setup has used its share of Claude\'s time.', sections, missing: [], canSave: true, ...over },
+    data: { kind: 'quick_path', reason: 'over_turns', message: 'This setup has used its share of Claude\'s time.', sections, missing: [], items: [], canSave: true, ...over },
   });
 
   async function toQuickPath(view: ReturnType<typeof quick>) {
