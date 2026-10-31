@@ -260,11 +260,13 @@ The verdict so far is a conditional go: no criterion has failed, criterion 1 pas
 | 4 | The weekly review changes a decision | Log each layer 3 outcome: changed, declined by choice, or skipped | Each person makes at least one real change across their reviews, and no more than two of the six reviews are skipped. Each review ends with one adjustment question, and we log the outcome: changed something, looked and chose no change, or skipped. A fail means the review gets reworked or cut, not that the project stops (see "What a fail means" below the table). | Partial |
 | 5 | The thin slice is buildable in N | Build days from the first thin-slice block to the family trial start. What is in and out of the slice, and the proposal for N, are in 6.1. | Inside N (section 6) | Deferred |
 | 6 | Family trial: three people use it for their own real goals, about two weeks | The owner and two household testers (one a minor) use it for their own goals. More family members outside the house join a second round, after the first fixes (5.3). | Each is still using it at the end, by choice | Not started |
+| 7 | Cost per user stays healthy (added 2026-10-31 by the owner) | Monthly cost per active user: Claude calls from the usage log, plus hosting and services from the owner's cost ledger, divided by active users. Compared with what Momentum could charge per month. | A discussion, not a cutoff. If cost per user looks unhealthy next to a plausible monthly price, it is raised with the owner, with the numbers; nothing is cut automatically. The working guide is the 6.2 proposal: AI cost under 10% of the price in a normal month. The cost cap is a projection, updated as real usage comes in. | Not started |
 
 **What a fail means.** No single criterion kills the project on its own. Each fail leads to one of the three verdicts we agreed: go, change or stop.
 
 - **Change that part:** criteria 2 (manual load), 4 (weekly review) and 5 (build time). A failed review gets reworked or cut, and the rest of Momentum carries on.
 - **Could mean stop:** criteria 1 (nobody can set it up), 3 (the model doesn't fit real goals) and 6 (nobody keeps using it). These test the core idea. Even then, we decide together, and we write down why.
+- **Raise for discussion:** criterion 7 (cost per user). An unhealthy comparison is brought to the owner with the numbers. It never cuts anything by itself.
 
 ### 5.1 Before the family trial
 
