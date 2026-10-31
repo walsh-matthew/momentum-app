@@ -42,8 +42,9 @@ test.describe('the account lifecycle', () => {
     await page.goto(await confirmationLinkFor(email));
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
-    // A new account starts empty (migration 010): no goals, and the wizard call to action.
-    await expect(page.getByRole('heading', { name: 'No goals yet' })).toBeVisible();
+    // A new account starts empty (migration 010): no goals, so home offers setup (MOM-143) in place of the old "No goals yet" card.
+    await expect(page.getByRole('heading', { name: 'Set up your goals' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'No goals yet' })).toHaveCount(0);
 
     // The other protected pages open now.
     await page.goto('/connections');

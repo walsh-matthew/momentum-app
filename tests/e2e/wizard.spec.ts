@@ -38,11 +38,13 @@ for (const [name, width] of Object.entries(WIDTHS)) {
 
     test('wizard: failure, Try again, the wait message, the starter plan, Create, and the goal in the picker', async ({ page }) => {
       await signUpAndConfirm(page, `wizard-${width}`);
-      await expect(page.getByRole('heading', { name: 'No goals yet' })).toBeVisible();
+      // A new account has no goals, so home offers setup (MOM-143) in place of the old "No goals yet" card.
+      await expect(page.getByRole('heading', { name: 'Set up your goals' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'No goals yet' })).toHaveCount(0);
       await page.waitForLoadState('networkidle');
 
-      // Open the wizard from the empty state and walk the steps.
-      await page.getByRole('button', { name: 'Set up your first goal' }).click();
+      // Open the wizard from the banner and walk the steps.
+      await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
       const wizard = page.getByRole('dialog', { name: 'New goal wizard' });
       await expect(wizard).toBeVisible();
       await wizard.getByRole('button', { name: 'Get certified' }).click();

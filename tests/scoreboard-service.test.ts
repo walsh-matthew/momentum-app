@@ -111,9 +111,9 @@ describe('getHomeScoreboard reads as the signed-in person', () => {
     expect(r).toEqual({ ok: true, data: { state: 'needs_day_anchors', anchor: 'time_zone', reason: 'not_set' } });
   });
 
-  it('a person with no goals in the goal model gets no_goals', async () => {
+  it('a person with no goals in the goal model gets no_goals, and another person\'s goals do not count as their saved setup', async () => {
     world(OTHER, 'Their');
-    expect(await getHomeScoreboard({ now })).toEqual({ ok: true, data: { state: 'no_goals' } });
+    expect(await getHomeScoreboard({ now })).toEqual({ ok: true, data: { state: 'no_goals', setupSaved: false } });
   });
 });
 

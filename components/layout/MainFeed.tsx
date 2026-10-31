@@ -24,6 +24,9 @@ interface MainFeedProps {
   moveChains: TaskMoveChains;
   // Opens the goal wizard, for the empty states that offer a goal.
   onNewGoal: () => void;
+  // True when the "No goals yet" card must not show (MOM-143): home shows the setup card, which says the same, or the person's
+  // setup is saved and the old model's empty state would contradict it.
+  hideNoGoals?: boolean;
   className?: string;
 }
 
@@ -35,6 +38,7 @@ export function MainFeed({
   channelTitle = null,
   moveChains,
   onNewGoal,
+  hideNoGoals = false,
   className = '',
 }: MainFeedProps) {
   const { focus, upNext, recentlyDone } = feed;
@@ -63,7 +67,7 @@ export function MainFeed({
       )}
       {feedState === 'signed_out' && <SignedOutState />}
       {feedState === 'load_failed' && <LoadFailedState />}
-      {feedState === 'no_goals' && <NoGoalsState onNewGoal={onNewGoal} />}
+      {feedState === 'no_goals' && !hideNoGoals && <NoGoalsState onNewGoal={onNewGoal} />}
       {feedState === 'no_tasks' && <NoTasksState channelTitle={channelTitle} onNewGoal={onNewGoal} />}
       {feedState === 'all_done' && (
         // Nothing left to do, but the user may have just finished the last task by mistake: keep the undo.
