@@ -15,7 +15,9 @@
 // - the week plan (migration 019): a pick is selected, inserted and deleted and never updated; a date's kind can also be
 //   updated, but only its day_type_id (a column grant); a pick is once per item and date, a kind once per person and date,
 //   and each points at the same person's own item or day type.
-// ENFORCED_CONSTRAINTS, ENFORCED_REVIEW_CONSTRAINTS and ENFORCED_PLAN_CONSTRAINTS list every name it enforces;
+// - target_changes (migration 020): select and insert only, its CHECKs, the same-person target key, and the trigger that sets created_at
+//   (the fake's clock, so a later save is always later) whatever an insert sends. No unique key: a second save is a second row.
+// ENFORCED_CONSTRAINTS, ENFORCED_REVIEW_CONSTRAINTS, ENFORCED_PLAN_CONSTRAINTS and ENFORCED_TARGET_CHANGE_CONSTRAINTS list every name it enforces;
 // tests/fake-entries-model.test.ts checks each one exists in the SQL.
 
 import { REVIEW_ADJUSTMENT_KINDS, REVIEW_ADJUSTMENT_OUTCOMES } from '@/types/database.types';
@@ -41,7 +43,8 @@ type TableName =
   | 'period_snapshots'
   | 'weekly_reviews'
   | 'week_plan_picks'
-  | 'week_plan_day_types';
+  | 'week_plan_day_types'
+  | 'target_changes';
 
 // What the authenticated role may do on each table (migration 013, section 7).
 const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'delete'>> = {
@@ -61,6 +64,8 @@ const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'de
   // 019: a pick is added and removed, never edited. A date's kind can be updated, but only day_type_id (see run()).
   week_plan_picks: new Set(['select', 'insert', 'delete']),
   week_plan_day_types: new Set(['select', 'insert', 'update', 'delete']),
+  // 020: append-only. No update and no delete grant for the person.
+  target_changes: new Set(['select', 'insert']),
 };
 
 export const ENFORCED_CONSTRAINTS = [
@@ -101,6 +106,14 @@ export const ENFORCED_PLAN_CONSTRAINTS = [
   'week_plan_day_types_user_day_unique',
 ] as const;
 
+// Migration 020's constraints the fake enforces; the names are checked against the SQL.
+export const ENFORCED_TARGET_CHANGE_CONSTRAINTS = [
+  'target_changes_floor_positive',
+  'target_changes_aspiration_above_floor',
+  'target_changes_slots_valid',
+  'target_changes_target_fk',
+] as const;
+
 export const gm = {
   tables: {
     person_settings: [] as Row[],
@@ -117,6 +130,7 @@ export const gm = {
     weekly_reviews: [] as Row[],
     week_plan_picks: [] as Row[],
     week_plan_day_types: [] as Row[],
+    target_changes: [] as Row[],
   } satisfies Record<TableName, Row[]>,
   user: null as { id: string } | null,
   rls: true,
@@ -260,6 +274,17 @@ function checkViolation(table: TableName, row: Row): Violation | null {
     const none = [row.adjustment_kind === null, row.adjustment === null, row.adjustment_outcome === null];
     if (!(none.every(Boolean) || none.every((n) => !n))) return { code: '23514', name: 'weekly_reviews_adjustment_together' };
   }
+  if (table === 'target_changes') {
+    if (typeof row.floor !== 'number' || !(row.floor > 0)) return { code: '23514', name: 'target_changes_floor_positive' };
+    if (row.aspiration !== null && row.aspiration !== undefined && (typeof row.aspiration !== 'number' || row.aspiration < row.floor)) {
+      return { code: '23514', name: 'target_changes_aspiration_above_floor' };
+    }
+    const days = row.slot_weekdays;
+    if (days !== null && days !== undefined) {
+      const ok = Array.isArray(days) && days.length >= 1 && days.length <= 7 && days.every((d) => Number.isInteger(d) && d >= 1 && d <= 7);
+      if (!ok) return { code: '23514', name: 'target_changes_slots_valid' };
+    }
+  }
   return null;
 }
 
@@ -293,6 +318,9 @@ function foreignKeyViolation(table: TableName, row: Row): Violation | null {
   }
   if (table === 'entry_corrections' && !owned('sources', row.source_id, row.user_id)) {
     return { code: '23503', name: 'entry_corrections_source_fk' };
+  }
+  if (table === 'target_changes' && !owned('targets', row.target_id, row.user_id)) {
+    return { code: '23503', name: 'target_changes_target_fk' };
   }
   if (table === 'week_plan_picks' && !owned('work_items', row.work_item_id, row.user_id)) {
     return { code: '23503', name: 'week_plan_picks_work_item_fk' };
@@ -486,6 +514,12 @@ class Query implements PromiseLike<Result> {
           row.adjustment_outcome ??= null;
           // The BEFORE INSERT trigger: the database's time, whatever the insert sent.
           row.finished_at = gm.dbNow ?? stamp();
+        }
+        if (this.table === 'target_changes') {
+          row.aspiration ??= null;
+          row.slot_weekdays ??= null;
+          // The BEFORE INSERT trigger: the database's own time, whatever the insert sent.
+          row.created_at = stamp();
         }
         const violation =
           insertPolicyViolation(this.table, row) ??

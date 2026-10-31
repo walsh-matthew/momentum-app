@@ -3,7 +3,7 @@
 // and composes. The recap screen (components/review/) lays out what is here; nothing on it is a number Claude made
 // (principle 9). The finished review's record (migration 018) holds a StoredRecap, written once and never rewritten.
 
-import type { ReviewAdjustmentKind, ReviewAdjustmentOutcome, ReviewPlanningMode, StartingPointKind, Tone } from '@/types/database.types';
+import type { Measure, ReviewAdjustmentKind, ReviewAdjustmentOutcome, ReviewPlanningMode, StartingPointKind, Tone } from '@/types/database.types';
 import type { TargetCardView } from '@/types/home';
 import type { Layer1TargetFact, LayerThreeAdjustment, LocalDate, ReviewedValue, ReviewWindow, Weekday } from '@/types/scoreboard';
 
@@ -64,6 +64,40 @@ export interface RecapChange {
   now: ReviewedValue;
 }
 
+// What the review's edit needs to know about the target the adjustment named (MOM-146): the numbers it will have from the next period
+// (the newest saved, or the ones in force when nothing is saved), and the week just reviewed. Null in the facts when the target cannot be
+// edited here (a deadline or checklist target, or one with no numbers).
+export interface TargetEdit {
+  targetId: string;
+  title: string;
+  measure: Measure;
+  unit: string | null;
+  period: 'weekly' | 'day_slots';
+  floor: number;
+  aspiration: number | null;
+  // A day-slots target's days, 1 to 7 with Monday as 1; null for a weekly target.
+  days: number[] | null;
+  // The weekday a week starts on (0 is Sunday), so the days are listed in the order of the person's week.
+  weekStartsOn: Weekday;
+  // What the reviewed week came to, the engine's own count.
+  lastCounted: number | null;
+  // The first day the new numbers would apply from.
+  effectiveFrom: LocalDate;
+  // The person's own today, so the day it starts reads without a year when it is this year.
+  today: LocalDate;
+}
+
+// What a saved change to a target's numbers comes to (lib/services/targetChanges.ts): the target, the first day the numbers apply from, and
+// the numbers and days as saved.
+export interface SavedTargetChange {
+  targetId: string;
+  effectiveFrom: LocalDate;
+  floor: number;
+  aspiration: number | null;
+  // A day-slots target's days, 1 to 7 with Monday as 1; null for a weekly target.
+  days: number[] | null;
+}
+
 export type WeeklyReviewFacts =
   // No active goal yet: nothing to review.
   | { state: 'no_goals' }
@@ -92,6 +126,8 @@ export type WeeklyReviewFacts =
       // only when the person taps for it (lib/services/reviewReflection.ts); this is only whether to show the button.
       offerReflection: boolean;
       adjustment: LayerThreeAdjustment | null;
+      // The edit the adjustment's "change" choice opens, when it names a target that can be edited here (MOM-146).
+      edit: TargetEdit | null;
       // Earlier finished reviews that a later entry has changed since.
       changes: RecapChange[];
     };

@@ -55,7 +55,8 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       await shot(page, 'review', width);
     });
 
-    // MOM-145: the plain callout of a form that is missing something, on sign-in and on the review's one question.
+    // MOM-145: the plain callout of a form that is missing something, on sign-in and on the review's change form (MOM-146: the finish is
+    // not there until the question is answered, so the review's callout is the change form's).
     test('the missing-field callouts: sign-in and the review', async ({ page }) => {
       test.setTimeout(240_000);
       await page.goto('/login');
@@ -66,8 +67,11 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       const reviewer = await signUpAndConfirm(page, `shots-missing-${THEME}-${width}`);
       await seedReview(reviewer, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, week: 'none', reviewDepth: 'full' });
       await page.goto('/review');
-      await page.getByRole('button', { name: 'Finish review' }).click();
-      await expect(page.getByRole('alert').filter({ hasText: 'Choose one first.' })).toBeVisible();
+      await page.getByRole('radio', { name: 'Yes, I want to change it' }).click();
+      const change = page.getByRole('form', { name: 'Change this target' });
+      await change.getByRole('textbox', { name: /would still count/ }).fill('');
+      await change.getByRole('button', { name: 'Save the change' }).click();
+      await expect(change.getByRole('alert')).toHaveText('Enter a number above 0.');
       await page.waitForLoadState('networkidle');
       await shot(page, 'review-missing', width);
     });

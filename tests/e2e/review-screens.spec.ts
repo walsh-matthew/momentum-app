@@ -47,8 +47,8 @@ test.describe(`${THEME} theme, the weekly review's sitting at 390px`, () => {
 
       await page.getByRole('button', { name: ASK }).click();
       await expect(page.getByText('From Claude.')).toBeVisible();
-      await page.getByRole('radio', { name: 'Yes, I want to change it' }).click();
-      await expect(page.getByText("Noted. Changing a target isn't in the app yet, so nothing was changed.")).toBeVisible();
+      await page.getByRole('radio', { name: 'No, keep it as it is' }).click();
+      await expect(page.getByText('Okay. It stays as it is.')).toBeVisible();
       await shot(page, '02', 'line-and-choice');
 
       await page.getByRole('button', { name: 'Finish review' }).click();

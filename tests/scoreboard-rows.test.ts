@@ -26,9 +26,11 @@ import {
   type ItemRead,
   type SettingsRead,
   type StepRead,
+  type TargetChangeRead,
   type TargetRead,
 } from '@/lib/services/scoreboardRows';
 import { NO_FORECAST_ROWS } from '@/lib/services/forecastRows';
+import { patternLine } from '@/components/home/wording';
 import { DEFAULT_CELEBRATION, DEFAULT_TONE } from '@/lib/home/defaults';
 import type { HomeScoreboard, TargetCardView } from '@/types/home';
 
@@ -109,6 +111,8 @@ const rows = (over: Partial<HomeRows> = {}): HomeRows => ({
   entries: [],
   corrections: [],
   snapshots: [],
+  changes: [],
+  reviewedWeeks: [],
   forecast: NO_FORECAST_ROWS,
   ...over,
 });
@@ -647,5 +651,116 @@ describe('goals and targets come in the order the database made them, not an ord
     const view = ready(buildHomeScoreboard(worked(), NOW));
     expect(view.goals.map((g) => g.id)).toEqual(['g1', 'g2', 'g3']);
     expect(view.goals[0].targets.map((t) => t.id)).toEqual(['workouts', 'run', 'mobility']);
+  });
+});
+
+// MOM-146: numbers the person saved from the weekly review (migration 020). Home shows the ones in force for the week it is looking
+// at and says what is coming, and no closed week is judged by a number that came after it.
+describe('a target the person has changed from a later period', () => {
+  const saved = (targetId: string, effectiveFrom: string, over: Partial<TargetChangeRead> = {}): TargetChangeRead => ({
+    id: `c-${targetId}-${effectiveFrom}`,
+    target_id: targetId,
+    effective_from: effectiveFrom,
+    floor: 4,
+    aspiration: 6,
+    slot_weekdays: null,
+    created_at: '2026-10-29T18:00:00.000000+00:00',
+    ...over,
+  });
+  const plain = buildHomeScoreboard(worked(), NOW);
+
+  it('shows the numbers in force this week and what starts next week, and judges this week by the numbers it began with', () => {
+    const view = buildHomeScoreboard(worked({ changes: [saved('workouts', '2026-11-02')] }), NOW);
+    const now = counted(card(view, 'g1', 'workouts'));
+    expect(now).toMatchObject({ floor: 3, aspiration: 5, level: 'floor', change: { from: '2026-11-02', floor: 4, aspiration: 6 } });
+    // Nothing about the week or the weeks before it moved.
+    expect(now).toMatchObject({ counted: 3, graded: true, pattern: { kind: 'holding', periods: 3 } });
+    expect(plain.state).toBe('ready');
+    expect(counted(card(plain, 'g1', 'workouts')).change ?? null).toBeNull();
+  });
+
+  it('shows the new numbers from the day they apply, says nothing is coming, and keeps the closed weeks at their grade', () => {
+    const view = buildHomeScoreboard(worked({ changes: [saved('workouts', '2026-10-26')] }), NOW);
+    const now = counted(card(view, 'g1', 'workouts'));
+    // Three this week against a floor of 4 now: the week in progress is judged by the new numbers.
+    expect(now).toMatchObject({ floor: 4, aspiration: 6, level: 'partway', change: null });
+    // The three closed weeks held at 3 under the old numbers and still do (a pattern needs graded weeks at the floor they had).
+    expect(now.pattern).toMatchObject({ kind: 'holding', periods: 3 });
+  });
+
+  it('the newest save for the same day wins', () => {
+    const view = buildHomeScoreboard(
+      worked({
+        changes: [
+          saved('workouts', '2026-11-02', { floor: 2, aspiration: null, created_at: '2026-10-29T18:00:00.000000+00:00' }),
+          saved('workouts', '2026-11-02', { id: 'second', floor: 5, aspiration: 8, created_at: '2026-10-29T18:05:00.000000+00:00' }),
+        ],
+      }),
+      NOW,
+    );
+    expect(counted(card(view, 'g1', 'workouts')).change).toEqual({ from: '2026-11-02', floor: 5, aspiration: 8 });
+  });
+
+  it('a day-slots target takes its new days from the day the change applies', () => {
+    const change = saved('mobility', '2026-10-26', { floor: 2, aspiration: null, slot_weekdays: [2, 4] });
+    const slots = counted(card(buildHomeScoreboard(worked({ changes: [change] }), NOW), 'g1', 'mobility')).slots;
+    expect(slots).toMatchObject({ total: 2, weekdays: [2, 4] });
+    expect(counted(card(plain, 'g1', 'mobility')).slots).toMatchObject({ total: 3, weekdays: [1, 3, 5] });
+  });
+
+  it('does not touch another target, and a change for a target that is not there is left out', () => {
+    const view = buildHomeScoreboard(worked({ changes: [saved('workouts', '2026-11-02'), saved('gone', '2026-11-02')] }), NOW);
+    expect(counted(card(view, 'g1', 'run'))).toMatchObject({ floor: 15, aspiration: 20 });
+    expect(counted(card(view, 'g1', 'run')).change ?? null).toBeNull();
+  });
+
+  it('shows a change dated after the goal began as coming, and leaves out one dated on or before it, which has no earlier version to replace', () => {
+    // g3 began on 2026-10-27.
+    const coming = buildHomeScoreboard(worked({ changes: [saved('spanish', '2026-11-02')] }), NOW);
+    expect(card(coming, 'g3', 'spanish').change).toMatchObject({ from: '2026-11-02' });
+    const early = buildHomeScoreboard(worked({ changes: [saved('spanish', '2026-10-27'), saved('spanish', '2026-10-01')] }), NOW);
+    expect(card(early, 'g3', 'spanish').change ?? null).toBeNull();
+    expect(counted(card(early, 'g3', 'spanish'))).toMatchObject({ floor: 90, aspiration: 150 });
+  });
+});
+
+// MOM-146: a slipping note on home points at the weekly review only until the review of the week the run ended in is finished. The long run
+// target of `worked()` is under its floor in the three closed weeks 10-05, 10-12 and 10-19, so its run ended in the week of 10-19.
+describe('a slipping run on home and the weekly review', () => {
+  const run = (reviewedWeeks: string[]) => {
+    const pattern = counted(card(buildHomeScoreboard(worked({ reviewedWeeks }), NOW), 'g1', 'run')).pattern;
+    if (!pattern) throw new Error('no pattern');
+    return pattern;
+  };
+
+  it('is still pointed at the review while the review of the week it ended in is not finished', () => {
+    for (const reviewed of [[], ['2026-10-12'], ['2026-10-26']]) {
+      const pattern = run(reviewed);
+      expect(pattern).toMatchObject({ kind: 'slipping', periods: 3, reviewed: false });
+      expect(patternLine(pattern, 'middle', pattern.reviewed === true).text).toBe('Under the floor 3 weeks running. Worth a look at your weekly review.');
+    }
+  });
+
+  it('keeps "Under the floor 3 weeks running." and drops the pointer once that review is finished', () => {
+    const pattern = run(['2026-10-19']);
+    expect(pattern).toMatchObject({ kind: 'slipping', periods: 3, reviewed: true });
+    const text = patternLine(pattern, 'middle', pattern.reviewed === true).text;
+    expect(text).toBe('Under the floor 3 weeks running.');
+    expect(text).not.toMatch(/review/i);
+  });
+
+  it('drops it in every tone, and the gentle tone keeps its "No rush."', () => {
+    const pattern = run(['2026-10-12', '2026-10-19']);
+    for (const tone of ['gentle', 'middle', 'direct'] as const) {
+      expect(patternLine(pattern, tone, pattern.reviewed === true).text).not.toMatch(/review/i);
+    }
+    expect(patternLine(pattern, 'gentle', true).text).toBe('Under the floor 3 weeks running. No rush.');
+    expect(patternLine(pattern, 'direct', true).text).toBe('Under the floor 3 weeks running.');
+  });
+
+  it('a pattern that is not slipping is never marked by the review: a holding run reads the same either way', () => {
+    const holding = counted(card(buildHomeScoreboard(worked({ reviewedWeeks: ['2026-10-19'] }), NOW), 'g1', 'workouts')).pattern;
+    expect(holding).toMatchObject({ kind: 'holding', periods: 3 });
+    expect(patternLine(holding!, 'middle', false).text).toBe(patternLine({ ...holding!, reviewed: false }, 'middle', false).text);
   });
 });

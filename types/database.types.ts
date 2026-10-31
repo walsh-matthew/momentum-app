@@ -462,6 +462,23 @@ export type WeeklyReviewRow = {
   finished_at: string;
 };
 
+// A change to a target's levels from a later period (migration 020, MOM-146). The target keeps its first version in targets; the
+// engine reads that plus these, each effective from its date, and for the same target and date the newest created_at wins
+// (lib/engine/baseline.ts). Append-only: every save is a new row.
+export type TargetChangeRow = {
+  id: string;
+  user_id: string;
+  target_id: string;
+  // The first day of the period the new numbers apply from (the person's own calendar date).
+  effective_from: string;
+  floor: number;
+  aspiration: number | null;
+  // day_slots only: the weekdays the person named, 1 to 7 (Monday is 1). Null for a weekly target.
+  slot_weekdays: number[] | null;
+  // Set by a trigger to the database's own time, whatever an insert sends.
+  created_at: string;
+};
+
 // The week plan (migration 019, MOM-112): the person's own choice of which work items to do on which of their dates, and
 // which of their own day types a date is. A pick is an item on a date, never a time or a slot (docs/DOMAIN_MODEL.md §1.4,
 // §4.2 principle 12).
@@ -1449,6 +1466,37 @@ export type Database = {
           },
         ];
       };
+      // Append-only (migration 020): the person's session inserts a change; no role updates or deletes one. created_at is set by a
+      // trigger, so an insert never needs to send it.
+      target_changes: {
+        Row: TargetChangeRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          target_id: string;
+          effective_from: string;
+          floor: number;
+          aspiration?: number | null;
+          slot_weekdays?: number[] | null;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: 'target_changes_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'target_changes_target_fk';
+            columns: ['target_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'targets';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
       // Migration 019: a pick is added and removed, never edited (no update grant).
       week_plan_picks: {
         Row: WeekPlanPickRow;
@@ -1609,6 +1657,7 @@ export type EntryCorrection = Tables<'entry_corrections'>;
 export type PeriodSnapshot = Tables<'period_snapshots'>;
 export type StartingPoint = Tables<'starting_points'>;
 export type WeeklyReview = Tables<'weekly_reviews'>;
+export type TargetChange = Tables<'target_changes'>;
 export type WeekPlanPick = Tables<'week_plan_picks'>;
 export type WeekPlanDayType = Tables<'week_plan_day_types'>;
 

@@ -54,7 +54,7 @@ export async function getHomeScoreboard(deps: HomeScoreboardDeps = {}): Promise<
   // keeps only the dates from their own today on.
   const planFrom = new Date((deps.now ?? Date.now)() - 2 * 86_400_000).toISOString().slice(0, 10);
 
-  const [settings, goals, targets, items, steps, corrections, snapshots, entries, picks, dayKinds, dayTypes] = await Promise.all([
+  const [settings, goals, targets, items, steps, corrections, snapshots, changes, reviews, entries, picks, dayKinds, dayTypes] = await Promise.all([
     supabase.from('person_settings').select('time_zone, week_start, day_end, tone, celebrations').eq('user_id', userId).maybeSingle(),
     supabase.from('goals').select('id, title, state, shape, start_date, end_date, created_at').eq('user_id', userId),
     supabase
@@ -71,6 +71,9 @@ export async function getHomeScoreboard(deps: HomeScoreboardDeps = {}): Promise<
       .from('period_snapshots')
       .select('target_id, period_start, period_end, measure, unit, role, period_kind, slot_weekdays, floor, aspiration, qualifying_threshold, carry_over_kind')
       .eq('user_id', userId),
+    supabase.from('target_changes').select('id, target_id, effective_from, floor, aspiration, slot_weekdays, created_at').eq('user_id', userId),
+    // Only which weeks have a finished review, never what each said: a slipping run that was reviewed is not pointed at the review again.
+    supabase.from('weekly_reviews').select('week_start').eq('user_id', userId).order('week_start', { ascending: false }).limit(12),
     readEntries(supabase, userId),
     supabase.from('week_plan_picks').select('work_item_id, plan_date').eq('user_id', userId).gte('plan_date', planFrom),
     supabase.from('week_plan_day_types').select('plan_date, day_type_id').eq('user_id', userId).gte('plan_date', planFrom),
@@ -84,6 +87,8 @@ export async function getHomeScoreboard(deps: HomeScoreboardDeps = {}): Promise<
     steps.error ||
     corrections.error ||
     snapshots.error ||
+    changes.error ||
+    reviews.error ||
     entries === null ||
     picks.error ||
     dayKinds.error ||
@@ -101,6 +106,8 @@ export async function getHomeScoreboard(deps: HomeScoreboardDeps = {}): Promise<
     entries,
     corrections: corrections.data,
     snapshots: snapshots.data,
+    changes: changes.data,
+    reviewedWeeks: reviews.data.map((r) => r.week_start),
     forecast: { items: items.data, picks: picks.data, dayKinds: dayKinds.data, dayTypes: dayTypes.data },
   };
   return { ok: true, data: buildHomeScoreboard(rows, (deps.now ?? Date.now)()) };

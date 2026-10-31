@@ -62,12 +62,27 @@ describe('listUnconfirmedStartingPoints: what the review reads', () => {
     });
   });
 
+  it("says what is saved there now when the person has changed a target's numbers in the review (MOM-146): the newest change by its day, then by its save", async () => {
+    const mine = seedSetup(ME);
+    const targetId = sp.tables.targets[0].id;
+    const change = (over: Record<string, unknown>) =>
+      add('target_changes', { id: newId(), user_id: ME, target_id: targetId, effective_from: '2026-11-02', floor: 3, aspiration: null, slot_weekdays: null, created_at: '2026-10-31T10:00:00.000000+00:00', ...over });
+    change({});
+    change({ floor: 4, aspiration: 6, slot_weekdays: [2, 4], created_at: '2026-10-31T11:00:00.000000+00:00' });
+    change({ effective_from: '2026-10-26', floor: 9, slot_weekdays: [7], created_at: '2026-10-31T12:00:00.000000+00:00' });
+    const result = await listUnconfirmedStartingPoints();
+    expect(result.ok && result.data.find((p) => p.id === mine.marks[3].id)?.value).toBe('2,4');
+    // One read of the changes, however many targets have a mark.
+    expect(sp.reads.target_changes).toBe(1);
+  });
+
   it('reads once for each kind that has a mark, never once for each mark', async () => {
     seedSetup(ME);
     add('starting_points', markRow(ME, { subject_kind: 'person' }, 'planning_weekday'));
     add('starting_points', markRow(ME, { subject_kind: 'goal', goal_id: sp.tables.goals[0].id }, 'block_weeks'));
     await listUnconfirmedStartingPoints();
-    expect(sp.reads).toEqual({ starting_points: 1, person_day_types: 1, goals: 1, targets: 1, work_items: 1, person_settings: 1 });
+    // target_changes (MOM-146): what the person has since changed on a target they took from a suggestion, one read for all of them.
+    expect(sp.reads).toEqual({ starting_points: 1, person_day_types: 1, goals: 1, targets: 1, target_changes: 1, work_items: 1, person_settings: 1 });
   });
 
   it('returns only the signed-in person\'s, whoever else has marks', async () => {

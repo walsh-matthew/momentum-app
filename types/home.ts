@@ -20,6 +20,8 @@ export interface TargetCardBase {
   dueOn: LocalDate | null;
   floor: number | null;
   aspiration: number | null;
+  // Numbers the person saved that start on a later day (MOM-146): the card shows the ones in force now, and says what is coming.
+  change?: { from: LocalDate; floor: number; aspiration: number | null } | null;
 }
 
 // Day slots: how many of the person's named days are filled this week, and which days they named (0 is Sunday),
@@ -34,6 +36,9 @@ export interface PatternView {
   kind: PatternKind;
   // How many closed weeks running.
   periods: number;
+  // Whether the weekly review of the week this run ended in is already finished (MOM-146): a slipping run that has been reviewed is no
+  // longer pointed at the review.
+  reviewed?: boolean;
 }
 
 export interface TrendView {

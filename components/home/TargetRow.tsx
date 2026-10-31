@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { Tone } from '@/types/database.types';
 import type { TargetCardView } from '@/types/home';
 import type { LocalDate } from '@/types/scoreboard';
+import { homeChangeLine } from '@/components/review/targetChangeWording';
 import { formatNumber, levelChip, levelsText, patternLine, slotDaysText, toAspirationLine, toSettledAspirationLine, trendText } from './wording';
 
 interface TargetRowProps {
@@ -59,7 +60,7 @@ export function TargetRow({ card, tone, settled = false, children, today = null 
 
   const unit = card.unit ? ` ${card.unit}` : '';
   const aspirationLine = settled ? toSettledAspirationLine(card) : toAspirationLine(card);
-  const pattern = card.graded && card.pattern ? patternLine(card.pattern, tone, settled) : null;
+  const pattern = card.graded && card.pattern ? patternLine(card.pattern, tone, settled || card.pattern.reviewed === true) : null;
   const trend = card.trend ? trendText(card.trend) : null;
   const scaleMax = card.floor === null ? 0 : Math.max(card.aspiration ?? card.floor, card.counted);
   const percent = (value: number) => Math.min(100, (value / scaleMax) * 100);
@@ -97,6 +98,8 @@ export function TargetRow({ card, tone, settled = false, children, today = null 
       )}
       {card.slots && card.startedPartway && <p className="home-note">Started partway through the week, so it is shown and not graded.</p>}
       {aspirationLine && <p className="home-next">{aspirationLine}</p>}
+      {/* Numbers the person saved that start on a later day (MOM-146), in the words they were promised when they saved. */}
+      {card.change && <p className="home-note">{homeChangeLine(card.change.from, card, card.change.floor, card.change.aspiration, today)}</p>}
       {card.belowThreshold > 0 && (
         <p className="home-note">
           {card.belowThreshold} below your threshold, kept and not counted.

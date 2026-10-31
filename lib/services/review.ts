@@ -19,6 +19,7 @@
 import {
   buildLayer1Facts,
   canGrade,
+  changeEffectiveFrom,
   closesEarly,
   compareRecapToLive,
   computeScoreboard,
@@ -26,17 +27,19 @@ import {
   reviewAsOf,
   selectLayerThreeAdjustment,
   specProblem,
+  targetInForce,
   weeklyReviewWindow,
 } from '@/lib/engine';
 import { DEFAULT_REVIEW_DEPTH, DEFAULT_REVIEW_PLANNING, DEFAULT_TONE } from '@/lib/home/defaults';
 import { parseStoredRecap } from '@/lib/review/storedRecap';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { PersonPriority, PersonSettingsRow, WeeklyReviewRow } from '@/types/database.types';
-import type { PriorityLine, RecapChange, StoredReview, WeeklyReviewFacts } from '@/types/review';
+import type { PriorityLine, RecapChange, StoredReview, TargetEdit, WeeklyReviewFacts } from '@/types/review';
 import type { Scoreboard, ScoreboardTarget, TimeAnchors } from '@/types/scoreboard';
 import type { ServiceResult } from './result';
 import { buildStoredRecap, recapValues } from './reviewRecap';
 import {
+  rowInForce,
   toAnchors,
   toScoreboardEntries,
   toScoreboardTarget,
@@ -49,6 +52,7 @@ import {
   type ItemRead,
   type SnapshotRead,
   type StepRead,
+  type TargetChangeRead,
   type TargetRead,
 } from './scoreboardRows';
 
@@ -81,6 +85,8 @@ export interface ReviewRows {
   entries: EntryRead[];
   corrections: CorrectionRead[];
   snapshots: SnapshotRead[];
+  // The changes the person saved to a target's levels from a later period (migration 020, MOM-146).
+  changes: TargetChangeRead[];
   priorities: PriorityRead[];
   // The person's finished reviews, newest week first.
   reviews: ReviewRead[];
@@ -165,7 +171,7 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
   const engineTargets: ScoreboardTarget[] = [];
   for (const t of targets) {
     const stepIds = stepIdsOfTarget(t.id);
-    const target = toScoreboardTarget(t, goalById.get(t.goal_id) as ActiveGoalRead, stepIds);
+    const target = toScoreboardTarget(t, goalById.get(t.goal_id) as ActiveGoalRead, stepIds, rows.changes);
     const spec = target.versions[0].spec;
     if (!canGrade(anchors, spec.period.kind).ok) continue;
     if (specProblem(spec) !== null) continue;
@@ -199,7 +205,39 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
 
   const priorities: PriorityLine[] = rows.priorities.map((p) => ({ id: p.id, label: p.label }));
   const facts = buildLayer1Facts(scoreboard, window);
+  // The recap says the numbers the reviewed week was judged by, not ones saved since for a later week.
+  const engineById = new Map(engineTargets.map((e) => [e.id, e]));
+  const recapTargets = targets.map((t) => {
+    const engine = engineById.get(t.id);
+    return engine === undefined ? t : rowInForce(t, targetInForce(engine, window.start));
+  });
+  const adjustment = selectLayerThreeAdjustment(scoreboard, window);
   const offerReflection = (rows.settings?.review_depth ?? DEFAULT_REVIEW_DEPTH) !== 'recap_only';
+
+  // What the edit of the named target starts from: the numbers it will have from the next period (the newest saved change, or the ones
+  // in force), and what the week just reviewed came to. Null for a target the edit does not cover.
+  const editFor = (targetId: string): TargetEdit | null => {
+    const row = targets.find((t) => t.id === targetId);
+    const engine = engineById.get(targetId);
+    if (row === undefined || engine === undefined || anchors.weekStartsOn === null) return null;
+    if ((row.period_kind !== 'weekly' && row.period_kind !== 'day_slots') || row.measure === 'checklist') return null;
+    const latest = engine.versions[engine.versions.length - 1].spec;
+    if (latest.levels === null) return null;
+    return {
+      targetId,
+      title: row.title,
+      measure: row.measure,
+      unit: row.unit,
+      period: row.period_kind,
+      floor: latest.levels.floor,
+      aspiration: latest.levels.aspiration,
+      days: latest.period.kind === 'day_slots' ? latest.period.days.map((d) => (d === 0 ? 7 : d)).sort((a, b) => a - b) : null,
+      weekStartsOn: anchors.weekStartsOn,
+      lastCounted: facts.find((f) => f.targetId === targetId)?.result.counted ?? null,
+      effectiveFrom: changeEffectiveFrom(window.end, today, (goalById.get(row.goal_id) as ActiveGoalRead).start_date, anchors.weekStartsOn),
+      today,
+    };
+  };
 
   return {
     state: 'ready',
@@ -211,14 +249,15 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
       window,
       closedEarly: closesEarly(today, window),
       goals,
-      targets,
+      targets: recapTargets,
       facts,
       priorities,
       weekStartsOn: anchors.weekStartsOn,
     }),
     priorities,
     offerReflection,
-    adjustment: selectLayerThreeAdjustment(scoreboard, window),
+    adjustment,
+    edit: adjustment !== null && 'targetId' in adjustment ? editFor(adjustment.targetId) : null,
     changes,
   };
 }
@@ -246,7 +285,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
   if (authError || !auth.user) return { ok: false, error: SIGNED_OUT };
   const userId = auth.user.id;
 
-  const [settings, goals, targets, items, steps, corrections, snapshots, priorities, reviews, entries] = await Promise.all([
+  const [settings, goals, targets, items, steps, corrections, snapshots, changes, priorities, reviews, entries] = await Promise.all([
     supabase
       .from('person_settings')
       .select('time_zone, week_start, day_end, planning_weekday, review_depth, review_planning, slipping_periods, tone')
@@ -266,6 +305,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
       .from('period_snapshots')
       .select('target_id, period_start, period_end, measure, unit, role, period_kind, slot_weekdays, floor, aspiration, qualifying_threshold, carry_over_kind')
       .eq('user_id', userId),
+    supabase.from('target_changes').select('id, target_id, effective_from, floor, aspiration, slot_weekdays, created_at').eq('user_id', userId),
     supabase.from('person_priorities').select('id, label').eq('user_id', userId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
     supabase
       .from('weekly_reviews')
@@ -283,6 +323,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
     steps.error ||
     corrections.error ||
     snapshots.error ||
+    changes.error ||
     priorities.error ||
     reviews.error ||
     entries === null
@@ -299,6 +340,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
     entries,
     corrections: corrections.data,
     snapshots: snapshots.data,
+    changes: changes.data,
     priorities: priorities.data,
     reviews: reviews.data,
   };

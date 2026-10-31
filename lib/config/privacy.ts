@@ -61,6 +61,12 @@ export const STORED_GROUPS: readonly StoredGroup[] = [
     tables: ['period_snapshots'],
   },
   {
+    id: 'target_changes',
+    words:
+      "Each change you make to a target's numbers from your weekly review, and the day it starts, so earlier weeks keep the numbers they had. For a target that counts on named days, the days too.",
+    tables: ['target_changes'],
+  },
+  {
     id: 'starting_points',
     words:
       'Which setup values you took from a suggestion instead of saying them yourself, so your first weekly review can ask whether they are still right. It holds which value, never what you said.',
