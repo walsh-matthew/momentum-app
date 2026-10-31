@@ -148,12 +148,10 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         const serverErrors = watchForServerErrors(page);
         await page.emulateMedia({ colorScheme: scheme });
         const email = await signUpAndConfirm(page, `theme-screens-${scheme}-${width}`);
-        // Interact on a page that only works once hydrated: open and close the goal wizard (a new account has no goal yet).
+        // Interact on a page that only works once hydrated: the setup card's link goes through Next's client router (a new account has no goal yet).
         await page.goto('/');
-        await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
-        await expect(page.getByRole('dialog', { name: 'New goal wizard' })).toBeVisible();
-        await page.getByRole('button', { name: 'Cancel' }).click();
-        await expect(page.getByRole('dialog', { name: 'New goal wizard' })).toBeHidden();
+        await page.getByRole('link', { name: 'Go to setup' }).click();
+        await expect(page).toHaveURL(/\/setup$/);
         await seedPlan(email, { timeZone: LA, weekStart: 1, weekly: true });
         for (const path of ['/', '/plan', '/review', '/connections', '/settings']) {
           await page.goto(path);

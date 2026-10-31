@@ -1,4 +1,4 @@
-import { LayoutDashboard, Link2, Settings, Target } from 'lucide-react';
+import { LayoutDashboard, Link2, Settings } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { SignOutButton } from '@/components/auth/SignOutButton';
@@ -58,10 +58,6 @@ export function WorkspaceSidebar({ ariaLabel, active, burnoutRisk = null, showPa
         <Link href="/" className="desktop-nav-link" aria-current={link('dashboard')}>
           <LayoutDashboard aria-hidden="true" />
           Daily Dashboard
-        </Link>
-        <Link href="/#active-goals" className="desktop-nav-link">
-          <Target aria-hidden="true" />
-          Goal Channels
         </Link>
         <Link href="/connections" className="desktop-nav-link" aria-current={link('connections')}>
           <Link2 aria-hidden="true" />

@@ -3,7 +3,7 @@
 // that has no account gives the same answer and sends nothing. A throwaway account is made for each test through the
 // sign-up form; the standing smoke-test account is never used.
 
-import { PASSWORD, expect, messageCountFor, recoveryLinkFor, signUpAndConfirm, submitCredentials, test, uniqueEmail } from './fixtures';
+import { PASSWORD, expect, expectHomeLoaded, messageCountFor, recoveryLinkFor, signUpAndConfirm, submitCredentials, test, uniqueEmail } from './fixtures';
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -57,7 +57,7 @@ test.describe('password reset', () => {
     await page.getByLabel('Confirm new password').fill(NEW_PASSWORD);
     await page.getByRole('button', { name: 'Set new password' }).click();
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+    await expectHomeLoaded(page);
 
     // Sign in with the new password; the old one no longer works.
     await signOutFromSettings(page);
@@ -65,7 +65,7 @@ test.describe('password reset', () => {
     await expect(page.locator('form [role="alert"]')).toHaveText(/invalid login credentials/i);
     await submitCredentials(page, email, NEW_PASSWORD, 'Sign in');
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+    await expectHomeLoaded(page);
 
     // The link works once: opened again (here in a fresh browser) it is used up, and goes back to /login with the way
     // to ask for another.
@@ -95,7 +95,7 @@ test.describe('password reset', () => {
     await phonePage.getByLabel('Confirm new password').fill(NEW_PASSWORD);
     await phonePage.getByRole('button', { name: 'Set new password' }).click();
     await expect(phonePage).toHaveURL(/\/$/);
-    await expect(phonePage.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+    await expectHomeLoaded(phonePage);
     await phone.close();
 
     // The laptop never held a session; the new password signs in there, and the link is now used up.
