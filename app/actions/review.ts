@@ -17,8 +17,10 @@ export async function askForReviewLine(): Promise<ServiceResult<ReviewLineResult
 }
 
 // Finishes this week's review, once, with the person's choice about the one adjustment it offered (or none when nothing was offered).
-export async function finishReview(outcome: unknown): Promise<ServiceResult<FinishedReview>> {
-  const result = await recordFinishedReview(outcome);
+// When the review asked "Still right for you?" instead, `answers` holds the person's answer to each suggestion (mark id to kept or
+// changed) and `outcome` is null (MOM-113 block 3.4). Both arrive as `unknown`: the service checks them against what it recomputes.
+export async function finishReview(outcome: unknown, answers?: unknown): Promise<ServiceResult<FinishedReview>> {
+  const result = await recordFinishedReview(outcome, {}, answers);
   if (result.ok) {
     revalidatePath('/review');
     revalidatePath('/');

@@ -5,7 +5,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ENFORCED_CONSTRAINTS, ENFORCED_PLAN_CONSTRAINTS, ENFORCED_REVIEW_CONSTRAINTS, ENFORCED_TARGET_CHANGE_CONSTRAINTS } from './helpers/fakeEntriesModel';
+import {
+  ENFORCED_CONSTRAINTS,
+  ENFORCED_PLAN_CONSTRAINTS,
+  ENFORCED_REVIEW_CONSTRAINTS,
+  ENFORCED_STARTING_POINT_CONSTRAINTS,
+  ENFORCED_TARGET_CHANGE_CONSTRAINTS,
+} from './helpers/fakeEntriesModel';
 
 // Statements only: comments say things like "never edited" and would match.
 const sql = readFileSync(join(process.cwd(), 'supabase', 'migrations', '013_goal_model_tables.sql'), 'utf8').replace(/--.*$/gm, '');
@@ -95,5 +101,19 @@ describe('the goal model fake matches migration 020', () => {
     expect(sql020).toMatch(/create trigger target_changes_set_created_at before insert on public\.target_changes/);
     expect(sql020).toMatch(/new\.created_at := clock_timestamp\(\)/);
     expect(sql020).not.toMatch(/\bunique\b/i);
+  });
+});
+
+// Migration 017 (MOM-134): the starting_points table the weekly review now reads and answers (MOM-113 block 3.4).
+const sql017 = readFileSync(join(process.cwd(), 'supabase', 'migrations', '017_starting_points.sql'), 'utf8').replace(/--.*$/gm, '');
+
+describe('the goal model fake matches migration 017', () => {
+  it.each([...ENFORCED_STARTING_POINT_CONSTRAINTS])('%s exists in the SQL', (name) => {
+    expect(sql017).toMatch(new RegExp(`(constraint|policy)\\s+"?${name}"?\\b`, 'i'));
+  });
+
+  it('an answer is the only update, and only of answered_at and outcome, as the fake allows', () => {
+    expect(sql017).toContain('grant update (answered_at, outcome) on table public.starting_points to authenticated;');
+    expect(sql017).toContain('grant select, insert on table public.starting_points to authenticated;');
   });
 });

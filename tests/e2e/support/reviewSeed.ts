@@ -43,6 +43,9 @@ export interface ReviewSeedOptions {
   // The review depth and the way review and planning go together, as the person chose them. Unset: not chosen (the defaults).
   reviewDepth?: 'recap_only' | 'recap_offer' | 'full';
   reviewPlanning?: 'one_sitting' | 'separate';
+  // Setup suggestions the person took on the workouts target, to be asked about at this review (MOM-113 block 3.4): the values of
+  // targets.floor and targets.aspiration, each marked as a starting point the way save_guided_setup marks it.
+  suggestions?: Array<'floor' | 'aspiration'>;
 }
 
 export interface ReviewSeed {
@@ -112,6 +115,10 @@ export async function seedReview(email: string, options: ReviewSeedOptions): Pro
       .single(),
     'the target',
   );
+  for (const field of options.suggestions ?? []) {
+    const mark = await supabase.from('starting_points').insert({ user_id: userId, subject_kind: 'target', target_id: target.id, field });
+    if (mark.error) throw new Error(`Could not seed a starting point (code ${mark.error.code}).`);
+  }
   must(await supabase.from('person_priorities').insert({ user_id: userId, label: REVIEW_TITLES.priority, sort_order: 0 }).select('id').single(), 'a priority');
 
   // Two workouts in the reviewed week: its floor is 2, so the week ends at the floor, 2 short of the aspiration. 20:00 UTC is
@@ -210,4 +217,19 @@ export async function readFinishedReviews(email: string): Promise<Array<{ week_s
   await supabase.auth.signOut({ scope: 'local' });
   if (rows.error) throw new Error(`Could not read the finished reviews (code ${rows.error.code}).`);
   return rows.data;
+}
+
+// The starting points a throwaway account has, read back as that person through row level security with the local anon key (never the
+// service role): which value each is about, and the answer if one was given. Oldest first.
+export async function readStartingPoints(email: string): Promise<Array<{ field: string; outcome: string | null; answered: boolean }>> {
+  const { serverEnv } = readLocalStackEnv();
+  const supabase = createClient<Database>(serverEnv.NEXT_PUBLIC_SUPABASE_URL, serverEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const signedIn = await supabase.auth.signInWithPassword({ email, password: PASSWORD });
+  if (signedIn.error || !signedIn.data.user) throw new Error('Could not sign the throwaway account in to read its starting points.');
+  const rows = await supabase.from('starting_points').select('field, outcome, answered_at').order('created_at').order('field');
+  await supabase.auth.signOut({ scope: 'local' });
+  if (rows.error) throw new Error(`Could not read the starting points (code ${rows.error.code}).`);
+  return rows.data.map((r) => ({ field: r.field, outcome: r.outcome, answered: r.answered_at !== null }));
 }

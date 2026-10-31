@@ -26,11 +26,11 @@ import { checkReflectionLine, readReflectionReply, type ReflectionFacts } from '
 import { runReviewLine } from '@/lib/services/llm';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
-// The owner's cap for all of MOM-113's live calls is $0.10. One case is at most two calls of about half a cent.
+// The owner's cap for all of MOM-113's live calls is $0.10 (block 3.4: four cases, at most two calls each). One call is about a fifth of a cent.
 const MAX_COST_USD = 0.1;
 
-// Three weeks, made up: one that went well, one slipping (with a title that holds a digit and one that looks like an ask, so the
-// exemption is exercised live), and one with nothing judged.
+// Four weeks, made up: one that went well, one slipping (with a title that holds a digit and one that looks like an ask, so the
+// exemption is exercised live), and one with nothing judged in the direct tone and again in the gentle one (block 3.4: the warmer prompt).
 const CASES: Record<string, ReflectionFacts> = {
   floor_met: {
     tone: 'middle',
@@ -48,6 +48,10 @@ const CASES: Record<string, ReflectionFacts> = {
   },
   nothing_judged: {
     tone: 'direct',
+    targets: [{ title: 'Study', level: 'tracked, not judged', crossings: [], patterns: [], trend: null }],
+  },
+  nothing_judged_gentle: {
+    tone: 'gentle',
     targets: [{ title: 'Study', level: 'tracked, not judged', crossings: [], patterns: [], trend: null }],
   },
 };

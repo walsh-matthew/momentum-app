@@ -223,6 +223,7 @@ describe('the title of a card', () => {
     { file: 'components/rebalance/RebalanceDrawer.tsx', match: /text-lg font-semibold|text-sm font-medium/, why: 'titles and groups in the drawer sheet' },
     { file: 'components/rebalance/RebalanceSideCard.tsx', match: /eyebrow/, why: 'an eyebrow label, not a title' },
     { file: 'components/review/ReviewScreen.tsx', match: /Your last review/, why: 'a heading over the recap cards' },
+    { file: 'components/review/StillRightCard.tsx', match: /review-fit-name/, why: "a target's name above its rows inside the card" },
     { file: 'components/setup/QuickPathCard.tsx', match: /CARD_TEXT\.note|Still needed/, why: "the quick path's muted section labels (setup's one bold line is its lead)" },
     { file: 'components/tasks/RecentlyDoneList.tsx', match: /recently-done-heading/, why: 'a heading over the task cards' },
     { file: 'components/tasks/UpNextList.tsx', match: /up-next-heading/, why: 'a heading over the task cards' },

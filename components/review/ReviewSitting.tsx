@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { askForReviewLine, finishReview } from '@/app/actions/review';
 import { busyProps } from '@/lib/forms/mainButton';
-import type { ReviewAdjustmentOutcome } from '@/types/database.types';
-import type { ReviewLineResult, SavedTargetChange, TargetEdit } from '@/types/review';
+import type { ReviewAdjustmentOutcome, StartingPointOutcome } from '@/types/database.types';
+import type { ReviewLineResult, SavedTargetChange, StillRightItem, TargetEdit } from '@/types/review';
 import { CHOICE_ORDER, NO_ADJUSTMENT, type AdjustmentView } from './adjustmentWording';
 import {
   ASKING_CLAUDE,
@@ -17,6 +17,7 @@ import {
   LINE_HELP,
   LINE_SOURCE,
 } from './sittingWording';
+import { StillRightCard, type FitAnswers } from './StillRightCard';
 import { TargetChangeForm } from './TargetChangeForm';
 import { CHANGE_AGAIN, savedLine } from './targetChangeWording';
 
@@ -31,17 +32,24 @@ interface ReviewSittingProps {
   adjustment: AdjustmentView | null;
   // What "Yes, I want to change it" opens: the edit of the adjustment's target. Null when it cannot be edited here (MOM-146).
   edit?: TargetEdit | null;
+  // The setup suggestions to ask about, with the edits of their targets (MOM-113 block 3.4). When there are any, the card takes the adjustment's place.
+  stillRight?: { items: StillRightItem[]; edits: TargetEdit[] };
 }
 
 // The rest of the sitting after layer 1's recap (docs/DOMAIN_MODEL.md §3.1): layer 2's one-line look back, only when the person
-// taps for it; layer 3's one question, with three equal choices; and the one button that finishes the review. Everything the
+// taps for it; layer 3's one question, with three equal choices (or, at the review that has setup suggestions to ask about, "Still right
+// for you?" in its place, MOM-113 block 3.4); and the one button that finishes the review. Everything the
 // screen shows is decided on the server: the words are templates in code and the line is checked there. The recap above and the
 // record that is stored never depend on anything here but the person's choice. "Yes, I want to change it" opens the edit of that
 // target in the same card (MOM-146), so the choice and the line from Claude are not lost; the stored outcome stays "changed".
 // The finish button appears when there is something to finish: after a choice, or after the change was saved (MOM-145: no button
 // that is there but cannot be used).
-export function ReviewSitting({ offerLine, adjustment, edit = null }: ReviewSittingProps) {
+export function ReviewSitting({ offerLine, adjustment, edit = null, stillRight: stillRightNow = { items: [], edits: [] } }: ReviewSittingProps) {
   const router = useRouter();
+  // The questions the sitting began with. Saving a change to a target refreshes this page, and the server then counts that target's
+  // suggestions as already changed, so they leave the asked list; the sitting keeps asking what it began with, and the finish records them.
+  const [stillRight] = useState(stillRightNow);
+  const askingFit = stillRight.items.length > 0;
   const [asking, setAsking] = useState(false);
   const [line, setLine] = useState<ReviewLineResult | null>(null);
   const [lineError, setLineError] = useState<string | null>(null);
@@ -49,6 +57,10 @@ export function ReviewSitting({ offerLine, adjustment, edit = null }: ReviewSitt
   const [saved, setSaved] = useState<SavedTargetChange | null>(null);
   // Whether the form is open again after a save ("Change it again").
   const [reopened, setReopened] = useState(false);
+  // "Still right for you?": the answer to each suggestion, the target whose form is open, and the changes saved in this sitting.
+  const [fit, setFit] = useState<FitAnswers>({});
+  const [formFor, setFormFor] = useState<string | null>(null);
+  const [savedByTarget, setSavedByTarget] = useState<Record<string, SavedTargetChange>>({});
   const [finishError, setFinishError] = useState<string | null>(null);
   const [finishing, startFinish] = useTransition();
   const savedNote = useRef<HTMLParagraphElement>(null);
@@ -73,7 +85,7 @@ export function ReviewSitting({ offerLine, adjustment, edit = null }: ReviewSitt
     setFinishError(null);
     startFinish(async () => {
       try {
-        const result = await finishReview(adjustment === null ? null : choice);
+        const result = askingFit ? await finishReview(null, fit) : await finishReview(adjustment === null ? null : choice);
         if (result.ok) router.refresh();
         else startFinish(() => setFinishError(result.error));
       } catch {
@@ -87,7 +99,45 @@ export function ReviewSitting({ offerLine, adjustment, edit = null }: ReviewSitt
   const formOpen = changing && (saved === null || reopened);
   const savedShown = changing && saved !== null && !reopened;
   // Nothing to finish yet while the edit is open and unsaved, or before a choice.
-  const canFinish = adjustment === null || (choice !== null && !formOpen);
+  const fitDone = stillRight.items.every((item) => fit[item.id] !== undefined) && formFor === null;
+  const canFinish = askingFit ? fitDone : adjustment === null || (choice !== null && !formOpen);
+
+  // A tap on an answer. "No, change it" opens the form of that target (one at a time; another unsaved one is closed and its answers cleared).
+  function answerFit(item: StillRightItem, answer: StartingPointOutcome) {
+    const next = { ...fit, [item.id]: answer };
+    if (answer === 'changed' && formFor !== item.targetId) {
+      // One form at a time: an unsaved one elsewhere is closed and the "change" answers it opened for are taken back.
+      if (formFor !== null && savedByTarget[formFor] === undefined) {
+        for (const i of stillRight.items) if (i.targetId === formFor && next[i.id] === 'changed') delete next[i.id];
+      }
+      setFormFor(item.targetId);
+    } else if (answer === 'kept' && formFor === item.targetId && savedByTarget[item.targetId] === undefined) {
+      // The last "change" on this target was taken back: nothing to edit, so the form goes.
+      if (!stillRight.items.some((i) => i.targetId === item.targetId && next[i.id] === 'changed')) setFormFor(null);
+    }
+    setFit(next);
+  }
+  function cancelFit(targetId: string) {
+    setFormFor(null);
+    // Never mind on an unsaved form takes back the "change" answers it opened for; a saved target keeps its answers.
+    if (savedByTarget[targetId] === undefined) {
+      setFit((now) => {
+        const next = { ...now };
+        for (const item of stillRight.items) if (item.targetId === targetId && next[item.id] === 'changed') delete next[item.id];
+        return next;
+      });
+    }
+  }
+  function savedFit(targetId: string, result: SavedTargetChange) {
+    setSavedByTarget((now) => ({ ...now, [targetId]: result }));
+    setFormFor(null);
+    // The numbers are the person's own now: a row of this target they had not answered is theirs changed, and the server records it so.
+    setFit((now) => {
+      const next = { ...now };
+      for (const item of stillRight.items) if (item.targetId === targetId && next[item.id] === undefined) next[item.id] = 'changed';
+      return next;
+    });
+  }
 
   // After a save the form is gone: move to the sentence that says what was saved, so a screen reader and the keyboard follow.
   useEffect(() => {
@@ -119,7 +169,22 @@ export function ReviewSitting({ offerLine, adjustment, edit = null }: ReviewSitt
         </section>
       )}
 
-      {adjustment !== null && (
+      {askingFit && (
+        <StillRightCard
+          items={stillRight.items}
+          edits={stillRight.edits}
+          answers={fit}
+          formFor={formFor}
+          saved={savedByTarget}
+          disabled={finishing}
+          onAnswer={answerFit}
+          onSaved={savedFit}
+          onCancel={cancelFit}
+          onReopen={setFormFor}
+        />
+      )}
+
+      {!askingFit && adjustment !== null && (
         <section aria-label="One thing to decide" className="home-notice review-card">
           <h2 className="card-title">{adjustment.question}</h2>
           <p className="home-note">{adjustment.detail}</p>
@@ -177,7 +242,7 @@ export function ReviewSitting({ offerLine, adjustment, edit = null }: ReviewSitt
 
       {canFinish && (
         <section aria-label="Finish your review" className="home-notice review-card">
-          {adjustment === null && <p className="home-note">{NO_ADJUSTMENT}</p>}
+          {!askingFit && adjustment === null && <p className="home-note">{NO_ADJUSTMENT}</p>}
           <button
             type="button"
             className="min-h-11 justify-self-start rounded-xl border border-transparent bg-primary px-5 text-sm font-semibold text-primary-foreground primary-hover"

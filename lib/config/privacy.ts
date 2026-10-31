@@ -75,7 +75,7 @@ export const STORED_GROUPS: readonly StoredGroup[] = [
   {
     id: 'weekly_reviews',
     words:
-      'A copy of each weekly recap you finish, as it was shown: each target, what crossed that week, and the priorities you named in your own words. It is never rewritten, so a later entry shows beside it in words instead of changing it.',
+      'A copy of each weekly recap you finish, as it was shown: each target, what crossed that week, and the priorities you named in your own words. It is never rewritten, so a later entry shows beside it in words instead of changing it. When the review asked whether a setup suggestion is still right, it also keeps which value and your answer, never what you said.',
     tables: ['weekly_reviews'],
   },
   {

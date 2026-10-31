@@ -125,9 +125,13 @@ export type WeeklyReviewFacts =
       // Whether layer 2's one-line look back is offered at all, per the review depth setting. The line itself is asked for
       // only when the person taps for it (lib/services/reviewReflection.ts); this is only whether to show the button.
       offerReflection: boolean;
+      // The engine's one adjustment. Null while "Still right for you?" has something to ask: that card takes layer 3's place for the
+      // sitting, and the engine's adjustment is found again at the next review (patterns are recomputed each time).
       adjustment: LayerThreeAdjustment | null;
       // The edit the adjustment's "change" choice opens, when it names a target that can be edited here (MOM-146).
       edit: TargetEdit | null;
+      // Setup suggestions to ask about (MOM-113 block 3.4).
+      stillRight: StillRightMarks;
       // Earlier finished reviews that a later entry has changed since.
       changes: RecapChange[];
     };
@@ -158,4 +162,30 @@ export interface UnconfirmedStartingPoint {
   // What is saved there now, as text; null when nothing is.
   value: string | null;
   createdAt: string;
+  // The target a target's mark belongs to; null for every other kind.
+  targetId: string | null;
+  // True when the person has since changed this value themselves (MOM-113 block 3.4): a target's floor, aspiration or days with a
+  // saved change (migration 020, MOM-146). A mark they changed is theirs to skip, never asked about again.
+  changed: boolean;
+}
+
+// The three target values the review's edit can change today (MOM-146), and so the only starting points "Still right for you?" asks
+// about. A mark on any other value stays unanswered until the app can change it (MOM-113 block 3.4 decision, 2026-10-31).
+export const STILL_RIGHT_FIELDS = ['floor', 'aspiration', 'slot_weekdays'] as const;
+export type StillRightField = (typeof STILL_RIGHT_FIELDS)[number];
+
+// One setup suggestion to ask about: the mark, the target it belongs to and which of its values it names.
+export interface StillRightItem {
+  id: string;
+  targetId: string;
+  field: StillRightField;
+}
+
+// The marks of a ready review (docs/DOMAIN_MODEL.md §3.2, "a suggestion taken at setup"). `asking` is what the card shows, oldest first.
+// `changed` are marks whose value the person has already changed: never asked, recorded as changed when the review is finished.
+// `edits` are the edits of the targets being asked about, so "No, change it" opens MOM-146's form.
+export interface StillRightMarks {
+  asking: StillRightItem[];
+  changed: StillRightItem[];
+  edits: TargetEdit[];
 }

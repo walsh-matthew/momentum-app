@@ -11,13 +11,15 @@
 // - (block 3.3) the whole sitting through the real screen, server actions, services, budget and database, with the FAKE model of
 //   tests/e2e/support/fakeAnthropic.ts answering as Claude (no paid call, no key): nothing is asked of Claude until the person
 //   taps, the request carries only their target title, one finish stores the review once with their choice, and a reply that
-//   fails code's checks is replaced by a plain line from Momentum; the review depth and the planning setting are followed.
+//   fails code's checks is replaced by a plain line from Momentum; the review depth and the planning setting are followed,
+// - (block 3.4) "Still right for you?" through the real screen, services and database at 390px: it asks about the setup suggestions on a
+//   target's numbers in layer 3's place, stores each answer once with the review, and "No, change it" opens MOM-146's form and settles the target.
 // Any 5xx response from the app fails the spec.
 
 import type { Page } from '@playwright/test';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
-import { REVIEW_TITLES, laToday, readFinishedReviews, readTargetChanges, seedReview, shiftDay } from './support/reviewSeed';
+import { REVIEW_TITLES, laToday, readFinishedReviews, readStartingPoints, readTargetChanges, seedReview, shiftDay } from './support/reviewSeed';
 
 // What the fake model has been asked (tests/e2e/support/fakeAnthropic.ts): how many weekly-review lines, and the facts of the newest.
 const fakeLast = async (): Promise<{ reviewRequests: number; lastReviewFacts: string }> =>
@@ -225,6 +227,71 @@ test.describe('the sitting in the situations a person can be in (390px)', () => 
     await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
     expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: 'slipping_check_in', adjustment_outcome: 'skipped' }]);
     expect(await readTargetChanges(email)).toEqual([]);
+    expect(serverErrors()).toEqual([]);
+  });
+
+  test('"Still right for you?" takes the place of layer 3\'s question at the review, and each answer is stored once with it (MOM-113 block 3.4)', async ({ page }) => {
+    const serverErrors = watchForServerErrors(page);
+    const email = await signUpAndConfirm(page, 'sitting-still-right');
+    // A slipping week would raise layer 3's check-in; the two suggestions take its place for this sitting.
+    const seed = await seedReview(email, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, week: 'none', suggestions: ['floor', 'aspiration'] });
+    await page.goto('/review');
+    await page.waitForLoadState('networkidle');
+    const card = page.getByRole('region', { name: 'Still right for you?' });
+    await expect(card.getByRole('heading', { name: 'Still right for you?' })).toBeVisible();
+    await expect(card.getByText('At setup you took these as suggestions instead of saying them yourself. Does each one still fit?')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'One thing to decide' })).toHaveCount(0);
+    await expect(card.getByRole('heading', { name: 'Workouts', level: 3 })).toHaveCount(1);
+    await expect(card.getByText('2 workouts in a hard week still count.')).toBeVisible();
+    await expect(card.getByText('Hoping for 4 workouts a week.')).toBeVisible();
+    await expect(card.getByRole('radio', { checked: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
+    expect(await overflowOfReview(page)).toBe(0);
+
+    await card.getByRole('radiogroup', { name: 'Workouts: 2 workouts in a hard week still count' }).getByRole('radio', { name: 'Yes, it fits' }).click();
+    await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
+    await card.getByRole('radiogroup', { name: 'Workouts: Hoping for 4 workouts a week' }).getByRole('radio', { name: 'Yes, it fits' }).click();
+    await expect(card.getByRole('radio', { checked: true })).toHaveCount(2);
+    await page.getByRole('button', { name: 'Finish review' }).click();
+    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+
+    expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: 'still_right', adjustment_outcome: 'declined' }]);
+    expect(await readStartingPoints(email)).toEqual([
+      { field: 'floor', outcome: 'kept', answered: true },
+      { field: 'aspiration', outcome: 'kept', answered: true },
+    ]);
+    expect(await readTargetChanges(email)).toEqual([]);
+    expect(serverErrors()).toEqual([]);
+  });
+
+  test('"No, change it" opens the form, a saved change settles the target, and both suggestions are recorded as changed (MOM-113 block 3.4)', async ({ page }) => {
+    const serverErrors = watchForServerErrors(page);
+    const email = await signUpAndConfirm(page, 'sitting-still-right-change');
+    const seed = await seedReview(email, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, week: 'none', suggestions: ['floor', 'aspiration'] });
+    await page.goto('/review');
+    await page.waitForLoadState('networkidle');
+    const card = page.getByRole('region', { name: 'Still right for you?' });
+    await card.getByRole('radiogroup', { name: 'Workouts: Hoping for 4 workouts a week' }).getByRole('radio', { name: 'No, change it' }).click();
+    const edit = card.getByRole('form', { name: 'Change this target' });
+    await expect(edit).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
+    await edit.getByRole('textbox', { name: /would still count/ }).fill('3');
+    await edit.getByRole('textbox', { name: /hoping for/ }).fill('5');
+    await edit.getByRole('button', { name: 'Save the change' }).click();
+    await expect(card.getByText(/^Saved\. From /)).toBeVisible();
+    await expect(card.getByRole('form')).toHaveCount(0);
+    // The target is settled: both rows are the person's change and neither can say the opposite.
+    await expect(card.getByRole('radio', { checked: true })).toHaveCount(2);
+    for (const radio of await card.getByRole('radio').all()) await expect(radio).toBeDisabled();
+    await page.getByRole('button', { name: 'Finish review' }).click();
+    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+
+    expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: 'still_right', adjustment_outcome: 'changed' }]);
+    expect(await readStartingPoints(email)).toEqual([
+      { field: 'floor', outcome: 'changed', answered: true },
+      { field: 'aspiration', outcome: 'changed', answered: true },
+    ]);
+    expect(await readTargetChanges(email)).toEqual([expect.objectContaining({ floor: 3, aspiration: 5 })]);
     expect(serverErrors()).toEqual([]);
   });
 

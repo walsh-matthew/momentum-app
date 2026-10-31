@@ -4,6 +4,9 @@
 // migration 018 stores: whether this week's review is already finished, the last finished one, and which earlier
 // recaps a later entry has changed since (RAID R-26).
 //
+// "Still right for you?" (block 3.4): the setup suggestions on a target's numbers that nobody has asked about yet, from
+// lib/services/startingPoints.ts; lib/review/stillRight.ts picks the ones to ask.
+//
 // Nothing here writes a weekly_reviews row (lib/services/reviewRecords.ts does, from block 3.3's finish button) or
 // calls Claude (lib/services/reviewReflection.ts does, only when the person taps for a line).
 //
@@ -31,13 +34,15 @@ import {
   weeklyReviewWindow,
 } from '@/lib/engine';
 import { DEFAULT_REVIEW_DEPTH, DEFAULT_REVIEW_PLANNING, DEFAULT_TONE } from '@/lib/home/defaults';
+import { stillRightMarks } from '@/lib/review/stillRight';
 import { parseStoredRecap } from '@/lib/review/storedRecap';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { PersonPriority, PersonSettingsRow, WeeklyReviewRow } from '@/types/database.types';
-import type { PriorityLine, RecapChange, StoredReview, TargetEdit, WeeklyReviewFacts } from '@/types/review';
+import type { PriorityLine, RecapChange, StoredReview, TargetEdit, UnconfirmedStartingPoint, WeeklyReviewFacts } from '@/types/review';
 import type { Scoreboard, ScoreboardTarget, TimeAnchors } from '@/types/scoreboard';
 import type { ServiceResult } from './result';
 import { buildStoredRecap, recapValues } from './reviewRecap';
+import { readUnconfirmedStartingPoints } from './startingPoints';
 import {
   rowInForce,
   toAnchors,
@@ -90,6 +95,8 @@ export interface ReviewRows {
   priorities: PriorityRead[];
   // The person's finished reviews, newest week first.
   reviews: ReviewRead[];
+  // The setup suggestions nobody has asked about yet (lib/services/startingPoints.ts, MOM-134).
+  startingPoints: UnconfirmedStartingPoint[];
 }
 
 export interface WeeklyReviewFactsDeps {
@@ -211,7 +218,7 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
     const engine = engineById.get(t.id);
     return engine === undefined ? t : rowInForce(t, targetInForce(engine, window.start));
   });
-  const adjustment = selectLayerThreeAdjustment(scoreboard, window);
+  const engineAdjustment = selectLayerThreeAdjustment(scoreboard, window);
   const offerReflection = (rows.settings?.review_depth ?? DEFAULT_REVIEW_DEPTH) !== 'recap_only';
 
   // What the edit of the named target starts from: the numbers it will have from the next period (the newest saved change, or the ones
@@ -239,6 +246,12 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
     };
   };
 
+  // "Still right for you?" takes layer 3's place while it has something to ask: the review raises one thing at a time, and the engine's
+  // adjustment is found again next review. When every suggestion is already the person's own change there is nothing to ask.
+  const stillRight = stillRightMarks(rows.startingPoints, editFor);
+  const asking = stillRight.asking.length > 0;
+  const adjustment = asking ? null : engineAdjustment;
+
   return {
     state: 'ready',
     tone,
@@ -258,6 +271,7 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
     offerReflection,
     adjustment,
     edit: adjustment !== null && 'targetId' in adjustment ? editFor(adjustment.targetId) : null,
+    stillRight,
     changes,
   };
 }
@@ -285,7 +299,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
   if (authError || !auth.user) return { ok: false, error: SIGNED_OUT };
   const userId = auth.user.id;
 
-  const [settings, goals, targets, items, steps, corrections, snapshots, changes, priorities, reviews, entries] = await Promise.all([
+  const [settings, goals, targets, items, steps, corrections, snapshots, changes, priorities, reviews, startingPoints, entries] = await Promise.all([
     supabase
       .from('person_settings')
       .select('time_zone, week_start, day_end, planning_weekday, review_depth, review_planning, slipping_periods, tone')
@@ -313,6 +327,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
       .eq('user_id', userId)
       .order('week_start', { ascending: false })
       .limit(REVIEWS_READ),
+    readUnconfirmedStartingPoints(supabase, userId),
     readEntries(supabase, userId),
   ]);
   if (
@@ -326,6 +341,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
     changes.error ||
     priorities.error ||
     reviews.error ||
+    !startingPoints.ok ||
     entries === null
   ) {
     return { ok: false, error: LOAD_FAILED };
@@ -343,6 +359,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
     changes: changes.data,
     priorities: priorities.data,
     reviews: reviews.data,
+    startingPoints: startingPoints.data,
   };
   return { ok: true, data: buildWeeklyReviewFacts(rows, (deps.now ?? Date.now)()) };
 }
