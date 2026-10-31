@@ -2,7 +2,7 @@
 // (MOM-61). The confirmation link comes from the local Mailpit inbox. No account is made through the auth admin API
 // (it returns 500 here; see BACKLOG.md).
 
-import { PASSWORD, confirmationLinkFor, expect, signUpAndConfirm, submitCredentials, test, uniqueEmail } from './fixtures';
+import { PASSWORD, confirmationLinkFor, expect, expectHomeLoaded, signUpAndConfirm, submitCredentials, test, uniqueEmail } from './fixtures';
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -41,7 +41,7 @@ test.describe('the account lifecycle', () => {
     // Follow the link from the Mailpit inbox, in the same browser: lands signed in on the home page.
     await page.goto(await confirmationLinkFor(email));
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+    await expectHomeLoaded(page);
     // A new account starts empty (migration 010): no goals, so home offers setup (MOM-143) in place of the old "No goals yet" card.
     await expect(page.getByRole('heading', { name: 'Set up your goals' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'No goals yet' })).toHaveCount(0);
@@ -64,14 +64,14 @@ test.describe('the account lifecycle', () => {
     // Sign in again with the same credentials.
     await submitCredentials(page, email, PASSWORD, 'Sign in');
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+    await expectHomeLoaded(page);
   });
 
   test('the sidebar and the mobile header show who is signed in (MOM-64)', async ({ page }) => {
     const email = await signUpAndConfirm(page, 'who');
 
     // Desktop: the sidebar names the account on the home page and on the other pages.
-    await expect(page.getByRole('complementary', { name: 'Goal channels' }).getByText(email)).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'Workspace' }).getByText(email)).toBeVisible();
     await page.goto('/connections');
     await expect(page.getByRole('complementary', { name: 'Workspace' }).getByText(email)).toBeVisible();
 

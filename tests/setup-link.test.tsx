@@ -2,7 +2,7 @@
 //
 // The way back to guided setup on home (MOM-143). Setup is first-setup-only (migration 015), so home offers it only to a person
 // whose first setup is not saved, in one calm card with one link, and never to a person whose setup is saved. The old "No goals yet"
-// card says nearly the same thing in the same place, so when the setup card shows, that card does not: one message, one link.
+// card no longer shows on home at all (MOM-115, trial subset): one message, one link.
 // What decides it is the scoreboard the page already read (no second read), and a scoreboard that could not be read offers nothing.
 
 import { cleanup, render, screen, within } from '@testing-library/react';
@@ -82,7 +82,6 @@ describe('the setup card', () => {
 describe('home with and without a saved setup', () => {
   const renderHome = (home: HomeScoreboard | null | undefined) =>
     render(<AppShell views={EMPTY_CHANNEL_VIEWS} connectedApps={[]} moveChains={{}} home={home} />);
-  const main = () => within(screen.getByRole('main'));
   const setupLinks = () => screen.queryAllByRole('link', { name: 'Go to setup' });
 
   it('no setup saved: the setup card shows with its one link, and the old "No goals yet" card is gone', () => {
@@ -91,7 +90,7 @@ describe('home with and without a saved setup', () => {
     expect(setupLinks()).toHaveLength(1);
     // One message, one place: nothing else on the page says there are no goals or offers to start the first one.
     expect(screen.queryByRole('heading', NO_GOALS_CARD)).toBeNull();
-    expect(main().queryByRole('button', { name: 'Set up your first goal' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set up your first goal' })).toBeNull();
   });
 
   // The feed under these is the old model's empty state (no active channel), which would say "No goals yet" to a person who has
@@ -128,13 +127,13 @@ describe('home with and without a saved setup', () => {
     renderHome(null);
     expect(screen.queryByRole('region', SETUP_CARD)).toBeNull();
     expect(document.querySelector('a[href="/setup"]')).toBeNull();
-    expect(screen.getByRole('status').textContent).toContain('Could not load your scoreboard.');
+    expect(screen.getByRole('alert').textContent).toContain("Your goals didn't load just now.");
+    noOldGoalsCard();
   });
 
-  it('signed out (no scoreboard passed): no setup card, and the feed keeps its own state', () => {
+  it('signed out (no scoreboard passed): no setup card, and no old "No goals yet" card either', () => {
     renderHome(undefined);
     expect(screen.queryByRole('region', SETUP_CARD)).toBeNull();
-    // Nothing about setup is offered, so the feed's own "No goals yet" is untouched.
-    expect(screen.getByRole('heading', NO_GOALS_CARD)).toBeTruthy();
+    noOldGoalsCard();
   });
 });

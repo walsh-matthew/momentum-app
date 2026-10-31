@@ -6,7 +6,6 @@ import { getHomeScoreboard } from '@/lib/services/scoreboard';
 import { getHomePlan } from '@/lib/services/weekPlan';
 import { getPlanSnapshot, type PlanSnapshot } from '@/lib/services/tasks';
 import { buildChannelViews } from '@/lib/utils/channelViews';
-import { summarizeActiveGoalProgress } from '@/lib/utils/progress';
 import { groupMovesByTask } from '@/lib/utils/rebalance';
 import { LOAD_FAILED_CHANNEL_VIEWS, SIGNED_OUT_CHANNEL_VIEWS } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
@@ -105,15 +104,11 @@ export default async function HomePage() {
     ? buildChannelViews(snapshot.goals, snapshot.tasks, snapshot.history, snapshot.today)
     : LOAD_FAILED_CHANNEL_VIEWS;
   const moveChains = groupMovesByTask(snapshot?.history ?? []);
-  // Progress per active goal for the sidebar and the goal cards, counted from the same snapshot (no second
-  // read), so it only ever covers this user's own goals and tasks.
-  const progress = snapshot ? summarizeActiveGoalProgress(snapshot.goals, snapshot.tasks, snapshot.today) : [];
   return (
     <AppShell
       views={views}
       connectedApps={connectedApps}
       moveChains={moveChains}
-      progress={progress}
       userEmail={user.email}
       home={home}
       plan={plan}

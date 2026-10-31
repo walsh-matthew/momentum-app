@@ -7,7 +7,7 @@
 // has no kind, and for a person with deadline goals only. Any 5xx response from the app fails the spec.
 
 import type { Page } from '@playwright/test';
-import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
+import { WIDTHS, expect, expectHomeLoaded, signUpAndConfirm, test } from './fixtures';
 import { FORECAST_TITLES, seedForecast } from './support/forecastSeed';
 import { HOME_TITLES, seedHome } from './support/homeSeed';
 import { shiftDay } from './support/reviewSeed';
@@ -63,12 +63,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       // A milestone has no forecast: nothing about whether it fits.
       await expect(goal).not.toContainText(/\b(fits|tight|on track|behind)\b/i);
 
-      // Above the old feed, which is unchanged and still there.
-      const feed = page.getByRole('heading', { name: 'Make today count.' });
-      await expect(feed).toBeVisible();
+      // The old feed is not under it any more (MOM-115): a person with no old-model tasks sees nothing of the old model.
+      await expect(page.getByRole('heading', { name: 'Make today count.' })).toHaveCount(0);
       const heroBox = await hero.boundingBox();
-      const feedBox = await feed.boundingBox();
-      expect(heroBox && feedBox && heroBox.y < feedBox.y).toBe(true);
 
       if (width === WIDTHS.phone) {
         // One column: nothing in the new cards runs past the screen.
@@ -239,7 +236,7 @@ test.describe('the states a person can be in (390px)', () => {
     await page.goto('/');
     await expect(page.getByText(/Set your time zone to see your week/)).toBeVisible();
     await expect(page.getByRole('region', { name: 'This week' })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+    await expectHomeLoaded(page);
     expect(serverErrors()).toEqual([]);
   });
 });

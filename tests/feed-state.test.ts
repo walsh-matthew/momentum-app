@@ -233,17 +233,18 @@ describe('the home page and the empty states (source)', () => {
     expect(raw).not.toContain('Your execution feed will appear here');
     const feed = strip(raw);
     expect(feed).not.toMatch(/\.length\s*[>=!<]/);
+    // The old model's feed shows only when it has something to show (MOM-115, trial subset); the rest is decided by one predicate.
     expect(feed).toContain("feedState === 'signed_out'");
-    expect(feed).toContain("feedState === 'load_failed'");
-    expect(feed).toContain("feedState === 'no_goals'");
-    expect(feed).toContain("feedState === 'no_tasks'");
-    expect(feed).toContain("feedState === 'all_done'");
     expect(feed).toContain("feedState === 'tasks'");
+    expect(feed).toContain("feedState === 'all_done'");
+    expect(feed).toContain('if (!showsOldFeed(feedState)) return null');
+    for (const hidden of ['load_failed', 'no_goals', 'no_tasks']) expect(feed).not.toContain("feedState === '" + hidden + "'");
   });
 
-  it('the wizard is rendered once, in AppShell, not in the sidebar or the feed', () => {
-    expect([...strip(read('components', 'layout', 'AppShell.tsx')).matchAll(/<GoalBuilderWizard/g)]).toHaveLength(1);
+  it('the wizard is not rendered on home any more (MOM-115, trial subset); its component and tests stay', () => {
+    expect(strip(read('components', 'layout', 'AppShell.tsx'))).not.toContain('GoalBuilderWizard');
     expect(strip(read('components', 'layout', 'NavSidebar.tsx'))).not.toContain('GoalBuilderWizard');
     expect(strip(read('components', 'layout', 'MainFeed.tsx'))).not.toContain('GoalBuilderWizard');
+    expect(read('components', 'goals', 'GoalBuilderWizard.tsx')).toContain('export function GoalBuilderWizard');
   });
 });
