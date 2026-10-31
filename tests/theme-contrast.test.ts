@@ -46,6 +46,23 @@ describe.each(['dark', 'light'] as const)('%s theme', (theme) => {
     }
   });
 
+  // The quick path's choices (MOM-111, components/setup/AnswerChoice.tsx choiceClasses): the answers a person did not choose are plain,
+  // no fill and the accent border every unchosen choice has (MOM-145, `.answer-choice`); the one they chose is filled with the accent
+  // and a check mark. Both have to read in both themes: the words of each at 4.5:1, the check on the fill (a graphic, 3:1, and it is
+  // the button's own text colour, so 4.5:1), the fill itself as a shape against the card (3:1), and the border of a plain one as an
+  // edge (3:1).
+  it('a chosen answer reads, and stands out from a plain one: the words, the check, the fill and the edge', () => {
+    const card = colourOf(theme, '--card-fill');
+    // Chosen: the accent fill with its own text colour (and its check, which draws in that colour).
+    expect(contrast(colourOf(theme, '--primary-foreground'), colourOf(theme, '--primary')), 'the chosen answer\'s words and check on the fill').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(colourOf(theme, '--primary'), card), 'the chosen answer\'s fill against the card').toBeGreaterThanOrEqual(3);
+    // Plain: the ordinary text colour on the card, and the accent border as an edge against it.
+    expect(contrast(colourOf(theme, '--foreground'), card), 'a plain answer\'s words on the card').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(colourOf(theme, '--accent'), card), 'a plain answer\'s border against the card').toBeGreaterThanOrEqual(3);
+    // And the two look different: the chosen fill is far from the card, the plain answer is the card.
+    expect(contrast(colourOf(theme, '--primary'), card)).toBeGreaterThan(contrast(card, card));
+  });
+
   it('text on a hovered accent button still reads at 4.5:1, over every surface it can sit on', () => {
     const share = Number(resolve('var(--hover-primary)', THEMES[theme]).replace('%', '')) / 100;
     const base = resolve('var(--hover-base)', THEMES[theme]);
@@ -61,6 +78,12 @@ describe.each(['dark', 'light'] as const)('%s theme', (theme) => {
       ['--danger on the red fill (9%)', '--danger', tint(theme, '--red-rgb', 0.09, '--card-fill')],
       ['--streak on the amber alert fill (8%)', '--streak', tint(theme, '--amber-rgb', 0.08, '--card-fill')],
       ['--streak on the amber alert fill (8%, on the page)', '--streak', tint(theme, '--amber-rgb', 0.08, '--background')],
+      // The quick path's "Needs your answer" callout (MOM-111, components/setup/NeedsAnswer.tsx): its label is --streak (above), and
+      // its question, its note and the words of every control inside it sit on the same amber fill.
+      ['--foreground, the callout question, on the amber callout fill (8%)', '--foreground', tint(theme, '--amber-rgb', 0.08, '--card-fill')],
+      ['--muted, the callout note, on the amber callout fill (8%)', '--muted', tint(theme, '--amber-rgb', 0.08, '--card-fill')],
+      ['--foreground on the amber callout fill (8%, on the page)', '--foreground', tint(theme, '--amber-rgb', 0.08, '--background')],
+      ['--muted on the amber callout fill (8%, on the page)', '--muted', tint(theme, '--amber-rgb', 0.08, '--background')],
       ['--lime on the accent chip (9%)', '--lime', tint(theme, '--lime-rgb', 0.09, '--card-fill')],
       ['--text-lime-1 on the badge (6%)', '--text-lime-1', tint(theme, '--lime-rgb', 0.06, '--card-fill')],
       ['--text-lime-1 on a good pattern (7%)', '--text-lime-1', tint(theme, '--lime-rgb', 0.07, '--card-fill')],

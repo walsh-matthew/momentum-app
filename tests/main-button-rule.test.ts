@@ -22,7 +22,6 @@ const EXEMPT: Record<string, string> = {
   'components/ui/button.tsx': 'the definition of the shared Button: its base styles fade any disabled button, and no main one is disabled',
   'components/setup/SetupButton.tsx': 'the definition of the setup button (a main one takes busy instead of disabled)',
   'components/setup/AnswerChoice.tsx': 'an answer is filled only while it is enabled (filled = main and not disabled), so a locked one is not a main button',
-  'components/setup/QuickPathCard.tsx': "the quick path's card (MOM-111) already shows its main button only when it can save; it merges separately, and day-end checks it",
 };
 
 interface Tag {
@@ -82,6 +81,7 @@ describe('the main-button rule', () => {
       'components/review/ReviewSitting.tsx',
       'components/rebalance/RebalanceDrawer.tsx',
       'components/setup/AnswerBox.tsx',
+      'components/setup/QuickPathCard.tsx',
       'components/entries/NumberControl.tsx',
       'components/integrations/ConnectionControls.tsx',
     ]) expect(where.has(file), file).toBe(true);
