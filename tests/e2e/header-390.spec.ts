@@ -1,9 +1,9 @@
 // The whole page at 390px with a long email address, on every signed-in page (MOM-131, RAID I-09). The sticky header's "Signed in as"
 // row used to run wider than a phone, so the page scrolled sideways; the specs before this one looked only at their own section or
-// card. Here the page as a whole must not scroll sideways, and where the header has its Sign out button, the button is fully on
-// the screen. A guard fails the spec when a page is added to app/ without being listed below, so the sweep cannot fall behind.
-// Screenshots are written only when HEADER_SCREENSHOT_DIR names a folder (outside the repo), numbered 01 to 04 in light and 05 to 08
-// in dark (E2E_COLOR_SCHEME=dark); without it the checks still run.
+// card. Here the page as a whole must not scroll sideways, and every page has a way home and a Sign out button fully on the
+// screen: the header's on home, Connected apps and Settings, and the back row's (MOM-148) on the rest. A guard fails the spec when a page is added to app/ without being listed below, so the sweep cannot fall behind.
+// Screenshots are written only when HEADER_SCREENSHOT_DIR names a folder (outside the repo), named <page>-<light|dark>-390.png
+// (E2E_COLOR_SCHEME=dark for dark); without it the checks still run.
 
 import { mkdirSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -18,17 +18,16 @@ const LA = 'America/Los_Angeles';
 // Long enough that the address, not the screen, is the widest thing in the row (the local part stays under 64 characters).
 const LONG_LABEL = 'a-very-long-throwaway-address-for-390';
 
-// Every signed-in page. `header` is true where the sticky header, with its Sign out button, is on the page. `shot` is the
-// screenshot's number within its theme (light 1 to 4, dark 5 to 8).
+// Every signed-in page. `header` is true where the sticky header is on the page; the others have the back row.
 const SIGNED_IN = [
-  { path: '/', header: true, shot: 1, name: 'home' },
-  { path: '/plan', header: false, shot: 2, name: 'plan' },
-  { path: '/settings', header: true, shot: 3, name: 'settings' },
-  { path: '/connections', header: true, shot: 4, name: 'connections' },
-  { path: '/review', header: false },
-  { path: '/log', header: false },
-  { path: '/setup', header: false },
-  { path: '/privacy', header: false },
+  { path: '/', header: true, name: 'home' },
+  { path: '/plan', header: false, name: 'plan' },
+  { path: '/settings', header: true, name: 'settings' },
+  { path: '/connections', header: true, name: 'connections' },
+  { path: '/review', header: false, name: 'review' },
+  { path: '/log', header: false, name: 'log' },
+  { path: '/setup', header: false, name: 'setup' },
+  { path: '/privacy', header: false, name: 'privacy' },
 ] as const;
 // Pages a signed-out visitor sees, which have no signed-in row to check.
 const SIGNED_OUT = ['/login', '/auth/reset'];
@@ -70,10 +69,13 @@ test.describe(`at ${WIDTHS.phone}px with a long email address`, () => {
       const { scroll, view } = await sideways(page);
       expect(scroll, `${route.path} scrolls sideways`).toBeLessThanOrEqual(view);
 
-      // The header is inside a region on the page, so it is not a "banner" landmark there; the class names it.
-      const signOut = page.locator('.mobile-header').getByRole('button', { name: 'Sign out' });
-      if (route.header) await expect(signOut, `${route.path} has the header's Sign out`).toBeVisible();
-      // On a page without the header there is none; if one is ever added, it must be on the screen too.
+      // The header is inside a region on the page, so it is not a "banner" landmark there; the class names it. Without it, the
+      // page's own back row holds the way home and Sign out.
+      const scope = route.header ? page.locator('.mobile-header') : page.locator('main');
+      const signOut = scope.getByRole('button', { name: 'Sign out' });
+      await expect(signOut, `${route.path} has a Sign out`).toBeVisible();
+      const home = route.header ? scope.getByRole('link', { name: 'Momentum home' }) : scope.getByRole('link', { name: 'Back to home' });
+      await expect(home, `${route.path} has a way home`).toBeVisible();
       for (const button of await signOut.all()) {
         const box = await button.boundingBox();
         expect(box, `${route.path}: Sign out has a box`).not.toBeNull();
@@ -81,10 +83,27 @@ test.describe(`at ${WIDTHS.phone}px with a long email address`, () => {
         expect(box!.x + box!.width, `${route.path}: Sign out ends on the screen`).toBeLessThanOrEqual(WIDTHS.phone);
       }
 
-      if (SHOTS && 'shot' in route) {
-        const number = String(route.shot + (DARK ? 4 : 0)).padStart(2, '0');
-        await page.screenshot({ path: join(SHOTS, `${number}-${route.name}-${DARK ? 'dark' : 'light'}.png`) });
-      }
+      if (SHOTS) await page.screenshot({ path: join(SHOTS, `${route.name}-${DARK ? 'dark' : 'light'}-${WIDTHS.phone}.png`) });
+    }
+  });
+});
+
+// The back row is the same on a desktop: the way home and Sign out sit on the page too (the owner asked for it at every width,
+// MOM-148). The sidebar and the header on home, Connected apps and Settings are not changed.
+test.describe(`at ${WIDTHS.desktop}px`, () => {
+  test.use({ viewport: { width: WIDTHS.desktop, height: 900 } });
+
+  test('the plan page has the way home and Sign out', async ({ page }) => {
+    const email = await signUpAndConfirm(page, LONG_LABEL);
+    await seedPlan(email, { timeZone: LA, weekStart: 1, weekly: true });
+    await page.goto('/plan');
+    await expect(page.locator('main h1, main h2').first()).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('main').getByRole('link', { name: 'Back to home' })).toBeVisible();
+    await expect(page.locator('main').getByRole('button', { name: 'Sign out' })).toBeVisible();
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: join(SHOTS, `plan-${DARK ? 'dark' : 'light'}-${WIDTHS.desktop}.png`) });
     }
   });
 });

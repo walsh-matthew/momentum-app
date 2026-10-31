@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { PageBackRow } from '@/components/layout/PageBackRow';
 import { ReviewScreen } from '@/components/review/ReviewScreen';
 import { getCurrentUser } from '@/lib/services/auth';
 import { getWeeklyReviewFacts } from '@/lib/services/review';
@@ -18,9 +18,7 @@ export default async function ReviewPage() {
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-2xl px-4 py-6">
-      <Link href="/" className="text-sm text-muted underline-offset-4 hover:underline">
-        Back to home
-      </Link>
+      <PageBackRow />
       <h1 className="mt-3 text-[25px] font-semibold leading-tight tracking-[-0.055em]">Weekly review</h1>
       <div className="mt-5">
         {facts === null || !facts.ok ? (

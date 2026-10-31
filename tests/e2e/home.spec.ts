@@ -21,8 +21,7 @@ function watchForServerErrors(page: Page): () => string[] {
 }
 
 // How far the new cards reach past the right edge of the screen: nothing inside them may. This looks at the new section
-// only. The sticky header's "Signed in as" row, which is not part of this block, can run wider than a phone with a long
-// email address (BACKLOG.md, MOM-112).
+// only; header-390.spec.ts checks the whole page's width.
 const overflowOfScoreboard = (page: Page) =>
   page.evaluate(() => {
     const right = Math.max(0, ...Array.from(document.querySelectorAll('.home-scoreboard, .home-scoreboard *')).map((el) => el.getBoundingClientRect().right));

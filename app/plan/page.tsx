@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { PageBackRow } from '@/components/layout/PageBackRow';
 import { PlanScreen } from '@/components/plan/PlanScreen';
-import { BACK_HOME, LOAD_FAILED_PLAN, PLAN_HEADING, needsDaysText } from '@/components/plan/wording';
+import { LOAD_FAILED_PLAN, PLAN_HEADING, needsDaysText } from '@/components/plan/wording';
 import { getCurrentUser } from '@/lib/services/auth';
 import { getWeekPlan } from '@/lib/services/weekPlan';
 
@@ -26,9 +26,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-2xl px-4 py-6">
-      <Link href="/" className="text-sm text-muted underline-offset-4 hover:underline">
-        {BACK_HOME}
-      </Link>
+      <PageBackRow />
       <h1 className="mt-3 text-[25px] font-semibold leading-tight tracking-[-0.055em]">{PLAN_HEADING}</h1>
       <div className="mt-5">
         {plan === null || !plan.ok ? (
