@@ -16,9 +16,11 @@ export default async function PrivacyPage() {
   const user = await getCurrentUser().catch(() => null);
   const signedIn = user !== null && user.ok && user.data !== null;
   return (
-    <main className="mx-auto w-full max-w-2xl p-4 py-8">
+    <div className="mx-auto w-full max-w-2xl p-4 py-8">
       {signedIn && <PageBackRow className="mb-3" />}
-      <PrivacyNotice signedIn={signedIn} />
-    </main>
+      <main>
+        <PrivacyNotice signedIn={signedIn} />
+      </main>
+    </div>
   );
 }

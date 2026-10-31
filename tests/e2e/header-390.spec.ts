@@ -71,7 +71,7 @@ test.describe(`at ${WIDTHS.phone}px with a long email address`, () => {
 
       // The header is inside a region on the page, so it is not a "banner" landmark there; the class names it. Without it, the
       // page's own back row holds the way home and Sign out.
-      const scope = route.header ? page.locator('.mobile-header') : page.locator('main');
+      const scope = route.header ? page.locator('.mobile-header') : page.getByRole('navigation', { name: 'Page' });
       const signOut = scope.getByRole('button', { name: 'Sign out' });
       await expect(signOut, `${route.path} has a Sign out`).toBeVisible();
       const home = route.header ? scope.getByRole('link', { name: 'Momentum home' }) : scope.getByRole('link', { name: 'Back to home' });
@@ -99,8 +99,9 @@ test.describe(`at ${WIDTHS.desktop}px`, () => {
     await page.goto('/plan');
     await expect(page.locator('main h1, main h2').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('main').getByRole('link', { name: 'Back to home' })).toBeVisible();
-    await expect(page.locator('main').getByRole('button', { name: 'Sign out' })).toBeVisible();
+    const row = page.getByRole('navigation', { name: 'Page' });
+    await expect(row.getByRole('link', { name: 'Back to home' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Sign out' })).toBeVisible();
     if (SHOTS) {
       mkdirSync(SHOTS, { recursive: true });
       await page.screenshot({ path: join(SHOTS, `plan-${DARK ? 'dark' : 'light'}-${WIDTHS.desktop}.png`) });

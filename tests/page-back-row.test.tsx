@@ -20,6 +20,13 @@ describe('PageBackRow', () => {
     expect(screen.getByRole('button', { name: 'Sign out' }).getAttribute('type')).toBe('submit');
   });
 
+  it('is page navigation, so a page puts it beside its <main> rather than in it', () => {
+    render(<PageBackRow />);
+    const row = screen.getByRole('navigation', { name: 'Page' });
+    expect(row.contains(screen.getByRole('link', { name: 'Back to home' }))).toBe(true);
+    expect(row.contains(screen.getByRole('button', { name: 'Sign out' }))).toBe(true);
+  });
+
   it('shows no email address, so a long one cannot widen the page', () => {
     const { container } = render(<PageBackRow />);
     expect(container.textContent).toBe('Back to homeSign out');

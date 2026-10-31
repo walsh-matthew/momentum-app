@@ -25,22 +25,24 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   const plan = await getWeekPlan(week).catch(() => null);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-2xl px-4 py-6">
+    <div className="mx-auto min-h-dvh w-full max-w-2xl px-4 py-6">
       <PageBackRow />
-      <h1 className="mt-3 text-[25px] font-semibold leading-tight tracking-[-0.055em]">{PLAN_HEADING}</h1>
-      <div className="mt-5">
-        {plan === null || !plan.ok ? (
-          <p role="alert" className="text-sm text-danger">
-            {plan === null ? LOAD_FAILED_PLAN : plan.error}
-          </p>
-        ) : plan.data.state === 'needs_day_anchors' ? (
-          <p role="status" className="home-notice">
-            {needsDaysText(plan.data)}
-          </p>
-        ) : (
-          <PlanScreen plan={plan.data} />
-        )}
-      </div>
-    </main>
+      <main>
+        <h1 className="mt-3 text-[25px] font-semibold leading-tight tracking-[-0.055em]">{PLAN_HEADING}</h1>
+        <div className="mt-5">
+          {plan === null || !plan.ok ? (
+            <p role="alert" className="text-sm text-danger">
+              {plan === null ? LOAD_FAILED_PLAN : plan.error}
+            </p>
+          ) : plan.data.state === 'needs_day_anchors' ? (
+            <p role="status" className="home-notice">
+              {needsDaysText(plan.data)}
+            </p>
+          ) : (
+            <PlanScreen plan={plan.data} />
+          )}
+        </div>
+      </main>
+    </div>
   );
 }
