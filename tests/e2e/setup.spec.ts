@@ -190,7 +190,12 @@ for (const [name, width] of Object.entries(WIDTHS)) {
             keptAsIs = true;
             await page.getByRole('button', { name: 'Change something' }).click();
             await expect(page.getByLabel(CHANGE_PROMPT)).toHaveAttribute('placeholder', 'Type your answer');
+            // "Send the change" is a main button, so it is not there until the box has a value (MOM-145).
+            await expect(page.getByRole('button', { name: 'Send the change' })).toHaveCount(0);
+            await page.getByLabel(CHANGE_PROMPT).fill('x');
             await expect(page.getByRole('button', { name: 'Send the change' })).toBeVisible();
+            await page.getByLabel(CHANGE_PROMPT).fill('');
+            await expect(page.getByRole('button', { name: 'Send the change' })).toHaveCount(0);
             await inView(page, page.getByRole('button', { name: KEEP_IT }));
             await page.getByRole('button', { name: KEEP_IT }).click();
           } else {
