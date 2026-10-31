@@ -60,7 +60,7 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       await signUpAndConfirm(page, `shots-wizard-${THEME}-${width}`);
       await page.waitForLoadState('networkidle');
       await shot(page, 'home-empty', width);
-      await page.getByRole('button', { name: 'Set up your first goal' }).click();
+      await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
       const wizard = page.getByRole('dialog', { name: 'New goal wizard' });
       await expect(wizard).toBeVisible();
       await shot(page, 'wizard', width, false);

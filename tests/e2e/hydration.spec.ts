@@ -25,7 +25,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
       await page.waitForLoadState('networkidle');
       // Interact: open and close the goal wizard, which only works once the page has hydrated.
-      await page.getByRole('button', { name: 'Set up your first goal' }).click();
+      await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
       await expect(page.getByRole('dialog', { name: 'New goal wizard' })).toBeVisible();
       await page.getByRole('button', { name: 'Cancel' }).click();
       await expect(page.getByRole('dialog', { name: 'New goal wizard' })).toBeHidden();

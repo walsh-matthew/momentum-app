@@ -150,7 +150,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         const email = await signUpAndConfirm(page, `theme-screens-${scheme}-${width}`);
         // Interact on a page that only works once hydrated: open and close the goal wizard (a new account has no goal yet).
         await page.goto('/');
-        await page.getByRole('button', { name: 'Set up your first goal' }).click();
+        await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
         await expect(page.getByRole('dialog', { name: 'New goal wizard' })).toBeVisible();
         await page.getByRole('button', { name: 'Cancel' }).click();
         await expect(page.getByRole('dialog', { name: 'New goal wizard' })).toBeHidden();

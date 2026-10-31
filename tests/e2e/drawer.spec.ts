@@ -12,7 +12,7 @@ import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 async function accountWithGoal(page: Page, label: string) {
   await signUpAndConfirm(page, label);
   await page.waitForLoadState('networkidle');
-  await page.getByRole('button', { name: 'Set up your first goal' }).click();
+  await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
   const wizard = page.getByRole('dialog', { name: 'New goal wizard' });
   await wizard.getByRole('button', { name: 'Get certified' }).click();
   for (let i = 0; i < 3; i++) await wizard.getByRole('button', { name: 'Next' }).click();
