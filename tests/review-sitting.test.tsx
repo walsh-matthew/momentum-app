@@ -224,16 +224,18 @@ describe("layer 3: the one question, with three equal choices", () => {
 });
 
 describe('the finish: one button, once', () => {
-  it('is off until a choice is made when something was offered, and says why', () => {
+  it('is solid from the start; tapped with nothing chosen it says "Choose one first.", moves to the choices and saves nothing (MOM-145)', () => {
     sitting();
     const finish = screen.getByRole('button', { name: 'Finish review' }) as HTMLButtonElement;
-    expect(finish.disabled).toBe(true);
-    expect(screen.getByText('Choose one of the three above to finish.')).toBeTruthy();
+    expect(finish.disabled).toBe(false);
+    expect(screen.queryByText('Choose one first.')).toBeNull();
     fireEvent.click(finish);
+    expect(screen.getByRole('alert').textContent).toBe('Choose one first.');
+    expect(document.activeElement).toBe(screen.getAllByRole('radio')[0]);
     expect(finishReview).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('radio', { name: 'Skip for now' }));
+    expect(screen.queryByText('Choose one first.')).toBeNull();
     expect(finish.disabled).toBe(false);
-    expect(screen.queryByText('Choose one of the three above to finish.')).toBeNull();
   });
 
   it.each([
@@ -267,7 +269,9 @@ describe('the finish: one button, once', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Skip for now' }));
     fireEvent.click(screen.getByRole('button', { name: 'Finish review' }));
     const saving = (await screen.findByRole('button', { name: 'Saving…' })) as HTMLButtonElement;
-    expect(saving.disabled).toBe(true);
+    // Busy, not disabled (MOM-145): still solid, says so, and ignores a second tap.
+    expect(saving.disabled).toBe(false);
+    expect(saving.getAttribute('aria-busy')).toBe('true');
     fireEvent.click(saving);
     fireEvent.click(screen.getByRole('radio', { name: 'No, keep it as it is' }));
     expect(finishReview).toHaveBeenCalledTimes(1);

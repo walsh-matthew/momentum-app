@@ -178,12 +178,18 @@ describe('Apply', () => {
     expect(await drawer().findByRole('heading', { name: 'Moved 1 task' })).toBeTruthy();
   });
 
-  it('with every move unticked there is nothing to apply', () => {
+  it('with every move unticked, Apply stays solid; a tap says "Choose at least one shift.", moves to the shifts and applies nothing (MOM-145)', () => {
     open();
     fireEvent.click(drawer().getByRole('checkbox', { name: /Study cloud security/ }));
     fireEvent.click(drawer().getByRole('checkbox', { name: /Build the demo/ }));
-    expect((drawer().getByRole('button', { name: 'Apply 0 shifts' }) as HTMLButtonElement).disabled).toBe(true);
+    const apply = drawer().getByRole('button', { name: 'Apply shifts' }) as HTMLButtonElement;
+    expect(apply.disabled).toBe(false);
+    fireEvent.click(apply);
+    expect(drawer().getByRole('alert').textContent).toBe('Choose at least one shift.');
+    expect(document.activeElement).toBe(drawer().getAllByRole('checkbox')[0]);
     expect(actions.apply).not.toHaveBeenCalled();
+    fireEvent.click(drawer().getByRole('checkbox', { name: /Study cloud security/ }));
+    expect(drawer().queryByText('Choose at least one shift.')).toBeNull();
   });
 
   it('lists the tasks the server left where they were, with its reason', async () => {

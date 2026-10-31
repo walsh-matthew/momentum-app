@@ -33,7 +33,8 @@ interface AnswerBoxProps {
 
 // A text box and a send button, for every setup card that takes the person's own words (MOM-111 findings 1 and 2): the box,
 // then Send straight under it, then any help link, small and muted. The box has a visible border, a slightly lighter fill
-// than the card and a clear focus ring; Send is dimmed only while the box is empty. The text is sent as typed, trimmed, and
+// than the card and a clear focus ring; a main Send is not there until the box has a value, and then it is the solid accent
+// (MOM-145: never disabled or faded; while a reply loads it stays solid and says it is busy). The text is sent as typed, trimmed, and
 // the box empties after it is sent. It is the card's one submit button (round 2, finding 8), and a small × clears the box.
 export function AnswerBox({
   label,
@@ -95,9 +96,17 @@ export function AnswerBox({
         )}
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
-        <SetupButton tone={submitTone} type="submit" disabled={!hasText} aria-disabled={!hasText || busy}>
-          {busy ? 'Thinking…' : submitLabel}
-        </SetupButton>
+        {submitTone === 'main' ? (
+          hasText && (
+            <SetupButton tone="main" type="submit" busy={busy}>
+              {busy ? 'Thinking…' : submitLabel}
+            </SetupButton>
+          )
+        ) : (
+          <SetupButton tone="second" type="submit" disabled={!hasText} aria-disabled={!hasText || busy}>
+            {busy ? 'Thinking…' : submitLabel}
+          </SetupButton>
+        )}
         {secondary && (
           <SetupButton tone="second" disabled={busy} onClick={secondary.onClick}>
             {secondary.label}

@@ -1,9 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState, type FormEvent } from 'react';
 import { authenticate } from '@/app/actions/auth';
 import { Button } from '@/components/ui/button';
+import { MainButton } from '@/components/ui/MainButton';
+import { MissingCallout } from '@/components/ui/MissingCallout';
+import { checkForm, type RequiredField } from '@/lib/forms/missing';
 import type { AuthFormState, CaptchaConfig } from '@/types/auth';
 import { AuthBrand, FIELD_CLASS, LINK_CLASS } from './AuthCardParts';
 import { CaptchaWidget } from './CaptchaWidget';
@@ -16,11 +19,24 @@ interface SignInFormProps {
 
 const INITIAL_STATE: AuthFormState = { error: null, notice: null };
 
+// What a tap on either button needs first (MOM-145): a form with two fields keeps its buttons visible and answers a tap with a callout.
+const REQUIRED: RequiredField[] = [
+  { name: 'email', what: 'your email address' },
+  { name: 'password', what: 'your password', minLength: 8 },
+];
+
 export function SignInForm({ initialError = null, captcha = null }: SignInFormProps) {
   const [state, formAction, pending] = useActionState(authenticate, { ...INITIAL_STATE, error: initialError });
+  const [missing, setMissing] = useState<string | null>(null);
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    const gap = checkForm(event.currentTarget, REQUIRED);
+    if (gap) event.preventDefault();
+    setMissing(gap?.message ?? null);
+  };
 
   return (
-    <form action={formAction} className="score-card w-full max-w-sm flex-col items-stretch gap-4 p-6">
+    <form action={formAction} onSubmit={onSubmit} noValidate className="score-card w-full max-w-sm flex-col items-stretch gap-4 p-6">
       <AuthBrand />
       <h1 className="text-lg font-semibold tracking-[-0.03em]">Sign in to Momentum</h1>
       <label className="flex flex-col gap-1 text-sm font-medium">
@@ -52,9 +68,10 @@ export function SignInForm({ initialError = null, captcha = null }: SignInFormPr
           {state.notice}
         </p>
       )}
-      <Button type="submit" name="intent" value="signin" disabled={pending}>
-        {pending ? 'Working…' : 'Sign in'}
-      </Button>
+      <MissingCallout message={missing} />
+      <MainButton type="submit" name="intent" value="signin" busy={pending} busyLabel="Working…">
+        Sign in
+      </MainButton>
       <Button type="submit" name="intent" value="signup" variant="outline" disabled={pending}>
         Create account
       </Button>

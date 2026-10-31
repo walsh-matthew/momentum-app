@@ -1,15 +1,17 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { askForReviewLine, finishReview } from '@/app/actions/review';
+import { MissingCallout } from '@/components/ui/MissingCallout';
+import { busyProps } from '@/lib/forms/mainButton';
 import type { ReviewAdjustmentOutcome } from '@/types/database.types';
 import type { ReviewLineResult } from '@/types/review';
 import { CHOICE_ORDER, NO_ADJUSTMENT, type AdjustmentView } from './adjustmentWording';
 import {
   ASKING_CLAUDE,
   FINISH_BUTTON,
-  FINISH_HINT,
+  FINISH_NEEDS_CHOICE,
   FINISHING,
   LINE_BUTTON,
   LINE_FAILED,
@@ -19,7 +21,7 @@ import {
 } from './sittingWording';
 
 // The look of a tappable answer, the same as the theme choice in settings: at least 44px tall, so a thumb can hit it, and the
-// accent tint (components layer, app/globals.css) until it is the one chosen.
+// accent outline (components layer, app/globals.css) until it is the one chosen.
 const BUTTON_BASE = 'min-h-11 rounded-xl border py-2 text-sm font-medium transition-colors disabled:opacity-70';
 
 interface ReviewSittingProps {
@@ -41,6 +43,8 @@ export function ReviewSitting({ offerLine, adjustment }: ReviewSittingProps) {
   const [choice, setChoice] = useState<ReviewAdjustmentOutcome | null>(null);
   const [finishError, setFinishError] = useState<string | null>(null);
   const [finishing, startFinish] = useTransition();
+  const [needsChoiceShown, setNeedsChoiceShown] = useState(false);
+  const choices = useRef<HTMLDivElement>(null);
 
   async function ask() {
     setAsking(true);
@@ -60,6 +64,12 @@ export function ReviewSitting({ offerLine, adjustment }: ReviewSittingProps) {
   // the error and the restored "Finish review" button then show in the same render, never the error beside "Saving…".
   function finish() {
     setFinishError(null);
+    // The button is always there and solid; with nothing chosen a tap says what is missing and moves to the choices (MOM-145).
+    if (adjustment !== null && choice === null) {
+      setNeedsChoiceShown(true);
+      choices.current?.querySelector<HTMLElement>('[role="radio"]')?.focus();
+      return;
+    }
     startFinish(async () => {
       try {
         const result = await finishReview(adjustment === null ? null : choice);
@@ -103,7 +113,7 @@ export function ReviewSitting({ offerLine, adjustment }: ReviewSittingProps) {
         <section aria-label="One thing to decide" className="home-notice review-card">
           <h2 className="card-title">{adjustment.question}</h2>
           <p className="home-note">{adjustment.detail}</p>
-          <div role="radiogroup" aria-label="Your choice" className="review-choices">
+          <div ref={choices} role="radiogroup" aria-label="Your choice" className="review-choices">
             {CHOICE_ORDER.map((outcome) => (
               <button
                 key={outcome}
@@ -111,7 +121,10 @@ export function ReviewSitting({ offerLine, adjustment }: ReviewSittingProps) {
                 role="radio"
                 aria-checked={choice === outcome}
                 disabled={finishing}
-                onClick={() => setChoice(outcome)}
+                onClick={() => {
+                  setNeedsChoiceShown(false);
+                  setChoice(outcome);
+                }}
                 className={`${BUTTON_BASE} px-3 text-left ${choice === outcome ? 'border-transparent bg-primary text-primary-foreground' : 'answer-choice text-foreground'}`}
               >
                 {adjustment.choices[outcome]}
@@ -126,12 +139,11 @@ export function ReviewSitting({ offerLine, adjustment }: ReviewSittingProps) {
 
       <section aria-label="Finish your review" className="home-notice review-card">
         {adjustment === null && <p className="home-note">{NO_ADJUSTMENT}</p>}
-        {needsChoice && <p className="home-note">{FINISH_HINT}</p>}
+        {needsChoice && needsChoiceShown && <MissingCallout message={FINISH_NEEDS_CHOICE} />}
         <button
           type="button"
-          className="min-h-11 justify-self-start rounded-xl border border-transparent bg-primary px-5 text-sm font-semibold text-primary-foreground primary-hover disabled:opacity-60"
-          disabled={needsChoice || finishing}
-          onClick={finish}
+          className="min-h-11 justify-self-start rounded-xl border border-transparent bg-primary px-5 text-sm font-semibold text-primary-foreground primary-hover"
+          {...busyProps<HTMLButtonElement>(finishing, finish)}
         >
           {finishing ? FINISHING : FINISH_BUTTON}
         </button>

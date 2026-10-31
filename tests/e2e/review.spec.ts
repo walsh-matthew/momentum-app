@@ -15,6 +15,7 @@
 // Any 5xx response from the app fails the spec.
 
 import type { Page } from '@playwright/test';
+import { FINISH_NEEDS_CHOICE } from '@/components/review/sittingWording';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
 import { REVIEW_TITLES, laToday, readFinishedReviews, seedReview, shiftDay } from './support/reviewSeed';
@@ -124,8 +125,11 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(question.getByRole('heading', { name: `Want to change anything about “${REVIEW_TITLES.workouts}”?` })).toBeVisible();
       await expect(question.getByText(/weeks in a row/)).toBeVisible();
       await expect(question.getByRole('radio')).toHaveCount(3);
-      await expect(page.getByRole('button', { name: 'Finish review' })).toBeDisabled();
-      await expect(page.getByText('Choose one of the three above to finish.')).toBeVisible();
+      // MOM-145: Finish is solid and tappable; with nothing chosen a tap says what is missing and moves to the choices.
+      await expect(page.getByRole('button', { name: 'Finish review' })).toBeEnabled();
+      await page.getByRole('button', { name: 'Finish review' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: FINISH_NEEDS_CHOICE })).toBeVisible();
+      await expect(question.getByRole('radio').first()).toBeFocused();
       if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
 
       // Tap for the line: one request, which carries the person's own target title and nothing about the goal, a priority or a number.

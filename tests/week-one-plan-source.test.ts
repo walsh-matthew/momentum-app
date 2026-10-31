@@ -164,8 +164,9 @@ describe('the wizard asks Claude only when the user clicks', () => {
   });
 
   it('only a click on Create goal saves, and only with a plan in hand', () => {
-    expect(wizard).toMatch(/if \(plan\) submit\(\)/);
-    expect(wizard).toMatch(/isLast && \(!parsed\.ok \|\| !plan\)/);
+    // MOM-145: the button is always there; a tap with no plan names what is missing and returns before anything is saved.
+    expect(wizard).toMatch(/isLast && plan === null\) return \{ message: 'Make a week 1 plan first/);
+    expect(wizard).toMatch(/if \(gap\) \{[\s\S]*?return;\s*\}\s*if \(isLast\) submit\(\)/);
   });
 
   it('the starter plan is a button the user presses, never a fallback', () => {
