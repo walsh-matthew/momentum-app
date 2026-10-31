@@ -13,6 +13,8 @@ import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 
 const NOT_CONFIGURED = "Claude plans aren't set up on the server yet. Nothing was saved or substituted.";
 const WAIT = 'Please wait a few seconds before asking again. Nothing was saved or substituted.';
+// The callout when Create is tapped with no week 1 plan (MOM-145).
+const MISSING_PLAN = 'Make a week 1 plan first: generate one, or use the starter plan.';
 
 // Where the user picks a channel: the sidebar's buttons from 1200px, the goal cards' links below it.
 function channelPicker(page: Page, width: number) {
@@ -53,7 +55,11 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await wizard.getByRole('button', { name: 'Next' }).click();
       await wizard.getByRole('button', { name: 'Next' }).click();
       await expect(wizard.getByRole('region', { name: 'Week 1 plan' })).toBeVisible();
-      await expect(wizard.getByRole('button', { name: 'Create goal' })).toBeDisabled();
+      // MOM-145: Create is solid and tappable; with no plan a tap says what is missing and creates nothing.
+      await expect(wizard.getByRole('button', { name: 'Create goal' })).toBeEnabled();
+      await wizard.getByRole('button', { name: 'Create goal' }).click();
+      await expect(wizard.getByRole('alert')).toHaveText(MISSING_PLAN);
+      await expect(wizard.getByRole('region', { name: 'Week 1 plan' })).toBeVisible();
 
       // Generate with no model key: the fixed failure message, no plan, and no automatic fallback.
       await wizard.getByRole('button', { name: 'Generate week 1 plan with Claude' }).click();
@@ -66,13 +72,16 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       ).toBe(NOT_CONFIGURED);
       await expect(wizard.getByText(/Written by Claude/)).toHaveCount(0);
       await expect(wizard.getByText(/Starter plan/)).toHaveCount(0);
-      await expect(wizard.getByRole('button', { name: 'Create goal' })).toBeDisabled();
+      await expect(wizard.getByRole('button', { name: 'Create goal' })).toBeEnabled();
 
       // Try again at once: a failed request still counts toward the 20 second limit, so this is the wait message.
       await wizard.getByRole('button', { name: 'Try again' }).click();
       await expect(alert).toHaveText(WAIT);
       await expect(wizard.getByRole('button', { name: 'Try again' })).toBeVisible();
-      await expect(wizard.getByRole('button', { name: 'Create goal' })).toBeDisabled();
+      // Still no plan: a tap on Create names it again and creates nothing.
+      await wizard.getByRole('button', { name: 'Create goal' }).click();
+      await expect(wizard.getByText(MISSING_PLAN)).toBeVisible();
+      await expect(wizard.getByRole('heading', { name: 'Goal created' })).toHaveCount(0);
 
       // The user chooses the starter plan: labelled as such, and only now can the goal be created.
       await wizard.getByRole('button', { name: 'Use the starter plan instead' }).click();

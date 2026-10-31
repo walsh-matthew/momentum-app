@@ -4,6 +4,8 @@ import { Check, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { createGoalWithPlanAction, generateWeekOnePlanAction } from '@/app/actions/goals';
 import { Button } from '@/components/ui/button';
+import { MainButton } from '@/components/ui/MainButton';
+import { MissingCallout } from '@/components/ui/MissingCallout';
 import {
   CONSTRAINTS,
   CONSTRAINT_LABELS,
@@ -95,6 +97,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
   const [pace, setPace] = useState<Pace | null>(null);
   const [reviewPrompts, setReviewPrompts] = useState<ReviewPrompt[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedState | null>(null);
   const [draft, setDraft] = useState<PlanDraft | null>(null);
   const [planError, setPlanError] = useState<{ message: string; forKey: string } | null>(null);
@@ -116,11 +119,20 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
   const plan = draft && draft.forKey === inputKey ? draft : null;
   const shownPlanError = planError && planError.forKey === inputKey ? planError.message : null;
 
-  // Step 1 is the only gated step; every chip group after it is optional.
-  const canAdvance = step !== 'goal_type' || (goalType !== null && title.trim().length > 0);
+  // What the next tap needs first (MOM-145). Step 1 is the only gated step, and the last needs a week 1 plan; every chip group between is
+  // optional. The button stays visible and solid either way: a tap with a gap shows the callout, focuses what is missing and sends nothing.
+  function nextGap(): { message: string; target: 'goal-type' | 'title' | 'plan' } | null {
+    if (step === 'goal_type') {
+      if (goalType === null) return { message: 'Choose a kind of goal to continue.', target: 'goal-type' };
+      if (title.trim().length === 0) return { message: 'Enter a title for your goal to continue.', target: 'title' };
+    }
+    if (isLast && plan === null) return { message: 'Make a week 1 plan first: generate one, or use the starter plan.', target: 'plan' };
+    return null;
+  }
 
   function pickGoalType(type: GoalType) {
     setGoalType(type);
+    setMissing(null);
     if (!titleEdited) setTitle(defaultTitleFor(type));
   }
 
@@ -131,6 +143,8 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
     const input = parsed.data;
     const forKey = inputKey;
     setPlanError(null);
+    // The person is acting on the callout, so it goes: the plan's own result or error is what shows next.
+    setMissing(null);
     startGenerating(async () => {
       const result = await generateWeekOnePlanAction(input);
       if (!result.ok) {
@@ -145,6 +159,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
   function useStarterPlan() {
     if (!parsed.ok || inputKey === null) return;
     setPlanError(null);
+    setMissing(null);
     setDraft({ plan: buildStubTaskPlan(parsed.data), source: 'starter', model: null, forKey: inputKey });
   }
 
@@ -194,10 +209,14 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (isLast) {
-          if (plan) submit();
+        const gap = nextGap();
+        setMissing(gap?.message ?? null);
+        if (gap) {
+          e.currentTarget.querySelector<HTMLElement>(`[data-gap="${gap.target}"]`)?.focus();
+          return;
         }
-        else if (canAdvance) setStepIndex(stepIndex + 1);
+        if (isLast) submit();
+        else setStepIndex(stepIndex + 1);
       }}
       className="flex max-h-[85dvh] flex-col"
     >
@@ -222,7 +241,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
       <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:px-6">
         {step === 'goal_type' && (
           <div className="flex flex-col gap-4">
-            <fieldset className="flex flex-col gap-2">
+            <fieldset data-gap="goal-type" tabIndex={-1} className="flex flex-col gap-2 focus-visible:outline-offset-4">
               <legend className="text-sm font-medium">What kind of goal is this?</legend>
               <div className="mt-2 flex flex-wrap gap-2">
                 {GOAL_TYPES.map((t) => (
@@ -239,9 +258,11 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
               Title
               <input
                 type="text"
+                data-gap="title"
                 value={title}
                 maxLength={TITLE_MAX_LENGTH}
                 onChange={(e) => {
+                  setMissing(null);
                   setTitle(e.target.value);
                   setTitleEdited(true);
                 }}
@@ -369,7 +390,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
               )}
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="outline" onClick={generate} disabled={busy || !parsed.ok}>
+                <Button variant="outline" data-gap="plan" onClick={generate} disabled={busy || !parsed.ok}>
                   {generating
                     ? 'Asking Claude…'
                     : shownPlanError
@@ -388,6 +409,12 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
           </div>
         )}
 
+        {missing !== null && (
+          <div className="mt-4">
+            <MissingCallout message={missing} />
+          </div>
+        )}
+
         {error && (
           <p role="alert" className="mt-4 text-sm text-danger">
             {error}
@@ -403,9 +430,9 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
         >
           {stepIndex === 0 ? 'Cancel' : 'Back'}
         </Button>
-        <Button type="submit" disabled={busy || !canAdvance || (isLast && (!parsed.ok || !plan))}>
-          {isLast ? (pending ? 'Creating…' : 'Create goal') : 'Next'}
-        </Button>
+        <MainButton type="submit" busy={busy} busyLabel={isLast && pending ? 'Creating…' : undefined}>
+          {isLast ? 'Create goal' : 'Next'}
+        </MainButton>
       </footer>
     </form>
   );

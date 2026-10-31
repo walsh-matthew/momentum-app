@@ -55,6 +55,23 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       await shot(page, 'review', width);
     });
 
+    // MOM-145: the plain callout of a form that is missing something, on sign-in and on the review's one question.
+    test('the missing-field callouts: sign-in and the review', async ({ page }) => {
+      test.setTimeout(240_000);
+      await page.goto('/login');
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Enter your email address' })).toHaveText('Enter your email address to continue.');
+      await shot(page, 'signin-missing', width);
+
+      const reviewer = await signUpAndConfirm(page, `shots-missing-${THEME}-${width}`);
+      await seedReview(reviewer, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, week: 'none', reviewDepth: 'full' });
+      await page.goto('/review');
+      await page.getByRole('button', { name: 'Finish review' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Choose one first.' })).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      await shot(page, 'review-missing', width);
+    });
+
     test('the goal wizard, a goal on home, and the rebalance drawer', async ({ page }) => {
       test.setTimeout(240_000);
       await signUpAndConfirm(page, `shots-wizard-${THEME}-${width}`);

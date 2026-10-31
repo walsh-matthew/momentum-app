@@ -211,7 +211,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
           </Link>{' '}
           has the details.
         </p>
-        <SetupButton tone="main" onClick={start} disabled={busy}>
+        <SetupButton tone="main" onClick={start} busy={busy}>
           {busy ? 'Starting…' : 'Start'}
         </SetupButton>
       </section>

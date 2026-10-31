@@ -3,6 +3,7 @@
 import { Play, Square } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { logTimerEntry } from '@/app/actions/entries';
+import { busyProps } from '@/lib/forms/mainButton';
 import type { LogDay, LogTarget } from '@/types/entries';
 import { EntryFeedback } from './EntryFeedback';
 import { MinutesControl } from './MinutesControl';
@@ -68,9 +69,8 @@ export function TimerControl({ target, days = null }: TimerControlProps) {
       )}
       <button
         type="button"
-        disabled={pending}
-        onClick={running ? stop : start}
-        className="flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+        {...busyProps<HTMLButtonElement>(pending, running ? stop : start)}
+        className="flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
       >
         {running ? <Square className="size-5" aria-hidden="true" /> : <Play className="size-5" aria-hidden="true" />}
         <span>{pending ? 'Saving…' : running ? `Stop timer: ${target.title}` : `Start timer: ${target.title}`}</span>

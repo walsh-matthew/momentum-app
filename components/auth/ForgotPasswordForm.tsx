@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { requestPasswordResetAction } from '@/app/actions/auth';
-import { Button } from '@/components/ui/button';
+import { MainButton } from '@/components/ui/MainButton';
 import type { CaptchaConfig, PasswordFormState } from '@/types/auth';
 import { AuthBrand, FIELD_CLASS, LINK_CLASS } from './AuthCardParts';
 import { CaptchaWidget } from './CaptchaWidget';
@@ -20,6 +20,8 @@ const INITIAL_STATE: PasswordFormState = { error: null, notice: null };
 // notice, so the form never says whether an account exists.
 export function ForgotPasswordForm({ initialError = null, captcha = null }: ForgotPasswordFormProps) {
   const [state, formAction, pending] = useActionState(requestPasswordResetAction, { ...INITIAL_STATE, error: initialError });
+  // One field: the button shows once there is an address (MOM-145). Enter in the field still sends it.
+  const [email, setEmail] = useState('');
 
   return (
     <form action={formAction} className="score-card w-full max-w-sm flex-col items-stretch gap-4 p-6">
@@ -28,7 +30,15 @@ export function ForgotPasswordForm({ initialError = null, captcha = null }: Forg
       <p className="text-sm text-muted">Enter your email and we will send you a link to set a new password.</p>
       <label className="flex flex-col gap-1 text-sm font-medium">
         Email
-        <input type="email" name="email" autoComplete="email" required className={FIELD_CLASS} />
+        <input
+          type="email"
+          name="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className={FIELD_CLASS}
+        />
       </label>
       {captcha && <CaptchaWidget config={captcha} resetOn={state} />}
       {state.error && (
@@ -41,9 +51,11 @@ export function ForgotPasswordForm({ initialError = null, captcha = null }: Forg
           {state.notice}
         </p>
       )}
-      <Button type="submit" disabled={pending}>
-        {pending ? 'Working…' : 'Send reset link'}
-      </Button>
+      {email.trim().length > 0 && (
+        <MainButton type="submit" busy={pending} busyLabel="Working…">
+          Send reset link
+        </MainButton>
+      )}
       <Link href="/login" className={`${LINK_CLASS} self-start`}>
         Back to sign in
       </Link>

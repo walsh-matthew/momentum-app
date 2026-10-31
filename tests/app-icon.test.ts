@@ -9,6 +9,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import manifest from '@/app/manifest';
 import { config } from '@/proxy';
+import { THEME_CHROME_COLOR } from '@/lib/theme/theme';
 
 const ROOT = process.cwd();
 const PNG_SIGNATURE = '89504e470d0a1a0a';
@@ -56,8 +57,8 @@ describe('web manifest', () => {
       short_name: 'Momentum',
       start_url: '/',
       display: 'standalone',
-      background_color: '#111513',
-      theme_color: '#111513',
+      background_color: '#050806',
+      theme_color: '#050806',
     });
     expect(Object.keys(result).sort()).toEqual(
       ['background_color', 'display', 'icons', 'name', 'short_name', 'start_url', 'theme_color'].sort(),
@@ -65,8 +66,7 @@ describe('web manifest', () => {
   });
 
   it("keeps the theme color the viewport uses for the device's dark setting", () => {
-    const layout = readFileSync(path.join(ROOT, 'app/layout.tsx'), 'utf8');
-    expect(layout).toContain(`{ media: '(prefers-color-scheme: dark)', color: '${result.theme_color}' }`);
+    expect(THEME_CHROME_COLOR.dark).toBe(result.theme_color);
   });
 
   it('lists a 192 icon, a 512 icon and a maskable 512 icon, each a real PNG of its declared size', () => {
