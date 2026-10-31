@@ -4,6 +4,8 @@ import { OctagonAlert, Sparkles, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import { applyRebalanceProposal, askClaudeToRebalance } from '@/app/actions/tasks';
 import { Button } from '@/components/ui/button';
+import { MainButton } from '@/components/ui/MainButton';
+import { MissingCallout } from '@/components/ui/MissingCallout';
 import { REBALANCE_ACTION_LABELS, TASK_TYPE_LABELS, TIMELINE_WARNING_LABELS } from '@/lib/tasks/labels';
 import { describeMoveChain } from '@/lib/utils/rebalance';
 import type { ChannelHint } from '@/types/channelViews';
@@ -75,6 +77,8 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
   const { proposal } = view;
   const [selected, setSelected] = useState<Set<string>>(() => new Set(proposal.moves.map((m) => m.taskId)));
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
+  const shifts = useRef<HTMLElement>(null);
   const [result, setResult] = useState<RebalanceApplyResult | null>(null);
   const [pending, startTransition] = useTransition();
   const [asking, startAsking] = useTransition();
@@ -98,6 +102,7 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
   const chosen = proposal.moves.filter((m) => selected.has(m.taskId));
 
   function toggle(taskId: string) {
+    setMissing(false);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(taskId)) next.delete(taskId);
@@ -110,6 +115,12 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
   // left out; the proposal still goes through the server-side schema before anything is written.
   function apply() {
     setError(null);
+    // Apply is always there and solid; with nothing chosen a tap says so and moves to the shifts (MOM-145).
+    if (chosen.length === 0) {
+      setMissing(true);
+      shifts.current?.querySelector<HTMLElement>('input[type="checkbox"]')?.focus();
+      return;
+    }
     startTransition(async () => {
       try {
         const outcome = await applyRebalanceProposal({ ...proposal, moves: chosen });
@@ -224,7 +235,7 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
         )}
 
         {hasMoves && (
-          <section aria-label="Proposed task shifts" className="mt-5">
+          <section ref={shifts} aria-label="Proposed task shifts" className="mt-5">
             <h3 className="text-sm font-medium">
               Proposed shifts ({chosen.length} of {proposal.moves.length} selected)
             </h3>
@@ -289,6 +300,11 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
       {/* The error sits with the buttons, not at the end of the list: Apply is pinned here, so an error
           rendered below a long list would be out of sight. */}
       <footer className="shrink-0 border-t border-border p-4 lg:px-6">
+        {missing && (
+          <div className="mb-3">
+            <MissingCallout message="Choose at least one shift." />
+          </div>
+        )}
         {error && (
           <p role="alert" className="mb-3 text-sm text-danger">
             {error}
@@ -299,9 +315,9 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
             {hasMoves ? 'Keep my plan' : 'Close'}
           </Button>
           {hasMoves && (
-            <Button disabled={pending || chosen.length === 0} onClick={apply}>
-              {pending ? 'Applying…' : `Apply ${chosen.length} ${chosen.length === 1 ? 'shift' : 'shifts'}`}
-            </Button>
+            <MainButton busy={pending} busyLabel="Applying…" onClick={apply}>
+              {chosen.length === 0 ? 'Apply shifts' : `Apply ${chosen.length} ${chosen.length === 1 ? 'shift' : 'shifts'}`}
+            </MainButton>
           )}
         </div>
       </footer>

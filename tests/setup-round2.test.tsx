@@ -396,7 +396,7 @@ const QUESTION_TURNS: [string, AssistantTurn][] = [
   ['date confirmation', turn({ kind: 'proposal', topic: 'start_date', question: 'Start Monday, Nov 2?', options: ['Today, Thursday, Oct 29'] })],
 ];
 
-// A disabled main button still counts: Send waiting for words is the card's main button all the same.
+// A main Send is not on the card until the box has words (MOM-145), so the counts that need it type something first.
 const mainCount = (root: HTMLElement) => root.querySelectorAll('[data-tone="main"]').length;
 const submitCount = (root: HTMLElement) => root.querySelectorAll('button[type="submit"]').length;
 const secondLooksEnabled = (root: HTMLElement) =>
@@ -411,6 +411,7 @@ describe('every card: at most one main button, one submit, and second choices th
     const typeIt = screen.queryByRole('button', { name: TYPE_INSTEAD });
     if (typeIt) {
       fireEvent.click(typeIt);
+      fireEvent.change(container.querySelector('textarea')!, { target: { value: 'My own words' } });
       expect(mainCount(container), 'after "Type it instead"').toBeLessThanOrEqual(1);
       expect(submitCount(container)).toBe(1);
     }
@@ -421,6 +422,7 @@ describe('every card: at most one main button, one submit, and second choices th
     expect(mainCount(container)).toBe(1);
     expect(secondLooksEnabled(container)).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
+    fireEvent.change(container.querySelector('textarea')!, { target: { value: 'A change' } });
     expect(mainCount(container)).toBe(1);
     expect(submitCount(container)).toBe(1);
   });

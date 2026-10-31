@@ -127,7 +127,8 @@ describe('one question at a time', () => {
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockReturnValueOnce(pending.promise);
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
-    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
+    // Cannot send nothing: there is no Send until there are words (MOM-145).
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 
     answerWith('Run more');
     // MOM-111 finding 10: the question stays, with the answer just sent under it and a thinking state; there is no box to
@@ -210,6 +211,9 @@ describe('changing your mind about changing something (production, 2026-10-29)',
     // The same placeholder as every answer box (MOM-111 finding 1), with the question said above the box.
     expect(box.placeholder).toBe('Type your answer');
     expect(screen.getByText('What would you like to change?')).toBeTruthy();
+    // The main Send appears with the first words (MOM-145); "Keep it as it is" is the same size beside it.
+    const box0 = screen.getByLabelText('What would you like to change?') as HTMLTextAreaElement;
+    fireEvent.change(box0, { target: { value: 'half typed' } });
     const send = screen.getByRole('button', { name: 'Send the change' });
     const keep = screen.getByRole('button', { name: 'Keep it as it is' });
     // The same row, the same size: a real button, not a small link.
@@ -318,7 +322,9 @@ describe('nothing is saved until the person taps Save', () => {
     actions.save.mockReturnValue(pending.promise);
     const button = screen.getByRole('button', { name: 'Save my setup' });
     fireEvent.click(button);
-    await waitFor(() => expect((screen.getByRole('button', { name: 'Saving…' }) as HTMLButtonElement).disabled).toBe(true));
+    // Busy, not disabled (MOM-145): solid, says so, and the second tap does nothing.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' }).getAttribute('aria-busy')).toBe('true'));
+    expect((screen.getByRole('button', { name: 'Saving…' }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Saving…' }));
     pending.resolve({ ok: true, data: { goals: 1, targets: 1 } });
     await screen.findByRole('heading', { name: 'Your setup is saved' });

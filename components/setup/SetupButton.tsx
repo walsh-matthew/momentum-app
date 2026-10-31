@@ -1,12 +1,16 @@
 'use client';
 
 import type { ButtonHTMLAttributes } from 'react';
+import { busyProps } from '@/lib/forms/mainButton';
 import { cn } from '@/lib/utils/cn';
 
 export interface SetupButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   // 'main': the one thing the card suggests doing next, filled. 'second': any other choice, with a full-contrast border and
   // text so it never looks disabled (MOM-111 round 2, finding 14).
   tone: 'main' | 'second';
+  // Work is in flight (MOM-145): a main button stays solid, says it is busy and ignores taps, instead of being disabled or faded
+  // (lib/forms/mainButton.ts). A second button is disabled as before.
+  busy?: boolean;
 }
 
 // The buttons on every setup card (MOM-111 round 2, findings 8 and 14): at most one main button on a card, and second
@@ -14,8 +18,17 @@ export interface SetupButtonProps extends ButtonHTMLAttributes<HTMLButtonElement
 // target as the rest of setup, full width on a phone. It writes its own classes rather than layering on the shared Button:
 // cn() does not merge classes, so the outline variant's own border colour would win over a second choice's. Its words are
 // regular weight: the card's lead is its one bold line (round 3c, finding 1).
-export function SetupButton({ tone, className, type = 'button', ...props }: SetupButtonProps) {
-  return <button type={type} data-slot="button" data-tone={tone} className={cn(setupButtonClasses(tone), className)} {...props} />;
+export function SetupButton({ tone, className, type = 'button', busy = false, onClick, ...props }: SetupButtonProps) {
+  return (
+    <button
+      type={type}
+      data-slot="button"
+      data-tone={tone}
+      className={cn(setupButtonClasses(tone), className)}
+      {...props}
+      {...busyProps<HTMLButtonElement>(busy, onClick)}
+    />
+  );
 }
 
 // The look of a setup button, for a control that must look like one without being a <button> (the date picker trigger in
