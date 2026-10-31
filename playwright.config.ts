@@ -30,6 +30,9 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
+    // The app follows the device (MOM-30). Light by default, as Playwright does; E2E_COLOR_SCHEME=dark runs the same specs in dark,
+    // which is how the dark screenshots are taken.
+    colorScheme: process.env.E2E_COLOR_SCHEME === 'dark' ? 'dark' : 'light',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

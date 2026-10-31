@@ -224,18 +224,16 @@ export function setupBudgetStatus(
 // Why setup stopped using Claude and offered the quick path instead.
 export type SetupQuickPathReason = 'over_turns' | 'over_tokens' | 'shared_cap' | 'person_cap' | 'unchecked';
 
-// What the person is offered: what they have said so far (played back by code from the validated draft), then the quick
-// path, which is sensible defaults they can see and change. Nothing is saved until they approve (DOMAIN_MODEL §2.3).
-const QUICK_PATH_OFFER =
-  'Here is what you have told me so far. You can check it and save it now; anything not set yet starts from a sensible default you can change later. Nothing is saved until you approve it.';
-
+// What happened, in one sentence, for each reason setup stopped using Claude. The card (components/setup/QuickPathCard.tsx) adds
+// what the person has said so far, played back by code, and what to do next. No default is ever applied: the quick path saves
+// what was said when it is complete, and otherwise names what is missing (DOMAIN_MODEL §2.3, "never assume").
 export const SETUP_QUICK_PATH_MESSAGES: Record<SetupQuickPathReason, string> = {
-  over_turns: `This setup has used its share of Claude's time. ${QUICK_PATH_OFFER}`,
-  over_tokens: `This setup has used its share of Claude's time. ${QUICK_PATH_OFFER}`,
-  shared_cap: `Claude is at its shared limit for everyone right now. ${QUICK_PATH_OFFER}`,
+  over_turns: "This setup has used up the questions Claude gets for one setup, so it can't ask any more.",
+  over_tokens: "This setup has used up the questions Claude gets for one setup, so it can't ask any more.",
+  shared_cap: "Claude is at its shared limit for everyone right now, so it can't ask any more questions.",
   // Unreachable while per-person limits are log-only, but it must say something true if the sentinel is ever reached.
-  person_cap: `Claude cannot take more requests from you right now. ${QUICK_PATH_OFFER}`,
-  unchecked: `Claude's usage limits could not be checked, so setup cannot go on with Claude. ${QUICK_PATH_OFFER}`,
+  person_cap: "Claude can't take more requests from you right now.",
+  unchecked: "Claude's usage limits could not be checked, so setup can't go on with Claude.",
 };
 
 export type SetupTurnResult =

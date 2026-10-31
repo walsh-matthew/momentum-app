@@ -3,7 +3,8 @@
 // Claude: every part played back, and a list, in plain words, of what the draft still lacks before it can be saved. Pure.
 
 import { SETUP_CHUNKS, type SetupChunk, type SetupModel } from '@/types/setup';
-import type { PlaybackSection } from '@/types/setupScreen';
+import type { PlaybackSection, QuickPathReason } from '@/types/setupScreen';
+import { numberQuestion } from './numbers';
 import { renderPlayback, type PlaybackOptions } from './playback';
 import type { DraftIssue } from './validate';
 
@@ -21,10 +22,16 @@ export function quickPathSections(model: SetupModel, options: PlaybackOptions = 
 
 const FALLBACK = 'Something in your answers needs another look.';
 
+// What a missing-fact line needs to say a counted thing in the person's words, and a deadline as a date.
+export interface MissingWords {
+  today?: string | null;
+  said?: readonly string[];
+}
+
 // One validator issue as a thing the person has not told us yet. The validator's own messages are written for Claude
 // ("Ask the time zone before a target is saved"), so they are not shown. The `approved.*` issues are skipped: saving from
 // the quick path is the person's approval of every part shown.
-function describeIssue(model: SetupModel, issue: DraftIssue): string | null {
+function describeIssue(model: SetupModel, issue: DraftIssue, words: MissingWords): string | null {
   const parts = issue.path.split('.');
   if (parts[0] === 'approved') return null;
   if (parts[0] === 'person') {
@@ -47,8 +54,9 @@ function describeIssue(model: SetupModel, issue: DraftIssue): string | null {
       const target = goal?.targets.find((t) => t.key === parts[3]);
       const name = target ? `"${target.title}"` : 'something you count';
       switch (parts[4]) {
+        // The same question, in the same words, as the number card (lib/setup/numbers.ts); round 3d.
         case 'floor':
-          return `The least you aim for with ${name}.`;
+          return target ? numberQuestion('floor', target, words.today ?? null, words.said ?? []) : `The number that would still count in a hard week for ${name}.`;
         case 'sources':
           return `Where ${name} is tracked.`;
         case 'unit':
@@ -92,11 +100,40 @@ function describeIssue(model: SetupModel, issue: DraftIssue): string | null {
 }
 
 // What is still missing, in plain words and without repeats. Empty when the draft can be saved.
-export function describeMissing(model: SetupModel, issues: DraftIssue[]): string[] {
+export function describeMissing(model: SetupModel, issues: DraftIssue[], words: MissingWords = {}): string[] {
   const seen = new Set<string>();
   for (const issue of issues) {
-    const line = describeIssue(model, issue);
+    const line = describeIssue(model, issue, words);
     if (line) seen.add(line);
   }
   return [...seen];
+}
+
+// Whether waiting helps (MOM-111, quick-path card): the shared limit, a per-person limit and a limit check that failed all lift on
+// their own, and the person's answers stay in their tab until then. A setup's own budget does not: that setup can not ask more.
+export function quickPathCanWait(reason: QuickPathReason): boolean {
+  return reason === 'shared_cap' || reason === 'person_cap' || reason === 'unchecked';
+}
+
+// The words of the quick-path card besides what happened (the server's sentence for the reason) and the playback. Written by
+// code, in everyday words, so the person knows what to do next before any button. No default is ever applied, so an incomplete
+// setup is never saved, and the way forward is stated, not promised.
+export const QUICK_PATH_WORDS = {
+  readyTitle: 'Your setup is ready to save',
+  missingTitle: "Setup can't be saved yet",
+  intro: 'Here is everything you told me so far.',
+  readyNext: "Look it over. If it's right, tap \"Save what I have\". Nothing is saved until you do.",
+  missingWait:
+    "Setup can't be saved without the items above, and Claude can't ask for them right now. Wait a little, then reload this page: your answers stay in this tab and setup picks up where it stopped. Or tap \"Start again\" to begin a new setup; that clears the answers here.",
+  missingNoWait:
+    "Setup can't be saved without the items above, and this setup can't ask for them any more. Tap \"Start again\" to begin a new setup; that clears the answers here.",
+  saveOff: 'Save is off until the items above are set.',
+  confirmStartOver: 'Start again? What you have said so far will be cleared.',
+  confirmYes: 'Yes, start again',
+  confirmNo: 'Keep what I have',
+} as const;
+
+export function quickPathNext(reason: QuickPathReason, complete: boolean): string {
+  if (complete) return QUICK_PATH_WORDS.readyNext;
+  return quickPathCanWait(reason) ? QUICK_PATH_WORDS.missingWait : QUICK_PATH_WORDS.missingNoWait;
 }

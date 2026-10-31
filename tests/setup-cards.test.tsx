@@ -81,8 +81,11 @@ describe('the question card, on every kind of asking turn (findings 1 to 3)', ()
   it('gives the box a visible border, a lighter fill and a focus ring, and dims Send only while the box is empty', () => {
     render(<QuestionCard turn={turn()} busy={false} onAnswer={() => {}} today={TODAY} />);
     const box = screen.getByLabelText('Your answer');
-    expect(box.className).toMatch(/border-foreground\/30/);
-    expect(box.className).toMatch(/bg-foreground\/\[0\.06\]/);
+    // The border is the control border at 30% (app/globals.css .ctl-30): the same in dark, and 3:1 in light (MOM-30).
+    expect(box.className).toMatch(/\bctl-30\b/);
+    // A plain field sunk into the card: the page's colour, no tint (app/globals.css .field-input; MOM-30 round 3).
+    expect(box.className.split(/\s+/)).toContain('field-input');
+    expect(box.className).not.toMatch(/bg-foreground|bg-accent|bg-primary/);
     expect(box.className).toMatch(/focus-visible:ring-2/);
     const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
@@ -194,7 +197,7 @@ describe('no date reaches a setup screen as YYYY-MM-DD (finding 7)', () => {
     expect(final.container.textContent).not.toMatch(MACHINE_DATE);
     cleanup();
     const quick = render(
-      <QuickPathCard message="Done." sections={quickPathSections(m, { today: TODAY })} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
+      <QuickPathCard reason="over_turns" message="Done." sections={quickPathSections(m, { today: TODAY })} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
     );
     expect(quick.container.textContent).not.toMatch(MACHINE_DATE);
     expect(quick.container.textContent).toContain('Monday, Jun 14, 2027');

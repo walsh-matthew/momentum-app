@@ -47,7 +47,7 @@ export function ManualEntryPanel({ panel }: ManualEntryPanelProps) {
         panel.targets.map((target) => (
           <section key={target.id} aria-labelledby={`target-${target.id}`} className="channel-card space-y-3 p-4">
             <div>
-              <h2 id={`target-${target.id}`} className="text-base font-semibold tracking-[-0.02em]">
+              <h2 id={`target-${target.id}`} className="card-title">
                 {target.title}
               </h2>
               <p className="text-sm text-muted">{target.goalTitle}</p>

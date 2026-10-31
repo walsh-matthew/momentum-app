@@ -27,7 +27,7 @@ export function YourPlanCard({ plan }: YourPlanCardProps) {
   return (
     <section aria-label={CARD_HEADING} className="home-goal plan-card">
       <header>
-        <h3>{CARD_HEADING}</h3>
+        <h3 className="card-title">{CARD_HEADING}</h3>
         <Link href="/plan" className="review-link">
           {PLAN_LINK}
         </Link>

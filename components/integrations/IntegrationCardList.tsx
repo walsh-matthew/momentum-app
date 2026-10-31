@@ -49,7 +49,7 @@ function IntegrationCard({ entry, active, account }: IntegrationCardProps) {
         <Icon />
       </span>
       <div className="min-w-0 flex-1">
-        <h3 id={labelId} className="text-sm font-semibold text-foreground">
+        <h3 id={labelId} className="card-title text-foreground">
           {entry.name}
         </h3>
         <p className="mt-1 text-xs leading-relaxed text-muted">{entry.description}</p>

@@ -493,6 +493,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner.
 - **Led to:** A rule: list only threads that are working, blocked or waiting for review.
 
+### F-072 · 2026-10-30 · build tool
+- **Asked:** Build the weekly review's finish button (MOM-113) and the light / dark / system control (MOM-30), each with a component test of its failure path.
+- **What went wrong:** The day-end's full `npm test` failed one review test: the error showed while the button still read "Saving…". The file passed when run alone. The theme control had the same pattern: the alert and the choice put back could show while its buttons were still disabled.
+- **Why:** Both set state after an `await` inside a transition's start function. In React 19 that update is not part of the transition, so it can render before the pending flag clears. The tests waited for the error, not for the settled state (the button ready again), so they passed in the block and failed only under the full run's load. The same pattern sits at 10 more call sites on `main`.
+- **Caught by:** The day-end's step A full test run.
+- **Led to:** A fix in this session (MOM-113, MOM-30: the update after the `await` is wrapped in the start function again, and the tests wait for the ready button), and MOM-147 for the 10 call sites on `main`.
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).

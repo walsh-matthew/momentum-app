@@ -12,7 +12,7 @@ export interface NoTasksStateProps {
 export function NoTasksState({ channelTitle = null, onNewGoal }: NoTasksStateProps) {
   return (
     <section aria-labelledby="no-tasks-heading" className="channel-card mt-6 border-dashed p-6">
-      <h2 id="no-tasks-heading" className="section-title">
+      <h2 id="no-tasks-heading" className="card-title">
         No tasks yet
       </h2>
       <p className="mt-2 text-sm text-muted">

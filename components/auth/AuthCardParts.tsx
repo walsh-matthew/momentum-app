@@ -1,7 +1,7 @@
 // Pieces the sign-in, forgot-password and set-new-password cards share.
 
 export const FIELD_CLASS =
-  'min-h-11 rounded-lg border border-foreground/45 bg-background px-3 text-base font-normal text-foreground placeholder:text-muted';
+  'min-h-11 rounded-lg border ctl-45 bg-background px-3 text-base font-normal text-foreground placeholder:text-muted';
 
 export const LINK_CLASS = 'text-sm text-muted underline underline-offset-2 hover:text-foreground';
 

@@ -24,7 +24,7 @@ export function setupButtonClasses(tone: SetupButtonProps['tone']): string {
   return cn(
     'inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-lg border px-5 text-sm font-normal whitespace-nowrap transition-colors select-none disabled:pointer-events-none disabled:opacity-50 sm:w-auto',
     tone === 'main'
-      ? 'border-transparent bg-primary text-primary-foreground hover:bg-primary/85'
+      ? 'border-transparent bg-primary text-primary-foreground primary-hover'
       : 'border-foreground/60 bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.12]',
   );
 }

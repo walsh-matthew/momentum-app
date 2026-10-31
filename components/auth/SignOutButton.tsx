@@ -16,7 +16,7 @@ export function SignOutButton({ className = '', bordered = false, compact = fals
         type="submit"
         className={`rounded-xl px-3 text-sm hover:bg-foreground/[0.06] hover:text-foreground ${
           compact ? 'min-h-8 whitespace-nowrap' : 'min-h-11 w-full text-left'
-        } ${bordered ? 'border border-foreground/30 px-5 text-center font-medium text-foreground' : 'text-muted'}`}
+        } ${bordered ? 'border ctl-30 px-5 text-center font-medium text-foreground' : 'text-muted'}`}
       >
         Sign out
       </button>

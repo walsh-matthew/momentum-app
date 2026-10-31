@@ -2,7 +2,7 @@
 // starting ideas card "lacked context, what does 'pages a week' mean": the card opened on Claude's lead-in, then a question
 // that did not say what the numbers were. Now a card of starting ideas, or of readings of an unclear answer, leads with one
 // short line in code's words that says what the options are about. On a number, it is the number question itself, in the
-// same everyday words as everywhere else ("How many pages makes a week count, even a hard one?", lib/setup/numbers.ts), with
+// same everyday words as everywhere else ("In a hard week, how many pages would still count?", lib/setup/numbers.ts), with
 // the goal in front when there is more than one. It is the card's one bold line; under it, in regular weight, "Pick one or
 // write your own." Pure.
 
@@ -39,7 +39,7 @@ const TOPIC_WORDS: Partial<Record<SetupTopic, string>> = {
 };
 
 // The number question for a card of options about a number, with the goal in front when there is more than one ("For Read
-// more, how many pages makes a week count, even a hard one?"). Null when no counted thing is in the draft yet.
+// more, in a hard week, how many pages would still count?"). Null when no counted thing is in the draft yet.
 function numberLead(turn: AssistantTurn, topic: NumberTopic, today: string | null, said: readonly string[]): string | null {
   const t = countedTarget(turn.draft, topic);
   if (!t) return null;

@@ -12,7 +12,7 @@ export interface SignedOutStateProps {
 export function SignedOutState({ signInHref = '/login' }: SignedOutStateProps) {
   return (
     <section aria-labelledby="signed-out-heading" className="channel-card mt-6 p-6">
-      <h2 id="signed-out-heading" className="section-title">
+      <h2 id="signed-out-heading" className="card-title">
         Sign in to see your plan
       </h2>
       <p className="mt-2 text-sm text-muted">Your session has ended. Sign in again to pick up where you left off.</p>

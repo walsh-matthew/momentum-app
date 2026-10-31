@@ -26,7 +26,7 @@ function EntryRow({ entry, timeZone, today }: EntryRowProps) {
   const when = entry.chosenDay ? `${formatChosenDay(entry.chosenDay, today)} · the day you chose` : formatEntryTime(entry.occurredAt, timeZone, today);
 
   return (
-    <li className="rounded-2xl border border-border bg-secondary p-4">
+    <li className="card-surface rounded-2xl p-4">
       <div className="flex items-center gap-3">
         <div className={`min-w-0 flex-1${entry.removed ? ' text-muted line-through' : ''}`}>
           <p className="text-base font-medium">
@@ -41,7 +41,7 @@ function EntryRow({ entry, timeZone, today }: EntryRowProps) {
           disabled={pending}
           aria-label={`${entry.removed ? 'Restore' : 'Remove'} ${entry.targetTitle}: ${describeEntry(entry)}`}
           onClick={() => run(() => (entry.removed ? restoreLoggedEntry(entry.id) : removeLoggedEntry(entry.id)))}
-          className="min-h-11 min-w-20 rounded-xl border border-border px-3 text-sm font-medium disabled:opacity-60"
+          className="min-h-11 min-w-20 rounded-xl border ctl-border px-3 text-sm font-medium disabled:opacity-60"
         >
           {pending ? 'Saving…' : entry.removed ? 'Restore' : 'Remove'}
         </button>

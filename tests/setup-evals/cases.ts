@@ -27,7 +27,7 @@ const SHAPE_DETAIL = 'It decides how your plan is laid out: in stretches that ke
 const BLOCK_Q = 'How many weeks should the first stretch run?';
 // The question on the least that still counts names what is counted, in the person's words (MOM-111 round 3b, finding 1),
 // and says what the number is for in everyday words (round 3c): the same words code writes (lib/setup/numbers.ts).
-const floorQ = (counted: string): string => `How many ${counted} makes a week count, even a hard one?`;
+const floorQ = (counted: string): string => `In a hard week, how many ${counted} would still count?`;
 
 const done = (c: Omit<SetupEvalCase, 'person'>, s: Script): ScriptedCase => ({ ...c, person: s.person, script: s.turns });
 
@@ -232,7 +232,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
         topic: 'floor',
         edit: addTarget,
         question: 'Do you have a number in mind, or would some starting ideas help?',
-        detail: `The number of ${counted.word} that makes a week count, even a hard one.`,
+        detail: `The number of ${counted.word} that would still count in a hard week.`,
         reply: 'Some ideas, please.',
       });
       s.add({

@@ -1,0 +1,1612 @@
+@import 'tailwindcss';
+
+/* The wireframe design system, dark only (MOM-76). Source: the v0 wireframe's app/globals.css.
+   There is no light palette and no theme toggle; a matching light palette that follows the device is MOM-30.
+
+   Token names. This repo's names are kept, mapped onto the wireframe palette, so existing classes keep working:
+     background / foreground  page and text
+     panel                    card and panel surfaces (the wireframe's --card)
+     border                   hairlines
+     muted                    secondary TEXT (the wireframe's --muted-foreground; its --muted is a surface)
+     accent                   the lime accent (the wireframe's --primary)
+   The wireframe's own names (card, primary, destructive, ...) are defined too, for the shadcn Button. */
+
+:root {
+  color-scheme: dark;
+  --background: oklch(0.13 0.009 155);
+  --foreground: oklch(0.96 0.012 110);
+  --panel: oklch(0.18 0.011 155);
+  --border: oklch(1 0 0 / 8%);
+  --muted: oklch(0.7 0.018 145);
+  --accent: #c6f36d;
+
+  --card: var(--panel);
+  --card-foreground: var(--foreground);
+  --primary: var(--accent);
+  --primary-foreground: oklch(0.18 0.035 130);
+  --secondary: oklch(0.22 0.012 155);
+  --secondary-foreground: oklch(0.92 0.01 110);
+  --destructive: oklch(0.65 0.2 25);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.89 0.18 125 / 60%);
+  --radius: 0.85rem;
+
+  --surface-raised: #1b201f;
+  --surface-soft: #171c1b;
+  --lime: #c6f36d;
+  --channel: #a8baff;
+  --streak: #f4c27e;
+  /* Error text. The wireframe has no error state; this is a light red that holds 4.5:1 on every surface above. */
+  --danger: oklch(0.78 0.13 25);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-soft: var(--surface-soft);
+  --color-lime: var(--lime);
+  --color-channel: var(--channel);
+  --color-streak: var(--streak);
+  --color-danger: var(--danger);
+  --color-warn: var(--streak);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+/* Slide-in for side drawers built on <dialog> (components/rebalance). */
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  min-height: 100%;
+  background: var(--background);
+}
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+/* Component classes sit in the components layer so a Tailwind utility on the same element still wins. */
+@layer components {
+/* ---- Brand ---------------------------------------------------------------------------------------------- */
+
+.momentum-mark {
+  margin-top: -4px;
+  font-family: Georgia, serif;
+  font-size: 25px;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: -0.13em;
+}
+
+/* ---- Text ----------------------------------------------------------------------------------------------- */
+
+/* The wireframe sets these at 9 to 10px; raised to 11px so the muted text stays legible. */
+.eyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.section-title {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+}
+/* ---- Badges --------------------------------------------------------------------------------------------- */
+
+/* The label always says the level; the dot colour and the border only reinforce it. */
+.burnout-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgb(198 243 109 / 18%);
+  border-radius: 999px;
+  background: rgb(198 243 109 / 6%);
+  padding: 0 10px;
+  color: #d3e3bb;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.burnout-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 7px rgb(198 243 109 / 35%);
+}
+.burnout-badge[data-risk='rising'] {
+  border-color: rgb(244 194 126 / 35%);
+  background: rgb(244 194 126 / 8%);
+  color: var(--streak);
+}
+.burnout-badge[data-risk='rising'] .burnout-dot {
+  border-radius: 1px;
+  background: var(--streak);
+  box-shadow: 0 0 7px rgb(244 194 126 / 35%);
+}
+.burnout-badge[data-risk='high'] {
+  border-color: rgb(244 128 120 / 40%);
+  background: rgb(244 128 120 / 9%);
+  color: var(--danger);
+}
+.burnout-badge[data-risk='high'] .burnout-dot {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  background: var(--danger);
+  box-shadow: none;
+}
+.effort-tag {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 6%);
+  padding: 0 8px;
+  color: #d3d8cf;
+  font-size: 12px;
+  font-weight: 550;
+}
+.chip {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chip-accent {
+  border-color: rgb(198 243 109 / 30%);
+  background: rgb(198 243 109 / 9%);
+  color: var(--lime);
+  font-weight: 600;
+}
+.chip-warn {
+  border-color: rgb(244 194 126 / 35%);
+  background: rgb(244 194 126 / 8%);
+  color: var(--streak);
+  font-weight: 600;
+}
+.chip-danger {
+  border-color: rgb(244 128 120 / 40%);
+  background: rgb(244 128 120 / 9%);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ---- Score card and ring -------------------------------------------------------------------------------- */
+
+.score-card {
+  position: relative;
+  display: flex;
+  min-height: 148px;
+  align-items: center;
+  overflow: hidden;
+  gap: 10px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse at 85% 60%, rgb(192 235 117 / 10%), transparent 48%),
+    linear-gradient(130deg, #1d2421, #171c1b 70%);
+  padding: 15px 15px 15px 18px;
+  box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+}
+.score-ring {
+  position: relative;
+  z-index: 1;
+  width: 116px;
+  height: 116px;
+  flex: 0 0 116px;
+}
+.score-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.score-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+.score-ring-track {
+  stroke: rgb(255 255 255 / 8%);
+}
+.score-ring-progress {
+  stroke: var(--lime);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgb(198 243 109 / 24%));
+  transition: stroke-dashoffset 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---- Focus card and task check -------------------------------------------------------------------------- */
+
+.focus-card {
+  display: flex;
+  min-height: 98px;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 17px;
+  background: var(--surface-raised);
+  padding: 13px 14px;
+  transition:
+    border-color 160ms ease,
+    opacity 160ms ease;
+}
+.focus-card.is-complete {
+  border-color: rgb(198 243 109 / 28%);
+}
+.focus-card.is-complete h2 {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: rgb(198 243 109 / 65%);
+}
+.task-check {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid rgb(198 243 109 / 42%);
+  border-radius: 10px;
+  background: rgb(198 243 109 / 8%);
+  color: var(--lime);
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+.task-check:hover:not(:disabled) {
+  transform: scale(1.04);
+  background: rgb(198 243 109 / 15%);
+}
+.task-check:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.task-check[aria-checked='true'] {
+  background: var(--lime);
+  color: #1c2514;
+}
+.task-check:disabled {
+  opacity: 0.7;
+}
+
+/* ---- Channel card and track ----------------------------------------------------------------------------- */
+
+.channel-card {
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 16px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+.channel-icon {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 9px;
+}
+.channel-icon.career {
+  background: rgb(158 182 255 / 10%);
+  color: var(--channel);
+}
+.channel-icon.fitness {
+  background: rgb(198 243 109 / 10%);
+  color: var(--lime);
+}
+.channel-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+}
+.channel-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+.channel-track span.career {
+  background: var(--channel);
+}
+.channel-track span.fitness {
+  background: var(--lime);
+}
+
+/* ---- Home scoreboard (MOM-112) --------------------------------------------------------------------------
+   The week's hero and each goal's scoreboard, drawn from the approved mock-up. The hero reuses the score card's
+   surface and ring; the cards reuse the goal card's. A level is always said in words, so colour only reinforces it. */
+
+.chip-dashed {
+  border-style: dashed;
+}
+.home-scoreboard {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0 22px;
+}
+.home-notice {
+  margin: 16px 0 22px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 16px;
+  background: var(--surface-soft);
+  padding: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.home-notice p {
+  color: inherit;
+}
+.home-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse at 85% 60%, rgb(192 235 117 / 10%), transparent 48%),
+    linear-gradient(130deg, #1d2421, #171c1b 70%);
+  padding: 16px;
+  box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+}
+.home-hero-list {
+  align-items: stretch;
+}
+.home-ring {
+  position: relative;
+  width: 116px;
+  height: 116px;
+  flex: 0 0 116px;
+}
+.home-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.home-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+.home-ring-track {
+  stroke: rgb(255 255 255 / 8%);
+}
+.home-ring-progress {
+  stroke: var(--lime);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgb(198 243 109 / 24%));
+}
+.home-hero[data-celebration='bold'] .home-ring-progress {
+  filter: drop-shadow(0 0 9px rgb(198 243 109 / 55%));
+}
+.home-ring-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.home-ring-centre b {
+  font-size: 21px;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.home-ring-centre small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.home-hero-title {
+  margin-top: 5px;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.home-hero-title[data-celebration='accent'],
+.home-hero-title[data-celebration='bold'] {
+  color: var(--lime);
+}
+.home-hero-title[data-celebration='bold'] {
+  text-shadow: 0 0 18px rgb(198 243 109 / 30%);
+}
+.home-hero-sub {
+  margin-top: 4px;
+  color: #b9c2bb;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.home-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 68px;
+  margin-top: 12px;
+}
+.home-bar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  height: 100%;
+}
+.home-bar i {
+  display: block;
+  width: 100%;
+  max-width: 18px;
+  border-radius: 4px;
+  background: var(--lime);
+}
+.home-bar[data-empty='true'] i {
+  background: rgb(255 255 255 / 14%);
+}
+.home-bar-value {
+  height: 12px;
+  color: #dce4d9;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.home-bar-day {
+  color: var(--muted);
+  font-size: 10px;
+}
+.home-bar[data-today='true'] .home-bar-day {
+  border-bottom: 2px solid var(--lime);
+  color: var(--foreground);
+  font-weight: 700;
+}
+.home-bars-caption {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.home-goal {
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 20px;
+  background: var(--surface-soft);
+  padding: 14px;
+}
+.home-goal > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.home-goal h3 {
+  font-size: 16px;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+.home-target {
+  margin-top: 10px;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  padding: 12px 0 4px;
+}
+.home-target-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.home-target h4 {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.home-count {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.home-count span {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: 0;
+}
+.home-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.home-forecast {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 8px;
+}
+.home-forecast .chip {
+  margin-bottom: 2px;
+}
+.home-forecast .home-note {
+  margin-top: 0;
+  overflow-wrap: anywhere;
+}
+.home-next {
+  margin-top: 6px;
+  color: #d3e3bb;
+  font-size: 12px;
+}
+.home-track {
+  position: relative;
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 9%);
+}
+.home-track > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: inherit;
+  background: var(--lime);
+}
+.home-track[data-graded='false'] > span {
+  background: repeating-linear-gradient(45deg, #8a9a86 0 4px, #6d7c6a 4px 8px);
+}
+.home-tick {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 14px;
+  border-radius: 1px;
+  background: #e8efe3;
+  text-decoration: none;
+}
+.home-tick-aspiration {
+  background: var(--streak);
+}
+.home-pattern {
+  margin-top: 8px;
+  border-radius: 9px;
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.home-pattern[data-tone='good'] {
+  background: rgb(198 243 109 / 7%);
+  color: #d3e3bb;
+}
+.home-pattern[data-tone='nudge'] {
+  background: rgb(244 194 126 / 8%);
+  color: var(--streak);
+}
+/* The weekly review's recap (MOM-113 block 3.2) reuses the home cards above; these are only its own lists and link. */
+.review-crossings,
+.review-priorities,
+.review-changes ul {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.review-priorities {
+  color: inherit;
+  font-size: 14px;
+}
+.review-crossings li,
+.review-priorities li,
+.review-changes li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.review-changes {
+  display: grid;
+  gap: 10px;
+}
+.review-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+.review-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--lime);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+/* ---- The week plan and the "Your plan" card (MOM-112 block 2) --------------------------------------------------------
+   The person's own choice of which things to do on which days. A day is a button of at least 44px, seven to a row, so a
+   phone shows the whole week without sideways scroll. Reuses the home card surfaces and chips. */
+
+.plan-screen {
+  display: grid;
+  gap: 18px;
+}
+.plan-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 14px;
+}
+.plan-window h2 {
+  font-size: 16px;
+  letter-spacing: -0.035em;
+}
+.plan-weeks {
+  display: flex;
+  gap: 16px;
+}
+.plan-weeks a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--lime);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.plan-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.plan-section > h2 {
+  font-size: 15px;
+  letter-spacing: -0.03em;
+}
+.plan-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.plan-error {
+  border: 1px solid rgb(244 128 120 / 40%);
+  border-radius: 12px;
+  background: rgb(244 128 120 / 9%);
+  padding: 10px 12px;
+  color: var(--danger);
+  font-size: 13px;
+}
+.plan-goal {
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 20px;
+  background: var(--surface-soft);
+  padding: 14px;
+}
+.plan-goal h3 {
+  font-size: 16px;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+.plan-row {
+  margin-top: 10px;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  padding: 12px 0 4px;
+}
+.plan-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+.plan-row-head h4 {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.plan-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.plan-set-days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
+.plan-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+/* On a phone the card's padding and the gaps are tightened so seven days still make 44px each (390px wide: 342px of card,
+   24px of gaps, 45px a day). */
+@media (max-width: 480px) {
+  .plan-goal {
+    padding: 12px 8px;
+  }
+  .plan-days {
+    gap: 4px;
+  }
+}
+.plan-day {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 11px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.plan-day span:first-child {
+  color: var(--muted);
+}
+.plan-day span:last-child {
+  font-size: 14px;
+  font-weight: 600;
+}
+.plan-day[data-today='true'] {
+  border-color: rgb(198 243 109 / 45%);
+}
+.plan-day[aria-pressed='true'] {
+  border-color: rgb(198 243 109 / 60%);
+  background: rgb(198 243 109 / 14%);
+  color: var(--lime);
+}
+.plan-day[aria-pressed='true'] span:first-child {
+  color: inherit;
+}
+/* A day that has passed is clearly quieter than one the person can still choose. */
+.plan-day:disabled {
+  border-color: rgb(255 255 255 / 8%);
+  opacity: 0.38;
+}
+.plan-row .plan-note {
+  margin-top: 8px;
+}
+.plan-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-self: start;
+  border: 1px solid rgb(198 243 109 / 35%);
+  border-radius: 999px;
+  background: rgb(198 243 109 / 9%);
+  padding: 0 16px;
+  color: var(--lime);
+  font-size: 13px;
+  font-weight: 600;
+}
+.plan-button:disabled {
+  opacity: 0.55;
+}
+.plan-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-kinds label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.plan-kinds select {
+  min-width: 0;
+  max-width: 55%;
+  min-height: 44px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  padding: 0 10px;
+  color: var(--foreground);
+  font-size: 13px;
+}
+.plan-card-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-card-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.plan-card-list small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.home-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-steps li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.home-steps li i {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 1.5px solid rgb(255 255 255 / 30%);
+  border-radius: 5px;
+}
+.home-steps li[data-done='true'] {
+  color: var(--foreground);
+}
+.home-steps li[data-done='true'] i {
+  border-color: var(--lime);
+  background: var(--lime);
+}
+
+/* ---- Connected app row and toggle ----------------------------------------------------------------------- */
+
+.connected-app-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid rgb(255 255 255 / 6%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 2%);
+  padding: 12px 11px;
+}
+.connected-app-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 11px;
+  background: rgb(111 163 255 / 11%);
+  color: #9bbcff;
+}
+.connected-app-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.sync-dot {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: #69736c;
+}
+.sync-dot.synced {
+  background: var(--lime);
+  box-shadow: 0 0 7px rgb(198 243 109 / 38%);
+}
+/* The switch is the whole 44px tap target; the pill inside is what is drawn. */
+.connection-toggle {
+  position: relative;
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.connection-toggle > .pill {
+  position: relative;
+  display: block;
+  width: 33px;
+  height: 19px;
+  border: 1px solid rgb(255 255 255 / 45%);
+  border-radius: 999px;
+  background: #2a312d;
+  padding: 2px;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease;
+}
+.connection-toggle > .pill > span {
+  display: block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #a3ada5;
+  transition:
+    transform 180ms ease,
+    background 180ms ease;
+}
+.connection-toggle[aria-checked='true'] > .pill {
+  border-color: rgb(198 243 109 / 40%);
+  background: rgb(198 243 109 / 17%);
+}
+.connection-toggle[aria-checked='true'] > .pill > span {
+  transform: translateX(14px);
+  background: var(--lime);
+}
+.connection-toggle:disabled {
+  opacity: 0.6;
+}
+
+/* ---- Dialogs (goal wizard, rebalance drawer) ------------------------------------------------------------ */
+
+.sheet-surface {
+  border: 1px solid rgb(255 255 255 / 9%);
+  background: linear-gradient(160deg, #202724 0%, #191e1d 62%);
+  box-shadow:
+    0 -16px 50px rgb(0 0 0 / 28%),
+    inset 0 1px rgb(255 255 255 / 4%);
+}
+.ai-icon {
+  display: grid;
+  width: 35px;
+  height: 35px;
+  flex: 0 0 35px;
+  place-items: center;
+  border: 1px solid rgb(198 243 109 / 18%);
+  border-radius: 12px;
+  background: rgb(198 243 109 / 9%);
+  color: var(--lime);
+}
+}
+
+/* ---- Layout and navigation (MOM-77) ---------------------------------------------------------------------
+   Ported from the wireframe's .desktop-*, .mobile-header, .goal-builder-* and .adaptive-sheet rules.
+   Below 1200px the page is one scrolling column (the document scrolls; nothing inside it does) with a sticky
+   header. From 1200px it is three columns, 232px / fluid / 326px, with sticky sidebars. */
+@layer components {
+  .desktop-shell {
+    display: block;
+    min-height: 100dvh;
+  }
+  .desktop-sidebar {
+    display: none;
+  }
+  /* The right column wrapper carries no semantics. Below 1200px it disappears so the nudge sheet is positioned
+     against the viewport and the connected stack (which has its own page on small screens) stays hidden. */
+  .desktop-right {
+    display: contents;
+  }
+  .desktop-workspace {
+    display: contents;
+  }
+  .workspace-content {
+    width: 100%;
+    max-width: 640px;
+    min-height: 100dvh;
+    margin: 0 auto;
+    padding: 0 16px 280px;
+  }
+
+  /* Mobile header: sticky, so the logo, risk badge and account links stay reachable while the feed scrolls. */
+  .mobile-header {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 -16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgb(255 255 255 / 6%);
+    background: rgb(17 21 19 / 92%);
+    backdrop-filter: blur(10px);
+  }
+  /* Who is signed in, and the way to sign out: a second row of the sticky header, full width under the logo row. */
+  .mobile-account {
+    display: flex;
+    flex: 0 0 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: -4px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .mobile-account-email {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 44px;
+    color: var(--foreground);
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.04em;
+  }
+  .brand-mark {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 11px;
+    background: var(--lime);
+    color: #1a2412;
+  }
+  .avatar-button {
+    position: relative;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    place-items: center;
+    border-radius: 50%;
+    color: #e5e9e1;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .avatar-button > span {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 50%;
+    background: linear-gradient(145deg, #414944, #252c29);
+  }
+  .icon-link {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border-radius: 12px;
+    color: var(--muted);
+  }
+  .icon-link:hover,
+  .icon-link[aria-current='page'] {
+    background: rgb(255 255 255 / 6%);
+    color: var(--foreground);
+  }
+  .icon-link[aria-current='page'] {
+    box-shadow: inset 0 -2px var(--lime);
+  }
+
+  /* Goal-builder banner: the copy is desktop only; the two actions stay on small screens, where there is no sidebar. */
+  .goal-builder-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin: 16px 0 0;
+  }
+  .goal-builder-copy {
+    display: none;
+    align-items: flex-start;
+    gap: 13px;
+    min-width: 0;
+  }
+  .goal-builder-icon {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    place-items: center;
+    border: 1px solid rgb(198 243 109 / 15%);
+    border-radius: 11px;
+    background: rgb(198 243 109 / 9%);
+    color: var(--lime);
+  }
+  .goal-builder-eyebrow {
+    margin: 0;
+    color: #c1d79c;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .goal-builder-copy h2 {
+    margin: 5px 0 0;
+    color: #f0f3eb;
+    font-size: 15px;
+    font-weight: 620;
+    letter-spacing: -0.035em;
+  }
+  .goal-builder-description {
+    margin: 5px 0 0;
+    color: #a9b3ab;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .goal-builder-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .builder-chip {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid rgb(255 255 255 / 14%);
+    border-radius: 11px;
+    background: rgb(12 16 14 / 55%);
+    padding: 0 12px;
+    color: #d3dad4;
+    font-size: 12px;
+    font-weight: 550;
+    white-space: nowrap;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      color 160ms ease;
+  }
+  .builder-chip svg {
+    width: 14px;
+    height: 14px;
+    color: #a9c77c;
+  }
+  .builder-chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .builder-chip:hover:not(:disabled) {
+    border-color: rgb(198 243 109 / 35%);
+    background: rgb(198 243 109 / 9%);
+    color: #eef4e3;
+  }
+
+  /* Goal cards (the in-feed goal picker on small screens). */
+  .goal-card {
+    position: relative;
+    display: block;
+    min-width: 0;
+    border: 1px solid rgb(255 255 255 / 7%);
+    border-radius: 16px;
+    background: var(--surface-soft);
+    padding: 12px;
+    color: var(--foreground);
+  }
+  .goal-card[aria-current='page'] {
+    border-color: rgb(198 243 109 / 45%);
+    background: rgb(198 243 109 / 6%);
+  }
+  .goal-count {
+    color: var(--foreground);
+    font-size: 12px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .goal-count span {
+    color: var(--muted);
+    font-weight: 450;
+  }
+
+  /* Connected stack card (right column). */
+  .connected-stack {
+    border: 1px solid rgb(255 255 255 / 8%);
+    border-radius: 20px;
+    background: linear-gradient(155deg, #1d2421, #171c1b 76%);
+    box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+  }
+  .right-panel-eyebrow {
+    margin: 0;
+    color: #a9b3ab;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+
+  /* Rebalance nudge: a bottom sheet below 1200px, a card in the right column from 1200px. */
+  .adaptive-sheet {
+    position: fixed;
+    z-index: 20;
+    bottom: 0;
+    left: 50%;
+    width: min(100%, 520px);
+    transform: translateX(-50%);
+    border: 1px solid rgb(255 255 255 / 9%);
+    border-bottom: 0;
+    border-radius: 23px 23px 0 0;
+    background: linear-gradient(160deg, #202724 0%, #191e1d 62%);
+    padding: 10px 20px calc(17px + env(safe-area-inset-bottom));
+    box-shadow:
+      0 -16px 50px rgb(0 0 0 / 28%),
+      inset 0 1px rgb(255 255 255 / 4%);
+    animation: sheet-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .sheet-handle {
+    width: 34px;
+    height: 4px;
+    margin: 0 auto 17px;
+    border-radius: 99px;
+    background: rgb(255 255 255 / 22%);
+  }
+  .ai-label {
+    color: var(--lime);
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.13em;
+  }
+  .ai-new {
+    border-radius: 4px;
+    background: rgb(255 255 255 / 9%);
+    padding: 2px 6px;
+    color: #c0c8c1;
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+  }
+
+  /* Sidebar pieces (desktop). */
+  .sidebar-label {
+    color: #98a39b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .desktop-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    width: fit-content;
+    color: var(--foreground);
+    font-size: 18px;
+    font-weight: 650;
+    letter-spacing: -0.055em;
+  }
+  .desktop-brand .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+  .desktop-nav-link {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 11px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    padding: 0 11px;
+    color: #b0b9b2;
+    font-size: 13px;
+    font-weight: 550;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease;
+  }
+  .desktop-nav-link svg {
+    width: 16px;
+    height: 16px;
+    color: #909b93;
+  }
+  .desktop-nav-link:hover {
+    background: rgb(255 255 255 / 4%);
+    color: var(--foreground);
+  }
+  .desktop-nav-link[aria-current='page'] {
+    border-color: rgb(198 243 109 / 22%);
+    background: rgb(198 243 109 / 8%);
+    color: #eef4e3;
+    font-weight: 650;
+  }
+  .desktop-nav-link[aria-current='page'] svg {
+    color: var(--lime);
+  }
+  .sidebar-goal {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid rgb(255 255 255 / 8%);
+    border-radius: 13px;
+    background: rgb(255 255 255 / 2%);
+    padding: 11px 11px 10px;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease;
+  }
+  .sidebar-goal:hover {
+    border-color: rgb(255 255 255 / 14%);
+    background: rgb(255 255 255 / 4%);
+  }
+  .sidebar-goal:focus-within {
+    outline: 2px solid var(--lime);
+    outline-offset: 2px;
+  }
+  .sidebar-goal[data-active='true'] {
+    border-color: rgb(198 243 109 / 45%);
+    background: rgb(198 243 109 / 6%);
+  }
+  .sidebar-goal-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sidebar-goal-top .channel-icon {
+    width: 25px;
+    height: 25px;
+  }
+  .sidebar-goal-count {
+    color: #dce4d9;
+    font-size: 12px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The button is the title only (its accessible name is the goal's name); its ::after stretches the click and
+     touch target over the whole card. */
+  .sidebar-goal-name {
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #e0e6df;
+    font-size: 13px;
+    font-weight: 550;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sidebar-goal-name::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  .sidebar-goal-name:focus-visible {
+    outline: none;
+  }
+  .sidebar-goal[data-active='true'] .sidebar-goal-name {
+    color: var(--foreground);
+    font-weight: 700;
+  }
+  .sidebar-footer {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 15px 9px 3px;
+    color: #a2ada5;
+    font-size: 12px;
+  }
+  /* Who is signed in, above the sign-out button (WorkspaceSidebar). The email can be long, so it truncates. */
+  .sidebar-account {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 12px 0;
+  }
+  .sidebar-account-email {
+    overflow: hidden;
+    color: var(--foreground);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sidebar-footer-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--lime);
+    box-shadow: 0 0 8px rgb(198 243 109 / 35%);
+  }
+
+  @media (min-width: 1200px) {
+    body {
+      background: #0a0d0c;
+    }
+    .desktop-shell {
+      display: grid;
+      grid-template-columns: 232px minmax(0, 1fr) 326px;
+      align-items: start;
+      gap: 30px;
+      width: 100%;
+      max-width: 1680px;
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding: 30px 32px;
+      background: radial-gradient(ellipse at 47% -12%, rgb(169 206 114 / 5%), transparent 44%);
+    }
+    .desktop-shell[data-columns='2'] {
+      grid-template-columns: 232px minmax(0, 1fr);
+    }
+    .desktop-sidebar {
+      position: sticky;
+      top: 30px;
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100dvh - 60px);
+      max-height: calc(100dvh - 60px);
+      overflow-y: auto;
+      padding: 4px 20px 0 0;
+      border-right: 1px solid rgb(255 255 255 / 7%);
+    }
+    .desktop-status-stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 22px;
+    }
+    .desktop-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-top: 30px;
+    }
+    .desktop-nav .sidebar-label {
+      margin: 0 0 8px 10px;
+    }
+    .desktop-channel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-top: 28px;
+    }
+    .sidebar-section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 1px 4px 10px;
+    }
+    .desktop-workspace {
+      display: block;
+      min-width: 0;
+    }
+    .workspace-content {
+      max-width: none;
+      min-height: auto;
+      margin: 0;
+      padding: 27px 0 56px;
+    }
+    .mobile-header,
+    .mobile-goal-channels {
+      display: none;
+    }
+    .goal-builder-banner {
+      margin-bottom: 30px;
+      border: 1px solid rgb(198 243 109 / 14%);
+      border-radius: 18px;
+      background: linear-gradient(110deg, rgb(198 243 109 / 8%), rgb(255 255 255 / 2%) 64%);
+      padding: 19px 21px;
+    }
+    .goal-builder-copy {
+      display: flex;
+    }
+    .goal-builder-actions {
+      justify-content: flex-end;
+    }
+    .builder-chip {
+      min-height: 36px;
+    }
+    .desktop-right {
+      position: sticky;
+      top: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-top: 27px;
+    }
+    .adaptive-sheet {
+      position: relative;
+      bottom: auto;
+      left: auto;
+      width: 100%;
+      transform: none;
+      border: 1px solid rgb(255 255 255 / 8%);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+      animation: none;
+    }
+    .sheet-handle {
+      display: none;
+    }
+  }
+}
+
+@keyframes sheet-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

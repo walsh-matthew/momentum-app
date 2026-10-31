@@ -87,8 +87,8 @@ describe('the sweep: every card of every scripted conversation, in everyday word
   });
 
   it.each([
-    ['the workout case', E2E_CASE_ID, 'How many runs makes a week count, even a hard one?', 'You said you run about 2 times a week now.'],
-    ['the reading case', READING_CASE_ID, 'How many pages makes a week count, even a hard one?', 'You said you read about 50 pages a week now.'],
+    ['the workout case', E2E_CASE_ID, 'In a hard week, how many runs would still count?', 'You said you run about 2 times a week now.'],
+    ['the reading case', READING_CASE_ID, 'In a hard week, how many pages would still count?', 'You said you read about 50 pages a week now.'],
   ])('%s: the ideas card asks the number question and quotes what the person said', async (_name, id, lead, detail) => {
     const c = ALL_CASES.find((x) => x.id === id)!;
     const ideas = (await cardsOf(c)).filter((x) => x.ideasDetail !== undefined);
@@ -122,10 +122,10 @@ const turn = (over: Partial<AssistantTurn> = {}): AssistantTurn => ({
 
 describe('one wording builder for every counted thing', () => {
   it.each([
-    [target('t1', 'Pages'), 'How many pages makes a week count, even a hard one?', 'How many pages a week are you hoping for?'],
-    [target('t1', 'Workouts'), 'How many workouts makes a week count, even a hard one?', 'How many workouts a week are you hoping for?'],
-    [target('t1', 'Runs'), 'How many runs makes a week count, even a hard one?', 'How many runs a week are you hoping for?'],
-    [target('t1', 'Practice', { measure: 'time' }), 'How many minutes of practice makes a week count, even a hard one?', 'How many minutes of practice a week are you hoping for?'],
+    [target('t1', 'Pages'), 'In a hard week, how many pages would still count?', 'How many pages a week are you hoping for?'],
+    [target('t1', 'Workouts'), 'In a hard week, how many workouts would still count?', 'How many workouts a week are you hoping for?'],
+    [target('t1', 'Runs'), 'In a hard week, how many runs would still count?', 'How many runs a week are you hoping for?'],
+    [target('t1', 'Practice', { measure: 'time' }), 'In a hard week, how many minutes of practice would still count?', 'How many minutes of practice a week are you hoping for?'],
     [
       target('t1', 'Blocks sewn', { period: { kind: 'deadline', dueDate: '2026-12-15' } }),
       'How many blocks sewn by Tuesday, Dec 15 would still count as on track?',
@@ -140,14 +140,14 @@ describe('one wording builder for every counted thing', () => {
   });
 
   it('is the bold line of a number question, and of an ideas or options card about that number', () => {
-    expect(normalizeNumberTurn(turn(), TODAY).question).toBe('How many pages makes a week count, even a hard one?');
-    expect(optionsLead(turn({ kind: 'ideas' }), TODAY)).toBe('How many pages makes a week count, even a hard one?');
+    expect(normalizeNumberTurn(turn(), TODAY).question).toBe('In a hard week, how many pages would still count?');
+    expect(optionsLead(turn({ kind: 'ideas' }), TODAY)).toBe('In a hard week, how many pages would still count?');
     expect(optionsLead(turn({ kind: 'interpretations', topic: 'aspiration' }), TODAY)).toBe('How many pages a week are you hoping for?');
   });
 
   it('an offer of ideas about a number says what the number is, in code\'s words', () => {
     const offer = turn({ kind: 'offer_ideas', question: 'Do you have a number in mind, or would some starting ideas help?', detail: 'The fewest pages a week.' });
-    expect(normalizeNumberTurn(offer, TODAY).detail).toBe('The number of pages that makes a week count, even a hard one.');
+    expect(normalizeNumberTurn(offer, TODAY).detail).toBe('The number of pages that would still count in a hard week.');
   });
 });
 
@@ -228,7 +228,7 @@ describe('the checks: jargon, and a source pointed at without the fact', () => {
   });
 
   it('tells Claude: the number in everyday words, and quote the fact or leave it out', () => {
-    expect(SETUP_SYSTEM_PROMPT).toContain('How many workouts makes a week count, even a hard one?');
+    expect(SETUP_SYSTEM_PROMPT).toContain('In a hard week, how many workouts would still count?');
     expect(SETUP_SYSTEM_PROMPT).toContain('You said you read about 50 pages a week now.');
     expect(SETUP_SYSTEM_PROMPT).toContain('Never point at an earlier answer by an abstract name');
     expect(SETUP_SYSTEM_PROMPT).not.toMatch(/What's the fewest|fewest or the aim/);

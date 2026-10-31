@@ -10,7 +10,7 @@ export function EntryFeedback({ error, notice }: EntryFeedbackProps) {
   return (
     <>
       {notice && (
-        <p role="status" className="mt-3 rounded-xl border border-border bg-secondary px-3 py-2 text-sm">
+        <p role="status" className="card-surface mt-3 rounded-xl px-3 py-2 text-sm">
           {notice}
         </p>
       )}

@@ -59,7 +59,7 @@ export function NumberControl({ target, days = null }: NumberControlProps) {
           value={text}
           disabled={pending}
           onChange={(event) => setText(event.target.value)}
-          className="min-h-16 min-w-0 flex-1 rounded-2xl border border-border bg-secondary px-4 text-lg text-foreground placeholder:text-muted"
+          className="min-h-16 min-w-0 flex-1 rounded-2xl border ctl-border bg-secondary px-4 text-lg text-foreground placeholder:text-muted"
         />
         <button
           type="submit"

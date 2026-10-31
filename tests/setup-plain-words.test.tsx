@@ -147,7 +147,7 @@ describe('what the setup cards show', () => {
     const missing = describeMissing(empty, paths.map((path) => ({ path, message: '', code: 'rule' as const })));
     for (const message of Object.values(SETUP_QUICK_PATH_MESSAGES)) {
       const { container } = render(
-        <QuickPathCard message={message} sections={quickPathSections(empty, { locale: 'en-US' })} missing={missing} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
+        <QuickPathCard reason="over_turns" message={message} sections={quickPathSections(empty, { locale: 'en-US' })} missing={missing} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
       );
       expect(unexplainedTerms(readable(container))).toEqual([]);
       cleanup();

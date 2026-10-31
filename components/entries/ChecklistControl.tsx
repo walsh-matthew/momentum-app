@@ -38,7 +38,7 @@ function StepRow({ step, day, onTicked }: StepRowProps) {
         aria-busy={pending}
         disabled={pending}
         onClick={step.ticked ? untick : tick}
-        className="flex min-h-14 w-full items-center gap-4 rounded-2xl border border-border bg-secondary px-4 text-left transition-transform active:scale-[0.99] disabled:opacity-60"
+        className="flex min-h-14 w-full items-center gap-4 rounded-2xl border ctl-border bg-secondary px-4 text-left transition-transform active:scale-[0.99] disabled:opacity-60"
       >
         <span className="task-check" aria-hidden="true">
           {pending ? <Loader2 className="size-[18px] animate-spin" /> : step.ticked ? <Check className="size-[18px]" /> : <Circle className="size-[20px]" />}

@@ -22,9 +22,13 @@
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { devices, type Page } from '@playwright/test';
-import { APPROVE_TEXT, CHANGE_ANSWER, MEANING_LINK, MEANING_TEXT, PICK_DATE, PICK_ONE, PICK_OTHER_DATE, PROPOSAL_YES_TEXT, SEND_AGAIN, TRY_AGAIN, TYPE_INSTEAD, errorCopy, pickedDateText, type RetryCause } from '@/lib/setup/session';
+import { devices, type Locator, type Page } from '@playwright/test';
+import { APPROVE_TEXT, CHANGE_ANSWER, MEANING_LINK, MEANING_TEXT, PICK_DATE, PICK_ONE, PICK_OTHER_DATE, PROPOSAL_YES_TEXT, SEND_AGAIN, SETUP_STORAGE_PREFIX, TRY_AGAIN, TYPE_INSTEAD, errorCopy, pickedDateText, type RetryCause } from '@/lib/setup/session';
+import { emptyDraft } from '@/lib/setup/draft';
+import { runSetupEval } from '@/lib/setup/evals';
+import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
 import { READING_CASE_ID, SETUP_CASES, type ScriptedCase } from '../setup-evals/cases';
+import { goal, scriptedModel, target } from '../helpers/setupScript';
 import { expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
 import { CARD, cardOf, cardTypes, elementsOffScreen, headingOf, sectionOf } from './support/setupCards';
@@ -148,6 +152,8 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
   // The ideas card's lead line, in code's words (round 3c, finding 2), and its detail line.
   let ideasLead: string | null = null;
   let ideasDetail: string | null = null;
+  // The idea buttons as shown (round 3d, finding c): each names the counted thing.
+  let ideasOptions: string[] = [];
 
   for (const { say: line } of scripted.person) {
     await expect(page.locator(CARD)).toHaveCount(1);
@@ -161,6 +167,7 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
       if (say) await expect(sectionOf(page)).not.toContainText(say);
       const detail = sectionOf(page).locator('[data-slot="question-detail"]');
       ideasDetail = (await detail.count()) > 0 ? ((await detail.textContent()) ?? '').trim() : null;
+      ideasOptions = (await sectionOf(page).locator('ol [data-slot="answer-choice"]').allTextContents()).map((t) => t.trim());
     }
     if (opts.everyCard || !seen.has(kind)) await shot(page, kind);
     seen.add(kind);
@@ -239,21 +246,26 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
   await fits(page, 'final');
   await shot(page, 'final');
   seen.add('final');
-  return { seen, errorsShown: errorsShown && stuckShown, ideasLead, ideasDetail };
+  return { seen, errorsShown: errorsShown && stuckShown, ideasLead, ideasDetail, ideasOptions };
 }
 
-test.describe('at 390px (phone)', () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+// SETUP_SHOT_WIDTH takes the same screenshots at another width (1280 for the desktop set, MOM-30); the checks run there too.
+const SHOT_WIDTH = Number(process.env.SETUP_SHOT_WIDTH) || 390;
+
+test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
+  test.use({ viewport: { width: SHOT_WIDTH, height: SHOT_WIDTH === 390 ? 844 : 900 } });
 
   test('every kind of setup card, and every error card in place, fits the screen and is saved as a screenshot', async ({ page }) => {
     test.setTimeout(420_000);
     await signUpAndConfirm(page, 'setup-cards');
     try {
-      const { seen, errorsShown, ideasLead, ideasDetail } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
+      const { seen, errorsShown, ideasLead, ideasDetail, ideasOptions } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
       expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options'].sort());
       expect(errorsShown).toBe(true);
-      expect(ideasLead).toBe('How many runs makes a week count, even a hard one?');
+      expect(ideasLead).toBe('In a hard week, how many runs would still count?');
       expect(ideasDetail).toBe('You said you run about 2 times a week now.');
+      expect(ideasOptions.length).toBeGreaterThan(1);
+      for (const option of ideasOptions) expect(option).toMatch(/^\d\. At least \d+ runs a week$/);
       // Round 3, finding 5; round 3c, finding 3: the recap reads as the person's goal, in whole sentences.
       const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
       expect(recap[0]).toMatch(/^Your goal: at least \d+ runs a week\.$/);
@@ -268,12 +280,113 @@ test.describe('at 390px (phone)', () => {
     test.setTimeout(300_000);
     const reading = SETUP_CASES.find((c) => c.id === READING_CASE_ID)!;
     await signUpAndConfirm(page, 'setup-reading');
-    const { ideasLead, ideasDetail } = await walk(page, reading, shooter('reading'), { everyCard: true, errors: false });
-    expect(ideasLead).toBe('How many pages makes a week count, even a hard one?');
+    const { ideasLead, ideasDetail, ideasOptions } = await walk(page, reading, shooter('reading'), { everyCard: true, errors: false });
+    expect(ideasLead).toBe('In a hard week, how many pages would still count?');
     expect(ideasDetail).toBe('You said you read about 50 pages a week now.');
+    expect(ideasOptions.length).toBeGreaterThan(1);
+    for (const option of ideasOptions) expect(option).toMatch(/^\d\. At least \d+ pages a week$/);
     const recap = await page.locator('section[aria-labelledby="setup-final"] li').allTextContents();
     expect(recap[0]).toBe('Your goal: at least 100 pages a week.');
     await expect(page.locator('main')).not.toContainText(/sessions/i);
+  });
+
+  // The quick-path card (MOM-111, the owner's review): what happened, what it has, what to do next and why Save is off, before any
+  // button; real nested lists with a hanging indent; Start again asks first; and in round 3d the missing number is the number
+  // question itself. A conversation that has used its 40 turns is put in this tab's session storage and the waiting answer is
+  // sent, so the server offers the quick path.
+  async function openQuickPath(page: Page, label: string, session: object): Promise<Locator> {
+    await signUpAndConfirm(page, label);
+    await page.goto('/setup');
+    await page.getByRole('button', { name: 'Start' }).click();
+    await nextCard(page, null);
+    const key = await page.evaluate((prefix) => Object.keys(window.sessionStorage).find((k) => k.startsWith(prefix)) ?? null, SETUP_STORAGE_PREFIX);
+    expect(key, 'the tab keeps the conversation in progress').not.toBeNull();
+    await page.evaluate(([k, value]) => window.sessionStorage.setItem(k, value), [key!, JSON.stringify(session)] as const);
+    await page.reload();
+    await page.getByRole('button', { name: SEND_AGAIN }).click();
+    const quick = page.locator('section[aria-labelledby="setup-quick-path"]');
+    await expect(quick).toBeVisible({ timeout: 30_000 });
+    return quick;
+  }
+
+  // Real lists: nothing on the card keeps its shape with pre-wrap, every list shows a bullet, and a line that wraps lines up under
+  // its own first word (every line of a text node starts at the same left edge).
+  async function expectRealLists(quick: Locator): Promise<void> {
+    const state = await quick.evaluate((root) => {
+      const pre = [...root.querySelectorAll('*')].filter((n) => getComputedStyle(n).whiteSpace.startsWith('pre')).length;
+      const lists = [...root.querySelectorAll('ul')];
+      const bulleted = lists.every((u) => /disc|circle/.test(getComputedStyle(u).listStyleType));
+      const ragged: string[] = [];
+      for (const li of root.querySelectorAll('li')) {
+        const text = [...li.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '');
+        if (!text) continue;
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const lefts = [...range.getClientRects()].map((r) => Math.round(r.left));
+        if (lefts.length > 1 && Math.max(...lefts) - Math.min(...lefts) > 1) ragged.push((li.textContent ?? '').slice(0, 40));
+      }
+      return { pre, lists: lists.length, bulleted, ragged, nested: root.querySelectorAll('li > ul').length };
+    });
+    expect(state.pre, 'nothing is shaped with pre-wrap').toBe(0);
+    expect(state.lists).toBeGreaterThan(2);
+    expect(state.bulleted, 'every list shows a bullet').toBe(true);
+    expect(state.ragged, 'a wrapped line lines up under its own first word').toEqual([]);
+  }
+
+  test('the quick path with something missing says why Save is off and what to do, in real lists, and Start again asks first', async ({ page }) => {
+    test.setTimeout(120_000);
+    const draft = emptyDraft();
+    draft.model.goals.push({ ...goal('g1', 'Get stronger and keep it up through the whole winter season'), targets: [target('t1', 'Workouts'), target('t2', 'Pages of the training book')] });
+    const claude = { kind: 'question', chunk: null, skipped: null, say: '', question: 'Anything else?', detail: null, topic: 'idea', options: [], draft };
+    const transcript = Array.from({ length: 40 }, () => [{ role: 'assistant', turn: claude }, { role: 'person', text: 'That is all.' }]).flat();
+    const quick = await openQuickPath(page, 'setup-quick-path', { transcript, draft, spentTokens: 0 });
+
+    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.missingTitle })).toBeVisible();
+    await expect(quick.getByText("This setup has used up the questions Claude gets for one setup, so it can't ask any more.", { exact: true })).toBeVisible();
+    await expect(quick.getByText(QUICK_PATH_WORDS.intro, { exact: true })).toBeVisible();
+    await expect(quick.getByText(QUICK_PATH_WORDS.missingNoWait, { exact: true })).toBeVisible();
+    await expect(quick.getByText(QUICK_PATH_WORDS.saveOff, { exact: true })).toBeVisible();
+    await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeDisabled();
+    // The words come before the buttons.
+    const [words, buttons] = await Promise.all([quick.getByText(QUICK_PATH_WORDS.missingNoWait, { exact: true }).boundingBox(), quick.getByRole('button', { name: 'Save what I have' }).boundingBox()]);
+    expect((words?.y ?? 0) < (buttons?.y ?? 0)).toBe(true);
+    // Round 3d: the missing number is the number question itself, and nothing promises a default.
+    await expect(quick.locator('ul li').filter({ hasText: 'In a hard week, how many workouts would still count?' })).toHaveCount(1);
+    await expect(quick).not.toContainText(/least you aim for|default/i);
+    await expectRealLists(quick);
+    await fits(page, 'quick path, missing');
+    await shooter('quick-path')(page, 'missing');
+
+    // Start again asks first: the first tap clears nothing.
+    await quick.getByRole('button', { name: 'Start again' }).click();
+    await expect(quick.getByText(QUICK_PATH_WORDS.confirmStartOver, { exact: true })).toBeVisible();
+    expect(await page.evaluate((prefix) => Object.keys(window.sessionStorage).some((k) => k.startsWith(prefix)), SETUP_STORAGE_PREFIX)).toBe(true);
+    await quick.getByRole('button', { name: QUICK_PATH_WORDS.confirmNo }).click();
+    await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeVisible();
+  });
+
+  test('the quick path with nothing missing says it is ready, and Save is on', async ({ page }) => {
+    test.setTimeout(120_000);
+    // A real, validated setup: the e2e case's whole conversation, with filler turns in front so the 40-turn budget is spent.
+    const c = e2eCase();
+    const report = await runSetupEval(c, scriptedModel(c.script));
+    expect(report.finalIssues ?? []).toEqual([]);
+    const assistants = report.transcript.filter((m) => m.role === 'assistant').length;
+    // The real conversation comes first and untouched (what the person said is judged by where it sits in it); the filler that spends
+    // the budget follows it, holding the same final draft, so it changes nothing the checks compare.
+    const claude = { kind: 'question', chunk: null, skipped: null, say: '', question: 'Anything else?', detail: null, topic: 'idea', options: [], draft: report.draft };
+    const filler = Array.from({ length: Math.max(0, 40 - assistants) }, () => [{ role: 'assistant', turn: claude }, { role: 'person', text: 'That is all.' }]).flat();
+    const transcript = [...report.transcript, { role: 'person', text: 'Yes, that is right.' }, ...filler];
+    const quick = await openQuickPath(page, 'setup-quick-path-ready', { transcript, draft: report.draft, spentTokens: 0 });
+
+    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.readyTitle })).toBeVisible();
+    await expect(quick.getByText(QUICK_PATH_WORDS.readyNext, { exact: true })).toBeVisible();
+    await expect(quick.getByText(QUICK_PATH_WORDS.saveOff)).toHaveCount(0);
+    await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeEnabled();
+    await expect(quick).not.toContainText(/default/i);
+    await expectRealLists(quick);
+    await fits(page, 'quick path, ready');
+    await shooter('quick-path')(page, 'ready');
   });
 });
 
