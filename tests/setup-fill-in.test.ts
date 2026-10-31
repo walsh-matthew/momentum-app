@@ -13,6 +13,7 @@ import { fillQuickPathItem, saveApprovedSetup } from '@/lib/services/setup';
 import { FILL_IN_ERRORS, fillInItems } from '@/lib/setup/fillIn';
 import { runSetupEval } from '@/lib/setup/evals';
 import { PROPOSAL_YES_TEXT } from '@/lib/setup/session';
+import { acceptedStartingPoints, startingPointForPath } from '@/lib/setup/startingPoints';
 import { validateDraft } from '@/lib/setup/validate';
 import { SETUP_CHUNKS, type AssistantTurn, type SetupSession } from '@/types/setup';
 import type { FillInItem, QuickPathState } from '@/types/setupScreen';
@@ -251,5 +252,231 @@ describe('fillQuickPathItem: canSave', () => {
     expect(out.items.map((i) => i.id)).toEqual(['person.dayEnd']);
     const result = await saveApprovedSetup(out.session, true);
     expect(result.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The second set: dates, shape, source, deadline task fields and a step's target
+// ---------------------------------------------------------------------------
+
+// The starting points an accepted suggestion added between two sessions. (The eval case already holds one from Claude's own
+// scripted conversation, so what matters here is only what the fill-in adds.)
+const newMarks = (before: SetupSession, after: SetupSession) => {
+  const had = new Set(acceptedStartingPoints(before.draft).map((m) => JSON.stringify(m)));
+  return acceptedStartingPoints(after.draft).filter((m) => !had.has(JSON.stringify(m)));
+};
+
+// The same stopped-early session with one goal opened up the way a setup that stopped early would be: no start date, no shape,
+// no source for its weekly target, a deadline task with no date, and a habit that feeds nothing yet.
+async function opened() {
+  const { session, floorKey } = await stoppedEarly({});
+  const draft = structuredClone(session.draft);
+  const goal = draft.model.goals.find((g) => g.targets.some((t) => t.key === floorKey));
+  const target = goal?.targets.find((t) => t.key === floorKey);
+  if (!goal || !target) throw new Error('fixture');
+  goal.startDate = null;
+  goal.shape = null;
+  goal.endDate = null;
+  goal.blockWeeks = null;
+  target.sources = [];
+  goal.items.push(
+    { key: 'sew', kind: 'deadline_task', title: 'Sew the quilt', targetKey: null, dueDate: null, dateCanMove: null, estimateMinutes: null, steps: [] },
+    { key: 'walk', kind: 'habit', title: 'Walk', targetKey: null, dueDate: null, dateCanMove: null, estimateMinutes: null, steps: [] },
+  );
+  const g = `goals.${goal.key}`;
+  const ids = {
+    start: `${g}.startDate`,
+    shape: `${g}.shape`,
+    end: `${g}.endDate`,
+    source: `${g}.targets.${floorKey}.sources`,
+    due: `${g}.items.sew.dueDate`,
+    canMove: `${g}.items.sew.dateCanMove`,
+    feeds: `${g}.items.walk.targetKey`,
+  };
+  return { session: { ...session, draft } as SetupSession, floorKey, goal, ids };
+}
+
+describe('fillInItems: the second set', () => {
+  it('offers each with its control, its choices and the one suggestion code has', async () => {
+    const { session, ids, floorKey } = await opened();
+    const items = itemsOf(session);
+    const by = (id: string) => items.find((i) => i.id === id);
+
+    expect(by(ids.start)).toMatchObject({ kind: 'date', suggestion: 'today' });
+    expect(by(ids.shape)?.choices.map((c) => c.label)).toEqual(['It keeps going', 'It has an end date', 'It has a deadline']);
+    expect(by(ids.source)?.choices.map((c) => c.label)).toEqual(["I'll log it myself", 'Hevy', 'Google Calendar']);
+    expect(by(ids.due)).toMatchObject({ kind: 'date', suggestion: null });
+    expect(by(ids.canMove)?.choices.map((c) => c.label)).toEqual(['Yes, it can move', "No, it can't move"]);
+    expect(by(ids.feeds)?.choices.map((c) => c.value)).toContain(floorKey);
+    // The end date waits for a shape that has one.
+    expect(by(ids.end)).toBeUndefined();
+    // Only the start date has a suggestion.
+    expect(items.filter((i) => i.suggestion !== null).map((i) => i.id)).toEqual([ids.start]);
+  });
+});
+
+describe('fillQuickPathItem: dates', () => {
+  it("a picked date is said in the picker's own words, with its year", async () => {
+    const { session, ids } = await opened();
+    const out = await mustFill(session, ids.start, '2026-11-02');
+    expect(lastTwo(out.session)[1].text).toBe('Monday, November 2, 2026');
+    expect(out.session.draft.said.at(-1)?.how).toBe('said');
+    expect(JSON.stringify(out.session.draft.model)).toContain('2026-11-02');
+  });
+
+  it('today taken as a suggestion is a proposal and a yes, and is marked a starting point', async () => {
+    const { session, ids, goal } = await opened();
+    const before = session.transcript.length;
+    const out = await mustFill(session, ids.start, TODAY, 'accepted');
+    const [asked, answered] = lastTwo(out.session);
+    expect(asked.turn.kind).toBe('proposal');
+    expect(asked.turn.topic).toBe('start_date');
+    expect(asked.turn.question).toBe(itemsOf(session).find((i) => i.id === ids.start)?.line);
+    expect(asked.turn.options).toEqual(['today, Friday, Oct 30']);
+    expect(answered.text).toBe(PROPOSAL_YES_TEXT);
+    expect(out.session.draft.said.at(-1)).toEqual({ path: ids.start, turn: before + 1, how: 'accepted' });
+    // A typed value is stored as said; this one is a starting point the first review asks about.
+    expect(newMarks(session, out.session)).toEqual([{ subject: { kind: 'goal', goalKey: goal.key }, field: 'start_date' }]);
+    expect(startingPointForPath(ids.start)?.field).toBe('start_date');
+  });
+
+  it('a typed value is never a starting point', async () => {
+    const { session, ids } = await opened();
+    const out = await mustFill(session, ids.start, '2026-11-02');
+    expect(newMarks(session, out.session)).toEqual([]);
+  });
+
+  it('refuses a suggestion that is not today, and a date that is not real', async () => {
+    const { session, ids } = await opened();
+    expect(await ask(session, ids.start, '2026-11-02', 'accepted')).toEqual({ ok: false, error: FILL_IN_ERRORS.noSuggestion });
+    expect(await ask(session, ids.start, '2026-02-31')).toEqual({ ok: false, error: FILL_IN_ERRORS.badDate });
+    expect(await ask(session, ids.start, 'next week')).toEqual({ ok: false, error: FILL_IN_ERRORS.badDate });
+  });
+
+  it('a shape with an end date makes the end date the next item, and an end date before the start is refused', async () => {
+    const { session, ids } = await opened();
+    let out = await mustFill(session, ids.start, '2026-11-02');
+    out = await mustFill(out.session, ids.shape, 'finite');
+    expect(lastTwo(out.session)[1].text).toBe('It has an end date');
+    expect(out.items.map((i) => i.id)).toContain(ids.end);
+
+    expect(await ask(out.session, ids.end, '2026-10-01')).toEqual({ ok: false, error: FILL_IN_ERRORS.badDate });
+    out = await mustFill(out.session, ids.end, '2027-01-15');
+    expect(out.items.map((i) => i.id)).not.toContain(ids.end);
+  });
+
+  it('a start date that would fall after an end date already given is refused, and nothing changes', async () => {
+    const { session, ids } = await opened();
+    let out = await mustFill(session, ids.shape, 'finite');
+    out = await mustFill(out.session, ids.end, '2026-11-10');
+    const snapshot = JSON.stringify(out.session);
+    expect(await ask(out.session, ids.start, '2026-12-01')).toEqual({ ok: false, error: FILL_IN_ERRORS.badDate });
+    expect(JSON.stringify(out.session)).toBe(snapshot);
+    expect((await mustFill(out.session, ids.start, '2026-11-02')).items.map((i) => i.id)).not.toContain(ids.start);
+  });
+
+  it('a shape of "keeps going" asks nothing more', async () => {
+    const { session, ids } = await opened();
+    const out = await mustFill(session, ids.shape, 'ongoing');
+    expect(out.items.map((i) => i.id)).not.toContain(ids.end);
+    expect(await ask(session, ids.shape, 'sometimes')).toEqual({ ok: false, error: FILL_IN_ERRORS.badValue });
+  });
+});
+
+describe('fillQuickPathItem: source', () => {
+  it('offers only logging it yourself or an app the code supports, and stores that', async () => {
+    const { session, ids, floorKey, goal } = await opened();
+    const sourcesOf = (s: SetupSession) => s.draft.model.goals.find((g) => g.key === goal.key)?.targets.find((t) => t.key === floorKey)?.sources;
+    const manual = await mustFill(session, ids.source, 'manual');
+    expect(lastTwo(manual.session)[1].text).toBe("I'll log it myself");
+    expect(sourcesOf(manual.session)).toEqual([{ kind: 'manual' }]);
+
+    const hevy = await mustFill(session, ids.source, 'hevy');
+    expect(sourcesOf(hevy.session)).toEqual([{ kind: 'synced', provider: 'hevy', metric: null }]);
+    // Not a provider the code supports, and not a suggestion.
+    expect(await ask(session, ids.source, 'strava')).toEqual({ ok: false, error: FILL_IN_ERRORS.badValue });
+    expect(await ask(session, ids.source, 'manual', 'accepted')).toEqual({ ok: false, error: FILL_IN_ERRORS.noSuggestion });
+  });
+
+  it('an app with more than one number to count asks which, in its own words, as the next item', async () => {
+    const { session, ids, floorKey, goal } = await opened();
+    const draft = structuredClone(session.draft);
+    const target = draft.model.goals.find((g) => g.key === goal.key)?.targets.find((t) => t.key === floorKey);
+    if (!target) throw new Error('fixture');
+    target.measure = 'quantity';
+    target.unit = 'sets';
+    const quantity = { ...session, draft };
+
+    const out = await mustFill(quantity, ids.source, 'hevy');
+    const next = out.items.find((i) => i.id === ids.source);
+    expect(next?.line).toBe(`Which number counts for "${target.title}" in Hevy.`);
+    expect(next?.choices.map((c) => c.label)).toEqual(['pounds lifted', 'kilograms lifted', 'sets', 'minutes']);
+    expect(out.canSave).toBe(false);
+
+    const done = await mustFill(out.session, ids.source, 'sets');
+    expect(lastTwo(done.session)[0].turn.question).toBe(next?.line);
+    expect(lastTwo(done.session)[0].turn.topic).toBe('metric');
+    expect(done.items.map((i) => i.id)).not.toContain(ids.source);
+    expect(done.session.draft.model.goals.find((g) => g.key === goal.key)?.targets.find((t) => t.key === floorKey)?.sources).toEqual([
+      { kind: 'synced', provider: 'hevy', metric: 'sets' },
+    ]);
+  });
+});
+
+describe("fillQuickPathItem: a deadline task and a step's target", () => {
+  it('sets its date and whether it can move, the second as the answer to its own question', async () => {
+    const { session, ids, goal } = await opened();
+    let out = await mustFill(session, ids.due, '2026-12-15');
+    out = await mustFill(out.session, ids.canMove, 'no');
+    const [asked, answered] = lastTwo(out.session);
+    expect(asked.turn.topic).toBe('date_can_move');
+    expect(asked.turn.question).toBe(itemsOf(session).find((i) => i.id === ids.canMove)?.line);
+    expect(answered.text).toBe("No, it can't move");
+    const task = out.session.draft.model.goals.find((g) => g.key === goal.key)?.items.find((i) => i.key === 'sew');
+    expect(task).toMatchObject({ dueDate: '2026-12-15', dateCanMove: false });
+    expect(out.items.map((i) => i.id)).not.toContain(ids.due);
+    expect(out.items.map((i) => i.id)).not.toContain(ids.canMove);
+    expect(await ask(session, ids.canMove, 'maybe')).toEqual({ ok: false, error: FILL_IN_ERRORS.badValue });
+  });
+
+  it("feeds a habit to one of the goal's own targets, by the target's name", async () => {
+    const { session, ids, floorKey, goal } = await opened();
+    const out = await mustFill(session, ids.feeds, floorKey);
+    expect(lastTwo(out.session)[1].text).toBe(goal.targets.find((t) => t.key === floorKey)?.title);
+    expect(out.session.draft.model.goals.find((g) => g.key === goal.key)?.items.find((i) => i.key === 'walk')?.targetKey).toBe(floorKey);
+    expect(await ask(session, ids.feeds, 'nothing_here')).toEqual({ ok: false, error: FILL_IN_ERRORS.badValue });
+  });
+});
+
+describe('fillQuickPathItem: all of it', () => {
+  it('fills in everything a stopped setup lacked, one item at a time, and the same save writes it', async () => {
+    const { session, ids, floorKey } = await opened();
+    const person = { ...session.draft.model.person, timeZone: null, dayEnd: null, weekStart: null };
+    const full: SetupSession = { ...session, draft: { ...session.draft, model: { ...session.draft.model, person } } };
+
+    const values: [string, string, 'said' | 'accepted'][] = [
+      ['person.timeZone', 'Europe/Berlin', 'accepted'],
+      ['person.dayEnd', '22:30', 'said'],
+      ['person.weekStart', '1', 'said'],
+      [ids.start, TODAY, 'accepted'],
+      [ids.shape, 'ongoing', 'said'],
+      [ids.source, 'manual', 'said'],
+      [ids.due, '2026-12-15', 'said'],
+      [ids.canMove, 'yes', 'said'],
+      [ids.feeds, floorKey, 'said'],
+    ];
+    let state: FilledOk | null = null;
+    let current = full;
+    for (const [id, value, how] of values) {
+      if (state) expect(state.canSave).toBe(false);
+      state = await mustFill(current, id, value, how);
+      current = state.session;
+    }
+    expect(state?.canSave, JSON.stringify(state?.missing)).toBe(true);
+    expect(state?.items).toEqual([]);
+    expect(newMarks(full, current).map((m) => m.field)).toEqual(['start_date']);
+
+    const saved = await saveApprovedSetup(current, true);
+    expect(saved.ok, saved.ok ? '' : saved.error).toBe(true);
   });
 });

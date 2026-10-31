@@ -172,6 +172,53 @@ describe('the controls hand the value to onFill', () => {
     fireEvent.click(buttons[6]);
     expect(onFill).toHaveBeenCalledWith(WEEK_START, '7', 'said');
   });
+
+  it('a date is a date field and Set, and only a start date shows today as a button, which counts as accepted', () => {
+    const START: FillInItem = { id: 'goals.g.startDate', line: 'A start date for "Get stronger".', kind: 'date', choices: [], suggestion: 'today' };
+    const DUE: FillInItem = { id: 'goals.g.items.sew.dueDate', line: 'The date for "Sew".', kind: 'date', ...none };
+    const { onFill } = card([START, DUE], { today: '2026-10-30' });
+
+    fireEvent.click(within(group(START)).getByRole('button', { name: 'Use today, Friday, Oct 30' }));
+    expect(onFill).toHaveBeenLastCalledWith(START, '2026-10-30', 'accepted');
+    expect(within(group(DUE)).queryByRole('button', { name: /use today/i })).toBeNull();
+
+    for (const item of [START, DUE]) {
+      const g = within(group(item));
+      const set = g.getByRole('button', { name: QUICK_PATH_WORDS.setItem }) as HTMLButtonElement;
+      expect(set.disabled).toBe(true);
+      fireEvent.change(g.getByLabelText(item.line), { target: { value: '2026-11-02' } });
+      fireEvent.click(set);
+      expect(onFill).toHaveBeenLastCalledWith(item, '2026-11-02', 'said');
+    }
+  });
+
+  it('a shape, a source and a yes or no are buttons, each sending its value, and none is a suggestion', () => {
+    const SHAPE: FillInItem = {
+      id: 'goals.g.shape',
+      line: 'Whether "Get stronger" keeps going, has an end date, or has a deadline.',
+      kind: 'choice',
+      choices: [
+        { value: 'ongoing', label: 'It keeps going' },
+        { value: 'finite', label: 'It has an end date' },
+      ],
+      suggestion: null,
+    };
+    const MOVE: FillInItem = {
+      id: 'goals.g.items.sew.dateCanMove',
+      line: 'Whether the date for "Sew" can move.',
+      kind: 'yesNo',
+      choices: [
+        { value: 'yes', label: 'Yes, it can move' },
+        { value: 'no', label: "No, it can't move" },
+      ],
+      suggestion: null,
+    };
+    const { onFill } = card([SHAPE, MOVE]);
+    fireEvent.click(within(group(SHAPE)).getByRole('button', { name: 'It has an end date' }));
+    expect(onFill).toHaveBeenLastCalledWith(SHAPE, 'finite', 'said');
+    fireEvent.click(within(group(MOVE)).getByRole('button', { name: "No, it can't move" }));
+    expect(onFill).toHaveBeenLastCalledWith(MOVE, 'no', 'said');
+  });
 });
 
 describe('on the screen', () => {

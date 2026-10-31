@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { casualDate } from '@/lib/dates/casual';
 import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
 import type { FillInItem } from '@/types/setupScreen';
 import { AnswerChoice } from './AnswerChoice';
@@ -16,6 +17,8 @@ interface QuickPathFillInProps {
   disabled: boolean;
   // The zone this device reports, offered as the one suggestion for a time zone.
   deviceZone: string | null;
+  // The date on this device (YYYY-MM-DD), offered as the one suggestion for a start date.
+  today: string | null;
   onFill: (item: FillInItem, value: string, how: FillHow) => void;
 }
 
@@ -24,7 +27,7 @@ const FIELD =
 
 interface FieldProps {
   label: string;
-  type: 'text' | 'time';
+  type: 'text' | 'time' | 'date';
   inputMode?: 'decimal';
   disabled: boolean;
   onSet: (value: string) => void;
@@ -50,7 +53,7 @@ function Field({ label, type, inputMode, disabled, onSet }: FieldProps) {
 
 // The control for one missing item on the quick path card (MOM-111): the item's own line, then the one control its kind needs.
 // Every value is the person's tap or typing; the only suggestion is the device's time zone, and it is a button, never filled in.
-export function QuickPathFillIn({ item, disabled, deviceZone, onFill }: QuickPathFillInProps) {
+export function QuickPathFillIn({ item, disabled, deviceZone, today, onFill }: QuickPathFillInProps) {
   const said = (value: string) => onFill(item, value, 'said');
   const labelId = `fill-${item.id}`;
   return (
@@ -60,6 +63,16 @@ export function QuickPathFillIn({ item, disabled, deviceZone, onFill }: QuickPat
       </p>
       {item.kind === 'timeZone' && <TimeZonePicker deviceZone={deviceZone} disabled={disabled} onPick={(zone, how) => onFill(item, zone, how)} />}
       {item.kind === 'time' && <Field label={item.line} type="time" disabled={disabled} onSet={said} />}
+      {item.kind === 'date' && (
+        <div className="space-y-2">
+          {item.suggestion === 'today' && today && (
+            <AnswerChoice disabled={disabled} onClick={() => onFill(item, today, 'accepted')}>
+              Use today, {casualDate(today, today, { relative: false })}
+            </AnswerChoice>
+          )}
+          <Field label={item.line} type="date" disabled={disabled} onSet={said} />
+        </div>
+      )}
       {item.kind === 'number' && <Field label={item.line} type="text" inputMode="decimal" disabled={disabled} onSet={said} />}
       {item.kind === 'text' && <Field label={item.line} type="text" disabled={disabled} onSet={said} />}
       {(item.kind === 'weekday' || item.kind === 'choice' || item.kind === 'yesNo') && (

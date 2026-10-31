@@ -27,6 +27,7 @@ interface QuickPathCardProps {
   // items the card is the plain list it was.
   items?: FillInItem[];
   deviceZone?: string | null;
+  today?: string | null;
   filling?: boolean;
   fillError?: string | null;
   onFill?: (item: FillInItem, value: string, how: FillHow) => void;
@@ -51,6 +52,7 @@ export function QuickPathCard({
   onStartOver,
   items = [],
   deviceZone = null,
+  today = null,
   filling = false,
   fillError = null,
   onFill,
@@ -80,7 +82,7 @@ export function QuickPathCard({
           <h3 className={CARD_TEXT.note}>Still needed before this can be saved</h3>
           {stuck.length > 0 && <PlaybackLines lines={stuck} />}
           {onFill &&
-            fillable.map((item) => <QuickPathFillIn key={item.id} item={item} disabled={locked} deviceZone={deviceZone} onFill={onFill} />)}
+            fillable.map((item) => <QuickPathFillIn key={item.id} item={item} disabled={locked} deviceZone={deviceZone} today={today} onFill={onFill} />)}
           {fillable.length > 0 && <p className={CARD_TEXT.note}>{QUICK_PATH_WORDS.fillStays}</p>}
           {fillError && <SetupAlert headline={fillError} />}
         </div>

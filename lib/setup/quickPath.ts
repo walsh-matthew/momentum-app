@@ -2,6 +2,7 @@
 // was collected, offer the quick path, save nothing unapproved"). Both pieces are written by code from the draft, never by
 // Claude: every part played back, and a list, in plain words, of what the draft still lacks before it can be saved. Pure.
 
+import { INTEGRATION_CATALOG, quantityMetricsOf } from '@/lib/integrations/catalog';
 import { SETUP_CHUNKS, type SetupChunk, type SetupModel } from '@/types/setup';
 import type { PlaybackSection, QuickPathReason } from '@/types/setupScreen';
 import { numberQuestion } from './numbers';
@@ -57,8 +58,11 @@ export function describeIssue(model: SetupModel, issue: DraftIssue, words: Missi
         // The same question, in the same words, as the number card (lib/setup/numbers.ts); round 3d.
         case 'floor':
           return target ? numberQuestion('floor', target, words.today ?? null, words.said ?? []) : `The number that would still count in a hard week for ${name}.`;
-        case 'sources':
-          return `Where ${name} is tracked.`;
+        case 'sources': {
+          // An app with more than one number to count asks which one; otherwise the question is where it is tracked.
+          const open = target?.sources.find((src) => src.kind === 'synced' && src.metric === null && target.measure === 'quantity' && quantityMetricsOf(src.provider).length > 0);
+          return open?.kind === 'synced' ? `Which number counts for ${name} in ${INTEGRATION_CATALOG.find((e) => e.provider === open.provider)?.name ?? 'that app'}.` : `Where ${name} is tracked.`;
+        }
         case 'unit':
           return `The unit for ${name}.`;
         default:

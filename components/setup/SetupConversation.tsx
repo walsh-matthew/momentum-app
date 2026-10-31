@@ -273,6 +273,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         onStartOver={startOver}
         items={view.items}
         deviceZone={deviceTimeZone()}
+        today={localDate()}
         filling={filling}
         fillError={fillError}
         onFill={(item, value, how) => void fill(item, value, how)}
