@@ -53,6 +53,10 @@ jobs:
     name: database
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # A fixed test value, not a secret: it only signs the reset-link cookie in the browser tests, against a stack that
+      # is thrown away at the end of the job (MOM-122). Production and Preview have their own values in Vercel.
+      RECOVERY_COOKIE_SECRET: ci-only-test-value-not-a-secret-0123456789abcdef
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

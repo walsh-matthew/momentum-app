@@ -248,6 +248,12 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# The password reset email carries a token link (MOM-122) so it opens in any browser, not only the one that asked.
+# Production uses the same text, pasted into Authentication > Emails > Templates > Reset password.
+[auth.email.template.recovery]
+subject = "Set a new password for Momentum"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

@@ -20,10 +20,26 @@ const fake = vi.hoisted(() => ({
   // The `amr` claim of the current session: how it was started.
   amr: [{ method: 'password', timestamp: 1 }] as { method: string; timestamp: number }[] | undefined,
   claimsError: null as AuthError | null,
+  // The id of the user the current session belongs to (the `sub` claim), and of the user verifyOtp signs in.
+  sub: 'user-a' as string | undefined,
+  // RECOVERY_COOKIE_SECRET as the env getter reports it: null when missing or too short.
+  secret: 'test-secret-test-secret-test-secret-0001' as string | null,
+  // The request's cookies, and the names the service deleted.
+  jar: new Map<string, string>(),
+  deleted: [] as string[],
   calls: [] as { name: string; args: unknown[] }[],
 }));
 
-vi.mock('@/lib/config/env', () => ({ getCaptchaConfig: () => fake.captcha }));
+vi.mock('@/lib/config/env', () => ({ getCaptchaConfig: () => fake.captcha, getRecoveryCookieSecret: () => fake.secret }));
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (fake.jar.has(name) ? { name, value: fake.jar.get(name) } : undefined),
+    delete: (name: string) => {
+      fake.jar.delete(name);
+      fake.deleted.push(name);
+    },
+  }),
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: async () => ({
     auth: {
@@ -42,7 +58,12 @@ vi.mock('@/lib/supabase/server', () => ({
       },
       getClaims: async () => {
         if (fake.claimsError) return { data: null, error: fake.claimsError };
-        return { data: { claims: { amr: fake.amr } }, error: null };
+        return { data: { claims: { amr: fake.amr, sub: fake.sub } }, error: null };
+      },
+      verifyOtp: async (...args: unknown[]) => {
+        fake.calls.push({ name: 'verifyOtp', args });
+        if (fake.error) return { data: { user: null }, error: fake.error };
+        return { data: { user: { id: fake.sub } }, error: null };
       },
       updateUser: async (...args: unknown[]) => {
         fake.calls.push({ name: 'updateUser', args });
@@ -58,12 +79,19 @@ import {
   signInWithPassword,
   signUpWithPassword,
   updatePassword,
+  verifyRecoveryToken,
 } from '@/lib/services/auth';
+import { RECOVERY_COOKIE, recoveryMarkerCookie } from '@/lib/services/recoveryMarker';
 
 const REDIRECT = 'https://momentum.example/auth/callback/reset';
 const TURNSTILE: CaptchaConfig = { provider: 'turnstile', siteKey: 'public-site-key' };
 const RECOVERY = [{ method: 'recovery', timestamp: 1 }];
+const OTP = [{ method: 'otp', timestamp: 1 }];
+const SECRET = 'test-secret-test-secret-test-secret-0001';
 const called = (name: string) => fake.calls.filter((c) => c.name === name);
+// Puts a marker for `userId`, made with `secret` at `at`, in the request's cookies.
+const setMarker = (userId = 'user-a', secret = SECRET, at = new Date()) =>
+  fake.jar.set(RECOVERY_COOKIE, recoveryMarkerCookie(userId, secret, at).value);
 
 beforeEach(() => {
   fake.captcha = null;
@@ -71,6 +99,10 @@ beforeEach(() => {
   fake.error = null;
   fake.amr = [{ method: 'password', timestamp: 1 }];
   fake.claimsError = null;
+  fake.sub = 'user-a';
+  fake.secret = SECRET;
+  fake.jar = new Map();
+  fake.deleted = [];
   fake.calls = [];
 });
 
@@ -161,6 +193,48 @@ describe('the CAPTCHA token', () => {
   });
 });
 
+describe('verifyRecoveryToken', () => {
+  it('verifies the token hash as a recovery token and returns the signed marker for that user', async () => {
+    const result = await verifyRecoveryToken('hash-1');
+    expect(called('verifyOtp')[0].args).toEqual([{ token_hash: 'hash-1', type: 'recovery' }]);
+    expect(result).toMatchObject({ ok: true, data: { cookie: { name: RECOVERY_COOKIE, maxAge: 900 } } });
+
+    // The marker it returns is the one hasRecoverySession accepts for an `otp` session of that same user.
+    if (!result.ok) throw new Error('expected ok');
+    fake.amr = OTP;
+    fake.jar.set(RECOVERY_COOKIE, result.data.cookie.value);
+    expect(await hasRecoverySession()).toBe(true);
+  });
+
+  it('is refused, without using up the token, when RECOVERY_COOKIE_SECRET is missing, and logs only the name', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fake.secret = null;
+    expect(await verifyRecoveryToken('hash-1')).toMatchObject({ ok: false });
+    expect(called('verifyOtp')).toEqual([]);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(String(log.mock.calls[0][0])).toContain('RECOVERY_COOKIE_SECRET');
+    expect(String(log.mock.calls[0][0])).not.toContain('hash-1');
+    log.mockRestore();
+  });
+
+  it('is refused when the verified token started no user', async () => {
+    fake.sub = undefined;
+    expect(await verifyRecoveryToken('hash-1')).toMatchObject({ ok: false });
+  });
+
+  it('refuses an empty token without calling Supabase', async () => {
+    for (const empty of ['', '   ']) {
+      expect(await verifyRecoveryToken(empty)).toMatchObject({ ok: false });
+    }
+    expect(fake.calls).toEqual([]);
+  });
+
+  it('comes back as an error for a used or expired token', async () => {
+    fake.error = { code: 'otp_expired', message: 'Email link is invalid or has expired' };
+    expect(await verifyRecoveryToken('hash-1')).toEqual({ ok: false, error: 'Email link is invalid or has expired' });
+  });
+});
+
 describe('hasRecoverySession', () => {
   it('is true only for a session a reset link started', async () => {
     fake.amr = RECOVERY;
@@ -170,6 +244,60 @@ describe('hasRecoverySession', () => {
     fake.amr = undefined;
     expect(await hasRecoverySession()).toBe(false);
     fake.claimsError = { message: 'no session' };
+    expect(await hasRecoverySession()).toBe(false);
+  });
+
+  it('accepts the older recovery session with no marker', async () => {
+    fake.amr = RECOVERY;
+    expect(await hasRecoverySession()).toBe(true);
+    fake.secret = null;
+    expect(await hasRecoverySession()).toBe(true);
+  });
+
+  it('accepts an otp session with a valid marker for the same user', async () => {
+    fake.amr = OTP;
+    setMarker();
+    expect(await hasRecoverySession()).toBe(true);
+  });
+
+  it('refuses an otp session with no marker', async () => {
+    fake.amr = OTP;
+    expect(await hasRecoverySession()).toBe(false);
+  });
+
+  it('refuses a forged marker', async () => {
+    fake.amr = OTP;
+    for (const forged of ['9999999999.forged', 'garbage', '', '9999999999.']) {
+      fake.jar.set(RECOVERY_COOKIE, forged);
+      expect(await hasRecoverySession(), forged).toBe(false);
+    }
+    // A real marker signed with a different secret is a forgery too.
+    setMarker('user-a', 'another-secret-another-secret-0000002');
+    expect(await hasRecoverySession()).toBe(false);
+  });
+
+  it('refuses an expired marker', async () => {
+    fake.amr = OTP;
+    setMarker('user-a', SECRET, new Date(Date.now() - 16 * 60 * 1000));
+    expect(await hasRecoverySession()).toBe(false);
+  });
+
+  it("refuses another user's marker", async () => {
+    fake.amr = OTP;
+    setMarker('user-b');
+    expect(await hasRecoverySession()).toBe(false);
+  });
+
+  it('refuses an otp session when the secret is missing, even with a marker made earlier', async () => {
+    fake.amr = OTP;
+    setMarker();
+    fake.secret = null;
+    expect(await hasRecoverySession()).toBe(false);
+  });
+
+  it('never accepts a password sign-in, marker or not', async () => {
+    fake.amr = [{ method: 'password', timestamp: 1 }];
+    setMarker();
     expect(await hasRecoverySession()).toBe(false);
   });
 });
@@ -194,6 +322,28 @@ describe('updatePassword', () => {
       error: 'We could not set your new password. Request a new reset link and try again.',
     });
     expect(called('updateUser')).toEqual([]);
+  });
+
+  it('sets the password for a token-link session and clears the marker afterwards', async () => {
+    fake.amr = OTP;
+    setMarker();
+    expect(await updatePassword('a-brand-new-password')).toEqual({ ok: true, data: null });
+    expect(called('updateUser')).toHaveLength(1);
+    expect(fake.deleted).toEqual([RECOVERY_COOKIE]);
+    expect(await hasRecoverySession()).toBe(false);
+  });
+
+  it('keeps the marker when the password was not changed, and refuses an otp session without one', async () => {
+    fake.amr = OTP;
+    setMarker();
+    fake.error = { code: 'weak_password', message: 'weak' };
+    expect(await updatePassword('a-brand-new-password')).toMatchObject({ ok: false });
+    expect(fake.deleted).toEqual([]);
+
+    fake.error = null;
+    fake.jar.clear();
+    expect(await updatePassword('a-brand-new-password')).toMatchObject({ ok: false });
+    expect(called('updateUser')).toHaveLength(1);
   });
 
   it('says so when the new password is the old one, and otherwise gives one fixed message', async () => {
