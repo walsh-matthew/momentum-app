@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { PageBackRow } from '@/components/layout/PageBackRow';
 import { SetupConversation } from '@/components/setup/SetupConversation';
 import { getCurrentUser } from '@/lib/services/auth';
 import { getSetupStart } from '@/lib/services/setup';
@@ -22,32 +23,32 @@ export default async function SetupPage() {
   const start = await getSetupStart();
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-xl px-4 py-6">
-      <Link href="/" className="text-sm text-muted underline-offset-4 hover:underline">
-        Back to home
-      </Link>
-      <h1 className="mt-3 text-[25px] font-semibold leading-tight tracking-[-0.055em]">Set up your goals</h1>
-      <div className="mt-5">
-        {!start.ok ? (
-          <p role="alert" className="text-sm text-danger">
-            {start.error}
-          </p>
-        ) : start.data.alreadySetUp ? (
-          <section className="channel-card space-y-3 p-4">
-            <h2 className="card-title">Setup is already done</h2>
-            <p className="text-base">
-              You have already set up your goals. Adding another goal from here is not built yet. You can log against what you
-              have on the{' '}
-              <Link href="/log" className="underline underline-offset-2">
-                log page
-              </Link>
-              .
+    <div className="mx-auto min-h-dvh w-full max-w-xl px-4 py-6">
+      <PageBackRow />
+      <main>
+        <h1 className="mt-3 text-[25px] font-semibold leading-tight tracking-[-0.055em]">Set up your goals</h1>
+        <div className="mt-5">
+          {!start.ok ? (
+            <p role="alert" className="text-sm text-danger">
+              {start.error}
             </p>
-          </section>
-        ) : (
-          <SetupConversation userId={user.data.id} />
-        )}
-      </div>
-    </main>
+          ) : start.data.alreadySetUp ? (
+            <section className="channel-card space-y-3 p-4">
+              <h2 className="card-title">Setup is already done</h2>
+              <p className="text-base">
+                You have already set up your goals. Adding another goal from here is not built yet. You can log against what you
+                have on the{' '}
+                <Link href="/log" className="underline underline-offset-2">
+                  log page
+                </Link>
+                .
+              </p>
+            </section>
+          ) : (
+            <SetupConversation userId={user.data.id} />
+          )}
+        </div>
+      </main>
+    </div>
   );
 }

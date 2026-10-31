@@ -6,7 +6,7 @@
 // prompts, tests/rebalance-model.test.ts and tests/task-plan-ai.test.ts.
 
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import PrivacyPage from '@/app/privacy/page';
 import { PrivacyNotice } from '@/components/privacy/PrivacyNotice';
 import {
@@ -24,14 +24,41 @@ import {
   joinWords,
 } from '@/lib/config/privacy';
 
-afterEach(cleanup);
+// The page reads the session only to give a signed-in visitor the way home and Sign out (MOM-148); a signed-out visitor, and a
+// session that cannot be read, get the notice alone.
+const auth = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
+vi.mock('@/lib/services/auth', () => ({ getCurrentUser: auth.getCurrentUser }));
+vi.mock('@/app/actions/auth', () => ({ signOutAction: vi.fn(), authenticate: vi.fn() }));
+
+afterEach(() => {
+  cleanup();
+  auth.getCurrentUser.mockReset();
+});
 
 const region = (name: string) => screen.getByRole('region', { name }).textContent ?? '';
 
 describe('the privacy notice', () => {
-  it('renders as a page with a heading, with no session or service needed', () => {
-    render(<PrivacyPage />);
+  it('renders as a page with a heading, with no session needed', async () => {
+    auth.getCurrentUser.mockResolvedValue({ ok: true, data: null });
+    render(await PrivacyPage());
     expect(screen.getByRole('heading', { level: 1, name: 'Privacy notice' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Back to sign in' })).toBeTruthy();
+  });
+
+  it('still renders when the session cannot be read', async () => {
+    auth.getCurrentUser.mockRejectedValue(new Error('down'));
+    render(await PrivacyPage());
+    expect(screen.getByRole('heading', { level: 1, name: 'Privacy notice' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+  });
+
+  it('gives a signed-in visitor the way home and Sign out in place of Back to sign in', async () => {
+    auth.getCurrentUser.mockResolvedValue({ ok: true, data: { id: 'u1', email: 'a@b.co' } });
+    render(await PrivacyPage());
+    expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Back to sign in' })).toBeNull();
   });
 
   it('states that the service is for adults (18 or over)', () => {

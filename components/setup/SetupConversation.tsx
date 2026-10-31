@@ -232,9 +232,6 @@ export function SetupConversation({ userId }: SetupConversationProps) {
           <Link href="/log" className={setupButtonClasses('main')}>
             Log an entry
           </Link>
-          <Link href="/" className={setupButtonClasses('second')}>
-            Back to home
-          </Link>
         </div>
       </section>
     );
