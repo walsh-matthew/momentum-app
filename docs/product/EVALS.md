@@ -1,4 +1,4 @@
-Template: AI eval plan with error-analysis loop · Last updated: 2026-10-30 (this branch) · Filled by: MOM-144 first fill · Open gaps: 7, listed at the end
+Template: AI eval plan with error-analysis loop · Last updated: 2026-10-30 (this branch, after build day 6's merges) · Filled by: MOM-144 first fill · Open gaps: 7, listed at the end
 
 # Momentum evals
 
@@ -6,10 +6,10 @@ How Momentum checks the places Claude is used. The rules being checked are in [`
 
 ## 1. What's evaluated
 
-*Sources: design record `docs/design/2026-10-26-goal-model-design.md` §5.1 and §6.2; `docs/DOMAIN_MODEL.md` §2 and §3; `docs/LLM_GOVERNANCE.md`; Jira MOM-111, MOM-113.*
+*Sources: design record `docs/design/2026-10-26-goal-model-design.md` §5.1 and §6.2; `docs/DOMAIN_MODEL.md` §2 and §3; `docs/LLM_GOVERNANCE.md` ("The weekly review's one line"); `lib/review/reflection.ts`; `lib/ai/review.ts`; Jira MOM-111, MOM-113.*
 
 - **Now: the setup conversation** (MOM-111). Every turn of Claude's passes through the rule checks and the plain-words checks, and the final draft must pass the same schema validation as the saved model (§2.3).
-- **Next: the weekly review's layer 2 line** (MOM-113 block 3.3, code checks). Not merged, so nothing is checked yet (Gap 6). The prompt for the review gets a fact list from the engine and may not add numbers (§3.3).
+- **Now: the weekly review's layer 2 line** (MOM-113 block 3.3, merged in PR #79). Claude writes one plain sentence about the week from a fact list the engine builds (target titles, where each ended as a word, what crossed, pattern kinds, trend direction, tone; no counts, dates or numbers to repeat), and code checks the sentence before it is shown (§3.3). It is asked for only when the person taps, on a budget of at most 4 `weekly_review` calls per person in 24 hours (`docs/LLM_GOVERNANCE.md`). The checks are in section 2.
 
 ## 2. Quality bar
 
@@ -31,9 +31,21 @@ The bar is the eight hard rules ([`DOMAIN_MODEL.md` §2.1](../DOMAIN_MODEL.md)),
 | Plain words | `plain.lead_in`, `.question_long`, `.activity`, `.date_lead_in`, `.date_asks`, `.options_say`, `.jargon`, `.unquoted_source` | A lead-in that previews the question or runs past one short line (110 characters); a question over 14 words; an activity the person never said; a date repeated in the lead-in, or shown and then asked for; a lead-in over 60 characters on a card of options; model words (floor, aspiration, baseline) the person never said; a line pointing at an earlier answer without quoting it |
 | Option lists | `choice.ideas_context`, `.ideas_bare`, `.ideas_scale`, `.ideas_role`, `.ideas_words` | An offer of ideas with no detail line; an option that is a bare number; a run of five or more consecutive numbers; a number option that does not say which number it sets; an option counting a thing the person did not say |
 
+**The weekly review's layer 2 line** (MOM-113 block 3.3, PR #79; `lib/review/reflection.ts`, read for this update). A separate, smaller set of checks, run in code on the raw reply. A reply that fails is asked for again once, with a fixed note naming the rule; a reply that fails twice is replaced by a line written by code and labelled as Momentum's, so a failed check never ends the review (`REFLECTION_RETRY_NOTES`, `REFLECTION_FALLBACK_LINES`). The person's own target titles are taken out before the checks, because a title can hold a digit or a word that looks like an ask.
+
+| Rule | Code | What the check catches |
+| --- | --- | --- |
+| Readable reply | `unreadable`, `empty` | A reply that is not the JSON object `{"line": ...}`; an empty line |
+| One short sentence | `too_long`, `not_one_sentence` | More than 200 characters; more than one sentence or more than one line |
+| No question | `question` | A question mark |
+| No numbers | `number` | A digit or a number word (the facts give Claude no number to repeat, §1.7) |
+| No score | `score` | A percent sign, or score, grade, rating or point words |
+| No ask | `ask` | A whole-word ask or suggestion (try, consider, should, remember, aim and similar); "retry" and "entry" do not count |
+| Plain text | `markup` | Formatting marks |
+
 ## 3. The eval set
 
-*Sources: `tests/setup-evals/cases.ts` (counted by loading `SETUP_CASES`, 2026-10-30); `tests/setup-evals/smokeCases.ts`; `tests/live/*.live.ts`; `docs/LLM_GOVERNANCE.md`; `BACKLOG.md` (setup live-run items); MOM-111 comments.*
+*Sources: `tests/setup-evals/cases.ts` (counted by loading `SETUP_CASES`, 2026-10-30); `tests/setup-evals/smokeCases.ts`; `tests/live/*.live.ts`; `tests/review-line-*.test.ts`; `tests/review-prompt-fields.test.ts`; `tests/e2e/review.spec.ts`; `docs/LLM_GOVERNANCE.md`; `BACKLOG.md` (setup live-run items); MOM-111 comments.*
 
 Scripted cases pair a scripted person with a scripted fake model, so `npm test` makes no network call. Every name, date and number in them is invented.
 
@@ -44,6 +56,8 @@ Scripted cases pair a scripted person with a scripted fake model, so `npm test` 
 | **Total in `cases.ts`** | **21** | Matches the file's header ("thirteen" and "eight") |
 
 Cases from the owner's phone smoke tests of 2026-10-29 sit apart in `tests/setup-evals/smokeCases.ts`. A text search finds 8 case ids there (for example `smoke-9-guessed` and `run-m-phone-paths`). They run through `tests/setup-smoke-fixes.test.ts`.
+
+**The review line has no case set of its own.** It is checked by unit tests rather than by scripted conversations (PR #79): `tests/review-line-checks.test.ts` (the checks above), `tests/review-line-service.test.ts` and `tests/review-line-budget.test.ts` (the call, the retry, the fallback line and the 4-in-24-hours budget), `tests/review-prompt-fields.test.ts` (the exact fields sent, pinned against the privacy notice), and `tests/e2e/review.spec.ts` (the whole sitting in a browser with a fake model: nothing asked until the tap, only a target title in the request, a reply that fails the checks replaced by a plain line from Momentum). A text search finds 15, 13, 23 and 10 `it(`/`test(` calls in the four unit files. A live runner exists (`tests/live/review-line.live.ts`, local stack only); no run of it is recorded in the files read for this update.
 
 **The live pilot.** `npm run eval:setup:pilot` runs one full scripted case against the real model through the same service the app uses. It is not part of `npm test` or CI. It refuses to run unless the database is the local stack, and it stops by itself past an estimated $6 (`docs/LLM_GOVERNANCE.md`). The later live runs on the owner's own path used lower caps: $2 for round 3 and $1 for round 3b (MOM-111 comments 2026-10-29). A reply that is not a valid turn is asked for again up to twice, and every such reply is counted in the report.
 
@@ -63,13 +77,13 @@ Only rows with a source. A row says what went wrong, its category, and what it b
 | 2026-10-29 | Round 3: weak option lists ("2 a week" with nothing counted), dates asked for when code had one, two ways to pick a date | `choice.ideas_*`, `plain.*` | Code fix (127cc34): new checks `choice.ideas_context`, `.ideas_bare`, `.ideas_scale`; `normalizeDateTurn`. 76 new tests (`tests/setup-round3.test.tsx`). Live run: 20 calls, 4 replies thrown away. |
 | 2026-10-29 | Round 3b: number questions that had to be decoded, a date shown then asked for, alert cards that read as failures | `choice.ideas_role`, `choice.ideas_words`, `plain.date_asks` | Code fix (401d128): new checks, one gentle alert look. 147 new tests (`tests/setup-round3b.test.tsx`). Live run: 15 calls, 2 replies thrown away. |
 | 2026-10-29 | Round 3c: cards that went mid-bold, heavy-bold, then light-bold; a recap that read as telling the person what they will do | `plain.options_say`; weight and wording | Code fix (ca99ce5): one bold line per card, `plain.options_say`. 38 new tests (`tests/setup-round3c.test.tsx`). |
-| 2026-10-30 | Round 3d: "How many X make a week count, even a hard one?" read as ambiguous; the quick-path card promised "sensible defaults" that no code applies | Wording; a promise the code did not keep | Code fix (eb24625, d8b66d4, f6d6421): the question is now "In a hard week, how many <thing> would still count?", written once in `lib/setup/numbers.ts`; `DOMAIN_MODEL.md` §2.3 says what the quick path does. A test fails if "sensible default" returns. Live run: 21 calls, 5 replies thrown away. |
+| 2026-10-30 | Round 3d: "How many X make a week count, even a hard one?" read as ambiguous; the quick-path card promised "sensible defaults" that no code applies | Wording; a promise the code did not keep | Code fix (eb24625, d8b66d4, f6d6421; merged in PR #73): the question is now "In a hard week, how many <thing> would still count?", written once in `lib/setup/numbers.ts`; `DOMAIN_MODEL.md` §2.3 says what the quick path does. A test fails if "sensible default" returns. Live run: 21 calls, 5 replies thrown away. |
 
 ## 5. Latest results
 
 *Sources: `npm test` run on this branch on 2026-10-30; `BACKLOG.md` (setup live-run item); MOM-111 comments 2026-10-29 and 2026-10-30.*
 
-- **Unit and component tests, my own run on this branch** (cut from `main` at 7d30531, before these docs were added): `npm test` passed, 113 test files and 4,152 tests, no network call.
+- **Unit and component tests, my own run on this branch** (rebased onto `main` at 83f235f, after build day 6's merges): `npm test` passed, 130 test files and 4,555 tests, no network call. The first fill's run was 113 files and 4,152 tests, on `main` at 7d30531.
 - **Last live runs the repo records** (`BACKLOG.md`, setup live-run item): round 2, 20 turns and 24 calls, about $1.55; round 3, 19 turns and 20 calls, about $1.26; round 3b, 16 turns and 15 calls, about $0.92 (stopped by its $1 cap before the source answer). In each, every turn produced a usable reply; thrown-away replies were retried (7, 4 and 2).
 - **Newest live run, on Jira only** (MOM-111 comment 2026-10-30): 19 turns, 21 calls, 249,772 input and 16,817 output tokens, about $1.34. It reached both number cards and both ideas cards. Five replies were thrown away. The floor ideas card was shown after its plain-words retry still held `plain.unquoted_source`.
 - **Budget:** the per-setup budget is still the placeholder of 40 turns and 1,000,000 tokens (`docs/LLM_GOVERNANCE.md`).
@@ -78,7 +92,7 @@ Only rows with a source. A row says what went wrong, its category, and what it b
 
 *Sources: `BACKLOG.md` setup live-run item; `docs/LLM_GOVERNANCE.md`; design record §6.2; MOM-111 and MOM-113.*
 
-See the list below. The main ones: no simulated person and no three-model run yet, so the budget numbers cannot be set; and nothing checks the review's layer 2 line yet.
+See the list below. The main ones: no simulated person and no three-model run yet, so the budget numbers cannot be set; and the review's layer 2 line is checked by code and unit tests but has no live run recorded.
 
 ## Open gaps
 
@@ -89,5 +103,5 @@ See the list below. The main ones: no simulated person and no three-model run ye
 3. The per-setup budget (40 turns, 1,000,000 tokens) is a placeholder, not the 90th percentile of eval runs plus the owner's margin (`docs/LLM_GOVERNANCE.md`; design record §6.2 step 2).
 4. The newest question wording has had no live call: the 2026-10-30 live run used the old floor question, and the later commits changed it (MOM-111 comment 2026-10-30, round 3d follow-up).
 5. Live-run reports live on Jira, not in the repo. The repo records the runs only up to round 3b; the pilot's own report and the round 3d run are on MOM-128 and MOM-111.
-6. The weekly review's layer 2 line has no checks and no eval cases yet (MOM-113 block 3.3, not merged).
+6. The weekly review's layer 2 line has checks and unit tests (MOM-113 block 3.3, PR #79) but no scripted eval cases and no recorded live run, so nothing shows whether the prompt keeps Claude inside the checks (`tests/live/review-line.live.ts` is the runner).
 7. The checks are heuristics, and no measured pass rate per rule exists from live runs: only a live run shows whether the prompt keeps Claude inside them (`lib/setup/checks.ts` header).
