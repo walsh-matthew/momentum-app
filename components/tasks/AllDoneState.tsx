@@ -15,7 +15,7 @@ export function AllDoneState({ channelTitle = null }: AllDoneStateProps) {
         <CircleCheck className="size-5" />
       </span>
       <div className="min-w-0">
-        <h2 id="all-done-heading" className="section-title">
+        <h2 id="all-done-heading" className="card-title">
           All done
         </h2>
         <p className="mt-1 text-sm text-muted">

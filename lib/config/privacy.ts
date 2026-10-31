@@ -322,6 +322,7 @@ export const UNUSED_CAPTCHA_OPTIONS: readonly string[] = ['hcaptcha'];
 export const DEVICE_STORAGE = {
   now: [
     'a cookie that keeps you signed in',
+    'your light or dark theme, if you choose one in Settings: a cookie that holds only that one word (without it, Momentum follows your device)',
     'which rebalance reminders you have dismissed, kept only until you close the tab',
     "a running timer's start time, kept in this browser until you stop it",
     'a setup conversation in progress, kept in this browser tab until you save it or close the tab',

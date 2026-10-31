@@ -245,7 +245,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
                   setTitle(e.target.value);
                   setTitleEdited(true);
                 }}
-                className="min-h-11 rounded-lg border border-foreground/45 bg-background px-3 text-base font-normal"
+                className="min-h-11 rounded-lg border ctl-45 bg-background px-3 text-base font-normal"
               />
             </label>
           </div>
@@ -304,7 +304,7 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
             </fieldset>
 
             <section aria-label="Summary" className="channel-card p-4 text-sm">
-              <h3 className="font-medium">{title.trim() || 'Untitled goal'}</h3>
+              <h3 className="card-title">{title.trim() || 'Untitled goal'}</h3>
               <p className="mt-1 text-muted">
                 {goalType ? GOAL_TYPE_LABELS[goalType] : 'No goal type'} · 90-day checkpoint
                 {pace ? ` · ${PACE_LABELS[pace]}` : ''}

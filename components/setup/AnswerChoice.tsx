@@ -40,7 +40,7 @@ export function answerChoiceClasses(tone: AnswerChoiceProps['tone'], disabled: b
   return cn(
     'flex min-h-11 w-full items-center justify-start rounded-lg border px-4 py-2 text-left text-base font-normal whitespace-normal break-words transition-colors select-none disabled:pointer-events-none disabled:opacity-50',
     filled
-      ? 'border-transparent bg-primary text-primary-foreground hover:bg-primary/85'
-      : 'border-foreground/20 bg-foreground/[0.04] text-foreground hover:bg-foreground/[0.08]',
+      ? 'border-transparent bg-primary text-primary-foreground primary-hover'
+      : 'answer-choice text-foreground',
   );
 }

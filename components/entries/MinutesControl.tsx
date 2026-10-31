@@ -58,12 +58,12 @@ export function MinutesControl({ target, days = null }: MinutesControlProps) {
           value={text}
           disabled={pending}
           onChange={(event) => setText(event.target.value)}
-          className="min-h-14 min-w-0 flex-1 rounded-2xl border border-border bg-secondary px-4 text-lg text-foreground placeholder:text-muted"
+          className="min-h-14 min-w-0 flex-1 rounded-2xl border ctl-border bg-secondary px-4 text-lg text-foreground placeholder:text-muted"
         />
         <button
           type="submit"
           disabled={pending}
-          className="min-h-14 min-w-28 rounded-2xl border border-border px-4 text-base font-semibold transition-transform active:scale-[0.98] disabled:opacity-60"
+          className="min-h-14 min-w-28 rounded-2xl border ctl-border px-4 text-base font-semibold transition-transform active:scale-[0.98] disabled:opacity-60"
         >
           {pending ? 'Saving…' : 'Log minutes'}
         </button>

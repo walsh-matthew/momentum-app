@@ -67,7 +67,7 @@ export function FocusTaskCard({ task, moves }: FocusTaskCardProps) {
           </p>
         )}
 
-        <h2 id={`focus-task-${task.id}`} className="mt-2.5 text-base font-semibold tracking-[-0.02em]">
+        <h2 id={`focus-task-${task.id}`} className="card-title mt-2.5">
           {task.title}
         </h2>
 

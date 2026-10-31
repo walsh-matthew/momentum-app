@@ -16,7 +16,7 @@ export function LoadFailedState({ onRetry }: LoadFailedStateProps) {
   const router = useRouter();
   return (
     <section aria-labelledby="load-failed-heading" role="alert" className="channel-card mt-6 p-6">
-      <h2 id="load-failed-heading" className="section-title">
+      <h2 id="load-failed-heading" className="card-title">
         We couldn&apos;t load your plan
       </h2>
       <p className="mt-2 text-sm text-muted">

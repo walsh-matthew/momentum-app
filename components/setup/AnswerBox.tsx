@@ -81,7 +81,7 @@ export function AnswerBox({
           rows={3}
           disabled={busy}
           onChange={(event) => setText(event.target.value)}
-          className="block min-h-24 w-full min-w-0 rounded-2xl border border-foreground/30 bg-foreground/[0.06] py-3 pr-11 pl-4 text-base text-foreground placeholder:text-muted focus-visible:border-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          className="block min-h-24 w-full min-w-0 rounded-2xl border ctl-30 field-input py-3 pr-11 pl-4 text-base text-foreground placeholder:text-muted focus-visible:border-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
         />
         {hasText && !busy && (
           <button

@@ -196,7 +196,7 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
         <p className="text-sm">{proposal.summary}</p>
 
         {view.notice && (
-          <p role="status" className="mt-3 rounded-xl border border-border bg-foreground/5 p-3 text-xs">
+          <p role="status" className="card-surface mt-3 rounded-xl p-3 text-xs">
             {view.notice}
           </p>
         )}
@@ -237,7 +237,7 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
                   <li key={move.taskId}>
                     <label
                       className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border p-3 ${
-                        isOn ? 'border-accent/50 bg-accent/5' : 'border-border opacity-80'
+                        isOn ? 'border-accent/50 bg-accent/5' : 'ctl-border opacity-80'
                       }`}
                     >
                       <input

@@ -76,7 +76,7 @@ export function RebalanceNudge({ channelId, view, hint = null, onReview }: Rebal
             <span className="ai-label">MOMENTUM AI</span>
             <span className="ai-new">NUDGE</span>
           </div>
-          <h2 id={titleId} className="mt-2 text-[15px] font-semibold leading-[1.35] tracking-[-0.03em]">
+          <h2 id={titleId} className="card-title mt-2">
             {hasProposal ? 'A little room to rebalance?' : 'One goal at a time'}
           </h2>
           <p className="mt-1.5 text-[13px] leading-[1.5] text-muted">
