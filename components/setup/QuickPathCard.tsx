@@ -115,7 +115,7 @@ export function QuickPathCard({ reason, sections, steps, stuck, saving, error, f
         {step.items.map((item) => controls(step, item, boxButton))}
         {stuckNotes}
         {done && stuck.length === 0 && (
-          <SetupButton tone="main" disabled={locked} onClick={last ? onSave : () => setView(at + 1)}>
+          <SetupButton tone="main" busy={locked} onClick={last ? onSave : () => setView(at + 1)}>
             {last ? (saving ? 'Saving…' : QUICK_PATH_WORDS.save) : QUICK_PATH_WORDS.next}
           </SetupButton>
         )}
@@ -158,7 +158,7 @@ export function QuickPathCard({ reason, sections, steps, stuck, saving, error, f
         ))}
         {stuckNotes}
         {canSave && (
-          <SetupButton tone="main" disabled={locked} onClick={onSave}>
+          <SetupButton tone="main" busy={locked} onClick={onSave}>
             {saving ? 'Saving…' : QUICK_PATH_WORDS.save}
           </SetupButton>
         )}
