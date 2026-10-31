@@ -14,10 +14,31 @@ export interface PlaybackSection {
   lines: string[];
 }
 
-// One thing the quick path card lets the person fill in (MOM-111, DOMAIN_MODEL §2.3). `id` is the path of the draft value it
-// sets; `line` is the card's own words for it, the same line the "still needed" list used, and the question the transcript
-// records. `kind` picks the control. `suggestion` names the one suggestion code can show for it, or null for none (the floor,
-// the day end, the week start, the unit and the source never get one: they are the person's to set).
+// One line of what the person has told us, and the step it belongs to (a goal, one thing counted, a work item, or their days), so
+// the quick-path card can show a step on its own, or put a missing item's question in place right after the step's lines.
+export interface RecapLine {
+  text: string;
+  stepId: string;
+}
+
+// One part of the recap: a goal, "Your days", or "How Momentum talks to you". Written by code from the validated draft.
+export interface RecapSection {
+  id: string;
+  title: string;
+  lines: RecapLine[];
+  // The steps whose lines (or questions) belong here, in the order they read: the goal itself, then each thing it counts, then each
+  // work item.
+  subjects: string[];
+  // What each subject is called, by its step id: the goal, a thing it counts, a work item, "Your days". The card shows a name as a
+  // heading over what is said and asked about it.
+  names: Record<string, string>;
+}
+
+// One thing the quick path card lets the person answer (MOM-111, DOMAIN_MODEL §2.3). `id` is the path of the draft value it
+// sets; `line` is its question in plain words, the same words the transcript records. `kind` picks the control. `suggestion`
+// names the one suggestion code can show for it, or null for none (the floor, the day end, the week start, the unit and the
+// source never get one: they are the person's to set). `answered` is true for one the person already answered on the card, which
+// they can change; `answer` is the value it holds then, in the form the control uses.
 export type FillInKind = 'timeZone' | 'time' | 'weekday' | 'number' | 'text' | 'date' | 'choice' | 'yesNo';
 export type FillInSuggestion = 'device_time_zone' | 'today';
 export interface FillInChoice {
@@ -27,17 +48,35 @@ export interface FillInChoice {
 export interface FillInItem {
   id: string;
   line: string;
+  // A short note under the question, when the question needs one.
+  hint: string | null;
   kind: FillInKind;
   choices: FillInChoice[];
   suggestion: FillInSuggestion | null;
+  answered: boolean;
+  answer: string | null;
 }
 
-// What the quick path card shows, besides why setup stopped: every part played back, what is still missing in words, what of it
-// the person can fill in here, and whether it can be saved as it is.
-export interface QuickPathState {
-  sections: PlaybackSection[];
-  missing: string[];
+// One step of the quick path: everything about one subject the person is asked. Time zone, day end and week start share "Your days".
+export interface QuickStep {
+  id: string;
+  // The section its lines are in.
+  sectionId: string;
+  title: string;
   items: FillInItem[];
+}
+
+// What the quick path card shows, besides why setup stopped: what the person has said, the steps (answered and not), the
+// missing items alone, what only Claude could ask for, and whether it can be saved as it is.
+export interface QuickPathState {
+  sections: RecapSection[];
+  steps: QuickStep[];
+  // The missing items, in step order. A step is done when it holds none.
+  items: FillInItem[];
+  // What is missing and no control on the card can supply (a goal to add), in plain words. Setup has to start again.
+  stuck: string[];
+  // The same missing items as plain lines (lib/setup/quickPath.ts describeMissing), for the log and the tests.
+  missing: string[];
   canSave: boolean;
 }
 

@@ -290,10 +290,10 @@ test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
     await expect(page.locator('main')).not.toContainText(/sessions/i);
   });
 
-  // The quick-path card (MOM-111, the owner's review): what happened, what it has, what to do next and why Save is off, before any
-  // button; real nested lists with a hanging indent; Start again asks first; and in round 3d the missing number is the number
-  // question itself. A conversation that has used its 40 turns is put in this tab's session storage and the waiting answer is
-  // sent, so the server offers the quick path.
+  // The quick-path card (MOM-111, reworked after the owner's review): what was said, and the few plain questions that finish it, each
+  // answered in place in an amber "Needs your answer" callout; one step at a time on a phone, every step in one list when wide.
+  // A conversation that has used its 40 turns is put in this tab's session storage and the waiting answer is sent, so the server
+  // offers the quick path.
   async function openQuickPath(page: Page, label: string, session: object): Promise<Locator> {
     await signUpAndConfirm(page, label);
     await page.goto('/setup');
@@ -311,7 +311,7 @@ test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
 
   // Real lists: nothing on the card keeps its shape with pre-wrap, every list shows a bullet, and a line that wraps lines up under
   // its own first word (every line of a text node starts at the same left edge).
-  async function expectRealLists(quick: Locator): Promise<void> {
+  async function expectRealLists(quick: Locator, minimum: number): Promise<void> {
     const state = await quick.evaluate((root) => {
       const pre = [...root.querySelectorAll('*')].filter((n) => getComputedStyle(n).whiteSpace.startsWith('pre')).length;
       const lists = [...root.querySelectorAll('ul')];
@@ -325,108 +325,133 @@ test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
         const lefts = [...range.getClientRects()].map((r) => Math.round(r.left));
         if (lefts.length > 1 && Math.max(...lefts) - Math.min(...lefts) > 1) ragged.push((li.textContent ?? '').slice(0, 40));
       }
-      return { pre, lists: lists.length, bulleted, ragged, nested: root.querySelectorAll('li > ul').length };
+      return { pre, lists: lists.length, bulleted, ragged };
     });
     expect(state.pre, 'nothing is shaped with pre-wrap').toBe(0);
-    expect(state.lists).toBeGreaterThan(2);
+    expect(state.lists).toBeGreaterThanOrEqual(minimum);
     expect(state.bulleted, 'every list shows a bullet').toBe(true);
     expect(state.ragged, 'a wrapped line lines up under its own first word').toEqual([]);
   }
 
-  test('the quick path with something missing says why Save is off and what to do, in real lists, and Start again asks first', async ({ page }) => {
-    test.setTimeout(120_000);
+  // The owner's example: one goal with two things to count, and nothing else said. The conversation has used its 40 turns.
+  async function openEmptyCard(page: Page, label: string): Promise<Locator> {
     const draft = emptyDraft();
     draft.model.goals.push({ ...goal('g1', 'Get stronger and keep it up through the whole winter season'), targets: [target('t1', 'Workouts'), target('t2', 'Pages of the training book')] });
     const claude = { kind: 'question', chunk: null, skipped: null, say: '', question: 'Anything else?', detail: null, topic: 'idea', options: [], draft };
     const transcript = Array.from({ length: 40 }, () => [{ role: 'assistant', turn: claude }, { role: 'person', text: 'That is all.' }]).flat();
-    const quick = await openQuickPath(page, 'setup-quick-path', { transcript, draft, spentTokens: 0 });
+    return openQuickPath(page, label, { transcript, draft, spentTokens: 0 });
+  }
 
-    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.missingTitle })).toBeVisible();
-    await expect(quick.getByText("This setup has used up the questions Claude gets for one setup, so it can't ask any more.", { exact: true })).toBeVisible();
-    await expect(quick.getByText(QUICK_PATH_WORDS.intro, { exact: true })).toBeVisible();
-    // Every missing item can be set on the card (MOM-111), so it says so instead of "start again".
-    await expect(quick.getByText(QUICK_PATH_WORDS.fillIn, { exact: true })).toBeVisible();
-    await expect(quick.getByText(QUICK_PATH_WORDS.saveOff, { exact: true })).toBeVisible();
-    await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeDisabled();
-    // The words come before the buttons.
-    const [words, buttons] = await Promise.all([quick.getByText(QUICK_PATH_WORDS.fillIn, { exact: true }).boundingBox(), quick.getByRole('button', { name: 'Save what I have' }).boundingBox()]);
-    expect((words?.y ?? 0) < (buttons?.y ?? 0)).toBe(true);
-    // Round 3d: the missing number is the number question itself, now with its own box, and nothing promises a default.
-    await expect(quick.locator('[data-fill-in]').filter({ hasText: 'In a hard week, how many workouts would still count?' })).toHaveCount(1);
-    await expect(quick).not.toContainText(/least you aim for|default/i);
-    await expectRealLists(quick);
-    await fits(page, 'quick path, missing');
-    await shooter('quick-path')(page, 'missing');
+  const SCHEME = process.env.E2E_COLOR_SCHEME === 'dark' ? 'dark' : 'light';
+  const WIDE = SHOT_WIDTH >= 768;
+  const noDimmedButton = async (quick: Locator): Promise<void> => {
+    expect(await quick.locator('button:disabled, [aria-disabled="true"]').count(), 'no button on the card is dimmed').toBe(0);
+  };
 
-    // Start again asks first: the first tap clears nothing.
-    await quick.getByRole('button', { name: 'Start again' }).click();
+  test('the card with questions left: the top line, the reason once, a question in place, no dimmed button; Start again asks first', async ({ page }) => {
+    test.setTimeout(120_000);
+    const quick = await openEmptyCard(page, `setup-quick-path-${SCHEME}-${SHOT_WIDTH}`);
+    const shot = shooter('quick-path-v2');
+
+    // Goal, two things counted, and the days: four steps. The top line says how many are left.
+    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.topLine(4) })).toBeVisible();
+    // The reason, once.
+    await expect(quick.getByText(QUICK_PATH_WORDS.reasonLimit, { exact: true })).toHaveCount(1);
+    await expect(quick).not.toContainText(/Still needed|Save is off|Save what I have|default/i);
+    await expect(quick.getByRole('button', { name: QUICK_PATH_WORDS.save })).toHaveCount(0);
+    await noDimmedButton(quick);
+
+    // Each missing item is an amber callout with a plain question.
+    const first = quick.locator('[data-fill-in="goals.g1.shape"]');
+    await expect(first).toBeVisible();
+    await expect(first).toContainText(QUICK_PATH_WORDS.needsAnswer);
+    await expect(first).toContainText('Does this goal keep going, end on a date, or have a deadline?');
+    await expect(quick.locator('[data-fill-in="goals.g1.startDate"]')).toContainText('When do you want to start this goal?');
+    // The goal's own words are not said twice.
+    await expect(quick.getByText('Get stronger and keep it up through the whole winter season', { exact: true })).toHaveCount(1);
+    const amber = await first.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { border: s.borderTopColor, fill: s.backgroundColor };
+    });
+    expect(amber.fill, 'a tinted fill, not the card colour').not.toBe('rgba(0, 0, 0, 0)');
+
+    if (WIDE) {
+      // Every step in one list: every question in place, no step counter and no Back.
+      await expect(quick.locator('[data-fill-in][data-state="missing"]')).toHaveCount(9);
+      // The goal and each thing it counts are headings in body type, as they are on a phone, not small grey text.
+      for (const name of ['Get stronger and keep it up through the whole winter season', 'Workouts', 'Pages of the training book', 'Your days']) {
+        const heading = quick.getByRole('heading', { name, exact: true });
+        await expect(heading, name).toBeVisible();
+        expect(await heading.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)), name).toBeGreaterThanOrEqual(16);
+      }
+      await expect(quick.getByText(/^\d of \d$/)).toHaveCount(0);
+      await expect(quick.getByRole('button', { name: QUICK_PATH_WORDS.back })).toHaveCount(0);
+    } else {
+      // One step at a time: "1 of 4", and the days' three answers are one step.
+      await expect(quick.getByText('1 of 4', { exact: true })).toBeVisible();
+      await expect(quick.getByRole('button', { name: QUICK_PATH_WORDS.back })).toHaveCount(0);
+      await expect(quick.locator('[data-fill-in][data-state="missing"]')).toHaveCount(2);
+    }
+    await fits(page, 'quick path, questions left');
+    await shot(page, `01-empty-${SCHEME}-${SHOT_WIDTH}`);
+
+    // Start again is a small link that asks first: the first tap clears nothing.
+    await quick.getByRole('button', { name: QUICK_PATH_WORDS.startAgain }).click();
     await expect(quick.getByText(QUICK_PATH_WORDS.confirmStartOver, { exact: true })).toBeVisible();
     expect(await page.evaluate((prefix) => Object.keys(window.sessionStorage).some((k) => k.startsWith(prefix)), SETUP_STORAGE_PREFIX)).toBe(true);
     await quick.getByRole('button', { name: QUICK_PATH_WORDS.confirmNo }).click();
-    await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeVisible();
+    await expect(quick.getByRole('button', { name: QUICK_PATH_WORDS.startAgain })).toBeVisible();
   });
 
-  test('the quick path with nothing missing says it is ready, and Save is on', async ({ page }) => {
+  test('the card with nothing left to ask: it looks it over, in plain words, and Save my setup is the one button', async ({ page }) => {
     test.setTimeout(120_000);
-    // A real, validated setup: the e2e case's whole conversation, with filler turns in front so the 40-turn budget is spent.
+    // A real, validated setup: the e2e case's whole conversation, with filler turns after it so the 40-turn budget is spent.
     const c = e2eCase();
     const report = await runSetupEval(c, scriptedModel(c.script));
     expect(report.finalIssues ?? []).toEqual([]);
     const assistants = report.transcript.filter((m) => m.role === 'assistant').length;
-    // The real conversation comes first and untouched (what the person said is judged by where it sits in it); the filler that spends
-    // the budget follows it, holding the same final draft, so it changes nothing the checks compare.
     const claude = { kind: 'question', chunk: null, skipped: null, say: '', question: 'Anything else?', detail: null, topic: 'idea', options: [], draft: report.draft };
     const filler = Array.from({ length: Math.max(0, 40 - assistants) }, () => [{ role: 'assistant', turn: claude }, { role: 'person', text: 'That is all.' }]).flat();
     const transcript = [...report.transcript, { role: 'person', text: 'Yes, that is right.' }, ...filler];
-    const quick = await openQuickPath(page, 'setup-quick-path-ready', { transcript, draft: report.draft, spentTokens: 0 });
+    const quick = await openQuickPath(page, `setup-quick-path-ready-${SCHEME}-${SHOT_WIDTH}`, { transcript, draft: report.draft, spentTokens: 0 });
 
-    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.readyTitle })).toBeVisible();
-    await expect(quick.getByText(QUICK_PATH_WORDS.readyNext, { exact: true })).toBeVisible();
-    await expect(quick.getByText(QUICK_PATH_WORDS.saveOff)).toHaveCount(0);
-    await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeEnabled();
-    await expect(quick).not.toContainText(/default/i);
-    await expectRealLists(quick);
+    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.readyTop })).toBeVisible();
+    // No reason on this screen, no question, and nothing dimmed.
+    await expect(quick).not.toContainText(/question limit|Needs your answer|Almost done|default/i);
+    await expect(quick.getByRole('button', { name: QUICK_PATH_WORDS.save })).toBeEnabled();
+    await expect(quick.getByRole('button', { name: QUICK_PATH_WORDS.save })).toHaveCount(1);
+    await noDimmedButton(quick);
+    // The owner's words: the floor as the least that would still count, and never "Your goal".
+    await expect(quick.locator('li').filter({ hasText: /^Even in a hard week: at least \d+ runs a week\.$/ })).toHaveCount(1);
+    await expect(quick).not.toContainText(/Your goal|Nothing in this part yet/);
+    await expectRealLists(quick, 1);
     await fits(page, 'quick path, ready');
-    await shooter('quick-path')(page, 'ready');
+    await shooter('quick-path-v2')(page, `04-ready-${SCHEME}-${SHOT_WIDTH}`);
   });
 
-  // From a limit stop to a saved setup (MOM-111): the person sets each missing item on the card, nothing they said is lost, and
-  // Save turns on only when the last one is set. Every control is used the way a person would: the time zone from the list, a
-  // time, a weekday, today as a suggestion, a shape, a number and a source. The screenshots are the empty card, the card
-  // part-filled and the card ready to save, in the colour scheme the run uses (E2E_COLOR_SCHEME) and at the run's width.
-  test('from a limit stop, the person fills in what is missing and saves; what they said is kept', async ({ page }) => {
-    test.setTimeout(240_000);
-    const scheme = process.env.E2E_COLOR_SCHEME === 'dark' ? 'dark' : 'light';
-    const draft = emptyDraft();
-    draft.model.goals.push({ ...goal('g1', 'Get stronger and keep it up through the whole winter season'), targets: [target('t1', 'Workouts')] });
-    const claude = { kind: 'question', chunk: null, skipped: null, say: '', question: 'Anything else?', detail: null, topic: 'idea', options: [], draft };
-    const transcript = Array.from({ length: 40 }, () => [{ role: 'assistant', turn: claude }, { role: 'person', text: 'That is all.' }]).flat();
-    const quick = await openQuickPath(page, `setup-quick-path-fill-${scheme}-${SHOT_WIDTH}`, { transcript, draft, spentTokens: 0 });
-    const shoot = shooter('quick-path-fill-in');
-    const shot = (name: string) => shoot(page, `${name}-${scheme}-${SHOT_WIDTH}`);
-
-    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.missingTitle })).toBeVisible();
-    await expect(quick.getByRole('button', { name: 'Save what I have' })).toBeDisabled();
+  // From a limit stop to a saved setup (MOM-111): the person answers each question, in place, and nothing they said is lost. On a
+  // phone each step is one screen, with the step before it as one line above and Back; wide, every question is in one list. The
+  // screenshots are the empty card, the card part-way (one step done), and the last step with Save my setup on it.
+  test('from a limit stop, the person answers what is missing, step by step, and saves; what they said is kept', async ({ page }) => {
+    test.setTimeout(300_000);
+    const quick = await openEmptyCard(page, `setup-quick-path-fill-${SCHEME}-${SHOT_WIDTH}`);
+    const shot = shooter('quick-path-v2-flow');
     const stored = async (): Promise<{ transcript: { role: string; text?: string }[] }> =>
       page.evaluate((prefix) => JSON.parse(window.sessionStorage.getItem(Object.keys(window.sessionStorage).find((k) => k.startsWith(prefix)) ?? '') ?? 'null'), SETUP_STORAGE_PREFIX);
     const said = (await stored()).transcript;
     expect(said).toHaveLength(80);
-    await fits(page, 'quick path fill-in, empty');
-    await shot('01-empty');
 
-    // Set each item the way its control asks, until Save is on. Every group is found by what it is for.
-    const save = quick.getByRole('button', { name: 'Save what I have' });
-    let filled = 0;
-    for (let guard = 0; guard < 20 && (await save.isDisabled()); guard++) {
-      const group = quick.locator('[data-fill-in]').first();
+    const save = quick.getByRole('button', { name: QUICK_PATH_WORDS.save });
+    // Answers one open question the way its control asks, by what it is for.
+    const answer = async (group: Locator): Promise<void> => {
       const id = (await group.getAttribute('data-fill-in')) ?? '';
-      const line = (await group.locator('p').first().textContent()) ?? '';
+      const box = group.locator('input:not([type="search"])');
       if (id === 'person.timeZone') {
         await group.getByRole('searchbox', { name: QUICK_PATH_WORDS.searchZones }).fill('london');
-        await group.getByRole('button', { name: 'Europe/London' }).click();
+        await group.getByRole('button', { name: /Europe\/London/ }).click();
       } else if (id === 'person.dayEnd') {
-        await group.getByLabel(line).fill('21:00');
-        await group.getByRole('button', { name: QUICK_PATH_WORDS.setItem }).click();
+        await box.fill('21:00');
+        await group.getByRole('button', { name: /^(Set|Next)$/ }).click();
       } else if (id === 'person.weekStart') {
         await group.getByRole('button', { name: 'Monday' }).click();
       } else if (id.endsWith('.startDate')) {
@@ -434,36 +459,102 @@ test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
       } else if (id.endsWith('.shape')) {
         await group.getByRole('button', { name: 'It keeps going' }).click();
       } else if (id.endsWith('.floor')) {
-        await group.getByLabel(line).fill('3');
-        await group.getByRole('button', { name: QUICK_PATH_WORDS.setItem }).click();
+        await box.fill('3');
+        await group.getByRole('button', { name: /^(Set|Next)$/ }).click();
       } else if (id.endsWith('.sources')) {
         await group.getByRole('button', { name: "I'll log it myself" }).click();
       } else {
-        throw new Error(`no step for the item ${id}`);
+        throw new Error(`no answer for the question ${id}`);
       }
-      // The item leaves the card once it is set.
-      await expect(quick.locator(`[data-fill-in="${id}"]`)).toHaveCount(0);
-      filled += 1;
-      if (filled === 2) {
-        await fits(page, 'quick path fill-in, part-filled');
-        await shot('02-part-filled');
+    };
+
+    let answers = 0;
+    let steppedOn = false;
+    for (let guard = 0; guard < 40 && !(await save.isVisible()); guard++) {
+      const group = quick.locator('[data-fill-in][data-state="missing"]').first();
+      await expect(group).toBeVisible();
+      const id = (await group.getAttribute('data-fill-in')) ?? '';
+      await answer(group);
+      answers += 1;
+      // The question leaves the open ones once it is answered (wide) or the step moves on; a done step with several answers offers Next.
+      await expect(quick.locator(`[data-fill-in="${id}"][data-state="missing"]`)).toHaveCount(0);
+      const next = quick.getByRole('button', { name: QUICK_PATH_WORDS.next, exact: true });
+      if (!WIDE && (await next.isVisible())) {
+        await next.click();
+        steppedOn = true;
+        if (answers === 2) {
+          // One step done: its line sits above the next step, as one small line.
+          await expect(quick.getByText(/^✓ /)).toHaveCount(1);
+          await expect(quick.getByText('2 of 4', { exact: true })).toBeVisible();
+          await expect(quick.getByRole('button', { name: QUICK_PATH_WORDS.back })).toBeVisible();
+          await expect(quick.getByText(QUICK_PATH_WORDS.reasonLimit, { exact: true })).toHaveCount(1);
+          await noDimmedButton(quick);
+          await fits(page, 'quick path, one step done');
+          await shot(page, `02-mid-step-${SCHEME}-${SHOT_WIDTH}`);
+        }
       }
     }
-    expect(filled, 'something was filled in').toBeGreaterThan(2);
+    expect(answers, 'something was answered').toBeGreaterThan(4);
+    if (!WIDE) expect(steppedOn, 'the card moved on step by step').toBe(true);
     await expect(save).toBeEnabled();
-    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.readyTitle })).toBeVisible();
-    await expect(quick).not.toContainText(/default/i);
-    await fits(page, 'quick path fill-in, ready');
-    await shot('03-ready');
+    await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.readyTop })).toBeVisible();
+    await expect(quick.getByText(QUICK_PATH_WORDS.reasonLimit, { exact: true })).toHaveCount(0);
+    await expect(quick).not.toContainText(/default|Your goal/i);
+    await noDimmedButton(quick);
+    await fits(page, 'quick path, last step');
+    await shot(page, `03-last-step-${SCHEME}-${SHOT_WIDTH}`);
 
-    // Nothing they said is lost: the conversation is the same one with each item's question and answer added to the end.
+    // Nothing they said is lost: the conversation is the same one with each answer's question and reply added to the end.
     const after = (await stored()).transcript;
     expect(after.slice(0, 80)).toEqual(said);
-    expect(after).toHaveLength(80 + 2 * filled);
+    expect(after).toHaveLength(80 + 2 * answers);
     expect(after.some((m) => m.text === 'Europe/London')).toBe(true);
+
+    if (!WIDE) {
+      // The ready screen after a reload: nothing left to ask, and, because the person answered on the card, a Back to the last step.
+      await page.reload();
+      await page.getByRole('button', { name: SEND_AGAIN }).click();
+      await expect(quick.getByRole('heading', { name: QUICK_PATH_WORDS.readyTop })).toBeVisible({ timeout: 30_000 });
+      await expect(quick.getByText(/^d of d$/)).toHaveCount(0);
+      const back = quick.getByRole('button', { name: QUICK_PATH_WORDS.back });
+      await expect(back).toBeVisible();
+      await fits(page, 'quick path, ready after answers');
+      await shot(page, `05-ready-with-back-${SCHEME}-${SHOT_WIDTH}`);
+      // Back goes to the last step, where the answers are chosen, and Save my setup is still there.
+      await back.click();
+      await expect(quick.getByRole('button', { name: 'Monday' })).toHaveAttribute('aria-pressed', 'true');
+      await expect(save).toBeVisible();
+    }
 
     await save.click();
     await expect(page.getByRole('heading', { name: 'Your setup is saved' })).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('Back shows the step before with the answer chosen, and an answer can be changed', async ({ page }) => {
+    test.skip(WIDE, 'a wide screen has no steps to go back through');
+    test.setTimeout(120_000);
+    const quick = await openEmptyCard(page, `setup-quick-path-back-${SCHEME}-${SHOT_WIDTH}`);
+    await quick.getByRole('button', { name: 'It keeps going' }).click();
+    await quick.getByRole('button', { name: /^Use today/ }).click();
+    await quick.getByRole('button', { name: QUICK_PATH_WORDS.next, exact: true }).click();
+    await expect(quick.getByText('2 of 4', { exact: true })).toBeVisible();
+    await quick.getByRole('button', { name: QUICK_PATH_WORDS.back }).click();
+    await expect(quick.getByText('1 of 4', { exact: true })).toBeVisible();
+    await expect(quick.getByRole('button', { name: 'It keeps going' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(quick.getByRole('button', { name: 'It ends on a date' })).toHaveAttribute('aria-pressed', 'false');
+    // The chosen answer is filled and checked, and the others are plain: the card's own colour with a border.
+    const on = quick.getByRole('button', { name: 'It keeps going' });
+    const off = quick.getByRole('button', { name: 'It ends on a date' });
+    await expect(on.locator('[data-slot="choice-check"]')).toBeVisible();
+    await expect(off.locator('[data-slot="choice-check"]')).toHaveCount(0);
+    const fillOf = (l: Locator) => l.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(await fillOf(on), 'the chosen answer is filled').not.toBe('rgba(0, 0, 0, 0)');
+    expect(await fillOf(off), 'a plain answer has no fill of its own').toBe('rgba(0, 0, 0, 0)');
+    await expect(quick.getByRole('button', { name: 'It has a deadline' })).toHaveAttribute('aria-pressed', 'false');
+    // Change it: a shape that ends on a date asks for the date, in the same step.
+    await quick.getByRole('button', { name: 'It ends on a date' }).click();
+    await expect(quick.locator('[data-fill-in="goals.g1.endDate"][data-state="missing"]')).toBeVisible();
+    await expect(quick.getByRole('button', { name: 'It ends on a date' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

@@ -113,40 +113,44 @@ export function describeMissing(model: SetupModel, issues: DraftIssue[], words: 
   return [...seen];
 }
 
+
+// The words of the quick-path card, in everyday words, written by code. No default is ever applied, so an incomplete setup is never
+// saved: what is missing is asked for, one plain question at a time, and the way forward is stated before any button.
+export const QUICK_PATH_WORDS = {
+  // The top line of a card with questions left: how many quick steps remain (one step may hold several answers).
+  topLine: (steps: number): string => `Almost done: ${steps} quick ${steps === 1 ? 'step' : 'steps'} and your setup is saved`,
+  readyTop: 'Everything is in. Look it over, then save.',
+  // Something only Claude could ask for is missing (a goal to add): the card cannot finish it.
+  stuckTop: "This setup can't be saved yet",
+  stuckHelp: "Only Claude could ask for this, and it can't right now. Start again to begin a new setup.",
+  stepOf: (step: number, steps: number): string => `${step} of ${steps}`,
+  // Why setup stopped, once, at the top of a card that still has questions.
+  reasonLimit: 'Claude has hit its question limit for this setup. Everything you said is kept, and these last answers finish it.',
+  reasonWait: "Claude can't take more questions right now. Everything you said is kept, and these last answers finish it.",
+  needsAnswer: 'Needs your answer',
+  yourAnswer: 'Your answer',
+  cantAnswerHere: "Can't be answered here",
+  next: 'Next',
+  back: 'Back',
+  save: 'Save my setup',
+  setItem: 'Set',
+  startAgain: 'Start again',
+  confirmStartOver: 'This clears everything you told me. Start again?',
+  confirmYes: 'Yes, start again',
+  confirmNo: 'Keep what I have',
+  fillStays: 'What you answer here stays in this tab until you save.',
+  searchZones: 'Search time zones',
+  noZones: 'No time zone matches that.',
+  fillFailed: "That didn't go through. Nothing was changed. Try again.",
+  useDeviceZone: (zone: string): string => `Use this device's time zone: ${zone}`,
+  useToday: (day: string): string => `Use today, ${day}`,
+} as const;
+
 // Whether waiting helps (MOM-111, quick-path card): the shared limit, a per-person limit and a limit check that failed all lift on
 // their own, and the person's answers stay in their tab until then. A setup's own budget does not: that setup can not ask more.
 export function quickPathCanWait(reason: QuickPathReason): boolean {
   return reason === 'shared_cap' || reason === 'person_cap' || reason === 'unchecked';
 }
 
-// The words of the quick-path card besides what happened (the server's sentence for the reason) and the playback. Written by
-// code, in everyday words, so the person knows what to do next before any button. No default is ever applied, so an incomplete
-// setup is never saved, and the way forward is stated, not promised.
-export const QUICK_PATH_WORDS = {
-  readyTitle: 'Your setup is ready to save',
-  missingTitle: "Setup can't be saved yet",
-  intro: 'Here is everything you told me so far.',
-  readyNext: "Look it over. If it's right, tap \"Save what I have\". Nothing is saved until you do.",
-  missingWait:
-    "Setup can't be saved without the items above, and Claude can't ask for them right now. Wait a little, then reload this page: your answers stay in this tab and setup picks up where it stopped. Or tap \"Start again\" to begin a new setup; that clears the answers here.",
-  missingNoWait:
-    "Setup can't be saved without the items above, and this setup can't ask for them any more. Tap \"Start again\" to begin a new setup; that clears the answers here.",
-  fillIn:
-    "Claude can't ask for the items above right now, so you can set them here. When they are all set, tap \"Save what I have\". Nothing is saved until you do.",
-  fillStays: 'What you set here stays in this tab until you save.',
-  setItem: 'Set',
-  searchZones: 'Search time zones',
-  noZones: 'No time zone matches that.',
-  fillFailed: "That didn't go through. Nothing was changed. Try again.",
-  saveOff: 'Save is off until the items above are set.',
-  confirmStartOver: 'Start again? What you have said so far will be cleared.',
-  confirmYes: 'Yes, start again',
-  confirmNo: 'Keep what I have',
-} as const;
-
-// `fillable` is true when every missing item can be set on the card: then the card says so instead of waiting or starting again.
-export function quickPathNext(reason: QuickPathReason, complete: boolean, fillable = false): string {
-  if (complete) return QUICK_PATH_WORDS.readyNext;
-  if (fillable) return QUICK_PATH_WORDS.fillIn;
-  return quickPathCanWait(reason) ? QUICK_PATH_WORDS.missingWait : QUICK_PATH_WORDS.missingNoWait;
-}
+// The one line that says why setup stopped using Claude.
+export const quickPathReason = (reason: QuickPathReason): string => (quickPathCanWait(reason) ? QUICK_PATH_WORDS.reasonWait : QUICK_PATH_WORDS.reasonLimit);

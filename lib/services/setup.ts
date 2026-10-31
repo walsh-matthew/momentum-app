@@ -45,8 +45,9 @@ import { shownModel } from '@/lib/setup/paraphrase';
 import { normalizePlainTurn } from '@/lib/setup/plainCard';
 import { spokenTimes } from '@/lib/setup/playback';
 import { personToday } from '@/lib/setup/relativeDates';
-import { applyFillIn, fillInItems } from '@/lib/setup/fillIn';
-import { describeMissing, quickPathSections } from '@/lib/setup/quickPath';
+import { applyFillIn, planFillIn, type FillInPlan } from '@/lib/setup/fillIn';
+import { describeMissing } from '@/lib/setup/quickPath';
+import { recapSections } from '@/lib/setup/quickRecap';
 import { personWords } from '@/lib/setup/said';
 import { errorText } from '@/lib/setup/session';
 import { sourceNote } from '@/lib/setup/sources';
@@ -146,22 +147,28 @@ const withAllApproved = (session: SetupSession): SetupSession => ({
 
 // The playback here is written on the server, so a clock time uses the locale the browser sent; without one, the time reads
 // as the person gave it (lib/setup/playback.ts).
-function quickPathState(session: SetupSession, locale: string | undefined, today: string | undefined): QuickPathState {
+function quickPathPlan(session: SetupSession, locale: string | undefined, today: string | undefined): { state: QuickPathState; plan: FillInPlan } {
   const shown = withAllApproved(session);
   const validation = validateDraft(shown.draft, shown.transcript, 'final');
   const words = { today: today ?? null, said: personWords(session.transcript) };
-  return {
-    sections: quickPathSections(shownModel(session.draft, session.transcript), {
-      locale,
-      spokenTime: spokenTimes(session.draft, session.transcript),
-      today: today ?? null,
-      said: words.said,
-    }),
+  const plan = planFillIn(session, validation.issues, words);
+  const sections = recapSections(
+    shownModel(session.draft, session.transcript),
+    { locale, spokenTime: spokenTimes(session.draft, session.transcript), today: today ?? null, said: words.said },
+    plan.steps.map((step) => step.sectionId),
+  );
+  const state: QuickPathState = {
+    sections,
+    steps: plan.steps,
+    items: plan.missing,
+    stuck: plan.stuck,
     missing: describeMissing(session.draft.model, validation.issues, words),
-    items: fillInItems(session.draft.model, validation.issues, words),
     canSave: validation.ok,
   };
+  return { state, plan };
 }
+
+const quickPathState = (session: SetupSession, locale: string | undefined, today: string | undefined): QuickPathState => quickPathPlan(session, locale, today).state;
 
 function quickPathView(session: SetupSession, reason: QuickPathReason, message: string, locale: string | undefined, today: string | undefined): SetupTurnView {
   return { kind: 'quick_path', reason, message, ...quickPathState(session, locale, today) };
@@ -186,8 +193,8 @@ export async function fillQuickPathItem(raw: unknown): Promise<ServiceResult<Qui
   if (!user.ok) return user;
   const { session, itemId, value, how, today, locale } = parsed.data;
 
-  const before = quickPathState(session, locale, today);
-  const filled = applyFillIn(session, before.items, { itemId, value, how, today });
+  const { plan } = quickPathPlan(session, locale, today);
+  const filled = applyFillIn(session, plan.all, { itemId, value, how, today });
   if (!filled.ok) return { ok: false, error: filled.error };
   return { ok: true, data: { session: filled.session, ...quickPathState(filled.session, locale, today) } };
 }

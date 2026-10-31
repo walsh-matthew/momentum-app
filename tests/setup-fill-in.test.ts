@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fillQuickPathItem, saveApprovedSetup } from '@/lib/services/setup';
-import { FILL_IN_ERRORS, fillInItems } from '@/lib/setup/fillIn';
+import { FILL_IN_ERRORS, FILL_IN_MARK, planFillIn } from '@/lib/setup/fillIn';
 import { runSetupEval } from '@/lib/setup/evals';
 import { PROPOSAL_YES_TEXT } from '@/lib/setup/session';
 import { acceptedStartingPoints, startingPointForPath } from '@/lib/setup/startingPoints';
@@ -70,8 +70,8 @@ async function mustFill(session: SetupSession, itemId: string, value: string, ho
 }
 
 // The items the card would offer for a session, worked out the way the service does.
-const itemsOf = (s: SetupSession): FillInItem[] =>
-  fillInItems(s.draft.model, validateDraft({ ...s.draft, approved: [...SETUP_CHUNKS] }, s.transcript, 'final').issues);
+const planOf = (s: SetupSession) => planFillIn(s, validateDraft({ ...s.draft, approved: [...SETUP_CHUNKS] }, s.transcript, 'final').issues);
+const itemsOf = (s: SetupSession): FillInItem[] => planOf(s).missing;
 
 const lastTwo = (s: SetupSession) => s.transcript.slice(-2) as [{ role: 'assistant'; turn: AssistantTurn }, { role: 'person'; text: string }];
 
@@ -93,7 +93,7 @@ describe('fillQuickPathItem: a typed value', () => {
     expect(asked.turn.kind).toBe('question');
     expect(asked.turn.topic).toBe('time_zone');
     // The question is the card's exact line for the item.
-    expect(asked.turn.question).toBe('Your time zone.');
+    expect(asked.turn.question).toBe('Which time zone are you in?');
     expect(answered.text).toBe('America/Chicago');
     expect(out.session.draft.model.person.timeZone).toBe('America/Chicago');
     expect(out.session.draft.said.at(-1)).toEqual({ path: 'person.timeZone', turn: before + 1, how: 'said' });
@@ -160,7 +160,7 @@ describe('fillQuickPathItem: an accepted suggestion', () => {
 
     const [asked, answered] = lastTwo(out.session);
     expect(asked.turn.kind).toBe('proposal');
-    expect(asked.turn.question).toBe('Your time zone.');
+    expect(asked.turn.question).toBe('Which time zone are you in?');
     expect(asked.turn.options).toEqual(['Europe/Berlin']);
     expect(answered.text).toBe(PROPOSAL_YES_TEXT);
     expect(out.session.draft.model.person.timeZone).toBe('Europe/Berlin');
@@ -303,7 +303,7 @@ describe('fillInItems: the second set', () => {
     const by = (id: string) => items.find((i) => i.id === id);
 
     expect(by(ids.start)).toMatchObject({ kind: 'date', suggestion: 'today' });
-    expect(by(ids.shape)?.choices.map((c) => c.label)).toEqual(['It keeps going', 'It has an end date', 'It has a deadline']);
+    expect(by(ids.shape)?.choices.map((c) => c.label)).toEqual(['It keeps going', 'It ends on a date', 'It has a deadline']);
     expect(by(ids.source)?.choices.map((c) => c.label)).toEqual(["I'll log it myself", 'Hevy', 'Google Calendar']);
     expect(by(ids.due)).toMatchObject({ kind: 'date', suggestion: null });
     expect(by(ids.canMove)?.choices.map((c) => c.label)).toEqual(['Yes, it can move', "No, it can't move"]);
@@ -357,7 +357,7 @@ describe('fillQuickPathItem: dates', () => {
     const { session, ids } = await opened();
     let out = await mustFill(session, ids.start, '2026-11-02');
     out = await mustFill(out.session, ids.shape, 'finite');
-    expect(lastTwo(out.session)[1].text).toBe('It has an end date');
+    expect(lastTwo(out.session)[1].text).toBe('It ends on a date');
     expect(out.items.map((i) => i.id)).toContain(ids.end);
 
     expect(await ask(out.session, ids.end, '2026-10-01')).toEqual({ ok: false, error: FILL_IN_ERRORS.badDate });
@@ -408,15 +408,16 @@ describe('fillQuickPathItem: source', () => {
     const quantity = { ...session, draft };
 
     const out = await mustFill(quantity, ids.source, 'hevy');
-    const next = out.items.find((i) => i.id === ids.source);
-    expect(next?.line).toBe(`Which number counts for "${target.title}" in Hevy.`);
+    const metricId = `${ids.source}#metric`;
+    const next = out.items.find((i) => i.id === metricId);
+    expect(next?.line).toBe('Which number counts for runs in Hevy?');
     expect(next?.choices.map((c) => c.label)).toEqual(['pounds lifted', 'kilograms lifted', 'sets', 'minutes']);
     expect(out.canSave).toBe(false);
 
-    const done = await mustFill(out.session, ids.source, 'sets');
+    const done = await mustFill(out.session, metricId, 'sets');
     expect(lastTwo(done.session)[0].turn.question).toBe(next?.line);
     expect(lastTwo(done.session)[0].turn.topic).toBe('metric');
-    expect(done.items.map((i) => i.id)).not.toContain(ids.source);
+    expect(done.items.map((i) => i.id)).not.toContain(metricId);
     expect(done.session.draft.model.goals.find((g) => g.key === goal.key)?.targets.find((t) => t.key === floorKey)?.sources).toEqual([
       { kind: 'synced', provider: 'hevy', metric: 'sets' },
     ]);
@@ -478,5 +479,139 @@ describe('fillQuickPathItem: all of it', () => {
 
     const saved = await saveApprovedSetup(current, true);
     expect(saved.ok, saved.ok ? '' : saved.error).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Steps, and changing an answer (the quick-path rework)
+// ---------------------------------------------------------------------------
+
+// The opened-up session with the person's time zone, day end and week start taken out as well.
+async function openedWithoutDays() {
+  const base = await opened();
+  const person = { ...base.session.draft.model.person, timeZone: null, dayEnd: null, weekStart: null };
+  const session: SetupSession = { ...base.session, draft: { ...base.session.draft, model: { ...base.session.draft.model, person } } };
+  return { ...base, session };
+}
+
+describe('planFillIn: steps', () => {
+  it('groups the questions by what they are about, with time zone, day end and week start in one "Your days" step', async () => {
+    const { session, goal, floorKey } = await openedWithoutDays();
+    const { steps } = planOf(session);
+    const g = `goal:${goal.key}`;
+    expect(steps.map((s) => s.id)).toEqual([g, `target:${goal.key}.${floorKey}`, `item:${goal.key}.sew`, `item:${goal.key}.walk`, 'days']);
+    expect(steps.map((s) => s.sectionId)).toEqual([g, g, g, g, 'days']);
+    expect(steps.map((s) => s.title)).toEqual([expect.any(String), expect.any(String), 'Sew the quilt', 'Walk', 'Your days']);
+    expect(steps[0].items.map((i) => i.id.split('.').pop())).toEqual(['startDate', 'shape']);
+    expect(steps.at(-1)?.items.map((i) => i.id)).toEqual(['person.timeZone', 'person.dayEnd', 'person.weekStart']);
+    // Every item is a plain question, and none shows a path or a word of the model's.
+    for (const item of steps.flatMap((s) => s.items)) {
+      expect(item.line, item.id).toMatch(/\?$/);
+      expect(item.line, item.id).not.toMatch(/goals\.|person\.|fewest|floor|aspiration|baseline|target/i);
+      expect(item.answered).toBe(false);
+      expect(item.answer).toBeNull();
+    }
+    expect(steps.flatMap((s) => s.items).map((i) => i.line)).toEqual(expect.arrayContaining([
+      'Does this goal keep going, end on a date, or have a deadline?',
+      'When do you want to start this goal?',
+      'Which time zone are you in?',
+      'What time do you check in each day?',
+      'Which day does your week start on?',
+    ]));
+  });
+
+  it('gives the day-end question its one note, and no other item a note', async () => {
+    const { session } = await openedWithoutDays();
+    const items = planOf(session).steps.flatMap((s) => s.items);
+    expect(items.filter((i) => i.hint !== null).map((i) => i.id)).toEqual(['person.dayEnd']);
+    expect(items.find((i) => i.id === 'person.dayEnd')?.hint).toBe("If you're often up past midnight, pick when your day really ends, like 2:00 AM. Late entries then count toward the day before.");
+  });
+
+  it('leaves out an answer Claude took, and a step with nothing left to ask is not a step', async () => {
+    const { session } = await opened();
+    const { steps, all } = planOf(session);
+    expect(all.map((i) => i.id)).not.toContain('person.weekStart');
+    expect(steps.some((s) => s.id === 'days')).toBe(false);
+  });
+
+  it('keeps an answered step in its place, so the number of steps does not change as they are answered', async () => {
+    const { session, ids } = await openedWithoutDays();
+    const before = planOf(session).steps;
+    let s = (await mustFill(session, ids.start, '2026-11-02')).session;
+    s = (await mustFill(s, ids.shape, 'ongoing')).session;
+    const after = planOf(s).steps;
+    expect(after.map((x) => x.id)).toEqual(before.map((x) => x.id));
+    expect(after[0].items.map((i) => i.answered)).toEqual([true, true]);
+    expect(after[0].items.map((i) => i.answer)).toEqual(['2026-11-02', 'ongoing']);
+    expect(after[1].items.every((i) => !i.answered)).toBe(true);
+  });
+});
+
+describe('fillQuickPathItem: changing an answer', () => {
+  it('marks each question it writes, so an answer given on the card can be told from one given to Claude', async () => {
+    const { session, ids } = await opened();
+    const out = await mustFill(session, ids.start, '2026-11-02');
+    expect(lastTwo(out.session)[0].turn.detail).toBe(FILL_IN_MARK);
+    expect(lastTwo(out.session)[0].turn.say).toBe('');
+  });
+
+  it('takes a new answer for one given on the card; the newest is the one that counts, and the conversation only grows', async () => {
+    const { session } = await openedWithoutDays();
+    let s = (await mustFill(session, 'person.dayEnd', '21:00')).session;
+    const length = s.transcript.length;
+    const changed = await mustFill(s, 'person.dayEnd', '22:30');
+    s = changed.session;
+    expect(s.draft.model.person.dayEnd).toBe('22:30');
+    expect(s.transcript).toHaveLength(length + 2);
+    expect(lastTwo(s)[1].text).toBe('22:30');
+    expect(planOf(s).all.find((i) => i.id === 'person.dayEnd')).toMatchObject({ answered: true, answer: '22:30' });
+    // The old answer is still in the record, before the new one.
+    expect(s.draft.said.filter((e) => e.path === 'person.dayEnd').map((e) => e.turn).slice(-2)).toEqual([length - 1, length + 1]);
+  });
+
+  it('the same answer again changes nothing and adds nothing to the conversation', async () => {
+    const { session } = await openedWithoutDays();
+    const once = (await mustFill(session, 'person.weekStart', '1')).session;
+    const again = await mustFill(once, 'person.weekStart', '1');
+    expect(again.session).toEqual(once);
+  });
+
+  it('can change a choice, and changing a shape to "keeps going" drops an end date it had', async () => {
+    const { session, ids, goal } = await opened();
+    let out = await mustFill(session, ids.shape, 'finite');
+    out = await mustFill(out.session, ids.end, '2027-01-15');
+    out = await mustFill(out.session, ids.start, '2026-11-02');
+    const changed = await mustFill(out.session, ids.shape, 'ongoing');
+    expect(changed.session.draft.model.goals.find((g) => g.key === goal.key)).toMatchObject({ shape: 'ongoing', endDate: null });
+    expect(changed.items.map((i) => i.id)).not.toContain(ids.end);
+    expect(planOf(changed.session).all.find((i) => i.id === ids.shape)).toMatchObject({ answered: true, answer: 'ongoing' });
+  });
+
+  it('refuses a change that breaks another date, and keeps the answer it had', async () => {
+    const { session, ids } = await opened();
+    let out = await mustFill(session, ids.shape, 'finite');
+    out = await mustFill(out.session, ids.end, '2026-12-01');
+    out = await mustFill(out.session, ids.start, '2026-11-02');
+    const snapshot = JSON.stringify(out.session);
+    expect(await ask(out.session, ids.start, '2027-03-01')).toEqual({ ok: false, error: FILL_IN_ERRORS.badDate });
+    expect(JSON.stringify(out.session)).toBe(snapshot);
+  });
+
+  it('changing the source drops the number it asked for, and asks again if the new one needs it', async () => {
+    const { session, ids, floorKey, goal } = await opened();
+    const draft = structuredClone(session.draft);
+    const target = draft.model.goals.find((g) => g.key === goal.key)?.targets.find((t) => t.key === floorKey);
+    if (!target) throw new Error('fixture');
+    target.measure = 'quantity';
+    target.unit = 'sets';
+    let out = await mustFill({ ...session, draft }, ids.source, 'hevy');
+    out = await mustFill(out.session, `${ids.source}#metric`, 'sets');
+    expect(planOf(out.session).all.filter((i) => i.id.startsWith(ids.source)).map((i) => [i.id, i.answered, i.answer])).toEqual([
+      [ids.source, true, 'hevy'],
+      [`${ids.source}#metric`, true, 'sets'],
+    ]);
+    const manual = await mustFill(out.session, ids.source, 'manual');
+    expect(manual.session.draft.model.goals.find((g) => g.key === goal.key)?.targets.find((t) => t.key === floorKey)?.sources).toEqual([{ kind: 'manual' }]);
+    expect(manual.items.map((i) => i.id)).not.toContain(`${ids.source}#metric`);
   });
 });

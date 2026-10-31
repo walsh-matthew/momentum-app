@@ -337,9 +337,12 @@ export type Transcript = TranscriptMessage[];
 // server treats it as untrusted input: these bounds keep a forged one from making a request (and its cost) larger than a
 // real setup can be. 40 assistant turns is the setup budget (lib/services/llm.ts); a person message is at most this long.
 export const MAX_PERSON_CHARS = 2000;
-// 82 is the budget's 40 assistant turns and 41 answers. The quick path adds a question and an answer for each item the person
-// fills in (lib/setup/fillIn.ts), at most MAX_FILL_INS of them, and they must still fit after a spent budget.
-export const MAX_FILL_INS = 40;
+// 82 is the budget's 40 assistant turns and 41 answers, with a message to spare. The quick path adds a question and an answer for
+// each item the person answers on the card (lib/setup/fillIn.ts), at most MAX_FILL_INS of them, and they must still fit after a
+// spent budget: 82 + 2 x 20 = 122. This only bounds what a request may hold; no Claude call is made once 40 of Claude's turns are in
+// the conversation (lib/services/llm.ts setupBudgetStatus), so the bound adds no room to any call. Pinned in
+// tests/setup-transcript-bound.test.ts.
+export const MAX_FILL_INS = 20;
 export const MAX_TRANSCRIPT_MESSAGES = 82 + 2 * MAX_FILL_INS;
 export const MAX_SPENT_TOKENS = 100_000_000;
 

@@ -9,7 +9,7 @@ import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
 import { ERROR_COPY, awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer, type RetryCause } from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
-import type { FillInItem, SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import type { FillInItem, QuickPathState, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { FinalCard } from './FinalCard';
 import { PlaybackCard } from './PlaybackCard';
 import { QuestionCard } from './QuestionCard';
@@ -184,21 +184,23 @@ export function SetupConversation({ userId }: SetupConversationProps) {
 
   // Sets one missing item on the quick path card (MOM-111). The server works out the new session and the card's new state, so a
   // refused value changes nothing; the answer is kept in this tab exactly like any other.
-  const fill = async (item: FillInItem, value: string, how: FillHow) => {
+  const fill = async (item: FillInItem, value: string, how: FillHow): Promise<QuickPathState | null> => {
     setFilling(true);
     setFillError(null);
     try {
       const result = await fillQuickPathItemAction({ session, itemId: item.id, value, how, today: localDate(), locale: browserLocale() });
-      if (result.ok) {
-        const { session: updated, ...state } = result.data;
-        setSession(updated);
-        storeSession(userId, updated);
-        setView((current) => (current?.kind === 'quick_path' ? { ...current, ...state } : current));
-      } else {
+      if (!result.ok) {
         setFillError(result.error);
+        return null;
       }
+      const { session: updated, ...state } = result.data;
+      setSession(updated);
+      storeSession(userId, updated);
+      setView((current) => (current?.kind === 'quick_path' ? { ...current, ...state } : current));
+      return state;
     } catch {
       setFillError(QUICK_PATH_WORDS.fillFailed);
+      return null;
     } finally {
       setFilling(false);
     }
@@ -263,20 +265,18 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     return (
       <QuickPathCard
         reason={view.reason}
-        message={view.message}
         sections={view.sections}
-        missing={view.missing}
-        canSave={view.canSave}
+        steps={view.steps}
+        stuck={view.stuck}
         saving={saving}
         error={error}
-        onSave={() => void save(true)}
-        onStartOver={startOver}
-        items={view.items}
+        fillError={fillError}
+        filling={filling}
         deviceZone={deviceTimeZone()}
         today={localDate()}
-        filling={filling}
-        fillError={fillError}
-        onFill={(item, value, how) => void fill(item, value, how)}
+        onFill={fill}
+        onSave={() => void save(true)}
+        onStartOver={startOver}
       />
     );
   }

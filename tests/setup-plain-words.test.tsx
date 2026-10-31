@@ -12,12 +12,13 @@ import { PlaybackCard } from '@/components/setup/PlaybackCard';
 import { QuestionCard } from '@/components/setup/QuestionCard';
 import { QuickPathCard } from '@/components/setup/QuickPathCard';
 import { SetupConversation } from '@/components/setup/SetupConversation';
-import { SETUP_QUICK_PATH_MESSAGES } from '@/lib/services/llm';
 import { runSetupEval } from '@/lib/setup/evals';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
 import { INTERNAL_TERMS, unexplainedTerms } from '@/lib/setup/plainWords';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
-import { CHUNK_TITLES, describeMissing, quickPathSections } from '@/lib/setup/quickPath';
+import { CHUNK_TITLES, describeMissing } from '@/lib/setup/quickPath';
+import { recapSections } from '@/lib/setup/quickRecap';
+import { quickProps } from './helpers/quickPath';
 import { HARD_RULES, SETUP_STEPS } from '@/lib/setup/steps';
 import { dayTimeWords, numbersIn } from '@/lib/setup/text';
 import { SETUP_CHUNKS, type AssistantTurn, type SetupModel } from '@/types/setup';
@@ -145,9 +146,9 @@ describe('what the setup cards show', () => {
       'somewhere.else',
     ];
     const missing = describeMissing(empty, paths.map((path) => ({ path, message: '', code: 'rule' as const })));
-    for (const message of Object.values(SETUP_QUICK_PATH_MESSAGES)) {
+    for (const reason of ['over_turns', 'shared_cap'] as const) {
       const { container } = render(
-        <QuickPathCard reason="over_turns" message={message} sections={quickPathSections(empty, { locale: 'en-US' })} missing={missing} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
+        <QuickPathCard {...quickProps({ sections: recapSections(empty, { locale: 'en-US' }), stuck: missing })} />,
       );
       expect(unexplainedTerms(readable(container))).toEqual([]);
       cleanup();

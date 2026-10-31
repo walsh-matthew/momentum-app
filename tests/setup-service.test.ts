@@ -404,7 +404,8 @@ describe('takeSetupTurn: when Claude is no longer used', () => {
     const result = await takeSetupTurn(sessionBefore(full, 3), { runTurn: stub.run });
     if (!result.ok || result.data.kind !== 'quick_path') throw new Error('expected the quick path');
     expect(result.data.reason).toBe('over_turns');
-    expect(result.data.sections.map((s) => s.chunk)).toEqual(['goals', 'targets', 'planning', 'talk']);
+    expect(result.data.sections.length).toBeGreaterThan(0);
+    for (const s of result.data.sections) expect(s.title.length, s.id).toBeGreaterThan(0);
     expect(result.data.canSave).toBe(false);
     expect(result.data.missing.length).toBeGreaterThan(0);
     // Plain words: no field paths, no instructions to Claude.

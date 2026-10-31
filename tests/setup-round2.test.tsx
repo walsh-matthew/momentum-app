@@ -36,6 +36,7 @@ import { appsIn, sourceNote } from '@/lib/setup/sources';
 import { validateDraft } from '@/lib/setup/validate';
 import { AssistantTurnSchema, SetupDraftSchema, type AssistantTurn, type SetupDraft, type SetupSession, type Transcript } from '@/types/setup';
 import { goal, item, scriptedModel, target } from './helpers/setupScript';
+import { quickProps } from './helpers/quickPath';
 import { SETUP_CASES } from './setup-evals/cases';
 import { SMOKE_CASES, SMOKE_TODAY } from './setup-evals/smokeCases';
 
@@ -428,7 +429,7 @@ describe('every card: at most one main button, one submit, and second choices th
     const final = render(<FinalCard lines={['One goal.']} saving={false} error={null} onSave={() => {}} onChange={() => {}} />);
     expect(mainCount(final.container)).toBe(1);
     cleanup();
-    const quick = render(<QuickPathCard reason="over_turns" message="Done." sections={[]} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />);
+    const quick = render(<QuickPathCard {...quickProps()} />);
     expect(mainCount(quick.container)).toBe(1);
     expect(secondLooksEnabled(quick.container)).toBe(true);
   });

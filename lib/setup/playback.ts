@@ -12,7 +12,7 @@ import { asSaid, itemOf, listOf, restate, titleOf, trimmed } from './restate';
 import { minutesOfClock, timePhrasesIn } from './text';
 
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const weekdayName = (n: number): string => WEEKDAY_NAMES[n - 1] ?? String(n);
+export const weekdayName = (n: number): string => WEEKDAY_NAMES[n - 1] ?? String(n);
 
 // The clock times the playback shows, by the path they are saved under.
 export type ClockPath = 'person.dayEnd' | 'person.planning.time';
@@ -33,9 +33,9 @@ export interface PlaybackOptions {
 
 // A date in the playback, the one way the app writes dates (MOM-111 round 2, finding 3): "today" or "tomorrow" on their own,
 // otherwise "Thursday, Nov 5", spelled, so it is never read in the wrong order.
-const dateWords = (iso: string, options: PlaybackOptions): string => casualDate(iso, options.today ?? null);
+export const dateWords = (iso: string, options: PlaybackOptions): string => casualDate(iso, options.today ?? null);
 // "on Thursday, Nov 5", or "today" alone ("comes back on today" does not read).
-const onDate = (iso: string, options: PlaybackOptions): string => {
+export const onDate = (iso: string, options: PlaybackOptions): string => {
   const words = dateWords(iso, options);
   return /^(today|tomorrow|yesterday)$/.test(words) ? words : `on ${words}`;
 };
@@ -54,7 +54,7 @@ function localClock(hhmm: string, locale: string | null | undefined): string | n
   }
 }
 
-function clock(hhmm: string, path: ClockPath, options: PlaybackOptions): string {
+export function clock(hhmm: string, path: ClockPath, options: PlaybackOptions): string {
   return localClock(hhmm, options.locale) ?? options.spokenTime?.(path) ?? hhmm;
 }
 
@@ -71,10 +71,10 @@ export function spokenTimes(draft: SetupDraft, transcript: Transcript): (path: C
   };
 }
 
-const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+export const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 // When a target is counted. 'rate' follows an amount ("2 a week"); 'each' stands alone ("counted each week").
-function describePeriod(t: TargetDraft, options: PlaybackOptions, style: 'rate' | 'each'): string {
+export function describePeriod(t: TargetDraft, options: PlaybackOptions, style: 'rate' | 'each'): string {
   const week = style === 'rate' ? 'a week' : 'each week';
   switch (t.period.kind) {
     case 'weekly':
@@ -105,7 +105,7 @@ const singular = (word: string): string => (/(ss|sh|ch|x)es$/i.test(word) ? word
 
 // An amount with what is counted, as the person's goal says it (MOM-111 round 3c, finding 3): "3 runs", "100 pages",
 // "90 minutes of practice", "5000 pounds lifted". For one, the counted thing's first plural word is made singular ("1 run").
-function amountOf(t: TargetDraft, n: number, options: PlaybackOptions): string {
+export function amountOf(t: TargetDraft, n: number, options: PlaybackOptions): string {
   const thing = countedWords(t.title, options.said);
   switch (t.measure) {
     case 'count': {
@@ -171,7 +171,7 @@ function describeShape(g: GoalDraft, options: PlaybackOptions): string {
 // When a goal set aside comes back. A condition in the person's words reads after "It comes back" when it starts like one
 // ("in the spring", "when my knee heals"); otherwise it is shown as said.
 const RETURN_START = /^(in|when|after|once|on|at|by|next|before|if|until|around|this|after)\b/i;
-function describeReturn(g: GoalDraft, options: PlaybackOptions): string {
+export function describeReturn(g: GoalDraft, options: PlaybackOptions): string {
   if (!g.returnWhen) return 'When it comes back is not set yet.';
   switch (g.returnWhen.kind) {
     case 'date':
@@ -193,7 +193,7 @@ function describeGoal(g: GoalDraft): string {
   return why ? `Goal: ${title}, because ${why}.` : `Goal: ${title}. Why, in your words: ${asSaid(g.why)}`;
 }
 
-const PROVIDER_NAMES = new Map(INTEGRATION_CATALOG.map((e) => [e.provider as string, e.name]));
+export const PROVIDER_NAMES = new Map(INTEGRATION_CATALOG.map((e) => [e.provider as string, e.name]));
 const SOURCE_WORDS = (t: TargetDraft): string =>
   t.sources.length === 0
     ? "where you track it isn't set yet"
