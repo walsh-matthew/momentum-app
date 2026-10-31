@@ -129,7 +129,9 @@ describe('what the setup cards show', () => {
       expect(unexplainedTerms(readable(container))).toEqual([]);
       cleanup();
     }
-  });
+    // Every model times every part is many full renders with no wait in between: about 1 second alone, and it went past the default
+    // 5 seconds once under a full run's load (day-end 2026-10-31). It is pure work, not a race, so it gets room rather than a retry.
+  }, 20_000);
 
   it('the quick path, with every part, what is missing and every message', () => {
     const empty = models[0] && structuredClone(models[0]);
