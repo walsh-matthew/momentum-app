@@ -39,6 +39,13 @@
 // saved changes. Each carries the id the browser made for this one approval; the same approval sent twice writes once and gets the
 // first answer back. A target added to a goal that has started stores the start date the person gave (no default), and is graded
 // only from it.
+//
+// The conversation for that person (MOM-132 part 2, lib/setup/returning.ts) is takeAddTurn(): the same turn as takeSetupTurn, held to the
+// returning checks and given one fixed note. The kind of addition and the goal's id come from the request; everything about the person
+// (the goal and its title, their saved time zone, day end and week start) is read here from their own rows. Nothing saved is put in the
+// draft or sent to Claude except the saved goal's title when a target is added to it. The two saves read the saved anchors from the same
+// rows for the final check, and a target that repeats each week is refused in plain words when no week start is saved (no screen can set
+// one yet, and setting it would change a saved row).
 
 import 'server-only';
 import { z } from 'zod';
@@ -58,7 +65,8 @@ import { personWords } from '@/lib/setup/said';
 import { errorText } from '@/lib/setup/session';
 import { sourceNote } from '@/lib/setup/sources';
 import { draftToRows, toAddGoalsPayload, toAddTargetsPayload, toSavePayload, type SetupRows } from '@/lib/setup/rows';
-import { validateDraft } from '@/lib/setup/validate';
+import { RETURNING_MODES, SAVED_GOAL_KEY, returningNote, type ReturningContext } from '@/lib/setup/returning';
+import { validateDraft, type SavedFacts, type ValidateOptions } from '@/lib/setup/validate';
 import type { Json } from '@/types/database.types';
 import {
   AssistantTurnSchema,
@@ -70,7 +78,7 @@ import {
   type AssistantTurn,
   type SetupSession,
 } from '@/types/setup';
-import type { QuickPathReason, QuickPathState, SetupAdded, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import type { AddOptions, QuickPathReason, QuickPathState, SetupAdded, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { runSetupTurn } from './llm';
 import type { ServiceResult } from './result';
 
@@ -153,9 +161,14 @@ const withAllApproved = (session: SetupSession): SetupSession => ({
 
 // The playback here is written on the server, so a clock time uses the locale the browser sent; without one, the time reads
 // as the person gave it (lib/setup/playback.ts).
-function quickPathPlan(session: SetupSession, locale: string | undefined, today: string | undefined): { state: QuickPathState; plan: FillInPlan } {
+function quickPathPlan(
+  session: SetupSession,
+  locale: string | undefined,
+  today: string | undefined,
+  options: ValidateOptions = {},
+): { state: QuickPathState; plan: FillInPlan } {
   const shown = withAllApproved(session);
-  const validation = validateDraft(shown.draft, shown.transcript, 'final');
+  const validation = validateDraft(shown.draft, shown.transcript, 'final', options);
   const words = { today: today ?? null, said: personWords(session.transcript) };
   const plan = planFillIn(session, validation.issues, words);
   const sections = recapSections(
@@ -174,13 +187,26 @@ function quickPathPlan(session: SetupSession, locale: string | undefined, today:
   return { state, plan };
 }
 
-const quickPathState = (session: SetupSession, locale: string | undefined, today: string | undefined): QuickPathState => quickPathPlan(session, locale, today).state;
+const quickPathState = (session: SetupSession, locale: string | undefined, today: string | undefined, options: ValidateOptions = {}): QuickPathState =>
+  quickPathPlan(session, locale, today, options).state;
 
-function quickPathView(session: SetupSession, reason: QuickPathReason, message: string, locale: string | undefined, today: string | undefined): SetupTurnView {
-  return { kind: 'quick_path', reason, message, ...quickPathState(session, locale, today) };
+function quickPathView(
+  session: SetupSession,
+  reason: QuickPathReason,
+  message: string,
+  locale: string | undefined,
+  today: string | undefined,
+  options: ValidateOptions = {},
+): SetupTurnView {
+  return { kind: 'quick_path', reason, message, ...quickPathState(session, locale, today, options) };
 }
 
+// A person adding to a finished setup (MOM-132 part 2), as the browser names it: the kind of addition and, for a target, the goal. The
+// server turns it into the rest (the goal's title, the saved anchors) from the person's own rows; none of that comes from the request.
+const AdditionSchema = z.strictObject({ mode: z.enum(RETURNING_MODES), goalId: z.string().uuid().optional() });
+
 const FillRequestSchema = z.strictObject({
+  addition: AdditionSchema.optional(),
   session: SetupSessionSchema,
   itemId: z.string().min(1).max(200),
   value: z.string().max(MAX_PERSON_CHARS),
@@ -197,12 +223,18 @@ export async function fillQuickPathItem(raw: unknown): Promise<ServiceResult<Qui
   if (!parsed.success) return { ok: false, error: BAD_REQUEST };
   const user = await signedInUserId();
   if (!user.ok) return user;
-  const { session, itemId, value, how, today, locale } = parsed.data;
+  const { session, itemId, value, how, today, locale, addition } = parsed.data;
 
-  const { plan } = quickPathPlan(session, locale, today);
+  let options: ValidateOptions = {};
+  if (addition !== undefined) {
+    const resolved = await resolveAddition(user.data.supabase, user.data.userId, addition);
+    if (!resolved.ok) return resolved;
+    options = resolved.data.validate;
+  }
+  const { plan } = quickPathPlan(session, locale, today, options);
   const filled = applyFillIn(session, plan.all, { itemId, value, how, today });
   if (!filled.ok) return { ok: false, error: filled.error };
-  return { ok: true, data: { session: filled.session, ...quickPathState(filled.session, locale, today) } };
+  return { ok: true, data: { session: filled.session, ...quickPathState(filled.session, locale, today, options) } };
 }
 
 // The next turn of Claude's, checked. `raw` is the conversation so far, as the browser sent it.
@@ -230,6 +262,9 @@ export interface CheckedTurnInput {
   locale?: string;
   // When the turn must have answered by, on the deps clock.
   deadlineMs: number;
+  // Set when the person has finished their first setup and is adding to it (MOM-132 part 2): the returning checks, the note Claude
+  // is given, and the anchors the final check and the quick path read. Absent for a first setup, which runs exactly as before.
+  addition?: Addition;
 }
 
 // One turn for a person already known: code's own date and length turns, then Claude, checked, with retries told what went
@@ -239,9 +274,11 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   const runTurn = deps.runTurn ?? runSetupTurn;
   const nowMs = deps.nowMs ?? Date.now;
 
-  const context = { transcript: session.transcript, prevDraft: session.draft };
-  // The person's own today: their time zone's date once setup knows it, else their device's (MOM-111 finding 8).
-  const personDay = personToday(session.draft.model.person.timeZone, today, new Date(nowMs()));
+  const { addition } = input;
+  const context = { transcript: session.transcript, prevDraft: session.draft, returning: addition?.returning };
+  // The person's own today: their time zone's date once setup knows it, else their device's (MOM-111 finding 8). A person adding to a
+  // finished setup has a saved time zone, which stays on the server (it is never put in the draft or sent to Claude).
+  const personDay = personToday(session.draft.model.person.timeZone ?? addition?.savedTimeZone ?? null, today, new Date(nowMs()));
 
   // An answer that is only a relative date ("Monday") or a length of time ("two months") is answered by code, with no call:
   // the date as a proposal, or the question again for a vague one. The turn is checked like any other; one that failed
@@ -289,11 +326,12 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
       retryFeedback: feedback,
       dateHint,
       sourceNote: note,
+      returningNote: addition ? returningNote(addition.returning) : undefined,
       timeoutMs,
     });
     const ms = Math.round(nowMs() - started);
     longestCallMs = Math.max(longestCallMs, ms);
-    if (answer.kind === 'quick_path') return quickPathView(session, answer.reason, answer.message, locale, personDay);
+    if (answer.kind === 'quick_path') return quickPathView(session, answer.reason, answer.message, locale, personDay, addition?.validate);
     if (answer.kind === 'wait') return { kind: 'wait', message: answer.message, retryAfterSeconds: answer.retryAfterSeconds };
 
     // The tokens of every call count against the setup budget, a thrown-away reply as much as a kept one.
@@ -371,9 +409,10 @@ export async function getSetupStart(): Promise<ServiceResult<{ alreadySetUp: boo
 }
 
 // The rows of an approved session, or the plain words for what is still missing. Shared by the first save and both additions, so
-// each holds a session to the same final validation before anything is sent.
-function approvedRows(session: SetupSession): ServiceResult<SetupRows> {
-  const rows = draftToRows(session.draft, session.transcript);
+// each holds a session to the same final validation before anything is sent. An addition passes the person's saved anchors, which
+// stand in for the ones its draft does not hold.
+function approvedRows(session: SetupSession, options: ValidateOptions = {}): ServiceResult<SetupRows> {
+  const rows = draftToRows(session.draft, session.transcript, options);
   if (rows.ok) return { ok: true, data: rows.rows };
   const missing = describeMissing(session.draft.model, rows.issues, { said: personWords(session.transcript) });
   return { ok: false, error: `This setup can't be saved yet.${missing.length > 0 ? ` Still needed: ${missing.join(' ')}` : ''} Nothing was saved.` };
@@ -436,6 +475,100 @@ const AddedCountsSchema = z.object({ goals: z.number().int(), targets: z.number(
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
+// Whether the approved draft holds a target that repeats (weekly or on named days). Such a target is counted by weeks, which need the
+// person's week start; a target with a due date does not.
+const holdsRepeatingTarget = (session: SetupSession): boolean =>
+  session.draft.model.goals.some((g) => g.targets.some((t) => t.period.kind !== 'deadline'));
+
+// The line a person hears when a target that repeats each week is added and no week start is saved. A person who set up with only due-date
+// goals has none, and no screen can set one yet; adding it would change a saved row, which an addition never does.
+export const NO_WEEK_START =
+  "Your week start isn't saved, so a target that repeats each week can't be added yet. A target with a due date can be. Nothing was saved.";
+const CHECK_FAILED = 'Could not check your setup.';
+
+// What an addition needs from the person's own saved rows: the returning context the checks and the note use, the options the final
+// validation reads, and the saved time zone (used on the server for a relative day, never sent anywhere).
+interface Addition {
+  returning: ReturningContext;
+  validate: ValidateOptions;
+  savedTimeZone: string | null;
+}
+
+// The person's saved time anchors, or none: a person with no settings row has none saved.
+async function readSavedFacts(supabase: Client, userId: string): Promise<ServiceResult<SavedFacts>> {
+  const { data, error } = await supabase.from('person_settings').select('time_zone, day_end, week_start').eq('user_id', userId).maybeSingle();
+  if (error) return { ok: false, error: CHECK_FAILED };
+  return { ok: true, data: { timeZone: data?.time_zone ?? null, dayEnd: data?.day_end ?? null, weekStart: data?.week_start ?? null } };
+}
+
+// Works out an addition from the person's own rows (row level security keeps them to theirs): they must have finished their first setup
+// (MS003's words), and for a target the goal must be one of theirs and active (MS004's words). The goal's title comes from the row, never
+// from the request.
+async function resolveAddition(supabase: Client, userId: string, asked: z.infer<typeof AdditionSchema>): Promise<ServiceResult<Addition>> {
+  const goals = await supabase.from('goals').select('id, title, state').eq('user_id', userId);
+  if (goals.error) return { ok: false, error: CHECK_FAILED };
+  if (goals.data.length === 0) return { ok: false, error: ADD_REFUSALS.MS003 };
+  const facts = await readSavedFacts(supabase, userId);
+  if (!facts.ok) return facts;
+  if (asked.mode === 'add_goal') {
+    return { ok: true, data: { returning: { mode: 'add_goal', goalTitle: null }, validate: { saved: facts.data }, savedTimeZone: facts.data.timeZone } };
+  }
+  const goal = goals.data.find((g) => g.id === asked.goalId && g.state === 'active');
+  if (!goal) return { ok: false, error: ADD_REFUSALS.MS004 };
+  return {
+    ok: true,
+    data: {
+      returning: { mode: 'add_target', goalTitle: goal.title },
+      validate: { saved: facts.data, existingGoalKey: SAVED_GOAL_KEY, sayings: [goal.title] },
+      savedTimeZone: facts.data.timeZone,
+    },
+  };
+}
+
+// What /setup shows a person who has finished setup: the goals a target can be added to, their saved week start and their own today.
+export async function getAddOptions(): Promise<ServiceResult<AddOptions>> {
+  const user = await signedInUserId();
+  if (!user.ok) return user;
+  const { supabase, userId } = user.data;
+  const facts = await readSavedFacts(supabase, userId);
+  if (!facts.ok) return facts;
+  const goals = await supabase
+    .from('goals')
+    .select('id, title, state, start_date, end_date')
+    .eq('user_id', userId)
+    .eq('state', 'active')
+    .order('sort_order', { ascending: true, nullsFirst: false });
+  if (goals.error) return { ok: false, error: CHECK_FAILED };
+  return {
+    ok: true,
+    data: {
+      goals: goals.data.flatMap((g) => (g.start_date === null ? [] : [{ id: g.id, title: g.title, startDate: g.start_date, endDate: g.end_date }])),
+      weekStart: facts.data.weekStart,
+      today: personToday(facts.data.timeZone, undefined, new Date()) ?? null,
+    },
+  };
+}
+
+const AddTurnRequestSchema = TurnRequestSchema.extend({ addition: AdditionSchema });
+
+// The next turn for a person adding to a finished setup (MOM-132 part 2): the same turn as takeSetupTurn, held to the returning checks
+// and given the fixed note. The kind of addition and the goal come from the request; everything about the person comes from their rows.
+export async function takeAddTurn(raw: unknown, deps: SetupDeps = {}): Promise<ServiceResult<SetupTurnView>> {
+  const nowMs = deps.nowMs ?? Date.now;
+  const deadlineMs = nowMs() + SETUP_TURN_BUDGET_MS;
+  const parsed = AddTurnRequestSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: BAD_REQUEST };
+  const { today, locale, addition: asked, ...session } = parsed.data;
+  const last = session.transcript[session.transcript.length - 1];
+  if (last !== undefined && last.role !== 'person') return { ok: false, error: BAD_REQUEST };
+
+  const user = await signedInUserId();
+  if (!user.ok) return user;
+  const addition = await resolveAddition(user.data.supabase, user.data.userId, asked);
+  if (!addition.ok) return addition;
+  return { ok: true, data: await runCheckedTurn({ userId: user.data.userId, session, today, locale, deadlineMs, addition: addition.data }, deps) };
+}
+
 // One call to an add function, its refusal in plain words, or its answer. The sign-in check and the session parse happen before.
 async function callAddition(supabase: Client, fn: 'add_goals_after_setup' | 'add_targets_after_setup', payload: Json): Promise<ServiceResult<SetupAdded>> {
   const { data, error } = await supabase.rpc(fn, { p_payload: payload });
@@ -461,8 +594,12 @@ export async function addApprovedGoals(raw: unknown, request: unknown): Promise<
   if (!session.success || !asked.success) return { ok: false, error: BAD_REQUEST };
   const user = await signedInUserId();
   if (!user.ok) return { ok: false, error: ADD_SIGN_IN };
+  const addition = await resolveAddition(user.data.supabase, user.data.userId, { mode: 'add_goal' });
+  if (!addition.ok) return addition;
+  // Said before anything else is checked: the person can not fix it here, so the general "still needed" list would only mislead.
+  if (addition.data.validate.saved?.weekStart === null && holdsRepeatingTarget(session.data)) return { ok: false, error: NO_WEEK_START };
 
-  const rows = approvedRows(asked.data.quickPath === true ? withAllApproved(session.data) : session.data);
+  const rows = approvedRows(asked.data.quickPath === true ? withAllApproved(session.data) : session.data, addition.data.validate);
   if (!rows.ok) return rows;
   return callAddition(user.data.supabase, 'add_goals_after_setup', toAddGoalsPayload(rows.data, asked.data.submissionId) as unknown as Json);
 }
@@ -476,8 +613,11 @@ export async function addApprovedTargets(raw: unknown, request: unknown): Promis
   if (!session.success || !asked.success) return { ok: false, error: BAD_REQUEST };
   const user = await signedInUserId();
   if (!user.ok) return { ok: false, error: ADD_SIGN_IN };
+  const addition = await resolveAddition(user.data.supabase, user.data.userId, { mode: 'add_target', goalId: asked.data.goalId });
+  if (!addition.ok) return addition;
+  if (addition.data.validate.saved?.weekStart === null && holdsRepeatingTarget(session.data)) return { ok: false, error: NO_WEEK_START };
 
-  const rows = approvedRows(asked.data.quickPath === true ? withAllApproved(session.data) : session.data);
+  const rows = approvedRows(asked.data.quickPath === true ? withAllApproved(session.data) : session.data, addition.data.validate);
   if (!rows.ok) return rows;
   const payload = toAddTargetsPayload(rows.data, asked.data.goalId, asked.data.startDate, asked.data.submissionId);
   if (payload === null) return { ok: false, error: BAD_REQUEST };

@@ -30,6 +30,7 @@ import { DATE_TOPICS, hasDate } from './codeTurns';
 import { NUMBER_OPTION_LEADS, NUMBER_TOPICS, countedTarget } from './numbers';
 import { optionsLead } from './optionsLead';
 import { ideasDetailQuotes, jargonIn, vagueSource } from './plainCard';
+import { returningDraft, settledChunks, skippedTopics, type ReturningContext } from './returning';
 import { ASKED_ONCE_TOPICS, DAY_END_SAY, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
 import { acceptsText, asksForIdeas, asksMeaning, datesIn, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas, withoutDateWeekdays } from './text';
 import { validateDraft } from './validate';
@@ -41,10 +42,13 @@ export interface TurnContext {
   prevDraft: SetupDraft;
   // Scripted cases mark an answer that does not fit its question (rule 6); a live run leaves this unset.
   personFits?: boolean;
+  // Set when the person has already finished their first setup and is adding to it (MOM-132 part 2). Unset for a first setup, which
+  // no check below treats any differently.
+  returning?: ReturningContext;
 }
 
 // The eight hard rules, the draft rules, and the plain-words checks (MOM-111 findings 4 and 6).
-export type ViolationRule = HardRuleId | 'draft' | 'plain_words';
+export type ViolationRule = HardRuleId | 'draft' | 'plain_words' | 'returning';
 
 export const VIOLATION_CODES = [
   'one_question.none',
@@ -95,6 +99,10 @@ export const VIOLATION_CODES = [
   'plain.options_say',
   'plain.jargon',
   'plain.unquoted_source',
+  'returning.topic',
+  'returning.person',
+  'returning.goal',
+  'returning.chunk',
 ] as const;
 export type ViolationCode = (typeof VIOLATION_CODES)[number];
 
@@ -121,6 +129,11 @@ const textForScan = (turn: AssistantTurn, parts: string[]): string => {
   const text = withoutDateWeekdays(parts.join(' \n '));
   return turn.topic === 'day_end' ? text.replace(DAY_END_BOUNDARY_WORDS, ' ') : text;
 };
+
+// What the person has said, for every check that asks whether a word was theirs. A person adding targets to a goal they have saved its
+// title in their own words, so the title counts as said (MOM-132 part 2); otherwise this is exactly personWords().
+const wordsOf = (ctx: TurnContext): string[] =>
+  ctx.returning?.goalTitle ? [...personWords(ctx.transcript), ctx.returning.goalTitle] : personWords(ctx.transcript);
 
 const lastAssistant = (ctx: TurnContext): AssistantTurn | null => {
   for (let i = ctx.transcript.length - 1; i >= 0; i--) {
@@ -177,7 +190,7 @@ export function checkOneQuestion(turn: AssistantTurn): Violation[] {
 
 export function checkAssumeNothing(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out: Violation[] = [];
-  const said = new Set(personWords(ctx.transcript).flatMap(dayTimeWords));
+  const said = new Set(wordsOf(ctx).flatMap(dayTimeWords));
   const unsaid = new Set(dayTimeWords(textForScan(turn, authored(turn))).filter((w) => !said.has(w)));
   for (const w of unsaid) {
     out.push(v('assume_nothing', 'assume_nothing.word', `Claude used "${w.replace('time:', 'a clock time ')}", which the person has not said.`));
@@ -257,6 +270,8 @@ export function checkChoiceBeforeExamples(turn: AssistantTurn, ctx: TurnContext)
 export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out: Violation[] = [];
   const answered = answeredTopics(ctx.prevDraft.model);
+  // A person who has finished setup has answered what is saved, so a notice that skips it is true (MOM-132 part 2).
+  if (ctx.returning) for (const topic of skippedTopics(ctx.returning.mode)) answered.add(topic);
   // A topic asked and replied to is answered, whether or not it reached the draft.
   ctx.transcript.forEach((m, i) => {
     if (m.role === 'assistant' && m.turn.topic && m.turn.kind === 'question' && ctx.transcript[i + 1]?.role === 'person') {
@@ -282,7 +297,7 @@ export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violat
     const skippable =
       answered.has(turn.skipped.topic) ||
       answeredTopics(turn.draft.model).has(turn.skipped.topic) ||
-      (UNRECORDED_TOPICS.has(turn.skipped.topic) && personWords(ctx.transcript).length > 0);
+      (UNRECORDED_TOPICS.has(turn.skipped.topic) && wordsOf(ctx).length > 0);
     if (!skippable) out.push(v('skip_answered', 'skip.unanswered', `Skipped "${turn.skipped.topic}", which has not been answered.`));
     if (sentencesOf(turn.skipped.line).length !== 1 || turn.skipped.line.length > 160) {
       out.push(v('skip_answered', 'skip.long', 'The skip notice must be one short line.'));
@@ -390,7 +405,7 @@ export function checkNoMath(turn: AssistantTurn, ctx: TurnContext): Violation[] 
   // as suggestions the person can take or leave; nothing else may.
   const exempt = turn.kind === 'proposal' ? authored(turn) : turn.kind === 'ideas' || turn.kind === 'interpretations' ? turn.options : [];
   const scanned = authored(turn).filter((t) => !exempt.includes(t));
-  const said = new Set(personWords(ctx.transcript).flatMap((t) => numbersIn(t)));
+  const said = new Set(wordsOf(ctx).flatMap((t) => numbersIn(t)));
   const unsaid = new Set(numbersIn(textForScan(turn, scanned), { skipOne: true }).filter((n) => !said.has(n)));
   for (const n of unsaid) out.push(v('no_math', 'math.number', `Claude wrote the number ${n}, which the person has not said.`));
   return out;
@@ -449,7 +464,7 @@ export function checkLeadIn(turn: AssistantTurn, ctx: TurnContext): Violation[] 
 // are suggestions they asked for. The question of which number counts in an app (Hevy: "pounds lifted") names that app's
 // own numbers.
 export function checkNoNewActivity(turn: AssistantTurn, ctx: TurnContext): Violation[] {
-  const said = personWords(ctx.transcript);
+  const said = wordsOf(ctx);
   const asked = askedForSuggestions(latestAnswer(ctx.transcript));
   const exempt = turn.kind === 'ideas' ? turn.options : turn.kind === 'proposal' && asked ? authored(turn) : [];
   const parts = turn.topic === 'metric' ? [] : authored(turn).filter((t) => !exempt.includes(t));
@@ -529,7 +544,7 @@ export function checkOptionList(turn: AssistantTurn, ctx?: TurnContext): Violati
   }
   const numberTopic = turn.topic !== null && NUMBER_TOPICS.has(turn.topic) ? (turn.topic as keyof typeof NUMBER_OPTION_LEADS) : null;
   if (ctx && (LISTING_KINDS.includes(turn.kind) || turn.kind === 'offer_ideas') && turn.topic !== 'metric') {
-    const said = personWords(ctx.transcript).join(' \n ').toLowerCase();
+    const said = wordsOf(ctx).join(' \n ').toLowerCase();
     const shown = [...turn.options, turn.detail ?? ''].join(' \n ');
     const unsaid = new Set([...shown.matchAll(COUNT_NOUNS)].map((m) => nounStem(m[1])).filter((s) => !new RegExp(`\\b${s}`).test(said)));
     if (unsaid.size > 0) out.push(v('plain_words', 'choice.ideas_words', `The options count "${[...unsaid].join('", "')}", which the person has not said.`));
@@ -567,13 +582,49 @@ function shownByCard(turn: AssistantTurn): string[] {
 
 export function checkEverydayWords(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   if (!ASKING_KINDS.includes(turn.kind)) return [];
-  const said = personWords(ctx.transcript);
+  const said = wordsOf(ctx);
   const shown = shownByCard(turn);
   const out: Violation[] = [];
   const jargon = new Set(shown.flatMap((t) => jargonIn(t, said)));
   if (jargon.size > 0) out.push(v('plain_words', 'plain.jargon', `The card would show "${[...jargon].join('", "')}", which the person has not said.`));
   if (shown.some((t) => vagueSource(t, said)) || (turn.kind === 'ideas' && !ideasDetailQuotes(turn.detail, said))) {
     out.push(v('plain_words', 'plain.unquoted_source', 'A line points at what the person said without quoting it.'));
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// A person adding to a finished setup (MOM-132 part 2, docs/DOMAIN_MODEL.md §2.1 rule 5)
+// ---------------------------------------------------------------------------
+
+// Nothing the person saved is asked again, written to the draft, changed or played back (lib/setup/returning.ts). These hold the
+// prompt's note to account: a reply that breaks one is thrown away and retried with the fixed words in feedback.ts.
+export function checkReturning(turn: AssistantTurn, ctx: TurnContext): Violation[] {
+  const returning = ctx.returning;
+  if (!returning) return [];
+  const out: Violation[] = [];
+  if (turn.topic !== null && ASKING_KINDS.includes(turn.kind) && skippedTopics(returning.mode).includes(turn.topic)) {
+    out.push(v('returning', 'returning.topic', `"${turn.topic}" is already saved; do not ask it.`));
+  }
+  const start = returningDraft(returning.mode, returning.goalTitle);
+  if (!sameJson(turn.draft.model.person, start.model.person) || !sameJson(turn.draft.model.settings, start.model.settings)) {
+    out.push(v('returning', 'returning.person', 'The person facts and settings are saved; the draft leaves them as they were.', 'person'));
+  }
+  if (returning.mode === 'add_target') {
+    const [saved, ...others] = turn.draft.model.goals;
+    const [expected] = start.model.goals;
+    const { targets: _t, items: _i, ...fields } = saved ?? {};
+    const { targets: _et, items: _ei, ...kept } = expected ?? {};
+    if (saved === undefined || others.length > 0 || !sameJson(fields, kept)) {
+      out.push(v('returning', 'returning.goal', 'The saved goal is final and is the only goal; only its targets and items are added.', 'goals'));
+    }
+  }
+  const settled = settledChunks(returning.mode);
+  if (turn.kind === 'playback' && turn.chunk !== null && settled.includes(turn.chunk)) {
+    out.push(v('returning', 'returning.chunk', `"${turn.chunk}" is already approved; do not play it back.`));
+  }
+  if (!settled.every((chunk) => turn.draft.approved.includes(chunk))) {
+    out.push(v('returning', 'returning.chunk', 'The parts that are already approved stay approved.'));
   }
   return out;
 }
@@ -601,7 +652,8 @@ const DRAFT_CODES: Record<string, ViolationCode> = { no_source: 'draft.no_source
 export function checkTurn(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out = HARD_RULE_IDS.flatMap((id) => RULE_CHECKS[id](turn, ctx));
   for (const check of PLAIN_WORDS_CHECKS) out.push(...check(turn, ctx));
-  const draft = validateDraft(turn.draft, ctx.transcript, 'progress');
+  out.push(...checkReturning(turn, ctx));
+  const draft = validateDraft(turn.draft, ctx.transcript, 'progress', { sayings: ctx.returning?.goalTitle ? [ctx.returning.goalTitle] : [] });
   for (const issue of draft.issues) out.push(v('draft', DRAFT_CODES[issue.code] ?? 'draft.rule', `${issue.path}: ${issue.message}`, issue.path));
   return out;
 }

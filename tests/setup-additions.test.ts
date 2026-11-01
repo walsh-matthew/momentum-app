@@ -14,7 +14,7 @@
 // The SQL itself (constraints, row level security, grants, the lock) is in supabase/verify/021_add_after_setup.sql.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ADD_FAILED, ADD_REFUSALS, ADD_SIGN_IN, START_AFTER_DUE, addApprovedGoals, addApprovedTargets, saveApprovedSetup } from '@/lib/services/setup';
+import { ADD_FAILED, ADD_REFUSALS, ADD_SIGN_IN, NO_WEEK_START, START_AFTER_DUE, addApprovedGoals, addApprovedTargets, saveApprovedSetup } from '@/lib/services/setup';
 import { runSetupEval } from '@/lib/setup/evals';
 import { draftToRows, toAddTargetsPayload } from '@/lib/setup/rows';
 import type { SetupSession } from '@/types/setup';
@@ -183,13 +183,40 @@ describe('addApprovedGoals: a person who has set up adds a goal through its own 
   it('refuses a draft that is not complete, in plain words, and sends nothing', async () => {
     await firstSetup();
     const reading = await caseNamed('run-r-reading-ideas');
-    const model = structuredClone(reading.draft.model);
-    model.person.timeZone = null;
     const sent = fakeSave.rpcCalls.length;
-    const result = await addApprovedGoals({ ...sessionOf(reading), draft: { ...reading.draft, model } }, { submissionId: sub(1), quickPath: true });
+    // A part nobody approved: the same final check as the first save stops it.
+    const result = await addApprovedGoals({ ...sessionOf(reading), draft: { ...reading.draft, approved: [] } }, { submissionId: sub(1) });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/^This setup can't be saved yet\..*Nothing was saved\.$/);
     expect(fakeSave.rpcCalls).toHaveLength(sent);
+  });
+
+  it('reads the person’s time anchors from what they saved, not from the draft: a draft that holds none still saves (MOM-132 part 2)', async () => {
+    await firstSetup();
+    const reading = await caseNamed('run-r-reading-ideas');
+    const model = structuredClone(reading.draft.model);
+    model.person = { timeZone: null, dayEnd: null, weekStart: null, dayTypes: [], priorities: [], planning: { weekday: null, time: null } };
+    const said = reading.draft.said.filter((s) => !s.path.startsWith('person.'));
+    const result = await addApprovedGoals({ ...sessionOf(reading), draft: { ...reading.draft, model, said } }, { submissionId: sub(1) });
+    expect(result).toEqual({ ok: true, data: { goals: 1, targets: 1, replayed: false } });
+  });
+
+  it('refuses a target that repeats each week when no week start is saved, in plain words, and sends nothing', async () => {
+    await firstSetup();
+    const saved = rowsOf('person_settings', ME)[0];
+    saved.week_start = null;
+    const before = savedBy(ME);
+    const sent = fakeSave.rpcCalls.length;
+    expect(await addApprovedGoals(sessionOf(await caseNamed('run-r-reading-ideas')), { submissionId: sub(1) })).toEqual({ ok: false, error: NO_WEEK_START });
+    expect(fakeSave.rpcCalls).toHaveLength(sent);
+    expect(savedBy(ME)).toEqual(before);
+  });
+
+  it('adds a goal whose targets all have due dates when no week start is saved', async () => {
+    await firstSetup();
+    rowsOf('person_settings', ME)[0].week_start = null;
+    const result = await addApprovedGoals(sessionOf(await caseNamed('run-a-deadline-only')), { submissionId: sub(1) });
+    expect(result).toEqual({ ok: true, data: { goals: 1, targets: 1, replayed: false } });
   });
 });
 

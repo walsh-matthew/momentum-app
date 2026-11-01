@@ -17,17 +17,19 @@ interface PlaybackCardProps {
   busy: boolean;
   onApprove: (text: string) => void;
   onChange: (text: string) => void;
+  // Left out, the part's usual title (lib/setup/quickPath.ts CHUNK_TITLES). An addition to a finished setup names "planning" for what it holds there.
+  title?: string;
 }
 
 // One part of the setup, played back for the person to approve before the next begins (docs/DOMAIN_MODEL.md §2.1 rule 7).
 // Approving sends their "yes"; changing sends what they type, and the part is played back again from the newest draft.
 // Once the change box is open, "Keep it as it is" is the way out: it approves the part as shown, in one tap (MOM-111).
-export function PlaybackCard({ chunk, lines, busy, onApprove, onChange }: PlaybackCardProps) {
+export function PlaybackCard({ chunk, lines, busy, onApprove, onChange, title = CHUNK_TITLES[chunk] }: PlaybackCardProps) {
   const [changing, setChanging] = useState(false);
 
   return (
     <section aria-labelledby="setup-playback" className="channel-card space-y-4 p-4">
-      <CardLead id="setup-playback">{CHUNK_TITLES[chunk]}: did I get this right?</CardLead>
+      <CardLead id="setup-playback">{title}: did I get this right?</CardLead>
       <PlaybackLines lines={lines} gap="loose" />
       {changing ? (
         <div className="space-y-2">

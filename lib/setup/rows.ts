@@ -13,7 +13,7 @@ import type { SetupDraft, Transcript } from '@/types/setup';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
 import { shownModel } from './paraphrase';
 import { acceptedStartingPoints, type StartingPointMark, type StartingPointSubject } from './startingPoints';
-import { validateDraft, type DraftIssue } from './validate';
+import { validateDraft, type DraftIssue, type ValidateOptions } from './validate';
 
 type Without<T, K extends string> = Omit<T, K | 'user_id' | 'created_at' | 'updated_at'>;
 
@@ -64,8 +64,10 @@ export interface SavePayload {
 
 const asTime = (hhmm: string | null): string | null => (hhmm === null ? null : `${hhmm}:00`);
 
-export function draftToRows(draft: SetupDraft, transcript: Transcript): DraftRowsResult {
-  const validation = validateDraft(draft, transcript, 'final');
+// `options` is set only for an addition after first setup (lib/setup/validate.ts): the person's saved anchors stand in for the ones a
+// returning draft does not hold. A first setup passes none.
+export function draftToRows(draft: SetupDraft, transcript: Transcript, options: ValidateOptions = {}): DraftRowsResult {
+  const validation = validateDraft(draft, transcript, 'final', options);
   if (!validation.ok) return { ok: false, issues: validation.issues };
 
   // What the person approved: the playback showed Claude's clean version of their words where it passed the check, so that

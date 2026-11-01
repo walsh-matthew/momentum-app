@@ -96,7 +96,7 @@ interface PickDateButtonProps {
 // lands on it and the phone opens its own date picker; on a computer the tap also asks the browser to open its picker
 // (showPicker), since clicking a date field there only focuses it. Choosing a date answers at once. Its name is the
 // answer's words, so a screen reader says "Pick a date, date picker".
-function PickDateButton({ label, tone, disabled, onPick }: PickDateButtonProps) {
+export function PickDateButton({ label, tone, disabled, onPick }: PickDateButtonProps) {
   const open = (event: MouseEvent<HTMLInputElement>) => {
     try {
       event.currentTarget.showPicker();

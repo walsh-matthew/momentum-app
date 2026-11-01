@@ -18,6 +18,12 @@ export const weekdayName = (n: number): string => WEEKDAY_NAMES[n - 1] ?? String
 export type ClockPath = 'person.dayEnd' | 'person.planning.time';
 
 export interface PlaybackOptions {
+  // The key of a goal the person already has, when targets are being added to it (MOM-132 part 2): the draft holds only its title, so
+  // its shape and start are not known here and no line is written about them.
+  savedGoalKey?: string;
+  // True for an addition to a finished setup (MOM-132 part 2): the final lines leave out first setup's "Everything can be changed on your settings
+  // page." (the person is not finishing a setup), and a target added to a goal they have reads as itself, not as "Your goal".
+  adding?: boolean;
   // The person's locale (their browser's, sent with each turn), so a time reads the way they write times. Without a usable
   // one, a time is shown as the person gave it.
   locale?: string | null;
@@ -242,7 +248,7 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
         );
       }
       for (const g of active) {
-        lines.push(describeShape(g, options));
+        if (g.key !== options.savedGoalKey) lines.push(describeShape(g, options));
         for (const t of g.targets) lines.push(`  ${describeTarget(g, t, active.length > 1, options)}`);
       }
       break;
@@ -330,7 +336,10 @@ export function renderFinal(model: SetupModel, options: PlaybackOptions = {}): s
     return g.targets.map((t) => {
       const numbers = goalNumbers(t, options);
       const what = countedWords(t.title, options.said);
-      return { line: `${goalLead(g, several)}: ${numbers ?? `${what}, counted ${describePeriod(t, options, 'each')}`}.`, things: 1 };
+      const counted = numbers ?? `${what}, counted ${describePeriod(t, options, 'each')}`;
+      // A target added to a goal the person already has is not "your goal": it is said on its own, as a sentence.
+      if (g.key === options.savedGoalKey) return { line: `${counted.charAt(0).toUpperCase()}${counted.slice(1)}.`, things: 1 };
+      return { line: `${goalLead(g, several)}: ${counted}.`, things: 1 };
     });
   });
   const parked = model.goals.length - active.length;
@@ -341,6 +350,6 @@ export function renderFinal(model: SetupModel, options: PlaybackOptions = {}): s
   const hidden = counted.slice(shown.length).reduce((n, c) => n + c.things, 0);
   if (counted.length > shown.length) lines.push(hidden > 0 ? `And ${plural(hidden, 'more thing', 'more things')} to count.` : 'And more goals with nothing counted yet.');
   if (parked > 0) lines.push(`${plural(parked, 'goal', 'goals')} set aside for now, with a way back.`);
-  lines.push('Everything can be changed on your settings page.');
+  if (options.adding !== true) lines.push('Everything can be changed on your settings page.');
   return lines.slice(0, FINAL_MAX_LINES);
 }

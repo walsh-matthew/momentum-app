@@ -1,9 +1,9 @@
 'use server';
 
 import type { ServiceResult } from '@/lib/services/result';
-import { fillQuickPathItem, saveApprovedSetup, takeSetupTurn } from '@/lib/services/setup';
+import { addApprovedGoals, addApprovedTargets, fillQuickPathItem, saveApprovedSetup, takeAddTurn, takeSetupTurn } from '@/lib/services/setup';
 import type { SetupSession } from '@/types/setup';
-import type { QuickPathState, SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import type { QuickPathState, SetupAdded, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 
 // Server Actions are reachable by direct POST, so both take `unknown`: the service parses the conversation against the
 // schemas, bounds its size, authenticates through the session cookie and never takes a user from the request.
@@ -22,6 +22,26 @@ export async function askSetupTurn(session: unknown): Promise<ServiceResult<Setu
 // The pages that show the new goals, / and /log, render per request, so they need no revalidation.
 export async function saveSetup(session: unknown, quickPath: unknown): Promise<ServiceResult<SetupSaved>> {
   return saveApprovedSetup(session, quickPath);
+}
+
+// Adding to a setup that is already saved (MOM-132 part 2). Each takes `unknown` and leaves the parsing, the sign-in check and every
+// read of the person's own rows to the service.
+
+// The next turn of a conversation that adds a goal, or targets for a goal the person has: the request holds the conversation and which
+// of the two it is (and the goal's id). Nothing is stored.
+export async function askAddTurn(request: unknown): Promise<ServiceResult<SetupTurnView>> {
+  return takeAddTurn(request);
+}
+
+// Runs only when the person taps "Add it" on a goal's final card. `request` holds the one id the browser made for this approval, so a
+// double tap saves once. No revalidatePath, as with the first save: the pages that show goals render per request.
+export async function addGoalsAction(session: unknown, request: unknown): Promise<ServiceResult<SetupAdded>> {
+  return addApprovedGoals(session, request);
+}
+
+// The same for targets: the request also holds the goal's id and the start the person chose.
+export async function addTargetsAction(session: unknown, request: unknown): Promise<ServiceResult<SetupAdded>> {
+  return addApprovedTargets(session, request);
 }
 
 // Runs when the person sets one missing item on the quick path card: no Claude call, nothing stored. It answers with the session

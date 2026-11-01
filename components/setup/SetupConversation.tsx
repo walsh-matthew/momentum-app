@@ -1,16 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { askSetupTurn, fillQuickPathItemAction, saveSetup } from '@/app/actions/setup';
+import { addGoalsAction, addTargetsAction, askAddTurn, askSetupTurn, fillQuickPathItemAction, saveSetup } from '@/app/actions/setup';
+import { casualDate } from '@/lib/dates/casual';
+import { ADD_WORDS } from '@/lib/setup/addWords';
+import { startsMidWeek } from '@/lib/setup/addStart';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
+import { RETURNING_FIRST_LINE, SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
 import { ERROR_COPY, awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer, type RetryCause } from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
-import type { FillInItem, QuickPathState, SetupSaved, SetupTurnView } from '@/types/setupScreen';
-import { FinalCard } from './FinalCard';
+import type { AddGoalOption, FillInItem, QuickPathState, SetupAdded, SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import { FIRST_SETUP_WORDS, FinalCard, type FinalCardWords } from './FinalCard';
+import { StartQuestion } from './StartQuestion';
 import { PlaybackCard } from './PlaybackCard';
 import { QuestionCard } from './QuestionCard';
 import { QuickPathCard } from './QuickPathCard';
@@ -66,10 +71,25 @@ function unansweredText(session: SetupSession): string | null {
 
 type Phase = 'loading' | 'intro' | 'running' | 'saved';
 
+// A person adding to a setup they have finished (MOM-132 part 2): a new goal, or targets for one goal they have. Left out for a first
+// setup, which this component runs exactly as it always has.
+export interface AddingConfig {
+  mode: ReturningMode;
+  // The goal the targets are for; null when adding a goal.
+  goal: AddGoalOption | null;
+  // Their saved week start, or null when none is saved.
+  weekStart: number | null;
+  // Their own today, from their saved time zone; null falls back to the date on this device.
+  today: string | null;
+  // Called once the addition is saved, so the page forgets what the person was in the middle of.
+  onSaved: () => void;
+}
+
 interface SetupConversationProps {
   // The signed-in person's id (their own, from the server's session). It only names this tab's copy of their setup in
   // progress, so another person signing in in the same tab does not see it.
   userId: string;
+  adding?: AddingConfig;
 }
 
 // The guided setup conversation (MOM-111, docs/DOMAIN_MODEL.md §2): one question on screen at a time. The conversation and
@@ -80,9 +100,23 @@ interface SetupConversationProps {
 // back to "You have a setup in progress" mid-setup: a phone drops a background tab while Claude thinks, the page reloads,
 // and the old resume screen stood between the person and their question. A reload now opens straight on the question, with
 // the answer still waiting and a way to send it again or change it; a reply that does not come shows the same.
-export function SetupConversation({ userId }: SetupConversationProps) {
+export function SetupConversation({ userId, adding }: SetupConversationProps) {
+  // An addition keeps its own copy in the tab, per kind of addition and goal, so it never mixes with a first setup's or another goal's.
+  const storageId = adding ? `${userId}.add.${adding.mode}.${adding.goal?.id ?? ''}` : userId;
+  const freshSession = (): SetupSession =>
+    adding ? { transcript: [], draft: returningDraft(adding.mode, adding.goal?.title ?? null), spentTokens: 0 } : newSession();
+  // What the server is told about an addition: the kind, and the goal's id. Everything else it reads from the person's own rows.
+  const addition = adding ? { mode: adding.mode, ...(adding.goal ? { goalId: adding.goal.id } : {}) } : undefined;
+
   const [phase, setPhase] = useState<Phase>('loading');
-  const [session, setSession] = useState<SetupSession>(newSession);
+  const [session, setSession] = useState<SetupSession>(freshSession);
+  // The start the person chose for a target being added, with the length of the conversation it was chosen at: a change after it
+  // (another final confirmation) asks again. The quick path has its own, since its answers also lengthen the conversation.
+  const [chosenStart, setChosenStart] = useState<{ date: string; at: number } | null>(null);
+  const [quickStart, setQuickStart] = useState<string | null>(null);
+  const [added, setAdded] = useState<{ result: SetupAdded; start: string | null } | null>(null);
+  // The one id of the approval being sent (MOM-132): a second tap on the same approval carries the same id, so the database saves once.
+  const approval = useRef<{ key: string; id: string } | null>(null);
   // Why the last request produced no turn (the wait, a failed reply, the quick path), when it did not.
   const [view, setView] = useState<Exclude<SetupTurnView, { kind: 'turn' }> | null>(null);
   // A save that did not go through.
@@ -103,27 +137,28 @@ export function SetupConversation({ userId }: SetupConversationProps) {
 
   // Read this tab's stored conversation after the first render, so the server and the browser render the same thing first.
   useEffect(() => {
-    const stored = loadStoredSession(userId);
+    const stored = loadStoredSession(storageId);
     if (stored) {
       setSession(stored);
       setPhase('running');
     } else {
       setPhase('intro');
     }
-  }, [userId]);
+  }, [storageId]);
 
   const ask = async (next: SetupSession) => {
     setBusy(true);
     setFailure(null);
     setView(null);
     try {
-      const result = await askSetupTurn({ ...next, today: localDate(), locale: browserLocale() });
+      const request = { ...next, today: localDate(), locale: browserLocale() };
+      const result = addition ? await askAddTurn({ ...request, addition }) : await askSetupTurn(request);
       if (!result.ok) {
         setFailure({ cause: 'no_answer', headline: result.error });
       } else if (result.data.kind === 'turn') {
         const updated = withAssistantTurn(next, result.data.turn, result.data.spentTokens);
         setSession(updated);
-        storeSession(userId, updated);
+        storeSession(storageId, updated);
       } else {
         setView(result.data);
       }
@@ -135,7 +170,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   };
 
   const start = () => {
-    const fresh = newSession();
+    const fresh = freshSession();
     setSession(fresh);
     setPhase('running');
     void ask(fresh);
@@ -145,7 +180,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     const next = withPersonMessage(session, text);
     setDraftAnswer(undefined);
     setSession(next);
-    storeSession(userId, next);
+    storeSession(storageId, next);
     void ask(next);
   };
 
@@ -160,7 +195,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
       setView(null);
       setFailure(null);
     });
-    storeSession(userId, taken.session);
+    storeSession(storageId, taken.session);
   };
 
   const save = async (quickPath: boolean) => {
@@ -169,7 +204,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     try {
       const result = await saveSetup(session, quickPath);
       if (result.ok) {
-        clearStoredSession(userId);
+        clearStoredSession(storageId);
         setSaved(result.data);
         setPhase('saved');
       } else {
@@ -182,20 +217,64 @@ export function SetupConversation({ userId }: SetupConversationProps) {
     }
   };
 
+  // The one id for an approval: made when the approval first appears and kept for as long as it is the same one (the same conversation,
+  // the same start, the same way of approving it), so a second tap, or a retry after a lost answer, is the same approval to the database.
+  const approvalId = (key: string): string => {
+    if (approval.current?.key !== key) approval.current = { key, id: crypto.randomUUID() };
+    return approval.current.id;
+  };
+
+  // Adds what the person approved to the setup they already have (MOM-132 part 2). A double tap sends the same id, and the database
+  // answers the second with the first answer, writing nothing. A state update after the await is plain here (no transition), so nothing
+  // needs wrapping (F-072).
+  const add = async (quickPath: boolean, start: string | null) => {
+    if (!adding) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const submissionId = approvalId(`${session.transcript.length}|${start ?? ''}|${quickPath}`);
+      const flags = quickPath ? { quickPath: true } : {};
+      const result =
+        adding.mode === 'add_target' && adding.goal && start
+          ? await addTargetsAction(session, { submissionId, goalId: adding.goal.id, startDate: start, ...flags })
+          : await addGoalsAction(session, { submissionId, ...flags });
+      if (result.ok) {
+        clearStoredSession(storageId);
+        adding.onSaved();
+        setAdded({ result: result.data, start });
+        setPhase('saved');
+      } else {
+        setError(result.error);
+      }
+    } catch {
+      setError(ADD_WORDS.noNetwork);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Sets one missing item on the quick path card (MOM-111). The server works out the new session and the card's new state, so a
   // refused value changes nothing; the answer is kept in this tab exactly like any other.
   const fill = async (item: FillInItem, value: string, how: FillHow): Promise<QuickPathState | null> => {
     setFilling(true);
     setFillError(null);
     try {
-      const result = await fillQuickPathItemAction({ session, itemId: item.id, value, how, today: localDate(), locale: browserLocale() });
+      const result = await fillQuickPathItemAction({
+        session,
+        itemId: item.id,
+        value,
+        how,
+        today: localDate(),
+        locale: browserLocale(),
+        ...(addition ? { addition } : {}),
+      });
       if (!result.ok) {
         setFillError(result.error);
         return null;
       }
       const { session: updated, ...state } = result.data;
       setSession(updated);
-      storeSession(userId, updated);
+      storeSession(storageId, updated);
       setView((current) => (current?.kind === 'quick_path' ? { ...current, ...state } : current));
       return state;
     } catch {
@@ -207,8 +286,10 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   };
 
   const startOver = () => {
-    clearStoredSession(userId);
-    setSession(newSession());
+    clearStoredSession(storageId);
+    setSession(freshSession());
+    setChosenStart(null);
+    setQuickStart(null);
     setView(null);
     setError(null);
     setFailure(null);
@@ -219,6 +300,25 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   };
 
   if (phase === 'loading') return null;
+
+  // The person's own today for anything about a start: from their saved time zone when the server could work it out, else this device's.
+  const dayToday = adding?.today ?? localDate();
+  const startWords = (iso: string): string => casualDate(iso, dayToday, { relative: false });
+  const startTarget = adding?.mode === 'add_target' ? adding.goal : null;
+
+  if (phase === 'saved' && added && adding) {
+    return (
+      <section aria-labelledby="setup-saved" className="channel-card space-y-4 p-4">
+        <CardLead id="setup-saved">{startTarget && added.start ? ADD_WORDS.addedTarget(startTarget.title, startWords(added.start)) : ADD_WORDS.added}</CardLead>
+        <p className={CARD_TEXT.body}>{ADD_WORDS.addedDetail}</p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Link href="/" className={setupButtonClasses('main')}>
+            {ADD_WORDS.backHome}
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   if (phase === 'saved' && saved) {
     return (
@@ -240,7 +340,7 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   if (phase === 'intro') {
     return (
       <section aria-labelledby="setup-intro" className="channel-card space-y-4 p-4">
-        <CardLead id="setup-intro">Let&apos;s set up your goals</CardLead>
+        <CardLead id="setup-intro">{adding ? ADD_WORDS.introHeading : "Let's set up your goals"}</CardLead>
         <p className={CARD_TEXT.body}>
           A short conversation with Claude, one question at a time. If a question isn&apos;t clear, just ask what it means. Nothing
           is saved until you approve it at the end. What you
@@ -259,6 +359,10 @@ export function SetupConversation({ userId }: SetupConversationProps) {
 
   // The quick path: Claude is no longer used for this setup.
   if (view?.kind === 'quick_path') {
+    // A target needs its start before anything can be added, and the quick path asks no question of its own for it.
+    if (startTarget && quickStart === null && adding) {
+      return <StartQuestion goal={startTarget} today={dayToday} weekStart={adding.weekStart} onChoose={setQuickStart} />;
+    }
     return (
       <QuickPathCard
         reason={view.reason}
@@ -272,7 +376,8 @@ export function SetupConversation({ userId }: SetupConversationProps) {
         deviceZone={deviceTimeZone()}
         today={localDate()}
         onFill={fill}
-        onSave={() => void save(true)}
+        onSave={() => void (adding ? add(true, quickStart) : save(true))}
+        adding={adding !== undefined}
         onStartOver={startOver}
       />
     );
@@ -309,25 +414,60 @@ export function SetupConversation({ userId }: SetupConversationProps) {
   const notice =
     waiting && !busy ? <RetryNotice cause={cause} headline={failure?.headline} onRetry={retry} onChangeAnswer={changeAnswer} /> : null;
   const today = localDate();
-  const playbackOptions = { locale: browserLocale(), spokenTime: spokenTimes(turn.draft, session.transcript), today, said: personWords(session.transcript) };
+  const playbackOptions = {
+    locale: browserLocale(),
+    spokenTime: spokenTimes(turn.draft, session.transcript),
+    today,
+    said: personWords(session.transcript),
+    savedGoalKey: startTarget ? SAVED_GOAL_KEY : undefined,
+    adding: adding !== undefined,
+  };
+  // The start chosen for the target on this final confirmation. A change after it makes a new final confirmation, which asks again.
+  const chosenDate = chosenStart && chosenStart.at === session.transcript.length ? chosenStart.date : null;
+  // The final card's words: an addition says what it adds and, for a target, from when it counts; a first setup keeps its own.
+  const finalWords: FinalCardWords = !adding
+    ? FIRST_SETUP_WORDS
+    : startTarget && chosenDate
+      ? {
+          heading: ADD_WORDS.targetHeading(startTarget.title),
+          notes: [ADD_WORDS.targetDetail(startWords(chosenDate)), ...(startsMidWeek(chosenDate, adding.weekStart) ? [ADD_WORDS.partWay] : [])],
+          save: ADD_WORDS.add,
+          saving: ADD_WORDS.adding,
+          change: ADD_WORDS.change,
+        }
+      : { heading: ADD_WORDS.goalHeading, notes: [ADD_WORDS.goalDetail], save: ADD_WORDS.add, saving: ADD_WORDS.adding, change: ADD_WORDS.change };
+  // Code's one line, on the first question of an addition: what is already saved is skipped (names only, never the values).
+  // An addition's final card carries its own alert, so the card keeps one bold line: the alert's, with the heading in regular weight.
+  const finalCardShown = turn.kind === 'final' && !(startTarget && chosenDate === null);
+  const firstLine = adding && turn.kind !== 'playback' && turn.kind !== 'final' && session.transcript.filter((m) => m.role === 'assistant').length === 1;
 
   return (
     <div className="space-y-3">
-      {error && !waiting && <SetupAlert headline={error} />}
+      {error && !waiting && !(adding && finalCardShown) && <SetupAlert headline={error} />}
+      {firstLine && <p className="text-sm leading-snug text-muted">{RETURNING_FIRST_LINE}</p>}
       {turn.kind === 'playback' && turn.chunk !== null ? (
         <PlaybackCard
           chunk={turn.chunk}
+          title={adding && turn.chunk === 'planning' ? ADD_WORDS.planningTitle : undefined}
           lines={renderPlayback(shownModel(turn.draft, session.transcript), turn.chunk, playbackOptions)}
           busy={busy || waiting}
           onApprove={answer}
           onChange={answer}
         />
+      ) : turn.kind === 'final' && startTarget && adding && chosenDate === null ? (
+        <StartQuestion
+          goal={startTarget}
+          today={dayToday}
+          weekStart={adding.weekStart}
+          onChoose={(date) => setChosenStart({ date, at: session.transcript.length })}
+        />
       ) : turn.kind === 'final' ? (
         <FinalCard
           lines={renderFinal(shownModel(turn.draft, session.transcript), playbackOptions)}
           saving={saving || busy || waiting}
-          error={null}
-          onSave={() => void save(false)}
+          error={adding && !waiting ? error : null}
+          words={finalWords}
+          onSave={() => void (adding ? add(false, chosenDate) : save(false))}
           onChange={answer}
         />
       ) : (

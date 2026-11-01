@@ -31,3 +31,44 @@ export function clearStoredSession(userId: string): void {
     // Nothing to clear.
   }
 }
+
+// What a person adding to a finished setup is in the middle of (MOM-132 part 2), kept in this tab like the conversation itself: a new goal,
+// or a target for one goal. A reload then opens straight on the conversation instead of asking the first question again. The goal's id is
+// the person's own saved goal; it never leaves the device except in the request for Claude's next turn, where the server checks it.
+export interface AddPointer {
+  mode: 'add_goal' | 'add_target';
+  goalId: string | null;
+}
+
+const addPointerKey = (userId: string): string => `momentum.setup.add.${userId}`;
+
+export function loadAddPointer(userId: string): AddPointer | null {
+  try {
+    const raw = window.sessionStorage.getItem(addPointerKey(userId));
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const { mode, goalId } = parsed as Record<string, unknown>;
+    if (mode === 'add_goal') return { mode, goalId: null };
+    if (mode === 'add_target' && typeof goalId === 'string') return { mode, goalId };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function storeAddPointer(userId: string, pointer: AddPointer): void {
+  try {
+    window.sessionStorage.setItem(addPointerKey(userId), JSON.stringify(pointer));
+  } catch {
+    // Storage unavailable: the person simply picks again after a reload.
+  }
+}
+
+export function clearAddPointer(userId: string): void {
+  try {
+    window.sessionStorage.removeItem(addPointerKey(userId));
+  } catch {
+    // Nothing to clear.
+  }
+}

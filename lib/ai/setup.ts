@@ -83,6 +83,9 @@ export interface SetupPromptFacts {
   // Which app code read in the person's answer to the source question (lib/setup/sources.ts, MOM-111 round 2): "Heavy" is
   // Hevy, and an app Momentum cannot read yet. Absent when there is none.
   sourceNote?: string;
+  // For a person adding to a finished setup (lib/setup/returning.ts, MOM-132 part 2): one fixed note naming the topics that are
+  // already saved, never their values, and, when adding targets, the title of the goal they belong to. Absent in a first setup.
+  returningNote?: string;
 }
 
 // The extras one turn can carry besides the conversation itself.
@@ -91,6 +94,7 @@ export interface SetupTurnExtras {
   retryFeedback?: string[];
   dateHint?: string;
   sourceNote?: string;
+  returningNote?: string;
 }
 
 export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, extras: SetupTurnExtras = {}): SetupPromptFacts {
@@ -108,6 +112,7 @@ export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, extr
   if (extras.retryFeedback && extras.retryFeedback.length > 0) facts.retryFeedback = extras.retryFeedback;
   if (extras.dateHint) facts.dateHint = extras.dateHint;
   if (extras.sourceNote) facts.sourceNote = extras.sourceNote;
+  if (extras.returningNote) facts.returningNote = extras.returningNote;
   return facts;
 }
 
@@ -138,6 +143,7 @@ export function buildSetupMessages(transcript: Transcript, draft: SetupDraft, ex
   const extraBlocks: Anthropic.TextBlockParam[] = [];
   if (facts.dateHint) extraBlocks.push({ type: 'text', text: facts.dateHint });
   if (facts.sourceNote) extraBlocks.push({ type: 'text', text: facts.sourceNote });
+  if (facts.returningNote) extraBlocks.push({ type: 'text', text: facts.returningNote });
   if (facts.retryFeedback) extraBlocks.push({ type: 'text', text: [RETRY_HEADER, ...facts.retryFeedback.map((line) => `- ${line}`)].join('\n') });
   const last = messages[messages.length - 1];
   if (last.role === 'user' && typeof last.content === 'string') {
@@ -190,6 +196,7 @@ export async function requestSetupTurnFromModel(
           retryFeedback: input.retryFeedback,
           dateHint: input.dateHint,
           sourceNote: input.sourceNote,
+          returningNote: input.returningNote,
         }),
       },
       { timeout, maxRetries: 0 },

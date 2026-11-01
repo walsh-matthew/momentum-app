@@ -104,6 +104,23 @@ export interface SetupSaved {
   targets: number;
 }
 
+// A goal a person already has and can add a target to (MOM-132 part 2): only an active one is listed. The dates are the goal's own, so
+// the start question can say, in words, when a chosen day is before the goal started or after it ends.
+export interface AddGoalOption {
+  id: string;
+  title: string;
+  startDate: string;
+  endDate: string | null;
+}
+
+// What /setup shows a person who has finished setup: the goals a target can be added to, their saved week start (null when none is
+// saved), and their own today in their saved time zone (null when the server cannot work it out; the screen then uses the device's).
+export interface AddOptions {
+  goals: AddGoalOption[];
+  weekStart: number | null;
+  today: string | null;
+}
+
 // What an addition after the first setup answers (MOM-132): the counts, and whether this tap only found the first one's answer
 // (the same approval sent twice writes once).
 export interface SetupAdded extends SetupSaved {
