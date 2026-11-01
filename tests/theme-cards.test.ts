@@ -224,7 +224,7 @@ describe('the title of a card', () => {
     { file: 'components/rebalance/RebalanceSideCard.tsx', match: /eyebrow/, why: 'an eyebrow label, not a title' },
     { file: 'components/review/ReviewScreen.tsx', match: /Your last review/, why: 'a heading over the recap cards' },
     { file: 'components/review/StillRightCard.tsx', match: /review-fit-name/, why: "a target's name above its rows inside the card" },
-    { file: 'components/setup/QuickPathCard.tsx', match: /CARD_TEXT\.note|Still needed/, why: "the quick path's muted section labels (setup's one bold line is its lead)" },
+    { file: 'components/setup/QuickPathCard.tsx', match: /CARD_TEXT\.note|CARD_TEXT\.body/, why: "the quick path's part labels and the name of the step in view, in regular weight (setup's one bold line is its lead)" },
     { file: 'components/tasks/RecentlyDoneList.tsx', match: /recently-done-heading/, why: 'a heading over the task cards' },
     { file: 'components/tasks/UpNextList.tsx', match: /up-next-heading/, why: 'a heading over the task cards' },
   ];

@@ -478,10 +478,8 @@ describe('source-level: building the views never writes', () => {
     expect(shell).not.toMatch(/localStorage|sessionStorage|document\.cookie/);
     // No selection state left in the shell: the address is the one source of truth.
     expect(shell).not.toMatch(/setSelected|useState<string>/);
-    // `window` is touched only inside the click handler, never while rendering (it does not exist on the server).
-    const handler = shell.slice(shell.indexOf('function selectChannel'), shell.indexOf('  return (\n    <>'));
-    expect([...shell.matchAll(/window\./g)].length).toBe([...handler.matchAll(/window\./g)].length);
-    expect(handler).toContain('window.history.pushState');
+    // Nothing on home sets the channel any more (MOM-115, trial subset), so the shell never touches the browser's history or window.
+    expect(shell).not.toMatch(/window.|history.pushState/);
 
     for (const component of ['NavSidebar.tsx', 'MainFeed.tsx', 'ConnectedStackPanel.tsx']) {
       expect(strip(read('components', 'layout', component))).not.toMatch(/localStorage|sessionStorage|window\./);

@@ -10,6 +10,7 @@ import {
   PROVIDER_NOTICES,
   SERVICES,
   STORED_GROUPS,
+  NOTICE_REVIEWED_ON,
   TERMS_CHECKED_ON,
   joinWords,
 } from '@/lib/config/privacy';
@@ -24,7 +25,12 @@ const SECTION_CLASS = 'channel-card flex flex-col gap-2 p-4';
 const H2_CLASS = 'card-title';
 const LIST_CLASS = 'ml-5 list-disc space-y-1';
 
-export function PrivacyNotice() {
+interface PrivacyNoticeProps {
+  // A signed-in visitor has the page's way home and Sign out above the notice, so the footer's "Back to sign in" is left out.
+  signedIn?: boolean;
+}
+
+export function PrivacyNotice({ signedIn = false }: PrivacyNoticeProps) {
   return (
     <article className="flex flex-col gap-6 text-sm leading-relaxed [overflow-wrap:anywhere]">
       <header className="flex flex-col gap-2">
@@ -141,10 +147,12 @@ export function PrivacyNotice() {
 
       <footer className="flex flex-col gap-2 text-muted">
         <p>{NOTICE_CHANGE_LINE}</p>
-        <p>Last reviewed {TERMS_CHECKED_ON}.</p>
-        <Link href="/login" className={LINK_CLASS}>
-          Back to sign in
-        </Link>
+        <p>Last reviewed {NOTICE_REVIEWED_ON}.</p>
+        {!signedIn && (
+          <Link href="/login" className={LINK_CLASS}>
+            Back to sign in
+          </Link>
+        )}
       </footer>
     </article>
   );

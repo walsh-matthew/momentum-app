@@ -190,7 +190,12 @@ for (const [name, width] of Object.entries(WIDTHS)) {
             keptAsIs = true;
             await page.getByRole('button', { name: 'Change something' }).click();
             await expect(page.getByLabel(CHANGE_PROMPT)).toHaveAttribute('placeholder', 'Type your answer');
+            // "Send the change" is a main button, so it is not there until the box has a value (MOM-145).
+            await expect(page.getByRole('button', { name: 'Send the change' })).toHaveCount(0);
+            await page.getByLabel(CHANGE_PROMPT).fill('x');
             await expect(page.getByRole('button', { name: 'Send the change' })).toBeVisible();
+            await page.getByLabel(CHANGE_PROMPT).fill('');
+            await expect(page.getByRole('button', { name: 'Send the change' })).toHaveCount(0);
             await inView(page, page.getByRole('button', { name: KEEP_IT }));
             await page.getByRole('button', { name: KEEP_IT }).click();
           } else {
@@ -198,16 +203,19 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           }
         } else {
           expect(card.id, `turn ${k} should be a question`).toBe('setup-question');
+          let plainQuestion = false;
           // "What does this mean?" is on every question, inside the screen's width.
           await inView(page, page.getByRole('button', { name: MEANING_LINK }));
           const yes = page.getByRole('button', { name: 'Yes', exact: true });
           if ((await page.getByLabel('Your answer').count()) > 0) {
-            // A plain question: the answer box, Send and the help link, in that order.
+            // A plain question: the answer box, then the help link. Send is not there until the box has a value (MOM-145); its
+            // place between the two is checked when an answer is typed below.
+            plainQuestion = true;
             await inView(page, page.getByLabel('Your answer'));
+            await expect(page.getByRole('button', { name: 'Send' })).toHaveCount(0);
             const boxY = (await page.getByLabel('Your answer').boundingBox())?.y ?? 0;
-            const sendY = (await page.getByRole('button', { name: 'Send' }).boundingBox())?.y ?? 0;
             const helpY = (await page.getByRole('button', { name: MEANING_LINK }).boundingBox())?.y ?? 0;
-            expect(boxY < sendY && sendY < helpY, 'box, then Send, then the help link').toBe(true);
+            expect(boxY < helpY, 'box, then the help link').toBe(true);
           } else {
             // A proposal or a date question (MOM-111 round 2, findings 4, 8 and 9): Yes or "Pick a date" leads, and the box
             // opens from a small "Type it instead" link.
@@ -221,7 +229,15 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           } else {
             if ((await page.getByLabel('Your answer').count()) === 0) await page.getByRole('button', { name: TYPE_INSTEAD }).click();
             await page.getByLabel('Your answer').fill(line);
-            await page.getByRole('button', { name: 'Send' }).click();
+            const send = page.getByRole('button', { name: 'Send' });
+            await expect(send).toBeVisible();
+            if (plainQuestion) {
+              const boxY = (await page.getByLabel('Your answer').boundingBox())?.y ?? 0;
+              const sendY = (await send.boundingBox())?.y ?? 0;
+              const helpY = (await page.getByRole('button', { name: MEANING_LINK }).boundingBox())?.y ?? 0;
+              expect(boxY < sendY && sendY < helpY, 'box, then Send, then the help link').toBe(true);
+            }
+            await send.click();
           }
         }
         card = await nextCard(page, card.heading);

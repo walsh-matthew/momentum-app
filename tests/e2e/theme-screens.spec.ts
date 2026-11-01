@@ -76,29 +76,11 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       await shot(page, 'review-missing', width);
     });
 
-    test('the goal wizard, a goal on home, and the rebalance drawer', async ({ page }) => {
-      test.setTimeout(240_000);
-      await signUpAndConfirm(page, `shots-wizard-${THEME}-${width}`);
+    // The goal wizard and the rebalance drawer are not reachable from home any more (MOM-115), so there is no shot of either.
+    test('home for a brand-new account', async ({ page }) => {
+      await signUpAndConfirm(page, `shots-home-${THEME}-${width}`);
       await page.waitForLoadState('networkidle');
       await shot(page, 'home-empty', width);
-      await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
-      const wizard = page.getByRole('dialog', { name: 'New goal wizard' });
-      await expect(wizard).toBeVisible();
-      await shot(page, 'wizard', width, false);
-      await wizard.getByRole('button', { name: 'Get certified' }).click();
-      for (let i = 0; i < 3; i++) await wizard.getByRole('button', { name: 'Next' }).click();
-      await wizard.getByRole('button', { name: 'Use the starter plan instead' }).click();
-      await wizard.getByRole('button', { name: 'Create goal' }).click();
-      await expect(wizard.getByRole('heading', { name: 'Goal created' })).toBeVisible();
-      await wizard.getByRole('button', { name: 'Done' }).click();
-      await expect(wizard).toBeHidden();
-      await page.waitForLoadState('networkidle');
-      await shot(page, 'home-goal', width);
-      await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'Adjust Weekly Pace' }).click();
-      await expect(page.getByRole('dialog', { name: 'Rebalance your plan' })).toBeVisible();
-      // The drawer slides in over 200ms; the shot is taken once it has stopped.
-      await page.waitForTimeout(500);
-      await shot(page, 'drawer', width, false);
     });
   });
 }

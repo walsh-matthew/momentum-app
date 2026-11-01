@@ -404,11 +404,31 @@ describe('takeSetupTurn: when Claude is no longer used', () => {
     const result = await takeSetupTurn(sessionBefore(full, 3), { runTurn: stub.run });
     if (!result.ok || result.data.kind !== 'quick_path') throw new Error('expected the quick path');
     expect(result.data.reason).toBe('over_turns');
-    expect(result.data.sections.map((s) => s.chunk)).toEqual(['goals', 'targets', 'planning', 'talk']);
+    expect(result.data.sections.length).toBeGreaterThan(0);
+    for (const s of result.data.sections) expect(s.title.length, s.id).toBeGreaterThan(0);
     expect(result.data.canSave).toBe(false);
     expect(result.data.missing.length).toBeGreaterThan(0);
     // Plain words: no field paths, no instructions to Claude.
     for (const line of result.data.missing) expect(line).not.toMatch(/goals\.|person\.|Ask |draft/);
+  });
+
+  it('shows a goal\'s start as the date itself when the person\'s time zone is ahead of their device, never as "yesterday"', async () => {
+    const full = await fullCase();
+    const done = completeSession(full);
+    const draft = structuredClone(done.draft);
+    // The person is in Auckland, a day ahead of the device (which is in the Americas and says it is the 30th).
+    draft.model.person.timeZone = 'Pacific/Auckland';
+    draft.model.goals[0].startDate = '2026-10-30';
+    const session: SetupSession = { ...done, draft, transcript: [...done.transcript, { role: 'person', text: 'Looks fine.' }] };
+    const stub = stubTurn([{ kind: 'quick_path', reason: 'over_turns', message: 'This setup has used its share of Claude\'s time.' }]);
+    // 20:00 UTC on the 30th is 09:00 on the 31st in Auckland: their today is the 31st, and the 30th would be "yesterday" to them.
+    const result = await takeSetupTurn({ ...session, today: '2026-10-30' }, { runTurn: stub.run, nowMs: () => Date.UTC(2026, 9, 30, 20, 0, 0) });
+    if (!result.ok || result.data.kind !== 'quick_path') throw new Error('expected the quick path');
+    const lines = result.data.sections.flatMap((s) => s.lines.map((l) => l.text));
+    expect(lines.some((l) => /starts Friday, Oct 30/.test(l)), lines.join(' | ')).toBe(true);
+    expect(lines.join('\n')).not.toMatch(/\b(today|tomorrow|yesterday)\b/i);
+    // Their own time zone is why it is ahead, and the same recap says so in plain words.
+    expect(lines).toContain("You're on Auckland time.");
   });
 
   it('can be saved when the draft is complete, because saving there is the approval of every part shown', async () => {

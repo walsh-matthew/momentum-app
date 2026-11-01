@@ -6,7 +6,7 @@
 // prompts, tests/rebalance-model.test.ts and tests/task-plan-ai.test.ts.
 
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import PrivacyPage from '@/app/privacy/page';
 import { PrivacyNotice } from '@/components/privacy/PrivacyNotice';
 import {
@@ -20,18 +20,46 @@ import {
   PROVIDER_NOTICES,
   SERVICES,
   STORED_GROUPS,
+  NOTICE_REVIEWED_ON,
   TERMS_CHECKED_ON,
   joinWords,
 } from '@/lib/config/privacy';
 
-afterEach(cleanup);
+// The page reads the session only to give a signed-in visitor the way home and Sign out (MOM-148); a signed-out visitor, and a
+// session that cannot be read, get the notice alone.
+const auth = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
+vi.mock('@/lib/services/auth', () => ({ getCurrentUser: auth.getCurrentUser }));
+vi.mock('@/app/actions/auth', () => ({ signOutAction: vi.fn(), authenticate: vi.fn() }));
+
+afterEach(() => {
+  cleanup();
+  auth.getCurrentUser.mockReset();
+});
 
 const region = (name: string) => screen.getByRole('region', { name }).textContent ?? '';
 
 describe('the privacy notice', () => {
-  it('renders as a page with a heading, with no session or service needed', () => {
-    render(<PrivacyPage />);
+  it('renders as a page with a heading, with no session needed', async () => {
+    auth.getCurrentUser.mockResolvedValue({ ok: true, data: null });
+    render(await PrivacyPage());
     expect(screen.getByRole('heading', { level: 1, name: 'Privacy notice' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Back to sign in' })).toBeTruthy();
+  });
+
+  it('still renders when the session cannot be read', async () => {
+    auth.getCurrentUser.mockRejectedValue(new Error('down'));
+    render(await PrivacyPage());
+    expect(screen.getByRole('heading', { level: 1, name: 'Privacy notice' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+  });
+
+  it('gives a signed-in visitor the way home and Sign out in place of Back to sign in', async () => {
+    auth.getCurrentUser.mockResolvedValue({ ok: true, data: { id: 'u1', email: 'a@b.co' } });
+    render(await PrivacyPage());
+    expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Back to sign in' })).toBeNull();
   });
 
   it('states that the service is for adults (18 or over)', () => {
@@ -85,6 +113,12 @@ describe('the privacy notice', () => {
     expect(claude).toContain(`Never sent: ${NEVER_SENT}`);
   });
 
+  it("dates the notice's own last review, apart from the date Anthropic's terms were checked (MOM-149)", () => {
+    render(<PrivacyNotice />);
+    expect(NOTICE_REVIEWED_ON).toBe('2026-10-31');
+    expect(screen.getByText(`Last reviewed ${NOTICE_REVIEWED_ON}.`)).toBeTruthy();
+  });
+
   it("quotes Anthropic's terms with links and the date they were checked", () => {
     render(<PrivacyNotice />);
     const claude = screen.getByRole('region', { name: 'What is sent to Claude (Anthropic)' });
@@ -113,6 +147,14 @@ describe('the privacy notice', () => {
     expect(who).toContain('Cloudflare Turnstile');
     expect(who).toMatch(/sign-up, sign-in and password-reset requests for bots/);
     expect(who).toMatch(/details of your browser and network connection/);
+  });
+
+  it('names the email provider and the sending address (MOM-149)', () => {
+    render(<PrivacyNotice />);
+    const who = region('Who can see your data');
+    expect(who).toContain('Resend');
+    expect(who).toContain('hello@ownaccordlabs.com');
+    expect(who).toMatch(/sees your email address and what each email says/);
   });
 
   it('says what is kept on the device: the sign-in cookie, and a running timer (MOM-110)', () => {
