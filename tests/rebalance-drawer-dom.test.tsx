@@ -131,7 +131,7 @@ describe('Ask Claude to review', () => {
 
     expect((await drawer().findByRole('alert')).textContent).toBe('Please wait a few seconds before asking again.');
     expect(drawer().getByText('Rule-based: 2 unfinished tasks can be carried over.')).toBeTruthy();
-    expect(await drawer().findByRole('button', { name: 'Ask Claude to review' })).toBeTruthy();
+    expect(((await drawer().findByRole('button', { name: 'Ask Claude to review' })) as HTMLButtonElement).disabled).toBe(false);
     expect(actions.apply).not.toHaveBeenCalled();
   });
 
@@ -145,6 +145,7 @@ describe('Ask Claude to review', () => {
     fireEvent.click(drawer().getByRole('button', { name: 'Ask Claude to review' }));
 
     expect((await drawer().findByRole('status')).textContent).toContain('could not be used');
+    expect(((await drawer().findByRole('button', { name: 'Ask Claude to review' })) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
@@ -224,6 +225,7 @@ describe('Apply', () => {
     fireEvent.click(drawer().getByRole('button', { name: 'Apply 2 shifts' }));
 
     expect((await drawer().findByRole('alert')).textContent).toContain('Your plan is unchanged');
+    expect(((await drawer().findByRole('button', { name: 'Apply 2 shifts' })) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('applies Claude\'s proposal, not the rule-based one, once Claude has answered', async () => {

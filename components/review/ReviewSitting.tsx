@@ -86,7 +86,7 @@ export function ReviewSitting({ offerLine, adjustment, edit = null, stillRight: 
     startFinish(async () => {
       try {
         const result = askingFit ? await finishReview(null, fit) : await finishReview(adjustment === null ? null : choice);
-        if (result.ok) router.refresh();
+        if (result.ok) startFinish(() => router.refresh());
         else startFinish(() => setFinishError(result.error));
       } catch {
         startFinish(() => setFinishError('Could not save your weekly review. Nothing was saved.'));

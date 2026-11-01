@@ -238,6 +238,8 @@ describe('the focus card: mark done and its error states', () => {
     fireEvent.click(screen.getByRole('checkbox'));
 
     expect((await screen.findByRole('alert')).textContent).toBe(TOGGLE_NETWORK_ERROR);
+    // Settled (MOM-147): the checkbox is back and enabled, in the same render as the message.
+    expect(((await screen.findByRole('checkbox')) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows Saving… while the task is being marked done', async () => {

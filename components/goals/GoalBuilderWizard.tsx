@@ -147,11 +147,14 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
     setMissing(null);
     startGenerating(async () => {
       const result = await generateWeekOnePlanAction(input);
-      if (!result.ok) {
-        setPlanError({ message: result.error, forKey });
-        return;
-      }
-      setDraft({ plan: result.data.plan, source: 'claude', model: result.data.model, forKey });
+      // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+      startGenerating(() => {
+        if (!result.ok) {
+          setPlanError({ message: result.error, forKey });
+          return;
+        }
+        setDraft({ plan: result.data.plan, source: 'claude', model: result.data.model, forKey });
+      });
     });
   }
 
@@ -175,12 +178,15 @@ function WizardBody({ onClose, onCreated, onPendingChange }: WizardBodyProps) {
     setError(null);
     startTransition(async () => {
       const result = await createGoalWithPlanAction(parsed.data, plan.plan);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setCreated(result.data);
-      onCreated?.(result.data.goal);
+      // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+      startTransition(() => {
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setCreated(result.data);
+        onCreated?.(result.data.goal);
+      });
     });
   }
 

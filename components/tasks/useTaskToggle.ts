@@ -18,10 +18,11 @@ export function useTaskToggle(taskId: string) {
     startTransition(async () => {
       try {
         const result = await toggleTaskStatus(taskId, next);
-        if (!result.ok) setError(result.error);
+        // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+        if (!result.ok) startTransition(() => setError(result.error));
       } catch {
         // A rejected action (network, server error) must not leave a button stuck or silently fail.
-        setError(TOGGLE_NETWORK_ERROR);
+        startTransition(() => setError(TOGGLE_NETWORK_ERROR));
       }
     });
   };

@@ -27,13 +27,17 @@ export function useEntryAction() {
     startTransition(async () => {
       try {
         const result = await action();
+        // A state update after an await is not part of the transition (React 19), so each is wrapped again: the result and
+        // the control being ready again show in the same render (MOM-147, failure log F-072).
         if (result.ok) {
-          setNotice(noticeOf(result.data));
-          onDone?.();
-        } else setError(result.error);
+          startTransition(() => {
+            setNotice(noticeOf(result.data));
+            onDone?.();
+          });
+        } else startTransition(() => setError(result.error));
       } catch {
         // A rejected action (network, server error) must not leave a button stuck or silently fail.
-        setError(ENTRY_NETWORK_ERROR);
+        startTransition(() => setError(ENTRY_NETWORK_ERROR));
       }
     });
   };

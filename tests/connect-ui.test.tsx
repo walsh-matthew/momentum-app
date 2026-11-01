@@ -109,6 +109,23 @@ describe('Google Calendar', () => {
   });
 });
 
+describe('the on/off switch (MOM-147)', () => {
+  it('shows the service\'s refusal, and the switch is ready again in the same render', async () => {
+    actions.toggle.mockResolvedValue({ ok: false, error: 'Could not update that app.' });
+    render(<IntegrationCardList connectedApps={[app('hevy')]} />);
+    const hevy = card('Hevy');
+
+    fireEvent.click(hevy.getByRole('switch'));
+    await waitFor(() => expect(actions.toggle).toHaveBeenCalledWith('hevy', false));
+
+    expect((await hevy.findByRole('alert')).textContent).toBe('Could not update that app.');
+    // Settled: the switch is back by its ready name and enabled, and the "Saving…" line is gone.
+    const ready = (await hevy.findByRole('switch', { name: 'Hevy' })) as HTMLButtonElement;
+    expect(ready.disabled).toBe(false);
+    expect(hevy.queryByText('Saving…')).toBeNull();
+  });
+});
+
 describe('disconnecting', () => {
   it('takes two clicks, and the first changes nothing', async () => {
     renderCards([account('hevy', 'not_connected'), account('google_calendar', 'connected')], [app('google_calendar')]);
@@ -122,6 +139,10 @@ describe('disconnecting', () => {
     fireEvent.click(google.getByRole('button', { name: 'Disconnect Google Calendar' }));
     await waitFor(() => expect(actions.disconnect).toHaveBeenCalledTimes(1));
     expect(actions.disconnect).toHaveBeenCalledWith('google_calendar');
+    // Settled (MOM-147): the confirm step closes and the first button is back, ready, in the same render as the end of the save.
+    const ready = (await google.findByRole('button', { name: 'Disconnect' })) as HTMLButtonElement;
+    expect(ready.disabled).toBe(false);
+    expect(google.queryByRole('button', { name: 'Disconnect Google Calendar' })).toBeNull();
   });
 
   it('"Keep it connected" backs out without calling anything', () => {
@@ -140,6 +161,9 @@ describe('disconnecting', () => {
     fireEvent.click(google.getByRole('button', { name: 'Disconnect' }));
     fireEvent.click(google.getByRole('button', { name: 'Disconnect Google Calendar' }));
     expect((await google.findByRole('alert')).textContent).toBe('Could not disconnect that app.');
+    // Settled (MOM-147): the confirm button is back by its ready name and enabled, so the person can try again.
+    const ready = (await google.findByRole('button', { name: 'Disconnect Google Calendar' })) as HTMLButtonElement;
+    expect(ready.disabled).toBe(false);
   });
 
   it('a request that fails shows a plain message instead of failing silently', async () => {
@@ -151,6 +175,8 @@ describe('disconnecting', () => {
     const alert = await hevy.findByRole('alert');
     expect(alert.textContent).toContain('Nothing was changed');
     expect(alert.textContent).not.toContain('NetworkError');
+    const ready = (await hevy.findByRole('button', { name: 'Disconnect Hevy' })) as HTMLButtonElement;
+    expect(ready.disabled).toBe(false);
   });
 
   it('is offered for a connection that needs reconnecting, so a bad one can be removed', () => {

@@ -15,12 +15,15 @@ export function usePlanAction() {
   function run(action: () => Promise<PlanChange>) {
     startTransition(async () => {
       const result = await action();
-      if (result.ok) {
-        setError(null);
-        router.refresh();
-      } else {
-        setError(result.error);
-      }
+      // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+      startTransition(() => {
+        if (result.ok) {
+          setError(null);
+          router.refresh();
+        } else {
+          setError(result.error);
+        }
+      });
     });
   }
 
