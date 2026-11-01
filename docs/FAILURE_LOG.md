@@ -591,6 +591,41 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The live run's own report, then checking the save directly.
 - **Led to:** A fix in this session (the harness query, MOM-132).
 
+### F-086 · 2026-11-01 · build tool
+- **Asked:** Make the MOM-120 review sites wait for the page refresh before moving on.
+- **What went wrong:** The advising thread told the build to wait for the end of a streamed page response, which the browser can't observe, so the helper hung in 5 of 7 tests.
+- **Why:** The wait condition was proposed without checking that the browser exposes it.
+- **Caught by:** The build stopping on timeouts.
+- **Led to:** A fix in this session (plan spec fix only, review sites reverted) and the app-side settled-marker follow-up on MOM-120.
+
+### F-087 · 2026-11-01 · build tool
+- **Asked:** Build MOM-132 part 2 using the screen words approved on the previous build day.
+- **What went wrong:** The approved words existed only in chat, so they were gone after /clear and had to be recovered from another thread.
+- **Why:** Approvals were never written anywhere durable.
+- **Caught by:** The build asking for the words at its design stop.
+- **Led to:** A rule: approved screen words go verbatim into the ticket's Jira comment at the design stop.
+
+### F-088 · 2026-11-01 · build tool
+- **Asked:** Phone pushes at every planned stop.
+- **What went wrong:** The /day-start reminder said the "push when actions required" setting sends stops to the phone (it covers only permission prompts and questions), and no command asked for a push.
+- **Why:** Setting behaviour assumed, not checked.
+- **Caught by:** The owner getting no pushes.
+- **Led to:** A fix in this session (f4f975f, MOM-124), confirmed working.
+
+### F-089 · 2026-11-01 · build tool
+- **Asked:** Profile changes for a public professional profile.
+- **What went wrong:** Proposed profile features that the platform doesn't support.
+- **Why:** Platform features asserted from memory.
+- **Caught by:** The owner while applying them.
+- **Led to:** A fix in this session, and a rule: check platform features against the live site or its help pages before proposing them.
+
+### F-090 · 2026-11-01 · build tool
+- **Asked:** Hand off a multi-part block into the build plan.
+- **What went wrong:** The plan kept only the first part, and nothing flagged the cut.
+- **Why:** The thread handing it off never checked the written plan against its handoff.
+- **Caught by:** The owner's rollout question.
+- **Led to:** The PM docs upkeep block in tomorrow's plan (MOM-164), and a rule: whoever hands off a block checks the written plan against the handoff.
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
