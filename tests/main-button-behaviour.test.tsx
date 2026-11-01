@@ -173,14 +173,23 @@ describe('(b) a form with several fields keeps its main button and names what is
     expect(mocks.authenticate).not.toHaveBeenCalled();
   });
 
-  it('sign-in: with an email and a short password, the password is what is missing; "Create account" says the same', () => {
+  it('sign-in: with an email and no password, the password is what is missing', () => {
     render(<SignInForm />);
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'matt@example.com' } });
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'short' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(screen.getByRole('alert').textContent).toBe('Your password needs at least 8 characters.');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(screen.getByRole('alert').textContent).toBe('Enter your password to continue.');
     expect(document.activeElement).toBe(screen.getByLabelText('Password'));
     expect(mocks.authenticate).not.toHaveBeenCalled();
+  });
+
+  it('sign-in: a 6-character password reaches the server instead of a callout (older accounts, MOM-150)', async () => {
+    render(<SignInForm />);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'matt@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'abc123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(mocks.authenticate).toHaveBeenCalledTimes(1));
+    expect((mocks.authenticate.mock.calls[0][1] as FormData).get('password')).toBe('abc123');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('sign-in: with everything there the tap sends it, and no callout is left', async () => {

@@ -96,11 +96,26 @@ export async function messageCountFor(email: string): Promise<number> {
   return messages?.length ?? 0;
 }
 
-// Fills the sign-in page's form and presses one of its two buttons.
+// Fills the sign-in form and presses Sign in, or opens the create-account screen (MOM-150) and presses Create account there. A spec that
+// is already on the create-account screen skips the link.
 export async function submitCredentials(page: Page, email: string, password: string, button: 'Sign in' | 'Create account') {
+  if (button === 'Create account') await openCreateAccount(page);
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: button }).click();
+}
+
+// From the sign-in page, follows the "Create an account" link to the create-account screen (MOM-150). Does nothing on that screen already.
+export async function openCreateAccount(page: Page) {
+  const link = page.getByRole('link', { name: 'Create an account' });
+  if ((await link.count()) > 0) await link.click();
+  await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
+}
+
+// The "Check your email" state after a sign-up, naming `email` (MOM-150).
+export async function expectCheckYourEmail(page: Page, email: string) {
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+  await expect(page.getByRole('status').getByText(email, { exact: true })).toBeVisible();
 }
 
 // Signs up through the form, follows the emailed link in the same browser (the sign-up keeps its code verifier
@@ -109,7 +124,7 @@ export async function signUpAndConfirm(page: Page, label: string): Promise<strin
   const email = uniqueEmail(label);
   await page.goto('/login');
   await submitCredentials(page, email, PASSWORD, 'Create account');
-  await expect(page.getByRole('status')).toHaveText('Check your email for a confirmation link, then sign in.');
+  await expectCheckYourEmail(page, email);
   await page.goto(await confirmationLinkFor(email));
   await expect(page).toHaveURL(/\/$/);
   return email;

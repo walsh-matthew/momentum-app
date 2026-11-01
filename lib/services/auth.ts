@@ -16,9 +16,14 @@ const PasswordSchema = z.string().min(MIN_PASSWORD_LENGTH, `Password must be at 
 
 const CredentialsSchema = z.object({ email: EmailSchema, password: PasswordSchema });
 
+// Sign-in checks no length (MOM-150): accounts made while production's minimum was 6 may have 6 or 7 characters, and Supabase
+// itself decides whether the password is right. Sign-up and password reset keep the 8-character rule.
+const SignInSchema = z.object({ email: EmailSchema, password: z.string().min(1, 'Enter your password.') });
+
 // Fixed messages: none of them depends on whether an account exists, and none repeats what the provider said.
 const CAPTCHA_REQUIRED = 'Complete the CAPTCHA check, then try again.';
 const CAPTCHA_FAILED = 'The CAPTCHA check did not pass. Try again.';
+const SIGNUP_TOO_SOON = 'We just sent you a link. Wait a minute, then try again.';
 const RESET_EMAIL_FAILED = 'We could not send the reset email. Try again in a little while.';
 const PASSWORD_UPDATE_FAILED = 'We could not set your new password. Request a new reset link and try again.';
 const REUSED_PASSWORD = 'Choose a password you have not used before.';
@@ -46,13 +51,19 @@ function captchaOptions(rawToken: unknown): CaptchaOptions {
   return token === '' ? { ok: false, error: CAPTCHA_REQUIRED } : { ok: true, captchaToken: token };
 }
 
+// Supabase sends at most one email per address in a short window and answers a second request inside it with "For security purposes,
+// you can only request this after N seconds" (code `over_email_send_rate_limit`, status 429). The person is told in plain words (MOM-150).
+function isResendWindowError(error: { code?: string; status?: number; message: string }): boolean {
+  return error.code === 'over_email_send_rate_limit' || /only request this after/i.test(error.message);
+}
+
 // Supabase reports a rejected token with the code `captcha_failed`; the message check covers an older server.
 function isCaptchaError(error: { code?: string; message: string }): boolean {
   return error.code === 'captcha_failed' || /captcha/i.test(error.message);
 }
 
 export async function signInWithPassword(rawInput: unknown, captchaToken?: unknown): Promise<ServiceResult<SessionUser>> {
-  const parsed = CredentialsSchema.safeParse(rawInput);
+  const parsed = SignInSchema.safeParse(rawInput);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const captcha = captchaOptions(captchaToken);
   if (!captcha.ok) return captcha;
@@ -85,6 +96,7 @@ export async function signUpWithPassword(
     options: { emailRedirectTo, captchaToken: captcha.captchaToken },
   });
   if (error && isCaptchaError(error)) return { ok: false, error: CAPTCHA_FAILED };
+  if (error && isResendWindowError(error)) return { ok: false, error: SIGNUP_TOO_SOON };
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: { confirmationRequired: data.session === null } };
 }

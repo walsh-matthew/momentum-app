@@ -2,6 +2,8 @@
 export interface AuthFormState {
   error: string | null;
   notice: string | null;
+  // The address a sign-up confirmation link was sent to (MOM-150). Set only after a sign-up that needs the person to confirm.
+  sentTo?: string | null;
 }
 
 // The state of the "forgot password" and "set a new password" forms. `notice` is the neutral success message.

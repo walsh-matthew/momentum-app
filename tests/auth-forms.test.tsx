@@ -8,6 +8,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CaptchaWidget } from '@/components/auth/CaptchaWidget';
+import { CreateAccountForm } from '@/components/auth/CreateAccountForm';
 import { ForgotPasswordForm } from '@/components/auth/ForgotPasswordForm';
 import { ResetPasswordForm } from '@/components/auth/ResetPasswordForm';
 import { SignInForm } from '@/components/auth/SignInForm';
@@ -97,6 +98,115 @@ describe('SignInForm', () => {
   it('shows the error it was given', () => {
     render(<SignInForm initialError="That confirmation link is invalid or has expired." />);
     expect(screen.getByRole('alert').textContent).toContain('invalid or has expired');
+  });
+});
+
+describe('SignInForm and the way to an account (MOM-150)', () => {
+  it('has no Create account button, and offers "Create an account" as a link to the create-account screen', () => {
+    render(<SignInForm />);
+    expect(screen.queryByRole('button', { name: 'Create account' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Create an account' }).getAttribute('href')).toBe('/login?signup=1');
+    expect(screen.getByText(/New to Momentum\?/)).toBeTruthy();
+  });
+});
+
+describe('CreateAccountForm (MOM-150)', () => {
+  const type = (email: string, password: string) => {
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: email } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
+  };
+
+  it('says it creates an account, in plain words, with a way back to sign-in and the privacy notice', () => {
+    render(<CreateAccountForm />);
+    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeTruthy();
+    expect(screen.getByText("Enter your email and choose a password. We'll email you a link to confirm your account.")).toBeTruthy();
+    expect(screen.getByText('At least 8 characters.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/login');
+    expect(screen.getByRole('link', { name: 'privacy notice' }).getAttribute('href')).toBe('/privacy');
+    expect(screen.getByText(/for adults \(18 or over\)/)).toBeTruthy();
+  });
+
+  it('answers an empty form with the plain callout, not the browser\'s bubble, and sends nothing', () => {
+    const { container } = render(<CreateAccountForm />);
+    // noValidate is what keeps the browser's own "Please fill out this field" bubble away.
+    expect(container.querySelector('form')?.noValidate).toBe(true);
+    const button = screen.getByRole('button', { name: 'Create account' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(screen.getByRole('alert').textContent).toBe('Enter your email address to continue.');
+    expect(document.activeElement).toBe(screen.getByLabelText('Email'));
+    expect(mocks.authenticate).not.toHaveBeenCalled();
+  });
+
+  it('names the password when it is missing or too short', () => {
+    render(<CreateAccountForm />);
+    type('matt@example.com', '');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(screen.getByRole('alert').textContent).toBe('Choose your password to continue.');
+    type('matt@example.com', 'abc123');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(screen.getByRole('alert').textContent).toBe('Your password needs at least 8 characters.');
+    expect(mocks.authenticate).not.toHaveBeenCalled();
+  });
+
+  it('sends the sign-up intent with the address and password', async () => {
+    render(<CreateAccountForm />);
+    type('matt@example.com', 'longenough');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    await waitFor(() => expect(mocks.authenticate).toHaveBeenCalledTimes(1));
+    const sent = mocks.authenticate.mock.calls[0][1] as FormData;
+    expect(sent.get('intent')).toBe('signup');
+    expect(sent.get('email')).toBe('matt@example.com');
+    expect(sent.get('password')).toBe('longenough');
+  });
+
+  it('shows a refusal from the server as an alert', async () => {
+    mocks.authenticate.mockResolvedValue({ error: 'Password must be at least 8 characters.', notice: null });
+    render(<CreateAccountForm />);
+    type('matt@example.com', 'longenough');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Password must be at least 8 characters.'));
+  });
+
+  it('turns into the "Check your email" state that names the address, says what to do and never says "then sign in"', async () => {
+    mocks.authenticate.mockResolvedValue({ error: null, notice: null, sentTo: 'new.person@example.com' });
+    const { container } = render(<CreateAccountForm />);
+    type('new.person@example.com', 'longenough');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    const heading = await screen.findByRole('heading', { name: 'Check your email' });
+    expect(document.activeElement).toBe(heading);
+    expect(screen.getByText('new.person@example.com').tagName).toBe('STRONG');
+    expect(screen.getByText(/We sent a link to/).textContent).toBe('We sent a link to new.person@example.com.');
+    expect(screen.getByText('Open the email and tap the link. It confirms your account and signs you in.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Nothing after a few minutes? Check your junk or spam folder. If it's not there, tap Start again and use the same address, and we'll send a new link.",
+      ),
+    ).toBeTruthy();
+    expect(container.textContent).not.toMatch(/then sign in/i);
+    // The form is gone while the state shows.
+    expect(screen.queryByLabelText('Password')).toBeNull();
+  });
+
+  it('shows "We just sent you a link. Wait a minute, then try again." as the server gives it, inside the resend window', async () => {
+    mocks.authenticate.mockResolvedValue({ error: 'We just sent you a link. Wait a minute, then try again.', notice: null });
+    const { container } = render(<CreateAccountForm />);
+    type('new.person@example.com', 'longenough');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('We just sent you a link. Wait a minute, then try again.'));
+    expect(container.textContent).not.toMatch(/only request this after/);
+  });
+
+  it('"Start again" goes back to an empty form', async () => {
+    mocks.authenticate.mockResolvedValue({ error: null, notice: null, sentTo: 'new.person@example.com' });
+    render(<CreateAccountForm />);
+    type('new.person@example.com', 'longenough');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    await screen.findByRole('heading', { name: 'Check your email' });
+    fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
+    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeTruthy();
+    expect((screen.getByLabelText('Email') as HTMLInputElement).value).toBe('');
   });
 });
 
@@ -192,7 +302,7 @@ describe('CaptchaWidget', () => {
 });
 
 describe('the login page', () => {
-  async function loginPage(params: { error?: string; reset?: string } = {}) {
+  async function loginPage(params: { error?: string; reset?: string; signup?: string } = {}) {
     const { default: LoginPage } = await import('@/app/login/page');
     return render(await LoginPage({ searchParams: Promise.resolve(params) }));
   }
@@ -201,6 +311,12 @@ describe('the login page', () => {
     const { container } = await loginPage();
     expect(screen.getByRole('heading', { name: 'Sign in to Momentum' })).toBeTruthy();
     expect(hiddenToken(container)).toBeNull();
+  });
+
+  it('shows the create-account card when asked (?signup=1)', async () => {
+    await loginPage({ signup: '1' });
+    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Sign in to Momentum' })).toBeNull();
   });
 
   it('shows the reset request when asked (?reset=1)', async () => {
@@ -221,13 +337,16 @@ describe('the login page', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/confirmation link/);
   });
 
-  it('puts the CAPTCHA on both cards when a site key is set', async () => {
+  it('puts the CAPTCHA on every card when a site key is set', async () => {
     mocks.captcha = TURNSTILE;
     const first = await loginPage();
     expect(hiddenToken(first.container)).not.toBeNull();
     cleanup();
     const second = await loginPage({ reset: '1' });
     expect(hiddenToken(second.container)).not.toBeNull();
+    cleanup();
+    const third = await loginPage({ signup: '1' });
+    expect(hiddenToken(third.container)).not.toBeNull();
   });
 });
 

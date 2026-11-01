@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useActionState, useState, type FormEvent } from 'react';
 import { authenticate } from '@/app/actions/auth';
-import { Button } from '@/components/ui/button';
 import { MainButton } from '@/components/ui/MainButton';
 import { MissingCallout } from '@/components/ui/MissingCallout';
 import { checkForm, type RequiredField } from '@/lib/forms/missing';
@@ -19,10 +18,11 @@ interface SignInFormProps {
 
 const INITIAL_STATE: AuthFormState = { error: null, notice: null };
 
-// What a tap on either button needs first (MOM-145): a form with two fields keeps its buttons visible and answers a tap with a callout.
+// What a tap on the button needs first (MOM-145): a form with two fields keeps its button visible and answers a tap with a callout.
+// No length rule on the password (MOM-150): accounts made before production's minimum became 8 may have 6 or 7 characters.
 const REQUIRED: RequiredField[] = [
   { name: 'email', what: 'your email address' },
-  { name: 'password', what: 'your password', minLength: 8 },
+  { name: 'password', what: 'your password' },
 ];
 
 export function SignInForm({ initialError = null, captcha = null }: SignInFormProps) {
@@ -49,7 +49,6 @@ export function SignInForm({ initialError = null, captcha = null }: SignInFormPr
           type="password"
           name="password"
           autoComplete="current-password"
-          minLength={8}
           required
           className={FIELD_CLASS}
         />
@@ -72,9 +71,12 @@ export function SignInForm({ initialError = null, captcha = null }: SignInFormPr
       <MainButton type="submit" name="intent" value="signin" busy={pending} busyLabel="Working…">
         Sign in
       </MainButton>
-      <Button type="submit" name="intent" value="signup" variant="outline" disabled={pending}>
-        Create account
-      </Button>
+      <p className="text-sm text-muted">
+        New to Momentum?{' '}
+        <Link href="/login?signup=1" className="underline underline-offset-2 hover:text-foreground">
+          Create an account
+        </Link>
+      </p>
       <p className="text-sm text-muted">
         Momentum is for adults (18 or over). See how it handles your data in the{' '}
         <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">

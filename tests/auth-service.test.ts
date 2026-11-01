@@ -137,6 +137,41 @@ describe('requestPasswordReset', () => {
   });
 });
 
+describe('sign-in and the password length (MOM-150)', () => {
+  it('sends a 6-character password to Supabase: accounts made while production allowed 6 can still sign in', async () => {
+    expect(await signInWithPassword({ email: 'a@example.com', password: 'abc123' })).toMatchObject({ ok: true });
+    expect(called('signInWithPassword')[0].args[0]).toMatchObject({ email: 'a@example.com', password: 'abc123' });
+  });
+
+  it('still refuses an empty password before calling Supabase, and sign-up keeps the 8-character rule', async () => {
+    expect(await signInWithPassword({ email: 'a@example.com', password: '' })).toEqual({ ok: false, error: 'Enter your password.' });
+    expect(called('signInWithPassword')).toEqual([]);
+    expect(await signUpWithPassword({ email: 'a@example.com', password: 'abc123' }, 'https://x/cb')).toEqual({
+      ok: false,
+      error: 'Password must be at least 8 characters.',
+    });
+  });
+});
+
+describe('signing up again inside the resend window (MOM-150)', () => {
+  it('says so in plain words instead of passing on Supabase\'s "you can only request this after N seconds"', async () => {
+    const expected = { ok: false, error: 'We just sent you a link. Wait a minute, then try again.' };
+    fake.error = { code: 'over_email_send_rate_limit', message: 'For security purposes, you can only request this after 42 seconds.' };
+    expect(await signUpWithPassword({ email: 'a@example.com', password: 'long-enough-1' }, 'https://x/cb')).toEqual(expected);
+    // An older Supabase sends the same message with no code.
+    fake.error = { message: 'For security purposes, you can only request this after 0 seconds.' };
+    expect(await signUpWithPassword({ email: 'a@example.com', password: 'long-enough-1' }, 'https://x/cb')).toEqual(expected);
+  });
+
+  it('still passes on any other sign-up error as it was', async () => {
+    fake.error = { code: 'weak_password', message: 'Password is known to be weak.' };
+    expect(await signUpWithPassword({ email: 'a@example.com', password: 'long-enough-1' }, 'https://x/cb')).toEqual({
+      ok: false,
+      error: 'Password is known to be weak.',
+    });
+  });
+});
+
 describe('the CAPTCHA token', () => {
   it('is not required, and not sent, when no site key is configured', async () => {
     expect(await requestPasswordReset('a@example.com', REDIRECT)).toEqual({ ok: true, data: null });
