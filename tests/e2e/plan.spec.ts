@@ -70,6 +70,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       // One tap puts the step on today, and it is still there after a reload.
       await dayButton(page, PLAN_TITLES.prep, today).click();
       await expect(dayButton(page, PLAN_TITLES.prep, today)).toHaveAttribute('aria-pressed', 'true');
+      await expect(dayButton(page, PLAN_TITLES.prep, today)).toBeEnabled(); // settled: the refresh has rendered (MOM-120)
       await page.reload();
       await expect(dayButton(page, PLAN_TITLES.prep, today)).toHaveAttribute('aria-pressed', 'true');
       // Only that one: the habit and the other days are untouched.
@@ -90,6 +91,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       // The next tap takes it off, and home goes back to saying nothing is planned.
       await dayButton(page, PLAN_TITLES.prep, today).click();
       await expect(dayButton(page, PLAN_TITLES.prep, today)).toHaveAttribute('aria-pressed', 'false');
+      await expect(dayButton(page, PLAN_TITLES.prep, today)).toBeEnabled(); // settled (MOM-120)
       await page.goto('/');
       await page.waitForLoadState('networkidle');
       await expect(page.getByRole('region', { name: 'Your plan' }).getByText(/Nothing planned for today yet\./)).toBeVisible();
@@ -121,15 +123,16 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(copy).toHaveCount(0);
 
       // It can be changed and cleared by the person, and it stays after a reload (once the save has finished: a reload in the
-      // middle of one would drop it, as it should).
+      // middle of one would drop it, as it should). Finished means the select is enabled again, after the refresh has rendered (MOM-120).
       const saved = page.waitForResponse((response) => response.request().method() === 'POST');
       await select.selectOption({ label: PLAN_TITLES.rest });
       await saved;
-      await page.waitForLoadState('networkidle');
+      await expect(kindSelect(page, today)).toBeEnabled();
       await page.reload();
       await expect(kindSelect(page, today).locator('option:checked')).toHaveText(PLAN_TITLES.rest);
       await kindSelect(page, today).selectOption({ label: 'Not set' });
       await expect(kindSelect(page, today)).toHaveValue('');
+      await expect(kindSelect(page, today)).toBeEnabled(); // settled before the test ends (MOM-120)
       expect(await overflowOfPage(page), 'sideways overflow on the plan').toBe(0);
 
       expect(serverErrors(), 'server errors').toEqual([]);
@@ -157,6 +160,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await dayButton(page, PLAN_TITLES.prep, today).click();
       await expect(dayButton(page, PLAN_TITLES.prep, today)).toHaveAttribute('aria-pressed', 'true');
       await expect(page.getByText('Left over from last week')).toHaveCount(0);
+      await expect(dayButton(page, PLAN_TITLES.prep, today)).toBeEnabled(); // settled before the test ends (MOM-120)
       expect(serverErrors(), 'server errors').toEqual([]);
     });
 
@@ -201,6 +205,7 @@ test.describe('states at 390px', () => {
     // Every one of the 14 is today or later, so every one can be chosen.
     await dayButton(page, PLAN_TITLES.prep, today).click();
     await expect(dayButton(page, PLAN_TITLES.prep, today)).toHaveAttribute('aria-pressed', 'true');
+    await expect(dayButton(page, PLAN_TITLES.prep, today)).toBeEnabled(); // settled before the test ends (MOM-120)
     expect(await overflowOfPage(page), 'sideways overflow on the plan').toBe(0);
     expect(serverErrors(), 'server errors').toEqual([]);
   });
