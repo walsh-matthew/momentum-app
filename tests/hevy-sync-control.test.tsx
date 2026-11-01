@@ -124,6 +124,9 @@ describe('the states', () => {
     renderCards('connected');
     fireEvent.click(card('Hevy').getByRole('button', { name: 'Sync now' }));
     expect((await card('Hevy').findByRole('alert')).textContent).toBe('Sign in to sync your workouts.');
+    // Settled (MOM-147): the button is back by its ready name and enabled, in the same render as the message.
+    const ready = (await card('Hevy').findByRole('button', { name: 'Sync now' })) as HTMLButtonElement;
+    expect(ready.disabled).toBe(false);
   });
 
   it('a dropped connection says nothing was changed, and the next tap clears the old message', async () => {
@@ -131,6 +134,7 @@ describe('the states', () => {
     renderCards('connected');
     fireEvent.click(card('Hevy').getByRole('button', { name: 'Sync now' }));
     expect((await card('Hevy').findByRole('alert')).textContent).toBe('Could not reach the server. Nothing was changed. Try again.');
+    expect(((await card('Hevy').findByRole('button', { name: 'Sync now' })) as HTMLButtonElement).disabled).toBe(false);
 
     actions.sync.mockResolvedValueOnce({ ok: true, data: view({}) });
     fireEvent.click(await card('Hevy').findByRole('button', { name: 'Sync now' }));

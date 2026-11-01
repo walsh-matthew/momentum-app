@@ -65,6 +65,7 @@ describe('the days', () => {
     const { rerender } = render(<PlanScreen plan={readyPlan()} />);
     fireEvent.click(dayButton('Book the room', 'Fri, Oct 30'));
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(((await screen.findByRole('button', { name: 'Book the room, Fri, Oct 30' })) as HTMLButtonElement).disabled).toBe(false);
     expect(actions.planItem).toHaveBeenCalledWith(STEP.id, '2026-10-30');
     expect(actions.unplanItem).not.toHaveBeenCalled();
 
@@ -81,6 +82,8 @@ describe('the days', () => {
     render(<PlanScreen plan={readyPlan()} />);
     fireEvent.click(dayButton('Go for a run', 'Fri, Oct 30'));
     expect((await screen.findByRole('alert')).textContent).toContain("That day has already passed, so it can't be changed.");
+    // Settled (MOM-147): the day button is back by its ready name and enabled, in the same render as the message.
+    expect(((await screen.findByRole('button', { name: 'Go for a run, Fri, Oct 30' })) as HTMLButtonElement).disabled).toBe(false);
     expect(refresh).not.toHaveBeenCalled();
   });
 });

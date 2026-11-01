@@ -19,10 +19,11 @@ export function HevySyncControl() {
     startTransition(async () => {
       try {
         const result = await syncHevyNow();
-        if (result.ok) setView(result.data);
-        else setError(result.error);
+        // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+        if (result.ok) startTransition(() => setView(result.data));
+        else startTransition(() => setError(result.error));
       } catch {
-        setError('Could not reach the server. Nothing was changed. Try again.');
+        startTransition(() => setError('Could not reach the server. Nothing was changed. Try again.'));
       }
     });
   }

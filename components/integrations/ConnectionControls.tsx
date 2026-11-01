@@ -89,10 +89,11 @@ export function ConnectionControls({ entry, account }: ConnectionControlsProps) 
     startTransition(async () => {
       try {
         const result = await disconnectApp(entry.provider);
-        if (result.ok) setConfirming(false);
-        else setError(result.error);
+        // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+        if (result.ok) startTransition(() => setConfirming(false));
+        else startTransition(() => setError(result.error));
       } catch {
-        setError('Could not reach the server. Nothing was changed. Try again.');
+        startTransition(() => setError('Could not reach the server. Nothing was changed. Try again.'));
       }
     });
   }

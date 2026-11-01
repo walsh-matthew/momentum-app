@@ -93,8 +93,11 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
     setAskError(null);
     startAsking(async () => {
       const answer = await askClaudeToRebalance(channelId);
-      if (answer.ok) onModelView(answer.data);
-      else setAskError(answer.error);
+      // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+      startAsking(() => {
+        if (answer.ok) onModelView(answer.data);
+        else setAskError(answer.error);
+      });
     });
   }
 
@@ -124,14 +127,17 @@ function DrawerBody({ view, channelId, onModelView, moveChains, titleId, onClose
     startTransition(async () => {
       try {
         const outcome = await applyRebalanceProposal({ ...proposal, moves: chosen });
-        if (!outcome.ok) {
-          setError(outcome.error);
-          return;
-        }
-        setResult(outcome.data);
+        // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+        startTransition(() => {
+          if (!outcome.ok) {
+            setError(outcome.error);
+            return;
+          }
+          setResult(outcome.data);
+        });
       } catch {
         // A thrown action (server unreachable, misconfigured) must not take the page down.
-        setError('Could not apply the changes. Your plan is unchanged; try again.');
+        startTransition(() => setError('Could not apply the changes. Your plan is unchanged; try again.'));
       }
     });
   }

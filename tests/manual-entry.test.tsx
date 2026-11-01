@@ -137,6 +137,8 @@ describe('the tap', () => {
     render(<TapControl target={target()} />);
     fireEvent.click(screen.getByRole('button'));
     expect((await screen.findByRole('alert')).textContent).toContain('Set your time zone before logging');
+    // Settled (MOM-147): the button is back, not busy, in the same render as the message.
+    expect((await screen.findByRole('button', { name: /Log one: Workouts/ })).getAttribute('aria-busy')).toBeNull();
   });
 
   it('says so when the request itself fails, and lets the person try again', async () => {
@@ -312,6 +314,7 @@ describe('the checklist', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain("isn't feeding a checklist target");
     expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(((await screen.findByRole('checkbox', { name: /Book the room/ })) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('says so when nothing feeds the target, or an item has no steps', () => {
@@ -364,6 +367,7 @@ describe('the recent entries: remove and restore', () => {
     render(<EntryList timeZone="UTC" entries={[entry()]} />);
     fireEvent.click(screen.getByRole('button', { name: /Remove/ }));
     expect((await screen.findByRole('alert')).textContent).toContain('Only entries you logged yourself');
+    expect(((await screen.findByRole('button', { name: /Remove/ })) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

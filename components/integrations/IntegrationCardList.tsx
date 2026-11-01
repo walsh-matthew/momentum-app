@@ -39,7 +39,8 @@ function IntegrationCard({ entry, active, account }: IntegrationCardProps) {
     setError(null);
     startTransition(async () => {
       const result = await toggleConnectedApp(entry.provider, !active);
-      if (!result.ok) setError(result.error);
+      // Wrapped again: a state update after an await is not part of the transition (React 19; MOM-147, F-072).
+      if (!result.ok) startTransition(() => setError(result.error));
     });
   };
 
