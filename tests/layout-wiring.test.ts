@@ -82,11 +82,11 @@ describe('the pages and the page source', () => {
   const read = (...parts: string[]) => readFileSync(join(process.cwd(), ...parts), 'utf8').replace(/\r\n/g, '\n');
   const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
-  it('the home page builds progress from its one snapshot: no extra service, no mock values', () => {
+  it('the home page reads its one snapshot and builds no goal progress: the sidebar list and goal cards that showed it are gone (MOM-115)', () => {
     const page = strip(read('app', 'page.tsx'));
-    expect(page).toContain('summarizeActiveGoalProgress(snapshot.goals, snapshot.tasks, snapshot.today)');
-    expect(page).toContain('progress={progress}');
-    expect(page).not.toMatch(/listGoalProgress|getPlanSnapshot\(\)[\s\S]*getPlanSnapshot\(\)/);
+    expect(page).not.toContain('summarizeActiveGoalProgress');
+    expect(page).not.toContain('progress=');
+    expect(page).not.toMatch(/listGoalProgress/);
     expect([...page.matchAll(/getPlanSnapshot\(/g)]).toHaveLength(1);
   });
 

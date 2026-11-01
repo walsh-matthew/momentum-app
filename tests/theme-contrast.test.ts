@@ -17,12 +17,12 @@ const colourOf = (theme: Theme, token: string): Rgb => {
   return c.alpha < 1 ? over(c, colourOf(theme, '--background')) : c.rgb;
 };
 const channelOf = (theme: Theme, token: string): Rgb => parseColour(resolve(`var(${token})`, THEMES[theme])).rgb;
-// A translucent tint of a colour channel over a surface: rgb(var(--lime-rgb) / 9%) over --surface-soft.
+// A translucent tint of a colour channel over a surface: rgb(var(--lime-rgb) / 9%) over --card-fill.
 const tint = (theme: Theme, channel: string, alpha: number, surface: string): Rgb =>
   over({ rgb: channelOf(theme, channel), alpha }, colourOf(theme, surface));
 
 // The card fill is the surface of every card (round 2 of the look review), and --page-wide is the page behind the three columns.
-const SURFACES = ['--background', '--page-wide', '--card-fill', '--panel', '--surface-soft', '--surface-raised', '--secondary'];
+const SURFACES = ['--background', '--page-wide', '--card-fill', '--field-fill', '--secondary'];
 // Colours the app draws as text on those surfaces.
 const TEXT = [
   '--foreground', '--muted', '--accent', '--danger', '--streak', '--channel',
@@ -46,6 +46,23 @@ describe.each(['dark', 'light'] as const)('%s theme', (theme) => {
     }
   });
 
+  // The quick path's choices (MOM-111, components/setup/AnswerChoice.tsx choiceClasses): the answers a person did not choose are plain,
+  // no fill and the accent border every unchosen choice has (MOM-145, `.answer-choice`); the one they chose is filled with the accent
+  // and a check mark. Both have to read in both themes: the words of each at 4.5:1, the check on the fill (a graphic, 3:1, and it is
+  // the button's own text colour, so 4.5:1), the fill itself as a shape against the card (3:1), and the border of a plain one as an
+  // edge (3:1).
+  it('a chosen answer reads, and stands out from a plain one: the words, the check, the fill and the edge', () => {
+    const card = colourOf(theme, '--card-fill');
+    // Chosen: the accent fill with its own text colour (and its check, which draws in that colour).
+    expect(contrast(colourOf(theme, '--primary-foreground'), colourOf(theme, '--primary')), 'the chosen answer\'s words and check on the fill').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(colourOf(theme, '--primary'), card), 'the chosen answer\'s fill against the card').toBeGreaterThanOrEqual(3);
+    // Plain: the ordinary text colour on the card, and the accent border as an edge against it.
+    expect(contrast(colourOf(theme, '--foreground'), card), 'a plain answer\'s words on the card').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(colourOf(theme, '--accent'), card), 'a plain answer\'s border against the card').toBeGreaterThanOrEqual(3);
+    // And the two look different: the chosen fill is far from the card, the plain answer is the card.
+    expect(contrast(colourOf(theme, '--primary'), card)).toBeGreaterThan(contrast(card, card));
+  });
+
   it('text on a hovered accent button still reads at 4.5:1, over every surface it can sit on', () => {
     const share = Number(resolve('var(--hover-primary)', THEMES[theme]).replace('%', '')) / 100;
     const base = resolve('var(--hover-base)', THEMES[theme]);
@@ -61,6 +78,12 @@ describe.each(['dark', 'light'] as const)('%s theme', (theme) => {
       ['--danger on the red fill (9%)', '--danger', tint(theme, '--red-rgb', 0.09, '--card-fill')],
       ['--streak on the amber alert fill (8%)', '--streak', tint(theme, '--amber-rgb', 0.08, '--card-fill')],
       ['--streak on the amber alert fill (8%, on the page)', '--streak', tint(theme, '--amber-rgb', 0.08, '--background')],
+      // The quick path's "Needs your answer" callout (MOM-111, components/setup/NeedsAnswer.tsx): its label is --streak (above), and
+      // its question, its note and the words of every control inside it sit on the same amber fill.
+      ['--foreground, the callout question, on the amber callout fill (8%)', '--foreground', tint(theme, '--amber-rgb', 0.08, '--card-fill')],
+      ['--muted, the callout note, on the amber callout fill (8%)', '--muted', tint(theme, '--amber-rgb', 0.08, '--card-fill')],
+      ['--foreground on the amber callout fill (8%, on the page)', '--foreground', tint(theme, '--amber-rgb', 0.08, '--background')],
+      ['--muted on the amber callout fill (8%, on the page)', '--muted', tint(theme, '--amber-rgb', 0.08, '--background')],
       ['--lime on the accent chip (9%)', '--lime', tint(theme, '--lime-rgb', 0.09, '--card-fill')],
       ['--text-lime-1 on the badge (6%)', '--text-lime-1', tint(theme, '--lime-rgb', 0.06, '--card-fill')],
       ['--text-lime-1 on a good pattern (7%)', '--text-lime-1', tint(theme, '--lime-rgb', 0.07, '--card-fill')],
@@ -75,7 +98,7 @@ describe.each(['dark', 'light'] as const)('%s theme', (theme) => {
   });
 
   it('graphics a person has to see reach 3:1: the progress ring and bars, icons, the toggle and the sync dot', () => {
-    for (const surface of ['--background', '--card-fill', '--panel', '--surface-soft']) {
+    for (const surface of ['--background', '--card-fill', '--field-fill']) {
       for (const token of ['--lime', '--icon-dim', '--icon-lime', '--icon-blue', '--sync-dot', '--stripe-a', '--stripe-b']) {
         expect(contrast(colourOf(theme, token), colourOf(theme, surface)), `${token} on ${surface}`).toBeGreaterThanOrEqual(3);
       }
@@ -84,29 +107,53 @@ describe.each(['dark', 'light'] as const)('%s theme', (theme) => {
   });
 });
 
-describe('light theme: the border of a control reaches 3:1 (dark keeps its own values; its gap is in the ticket notes)', () => {
-  const light = THEMES.light;
-  const ctlMin = Number(resolve('var(--ctl-min)', light).replace('%', '')) / 100;
-  const surfaces = ['--background', '--card-fill', '--panel', '--surface-soft', '--secondary'];
+// MOM-145: a choice that is not chosen has a full-strength accent border and no fill. The border is an edge a person has to see, so it
+// reaches 3:1 against the card, the page and the field, in both themes (lime in dark, the deeper green in light).
+describe.each(['dark', 'light'] as const)('%s theme: the border of an unchosen choice', (theme) => {
+  it('is the accent, at 3:1 against the card and the page', () => {
+    for (const surface of ['--card-fill', '--background', '--page-wide']) {
+      expect(contrast(colourOf(theme, '--accent'), colourOf(theme, surface)), `--accent on ${surface}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("and its hover wash (the accent at 10%, pressed 18%) keeps the choice's text at 4.5:1", () => {
+    for (const share of [0.1, 0.18]) {
+      const wash = over({ rgb: colourOf(theme, '--accent'), alpha: share }, colourOf(theme, '--card-fill'));
+      expect(contrast(colourOf(theme, '--foreground'), wash), `text on the ${share} wash`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
+// MOM-145: the plain callout of a form that is missing something (components/ui/MissingCallout.tsx) is the ordinary text on the amber
+// note surface, over a card and over the page, and its border (--streak at 50%) is an edge a person can see (3:1 is not needed for a
+// border that only repeats the words, but it stays visible).
+describe.each(['dark', 'light'] as const)('%s theme: the missing-field callout', (theme) => {
+  it('reads at 4.5:1 on the amber fill, over the card and over the page', () => {
+    for (const surface of ['--card-fill', '--background']) {
+      expect(contrast(colourOf(theme, '--foreground'), tint(theme, '--amber-rgb', 0.08, surface)), `--foreground on the callout over ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
+// MOM-145: the border of a control reaches 3:1 in both themes. The two themes differ only in how strong the border is (--ctl-min).
+describe.each(['dark', 'light'] as const)('%s theme: the border of a control reaches 3:1', (theme) => {
+  const ctlMin = Number(resolve('var(--ctl-min)', THEMES[theme]).replace('%', '')) / 100;
+  const surfaces = ['--background', '--page-wide', '--card-fill', '--field-fill', '--secondary'];
 
   it('the control-border alpha is at least 3:1 on every surface, for both the ink and the foreground it is drawn with', () => {
-    expect(ctlMin).toBeGreaterThan(0.5);
+    expect(ctlMin).toBeGreaterThan(0.3);
     for (const surface of surfaces) {
-      const ink = over({ rgb: channelOf('light', '--ink'), alpha: ctlMin }, colourOf('light', surface));
-      const foreground = over({ rgb: colourOf('light', '--foreground'), alpha: ctlMin }, colourOf('light', surface));
-      expect(contrast(ink, colourOf('light', surface)), `ink border on ${surface}`).toBeGreaterThanOrEqual(3);
-      expect(contrast(foreground, colourOf('light', surface)), `foreground border on ${surface}`).toBeGreaterThanOrEqual(3);
+      const ink = over({ rgb: channelOf(theme, '--ink'), alpha: ctlMin }, colourOf(theme, surface));
+      const foreground = over({ rgb: colourOf(theme, '--foreground'), alpha: ctlMin }, colourOf(theme, surface));
+      expect(contrast(ink, colourOf(theme, surface)), `ink border on ${surface}`).toBeGreaterThanOrEqual(3);
+      expect(contrast(foreground, colourOf(theme, surface)), `foreground border on ${surface}`).toBeGreaterThanOrEqual(3);
     }
   });
 
   it('the --input border is 3:1 on every surface', () => {
-    const input = parseColour(resolve('var(--input)', light));
+    const input = parseColour(resolve('var(--input)', THEMES[theme]));
     for (const surface of surfaces) {
-      expect(contrast(over(input, colourOf('light', surface)), colourOf('light', surface)), surface).toBeGreaterThanOrEqual(3);
+      expect(contrast(over(input, colourOf(theme, surface)), colourOf(theme, surface)), surface).toBeGreaterThanOrEqual(3);
     }
-  });
-
-  it('dark leaves control borders at their old alpha', () => {
-    expect(resolve('var(--ctl-min)', THEMES.dark)).toBe('0%');
   });
 });

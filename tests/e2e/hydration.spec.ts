@@ -4,7 +4,7 @@
 //
 // The jsdom hydration test in tests/channel-selection.test.tsx stands in for Next's router; this is the real one.
 
-import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
+import { WIDTHS, expect, expectHomeLoaded, signUpAndConfirm, test } from './fixtures';
 
 for (const [name, width] of Object.entries(WIDTHS)) {
   test.describe(`at ${width}px (${name})`, () => {
@@ -22,13 +22,11 @@ for (const [name, width] of Object.entries(WIDTHS)) {
     test('the signed-in home page hydrates without a console message', async ({ page }) => {
       await signUpAndConfirm(page, `hydration-${width}`);
       await page.goto('/');
-      await expect(page.getByRole('heading', { name: 'Make today count.' })).toBeVisible();
+      await expectHomeLoaded(page);
       await page.waitForLoadState('networkidle');
-      // Interact: open and close the goal wizard, which only works once the page has hydrated.
-      await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
-      await expect(page.getByRole('dialog', { name: 'New goal wizard' })).toBeVisible();
-      await page.getByRole('button', { name: 'Cancel' }).click();
-      await expect(page.getByRole('dialog', { name: 'New goal wizard' })).toBeHidden();
+      // Interact: follow the setup card's link, which goes through Next's client router and so only works once the page has hydrated.
+      await page.getByRole('link', { name: 'Go to setup' }).click();
+      await expect(page).toHaveURL(/\/setup$/);
     });
   });
 }

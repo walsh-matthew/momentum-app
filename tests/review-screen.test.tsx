@@ -301,7 +301,7 @@ describe('the states before a review exists', () => {
   it('says there is nothing to review yet with no goal', () => {
     show({ state: 'no_goals' });
     expect(screen.getByText(/starts once you have a goal/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');
+    expect(screen.queryByRole('link', { name: 'Back to home' })).toBeNull();
   });
 
   it('says which day the review comes on when it is not due, with no recap of this week', () => {

@@ -16,7 +16,8 @@ import { APPROVE_TEXT, ERROR_COPY, MEANING_LINK, MEANING_TEXT, errorText, setupS
 const alertWords = (cause: keyof typeof ERROR_COPY): string => `${ERROR_COPY[cause].headline}${ERROR_COPY[cause].line ?? ''}`;
 import { runSetupEval } from '@/lib/setup/evals';
 import type { AssistantTurn, SetupSession, Transcript } from '@/types/setup';
-import type { SetupTurnView } from '@/types/setupScreen';
+import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
+import type { RecapSection, SetupTurnView } from '@/types/setupScreen';
 import { SETUP_CASES } from './setup-evals/cases';
 import { scriptedModel } from './helpers/setupScript';
 
@@ -126,7 +127,8 @@ describe('one question at a time', () => {
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockReturnValueOnce(pending.promise);
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
-    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
+    // Cannot send nothing: there is no Send until there are words (MOM-145).
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 
     answerWith('Run more');
     // MOM-111 finding 10: the question stays, with the answer just sent under it and a thinking state; there is no box to
@@ -209,6 +211,9 @@ describe('changing your mind about changing something (production, 2026-10-29)',
     // The same placeholder as every answer box (MOM-111 finding 1), with the question said above the box.
     expect(box.placeholder).toBe('Type your answer');
     expect(screen.getByText('What would you like to change?')).toBeTruthy();
+    // The main Send appears with the first words (MOM-145); "Keep it as it is" is the same size beside it.
+    const box0 = screen.getByLabelText('What would you like to change?') as HTMLTextAreaElement;
+    fireEvent.change(box0, { target: { value: 'half typed' } });
     const send = screen.getByRole('button', { name: 'Send the change' });
     const keep = screen.getByRole('button', { name: 'Keep it as it is' });
     // The same row, the same size: a real button, not a small link.
@@ -317,7 +322,9 @@ describe('nothing is saved until the person taps Save', () => {
     actions.save.mockReturnValue(pending.promise);
     const button = screen.getByRole('button', { name: 'Save my setup' });
     fireEvent.click(button);
-    await waitFor(() => expect((screen.getByRole('button', { name: 'Saving…' }) as HTMLButtonElement).disabled).toBe(true));
+    // Busy, not disabled (MOM-145): solid, says so, and the second tap does nothing.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' }).getAttribute('aria-busy')).toBe('true'));
+    expect((screen.getByRole('button', { name: 'Saving…' }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Saving…' }));
     pending.resolve({ ok: true, data: { goals: 1, targets: 1 } });
     await screen.findByRole('heading', { name: 'Your setup is saved' });
@@ -412,49 +419,48 @@ describe('when a turn does not come', () => {
 });
 
 describe('the quick path', () => {
-  const sections = (['goals', 'targets', 'planning', 'talk'] as const).map((chunk, i) => ({
-    chunk,
-    title: ['Your goals', "What you'll count", 'Your days and weeks', 'How Momentum talks to you'][i],
-    lines: [`A line for ${chunk}.`],
-  }));
+  const sections: RecapSection[] = [
+    { id: 'goal:g1', title: 'Get stronger', lines: [{ text: 'Get stronger starts Friday, Oct 30 and keeps going.', stepId: 'goal:g1' }], subjects: ['goal:g1'], names: { 'goal:g1': 'Get stronger' } },
+    { id: 'days', title: 'Your days', lines: [{ text: 'You check in at 9:00 PM.', stepId: 'days' }], subjects: ['days'], names: { days: 'Your days' } },
+  ];
   const quick = (over: Partial<Extract<SetupTurnView, { kind: 'quick_path' }>> = {}): { ok: true; data: SetupTurnView } => ({
     ok: true,
-    data: { kind: 'quick_path', reason: 'over_turns', message: 'This setup has used its share of Claude\'s time.', sections, missing: [], canSave: true, ...over },
+    data: { kind: 'quick_path', reason: 'over_turns', message: 'This setup has used its share of Claude\'s time.', sections, steps: [], items: [], stuck: [], missing: [], canSave: true, ...over },
   });
 
-  async function toQuickPath(view: ReturnType<typeof quick>) {
+  async function toQuickPath(view: ReturnType<typeof quick>, heading: string) {
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockResolvedValueOnce(view);
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     answerWith('Run more');
-    const missing = view.data.kind === 'quick_path' ? view.data.missing.length > 0 : false;
-    await screen.findByRole('heading', { name: missing ? "Setup can't be saved yet" : 'Your setup is ready to save' });
+    await screen.findByRole('heading', { name: heading });
   }
 
-  it('shows the message, every part collected, and saves only on a tap, as the approval of what is shown', async () => {
-    await toQuickPath(quick());
-    expect(screen.getByText('This setup has used its share of Claude\'s time.')).toBeTruthy();
+  it('shows every part collected, no reason line once nothing is left to ask, and saves only on a tap, as the approval of what is shown', async () => {
+    await toQuickPath(quick(), QUICK_PATH_WORDS.readyTop);
     for (const s of sections) {
-      expect(screen.getByRole('heading', { name: s.title })).toBeTruthy();
-      expect(screen.getByText(s.lines[0])).toBeTruthy();
+      expect(screen.getByText(s.title)).toBeTruthy();
+      // A goal's first line starts at what it says of the goal: its name is the heading above it.
+      expect(screen.getByText(s.lines[0].text.replace(/^Get stronger s/, 'S'))).toBeTruthy();
     }
+    expect(screen.queryByText(QUICK_PATH_WORDS.reasonLimit)).toBeNull();
     expect(actions.save).not.toHaveBeenCalled();
     actions.save.mockResolvedValue({ ok: true, data: { goals: 1, targets: 1 } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save what I have' }));
+    fireEvent.click(screen.getByRole('button', { name: QUICK_PATH_WORDS.save }));
     await screen.findByRole('heading', { name: 'Your setup is saved' });
     expect(actions.save.mock.calls[0][1]).toBe(true);
   });
 
-  it('lists what is still missing, and will not save an incomplete setup', async () => {
-    await toQuickPath(quick({ canSave: false, missing: ['Your time zone.', 'When your day ends.'] }));
-    expect(screen.getByRole('heading', { name: 'Still needed before this can be saved' })).toBeTruthy();
-    expect(screen.getByText('Your time zone.')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Save what I have' }) as HTMLButtonElement).disabled).toBe(true);
+  it('says what only Claude could ask for, offers no Save, and Start again asks first and only the second tap clears', async () => {
+    await toQuickPath(quick({ canSave: false, stuck: ['At least one goal.'] }), QUICK_PATH_WORDS.stuckTop);
+    expect(screen.getByText('At least one goal.')).toBeTruthy();
+    expect(screen.getByText(QUICK_PATH_WORDS.reasonLimit)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: QUICK_PATH_WORDS.save })).toBeNull();
     // Start again clears everything, so it asks first (MOM-111, quick-path card); only the second tap clears.
-    fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
-    expect(screen.getByText('Start again? What you have said so far will be cleared.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: QUICK_PATH_WORDS.startAgain }));
+    expect(screen.getByText(QUICK_PATH_WORDS.confirmStartOver)).toBeTruthy();
     expect(window.sessionStorage.getItem(KEY)).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, start again' }));
+    fireEvent.click(screen.getByRole('button', { name: QUICK_PATH_WORDS.confirmYes }));
     await screen.findByRole('heading', { name: /set up your goals/i });
     expect(window.sessionStorage.getItem(KEY)).toBeNull();
   });

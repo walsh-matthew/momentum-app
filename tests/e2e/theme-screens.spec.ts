@@ -55,29 +55,28 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       await shot(page, 'review', width);
     });
 
-    test('the goal wizard, a goal on home, and the rebalance drawer', async ({ page }) => {
+    // MOM-145: the plain callout of a form that is missing something, on sign-in and on the review's one question.
+    test('the missing-field callouts: sign-in and the review', async ({ page }) => {
       test.setTimeout(240_000);
-      await signUpAndConfirm(page, `shots-wizard-${THEME}-${width}`);
+      await page.goto('/login');
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Enter your email address' })).toHaveText('Enter your email address to continue.');
+      await shot(page, 'signin-missing', width);
+
+      const reviewer = await signUpAndConfirm(page, `shots-missing-${THEME}-${width}`);
+      await seedReview(reviewer, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, week: 'none', reviewDepth: 'full' });
+      await page.goto('/review');
+      await page.getByRole('button', { name: 'Finish review' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Choose one first.' })).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      await shot(page, 'review-missing', width);
+    });
+
+    // The goal wizard and the rebalance drawer are not reachable from home any more (MOM-115), so there is no shot of either.
+    test('home for a brand-new account', async ({ page }) => {
+      await signUpAndConfirm(page, `shots-home-${THEME}-${width}`);
       await page.waitForLoadState('networkidle');
       await shot(page, 'home-empty', width);
-      await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'New Goal Wizard' }).click();
-      const wizard = page.getByRole('dialog', { name: 'New goal wizard' });
-      await expect(wizard).toBeVisible();
-      await shot(page, 'wizard', width, false);
-      await wizard.getByRole('button', { name: 'Get certified' }).click();
-      for (let i = 0; i < 3; i++) await wizard.getByRole('button', { name: 'Next' }).click();
-      await wizard.getByRole('button', { name: 'Use the starter plan instead' }).click();
-      await wizard.getByRole('button', { name: 'Create goal' }).click();
-      await expect(wizard.getByRole('heading', { name: 'Goal created' })).toBeVisible();
-      await wizard.getByRole('button', { name: 'Done' }).click();
-      await expect(wizard).toBeHidden();
-      await page.waitForLoadState('networkidle');
-      await shot(page, 'home-goal', width);
-      await page.getByRole('group', { name: 'Quick goal actions' }).getByRole('button', { name: 'Adjust Weekly Pace' }).click();
-      await expect(page.getByRole('dialog', { name: 'Rebalance your plan' })).toBeVisible();
-      // The drawer slides in over 200ms; the shot is taken once it has stopped.
-      await page.waitForTimeout(500);
-      await shot(page, 'drawer', width, false);
     });
   });
 }

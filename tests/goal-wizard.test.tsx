@@ -74,12 +74,22 @@ async function goToReview() {
 }
 
 describe('the steps', () => {
-  it('starts on step 1 with Next off until a goal type is chosen', async () => {
+  it('starts on step 1 with Next solid; tapping it with nothing chosen says what is missing, focuses it and goes nowhere (MOM-145)', async () => {
     openWizard();
     expect(wizard().getByRole('heading', { name: 'New goal' })).toBeTruthy();
     expect(wizard().getByText('What kind of goal is this?')).toBeTruthy();
-    expect((wizard().getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((wizard().getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(false);
     expect(wizard().getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    await click('Next');
+    expect(wizard().getByRole('alert').textContent).toBe('Choose a kind of goal to continue.');
+    expect(document.activeElement?.getAttribute('data-gap')).toBe('goal-type');
+    expect(wizard().getByText('What kind of goal is this?')).toBeTruthy();
+    // With a type chosen and the title cleared, the title is what is missing.
+    await click('Get certified');
+    fireEvent.change(wizard().getByLabelText('Title'), { target: { value: '  ' } });
+    await click('Next');
+    expect(wizard().getByRole('alert').textContent).toBe('Enter a title for your goal to continue.');
+    expect(document.activeElement).toBe(wizard().getByLabelText('Title'));
   });
 
   it('choosing a goal type fills the title and turns Next on', async () => {
@@ -121,10 +131,25 @@ describe('the steps', () => {
   it('on review, Create is off until there is a plan, and nothing has been asked or saved', async () => {
     openWizard();
     await goToReview();
-    expect((wizard().getByRole('button', { name: 'Create goal' }) as HTMLButtonElement).disabled).toBe(true);
+    // Solid and tappable (MOM-145); with no plan a tap names what is missing, focuses Generate and saves nothing.
+    expect((wizard().getByRole('button', { name: 'Create goal' }) as HTMLButtonElement).disabled).toBe(false);
+    await click('Create goal');
+    expect(wizard().getByRole('alert').textContent).toBe('Make a week 1 plan first: generate one, or use the starter plan.');
+    expect(document.activeElement).toBe(wizard().getByRole('button', { name: 'Generate week 1 plan with Claude' }));
     expect(wizard().getByRole('button', { name: 'Generate week 1 plan with Claude' })).toBeTruthy();
     expect(wizard().getByText(/Claude sees only what you entered in this wizard/)).toBeTruthy();
     expect(actions.generate).not.toHaveBeenCalled();
+    expect(actions.create).not.toHaveBeenCalled();
+  });
+
+  it('the missing-plan callout goes once the person makes a plan, so it never says "make a plan" beside one (MOM-145)', async () => {
+    openWizard();
+    await goToReview();
+    await click('Create goal');
+    expect(wizard().getByRole('alert').textContent).toBe('Make a week 1 plan first: generate one, or use the starter plan.');
+    await click('Use the starter plan instead');
+    expect(wizard().queryByText('Make a week 1 plan first: generate one, or use the starter plan.')).toBeNull();
+    expect(wizard().queryByRole('alert')).toBeNull();
     expect(actions.create).not.toHaveBeenCalled();
   });
 
@@ -180,10 +205,10 @@ describe('Generate', () => {
     const alert = await wizard().findByRole('alert');
     expect(alert.textContent).toBe('Claude could not be reached. Nothing was saved or substituted.');
     expect(await wizard().findByRole('button', { name: 'Try again' })).toBeTruthy();
-    // No automatic fallback: no plan on screen, Create still off, and the starter plan is only offered.
+    // No automatic fallback: no plan on screen, Create saves nothing, and the starter plan is only offered.
     expect(wizard().queryByText(/Written by Claude/)).toBeNull();
     expect(wizard().queryByText(/Starter plan/)).toBeNull();
-    expect((wizard().getByRole('button', { name: 'Create goal' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((wizard().getByRole('button', { name: 'Create goal' }) as HTMLButtonElement).disabled).toBe(false);
     expect(wizard().getByRole('button', { name: 'Use the starter plan instead' })).toBeTruthy();
     expect(actions.create).not.toHaveBeenCalled();
   });
@@ -228,7 +253,7 @@ describe('Generate', () => {
     await click('Next');
 
     expect(wizard().queryByText(/Written by Claude/)).toBeNull();
-    expect((wizard().getByRole('button', { name: 'Create goal' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((wizard().getByRole('button', { name: 'Create goal' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

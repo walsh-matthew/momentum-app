@@ -1,39 +1,31 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useState } from 'react';
-import { NavSidebar } from './NavSidebar';
-import { MainFeed } from './MainFeed';
 import { ConnectedStackPanel } from './ConnectedStackPanel';
-import { GoalBuilderBanner } from './GoalBuilderBanner';
-import { GoalCards } from './GoalCards';
+import { MainFeed, showsOldFeed } from './MainFeed';
 import { MobileHeader } from './MobileHeader';
-import { RebalanceNudge } from './RebalanceNudge';
-import { GoalBuilderWizard } from '@/components/goals/GoalBuilderWizard';
+import { WorkspaceSidebar } from './WorkspaceSidebar';
 import { HomeScoreboardSection } from '@/components/home/HomeScoreboardSection';
 import { ReviewNotice } from '@/components/home/ReviewNotice';
 import { SetupLinkCard } from '@/components/home/SetupLinkCard';
-import { RebalanceDrawer } from '@/components/rebalance/RebalanceDrawer';
-import { CHANNEL_PARAM, withChannelParam } from '@/lib/utils/channelParam';
+import { CHANNEL_PARAM } from '@/lib/utils/channelParam';
 import { resolveChannel } from '@/lib/utils/channelViews';
-import { setupIsOffered, setupIsSaved } from '@/lib/utils/setupOffer';
+import { setupIsOffered } from '@/lib/utils/setupOffer';
 import { ALL_CHANNELS, type ChannelViews } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { HomeScoreboard } from '@/types/home';
 import type { HomePlanView } from '@/types/plan';
-import type { GoalProgress } from '@/types/progress';
 import type { TaskMoveChains } from '@/types/rebalance';
 import type { ReviewPrompt } from '@/types/review';
 
 interface AppShellProps {
   // One view (feed, velocity and rebalance proposal) per active goal channel plus all channels, built on the
-  // server from the user's own data (see lib/utils/channelViews.ts). The sidebar only chooses between them.
+  // server from the user's own data (see lib/utils/channelViews.ts). Home shows only the feed of the old model's
+  // tasks, and only when there are some (MOM-115, trial subset).
   views: ChannelViews;
   connectedApps: ConnectedAppPublic[];
-  // Each task's moves, from one history query on the page. Read by the focus card and the drawer.
+  // Each task's moves, from one history query on the page. Read by the focus card.
   moveChains: TaskMoveChains;
-  // Each active goal's tasks done and total, from the page's one snapshot (summarizeActiveGoalProgress).
-  progress?: GoalProgress[];
   // The signed-in user's email, for the avatar's initials; null when there is no session.
   userEmail?: string | null;
   // The goal model's week hero and goal scoreboards (MOM-112), shown above the feed. undefined shows nothing (signed
@@ -46,113 +38,58 @@ interface AppShellProps {
   reviewPrompt?: ReviewPrompt;
 }
 
-// The home page's layout. Below 1200px it is one scrolling column (sticky header, feed, goal cards, and the nudge
-// as a bottom sheet); from 1200px it is three columns (sidebar, feed, connected stack and nudge). Both are the
-// same elements, arranged by CSS (app/globals.css), so there is no view state to keep in step with the address.
-// It owns only whether the rebalance drawer and the goal wizard are open. The selected goal channel is not
-// state here: it is the ?channel=<goal id> in the address bar (MOM-88), read with useSearchParams. The page is
-// rendered per request, so that hook has the same value on the server and in the browser's first render: a
-// reload or a shared link lands on the right channel with no flash and no hydration mismatch. The server
-// never uses the parameter to load or filter anything; it only chooses among the user's own views below.
-export function AppShell({ views, connectedApps, moveChains, progress = [], userEmail = null, home, plan, reviewPrompt }: AppShellProps) {
-  const [rebalanceOpen, setRebalanceOpen] = useState(false);
-  // The one goal wizard, opened from the sidebar, the banner and the empty states' call to action.
-  const [wizardOpen, setWizardOpen] = useState(false);
-
+// The home page's layout. Below 1200px it is one scrolling column (sticky header, then the page); from 1200px it is three columns
+// (sidebar, page, connected stack), arranged by CSS (app/globals.css). The old model's controls are not on home any more (MOM-115,
+// trial subset): no goal wizard, no weekly pace, no rebalance, no goal channel list or goal cards. Their code stays until MOM-115 is
+// done. The channel in the address (?channel=<goal id>, MOM-88) still chooses which old-model view the feed shows, so an old link
+// keeps working; nothing on the page sets it. The server never uses it to load or filter anything.
+export function AppShell({ views, connectedApps, moveChains, userEmail = null, home, plan, reviewPrompt }: AppShellProps) {
   const searchParams = useSearchParams();
   // A missing, mistyped, paused or foreign id is not one of this user's channels, so it falls back to all channels.
   const channelId = resolveChannel(views, searchParams.get(CHANNEL_PARAM) ?? ALL_CHANNELS);
   const channel = views.byChannel[channelId];
   const channelTitle = views.channels.find((c) => c.id === channelId)?.title ?? null;
   const burnoutRisk = channel.velocity?.risk ?? null;
-  // The plan could not be read: the wizard and the rebalance drawer need data that is not there, so their buttons are disabled.
-  const loadFailed = channel.feedState === 'load_failed';
-  // The way back to setup shows while the first setup is not saved (MOM-143). The feed's own "No goals yet" then stays out of its
-  // way, and it never shows to a person whose setup is saved, whatever the old model holds (MOM-115 retires it).
+  // The way back to setup shows while the first setup is not saved (MOM-143).
   const setupOffered = setupIsOffered(home);
-  const hideNoGoals = setupOffered || setupIsSaved(home);
-
-  // The address that selects a channel, for the goal cards' links. Built from the render's own search params, so
-  // the server and the browser produce the same text.
-  const hrefFor = (id: string) => `/${withChannelParam(searchParams.toString(), id)}`;
-
-  // Puts the choice in the address bar with the browser's own history API, which Next.js syncs with
-  // useSearchParams, so nothing is fetched and the back button steps through the choices. Reads the live URL,
-  // not the render's, and does nothing when the address would not change (no duplicate history entries).
-  function selectChannel(id: string) {
-    const next = withChannelParam(window.location.search, id);
-    if (next !== window.location.search) window.history.pushState(null, '', `${window.location.pathname}${next}`);
-  }
+  const oldFeedShown = showsOldFeed(channel.feedState);
+  const sections = (
+    <>
+      {reviewPrompt !== undefined && <ReviewNotice prompt={reviewPrompt} />}
+      {setupOffered && <SetupLinkCard />}
+      {home !== undefined && <HomeScoreboardSection home={home} plan={plan} />}
+    </>
+  );
 
   return (
-    <>
-      <div className="desktop-shell">
-        <NavSidebar
-          channels={views.channels}
-          selected={channelId}
-          onSelect={selectChannel}
-          onAdjustPace={() => setRebalanceOpen(true)}
-          onNewGoal={() => setWizardOpen(true)}
-          progress={progress}
-          burnoutRisk={burnoutRisk}
-          actionsDisabled={loadFailed}
-          userEmail={userEmail}
-        />
-        <section className="desktop-workspace" aria-label="Daily workspace">
-          <div className="workspace-content">
-            <MobileHeader active="dashboard" userEmail={userEmail} burnoutRisk={burnoutRisk} />
-            <GoalBuilderBanner
-              onNewGoal={() => setWizardOpen(true)}
-              onAdjustPace={() => setRebalanceOpen(true)}
-              actionsDisabled={loadFailed}
-            />
-            {reviewPrompt !== undefined && <ReviewNotice prompt={reviewPrompt} />}
-            {setupOffered && <SetupLinkCard />}
-            {home !== undefined && <HomeScoreboardSection home={home} plan={plan} />}
-            <MainFeed
-              feedState={channel.feedState}
-              feed={channel.feed}
-              velocity={channel.velocity}
-              velocityHint={channel.velocityHint}
-              channelTitle={channelTitle}
-              moveChains={moveChains}
-              onNewGoal={() => setWizardOpen(true)}
-              hideNoGoals={hideNoGoals}
-            />
-            <GoalCards
-              channels={views.channels}
-              selected={channelId}
-              hrefFor={hrefFor}
-              onSelect={selectChannel}
-              progress={progress}
-            />
-          </div>
-        </section>
-        <div className="desktop-right">
-          <ConnectedStackPanel
-            connectedApps={connectedApps}
-            rebalance={channel.rebalance}
-            rebalanceHint={channel.rebalanceHint}
-            onOpenRebalance={() => setRebalanceOpen(true)}
-          />
-          <RebalanceNudge
-            channelId={channelId}
-            view={channel.rebalance}
-            hint={channel.rebalanceHint}
-            onReview={() => setRebalanceOpen(true)}
-          />
+    <div className="desktop-shell">
+      <WorkspaceSidebar ariaLabel="Workspace" active="dashboard" burnoutRisk={burnoutRisk} userEmail={userEmail} />
+      <section className="desktop-workspace" aria-label="Daily workspace">
+        <div className="workspace-content">
+          <MobileHeader active="dashboard" userEmail={userEmail} burnoutRisk={burnoutRisk} />
+          {oldFeedShown ? (
+            <>
+              {sections}
+              <MainFeed
+                feedState={channel.feedState}
+                feed={channel.feed}
+                velocity={channel.velocity}
+                channelTitle={channelTitle}
+                moveChains={moveChains}
+              />
+            </>
+          ) : (
+            // The old feed (which has its own main and heading) is not shown, so the page has its own, with a heading out of sight.
+            <main className="min-w-0">
+              <h1 className="sr-only">Momentum home</h1>
+              {sections}
+            </main>
+          )}
         </div>
+      </section>
+      <div className="desktop-right">
+        <ConnectedStackPanel connectedApps={connectedApps} />
       </div>
-      {/* Rendered here, outside the layout: a modal opened from inside a hidden part of it would be hidden too. */}
-      <GoalBuilderWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
-      <RebalanceDrawer
-        open={rebalanceOpen}
-        onClose={() => setRebalanceOpen(false)}
-        view={channel.rebalance}
-        channelId={channel.rebalanceChannelId}
-        hint={channel.rebalanceHint}
-        moveChains={moveChains}
-      />
-    </>
+    </div>
   );
 }

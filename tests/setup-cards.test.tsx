@@ -14,7 +14,8 @@ import { MACHINE_DATE } from '@/lib/dates/casual';
 import { emptyDraft } from '@/lib/setup/draft';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
 import { optionsLead } from '@/lib/setup/optionsLead';
-import { quickPathSections } from '@/lib/setup/quickPath';
+import { recapSections } from '@/lib/setup/quickRecap';
+import { quickProps } from './helpers/quickPath';
 import { MEANING_LINK, MEANING_TEXT, PICK_DATE, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import { SETUP_CHUNKS, type AssistantTurn, type TurnKind } from '@/types/setup';
 import { goal, item, target } from './helpers/setupScript';
@@ -54,6 +55,8 @@ describe('the question card, on every kind of asking turn (findings 1 to 3)', ()
     if (codeLead) expect(lead).toBeNull();
     const question = screen.getByRole('heading', { name: codeLead ?? 'Does this keep going with no end date?' });
     const box = screen.getByLabelText('Your answer');
+    // A main Send is not there until the box has words (MOM-145), so the order is read with words in it.
+    fireEvent.change(box, { target: { value: 'It keeps going' } });
     const send = screen.getByRole('button', { name: 'Send' });
     const help = screen.getByRole('button', { name: MEANING_LINK });
     const answers = document.querySelectorAll('[data-slot="answer-choice"]');
@@ -78,7 +81,7 @@ describe('the question card, on every kind of asking turn (findings 1 to 3)', ()
     expect(question.className).toContain('font-semibold');
   });
 
-  it('gives the box a visible border, a lighter fill and a focus ring, and dims Send only while the box is empty', () => {
+  it('gives the box a visible border, a lighter fill and a focus ring, and shows Send, solid, only once the box has words (MOM-145)', () => {
     render(<QuestionCard turn={turn()} busy={false} onAnswer={() => {}} today={TODAY} />);
     const box = screen.getByLabelText('Your answer');
     // The border is the control border at 30% (app/globals.css .ctl-30): the same in dark, and 3:1 in light (MOM-30).
@@ -87,10 +90,13 @@ describe('the question card, on every kind of asking turn (findings 1 to 3)', ()
     expect(box.className.split(/\s+/)).toContain('field-input');
     expect(box.className).not.toMatch(/bg-foreground|bg-accent|bg-primary/);
     expect(box.className).toMatch(/focus-visible:ring-2/);
-    const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     fireEvent.change(box, { target: { value: 'It keeps going' } });
+    const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
     expect(send.disabled).toBe(false);
+    expect(send.className).toContain('bg-primary');
+    fireEvent.change(box, { target: { value: '  ' } });
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
   });
 
   it('sends "What do you mean?" from the help link, and an answer\'s words from a tap', () => {
@@ -197,7 +203,7 @@ describe('no date reaches a setup screen as YYYY-MM-DD (finding 7)', () => {
     expect(final.container.textContent).not.toMatch(MACHINE_DATE);
     cleanup();
     const quick = render(
-      <QuickPathCard reason="over_turns" message="Done." sections={quickPathSections(m, { today: TODAY })} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
+      <QuickPathCard {...quickProps({ sections: recapSections(m, { today: TODAY }) })} />,
     );
     expect(quick.container.textContent).not.toMatch(MACHINE_DATE);
     expect(quick.container.textContent).toContain('Monday, Jun 14, 2027');

@@ -36,6 +36,7 @@ import { appsIn, sourceNote } from '@/lib/setup/sources';
 import { validateDraft } from '@/lib/setup/validate';
 import { AssistantTurnSchema, SetupDraftSchema, type AssistantTurn, type SetupDraft, type SetupSession, type Transcript } from '@/types/setup';
 import { goal, item, scriptedModel, target } from './helpers/setupScript';
+import { quickProps } from './helpers/quickPath';
 import { SETUP_CASES } from './setup-evals/cases';
 import { SMOKE_CASES, SMOKE_TODAY } from './setup-evals/smokeCases';
 
@@ -395,7 +396,7 @@ const QUESTION_TURNS: [string, AssistantTurn][] = [
   ['date confirmation', turn({ kind: 'proposal', topic: 'start_date', question: 'Start Monday, Nov 2?', options: ['Today, Thursday, Oct 29'] })],
 ];
 
-// A disabled main button still counts: Send waiting for words is the card's main button all the same.
+// A main Send is not on the card until the box has words (MOM-145), so the counts that need it type something first.
 const mainCount = (root: HTMLElement) => root.querySelectorAll('[data-tone="main"]').length;
 const submitCount = (root: HTMLElement) => root.querySelectorAll('button[type="submit"]').length;
 const secondLooksEnabled = (root: HTMLElement) =>
@@ -410,6 +411,7 @@ describe('every card: at most one main button, one submit, and second choices th
     const typeIt = screen.queryByRole('button', { name: TYPE_INSTEAD });
     if (typeIt) {
       fireEvent.click(typeIt);
+      fireEvent.change(container.querySelector('textarea')!, { target: { value: 'My own words' } });
       expect(mainCount(container), 'after "Type it instead"').toBeLessThanOrEqual(1);
       expect(submitCount(container)).toBe(1);
     }
@@ -420,6 +422,7 @@ describe('every card: at most one main button, one submit, and second choices th
     expect(mainCount(container)).toBe(1);
     expect(secondLooksEnabled(container)).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
+    fireEvent.change(container.querySelector('textarea')!, { target: { value: 'A change' } });
     expect(mainCount(container)).toBe(1);
     expect(submitCount(container)).toBe(1);
   });
@@ -428,7 +431,7 @@ describe('every card: at most one main button, one submit, and second choices th
     const final = render(<FinalCard lines={['One goal.']} saving={false} error={null} onSave={() => {}} onChange={() => {}} />);
     expect(mainCount(final.container)).toBe(1);
     cleanup();
-    const quick = render(<QuickPathCard reason="over_turns" message="Done." sections={[]} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />);
+    const quick = render(<QuickPathCard {...quickProps()} />);
     expect(mainCount(quick.container)).toBe(1);
     expect(secondLooksEnabled(quick.container)).toBe(true);
   });

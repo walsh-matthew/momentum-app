@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { chromeColor } from '@/lib/theme/theme';
 import { getStoredTheme } from '@/lib/theme/server';
 import './globals.css';
 
@@ -7,16 +8,16 @@ export const metadata: Metadata = {
   description: 'AI-powered Life Operating System',
 };
 
-// The app follows the device unless the person chose (MOM-30): the browser chrome takes the matching colour.
-export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f7f7f3' },
-    { media: '(prefers-color-scheme: dark)', color: '#111513' },
-  ],
-  width: 'device-width',
-  initialScale: 1,
-};
+// The app follows the device unless the person chose (MOM-30): the browser chrome takes the chosen theme's colour, or with no choice
+// the device's (MOM-145).
+export async function generateViewport(): Promise<Viewport> {
+  return {
+    colorScheme: 'light dark',
+    themeColor: chromeColor(await getStoredTheme()),
+    width: 'device-width',
+    initialScale: 1,
+  };
+}
 
 interface RootLayoutProps {
   children: React.ReactNode;

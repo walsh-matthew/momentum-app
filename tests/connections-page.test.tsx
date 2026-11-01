@@ -118,7 +118,8 @@ describe('status can be read', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Hevy' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Google Calendar' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Connect Hevy' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Connect Hevy' })).toBeNull(); // one field: no button until there is a key (MOM-145)
+    expect(screen.getByLabelText('Hevy API key')).toBeTruthy();
     expect(screen.getAllByText('Not connected')).toHaveLength(2);
   });
 

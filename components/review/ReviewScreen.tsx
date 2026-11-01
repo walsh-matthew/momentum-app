@@ -62,7 +62,7 @@ export function ReviewScreen({ facts }: ReviewScreenProps) {
   switch (facts.state) {
     case 'no_goals':
       return (
-        <Message to={{ href: '/', label: 'Back to home' }}>
+        <Message>
           Your weekly review starts once you have a goal. Nothing to look back on yet.
         </Message>
       );
@@ -85,7 +85,7 @@ export function ReviewScreen({ facts }: ReviewScreenProps) {
     case 'not_due':
       return (
         <>
-          <Message to={{ href: '/', label: 'Back to home' }}>
+          <Message>
             Your weekly review comes on {fullWeekdayName(facts.planningWeekday)}s, the day you chose to plan your week.
           </Message>
           {facts.last && (

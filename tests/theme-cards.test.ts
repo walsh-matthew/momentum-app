@@ -223,7 +223,7 @@ describe('the title of a card', () => {
     { file: 'components/rebalance/RebalanceDrawer.tsx', match: /text-lg font-semibold|text-sm font-medium/, why: 'titles and groups in the drawer sheet' },
     { file: 'components/rebalance/RebalanceSideCard.tsx', match: /eyebrow/, why: 'an eyebrow label, not a title' },
     { file: 'components/review/ReviewScreen.tsx', match: /Your last review/, why: 'a heading over the recap cards' },
-    { file: 'components/setup/QuickPathCard.tsx', match: /CARD_TEXT\.note|Still needed/, why: "the quick path's muted section labels (setup's one bold line is its lead)" },
+    { file: 'components/setup/QuickPathCard.tsx', match: /CARD_TEXT\.note|CARD_TEXT\.body/, why: "the quick path's part labels and the name of the step in view, in regular weight (setup's one bold line is its lead)" },
     { file: 'components/tasks/RecentlyDoneList.tsx', match: /recently-done-heading/, why: 'a heading over the task cards' },
     { file: 'components/tasks/UpNextList.tsx', match: /up-next-heading/, why: 'a heading over the task cards' },
   ];
@@ -273,7 +273,7 @@ describe.each(['dark', 'light'] as const)('%s theme: a card stands out from the 
     return c.alpha < 1 ? over(c, colour('--background')) : c.rgb;
   };
   // Dark: its own fill against a dark page. Light: white against a tinted page, helped by the border and the shadow.
-  const MIN_FILL = theme === 'dark' ? 1.3 : 1.15;
+  const MIN_FILL = theme === 'dark' ? 1.05 : 1.15; // MOM-145: a darker dark card; its border (below) carries it
 
   it(`the fill reads at least ${MIN_FILL}:1 against the page, on the phone page and the desktop page behind the three columns`, () => {
     expect(contrast(colour('--card-fill'), colour('--background'))).toBeGreaterThanOrEqual(MIN_FILL);

@@ -16,7 +16,8 @@ export const LINE_SOURCE = {
 
 export const FINISH_BUTTON = 'Finish review';
 export const FINISHING = 'Saving…';
-export const FINISH_HINT = 'Choose one of the three above to finish.';
+// Shown only when "Finish review" is tapped with nothing chosen (MOM-145): the button is always there and solid, and this says what is missing.
+export const FINISH_NEEDS_CHOICE = 'Choose one first.';
 
 // After a finished review (docs/DOMAIN_MODEL.md §3, §4.1 "Review and planning"): planning follows in the same sitting by
 // default, or is left for the person to open when they have chosen to plan separately. A link only; the plan is its own page.

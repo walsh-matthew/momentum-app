@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { PageBackRow } from '@/components/layout/PageBackRow';
 import { PlanScreen } from '@/components/plan/PlanScreen';
-import { BACK_HOME, LOAD_FAILED_PLAN, PLAN_HEADING, needsDaysText } from '@/components/plan/wording';
+import { LOAD_FAILED_PLAN, PLAN_HEADING, needsDaysText } from '@/components/plan/wording';
 import { getCurrentUser } from '@/lib/services/auth';
 import { getWeekPlan } from '@/lib/services/weekPlan';
 
@@ -25,24 +25,24 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   const plan = await getWeekPlan(week).catch(() => null);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-2xl px-4 py-6">
-      <Link href="/" className="text-sm text-muted underline-offset-4 hover:underline">
-        {BACK_HOME}
-      </Link>
-      <h1 className="mt-3 text-[25px] font-semibold leading-tight tracking-[-0.055em]">{PLAN_HEADING}</h1>
-      <div className="mt-5">
-        {plan === null || !plan.ok ? (
-          <p role="alert" className="text-sm text-danger">
-            {plan === null ? LOAD_FAILED_PLAN : plan.error}
-          </p>
-        ) : plan.data.state === 'needs_day_anchors' ? (
-          <p role="status" className="home-notice">
-            {needsDaysText(plan.data)}
-          </p>
-        ) : (
-          <PlanScreen plan={plan.data} />
-        )}
-      </div>
-    </main>
+    <div className="mx-auto min-h-dvh w-full max-w-2xl px-4 py-6">
+      <PageBackRow />
+      <main>
+        <h1 className="mt-3 text-[25px] font-semibold leading-tight tracking-[-0.055em]">{PLAN_HEADING}</h1>
+        <div className="mt-5">
+          {plan === null || !plan.ok ? (
+            <p role="alert" className="text-sm text-danger">
+              {plan === null ? LOAD_FAILED_PLAN : plan.error}
+            </p>
+          ) : plan.data.state === 'needs_day_anchors' ? (
+            <p role="status" className="home-notice">
+              {needsDaysText(plan.data)}
+            </p>
+          ) : (
+            <PlanScreen plan={plan.data} />
+          )}
+        </div>
+      </main>
+    </div>
   );
 }

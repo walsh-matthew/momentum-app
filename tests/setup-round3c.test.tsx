@@ -24,7 +24,8 @@ import { emptyDraft } from '@/lib/setup/draft';
 import { RETRY_FEEDBACK } from '@/lib/setup/feedback';
 import { optionsLead } from '@/lib/setup/optionsLead';
 import { countedWords, renderFinal, renderPlayback } from '@/lib/setup/playback';
-import { quickPathSections } from '@/lib/setup/quickPath';
+import { recapSections } from '@/lib/setup/quickRecap';
+import { item, quickProps, step } from './helpers/quickPath';
 import { PICK_ONE, RETRY_CAUSES } from '@/lib/setup/session';
 import type { AssistantTurn, SetupModel, TargetDraft, Transcript, TurnKind } from '@/types/setup';
 import { READING_CASE_ID, SETUP_CASES } from './setup-evals/cases';
@@ -82,7 +83,7 @@ const CARDS: [string, () => ReactElement][] = [
   ['the final card with a save error', () => <FinalCard lines={renderFinal(model())} saving={false} error="Nothing was saved yet." onSave={() => {}} onChange={() => {}} />],
   [
     'the quick path',
-    () => <QuickPathCard reason="over_turns" message="Setup has stopped asking." sections={quickPathSections(model())} missing={['A time zone']} canSave={false} saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
+    () => <QuickPathCard {...quickProps({ sections: recapSections(model(), {}, ['days']), steps: [step('days', 'Your days', [item('person.timeZone', 'Which time zone are you in?', 'timeZone')])] })} />,
   ],
   ...RETRY_CAUSES.map((cause): [string, () => ReactElement] => [
     `the ${cause} error card under its question`,
