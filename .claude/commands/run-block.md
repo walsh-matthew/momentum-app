@@ -12,6 +12,7 @@ Rules for every step:
 - CLAUDE.md wins over the block's prompt. `main` is protected: never merge into it, never push it, and never push any branch without my explicit OK.
 - Stage files by name. Never stage `docs/FAILURE_LOG.md`, `docs/RAID_LOG.md`, `AGENTS.md`, `supabase/.branches/` or `supabase/snippets/` (never `git add -A` or `git add .`), unless the day-end log review approved those entries.
 - Keep every stop the block's prompt has (design OKs, migrations, production steps) and wait at it.
+- Every time you stop to wait for me (a design OK, a migration, a push, any question), first send a mobile push notification with a one-line summary of what you need.
 - Blocks never edit `BACKLOG.md`. Put backlog notes in the Jira comment and the close-out; day-end step D writes `BACKLOG.md` once.
 
 0. **Repository check.** Run `npm run project:check`. If it exits non-zero, show its one line and stop: these commands belong to `walsh-matthew/momentum-app`, and nothing below runs in another repository.
