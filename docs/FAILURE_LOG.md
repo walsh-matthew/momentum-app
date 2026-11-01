@@ -563,6 +563,34 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner (a shell error).
 - **Led to:** A rule: say where a paste goes as plain text, and start every session's pastes with the folder change as its own paste.
 
+### F-082 · 2026-11-01 · build tool
+- **Asked:** Build two new screens and run the browser specs of every page the block changes.
+- **What went wrong:** The block added two pages and ran only the specs of the pages it changed, not the 390px header sweep, whose guard fails for any page missing from its list. The guard failed at the day-end.
+- **Why:** The rule "run the specs of every page you change" reads as the changed pages' own specs; a spec that sweeps every page is not one of them, so a new page never brings it in.
+- **Caught by:** Day-end step A, the browser specs on the stacked branches.
+- **Led to:** A fix in this session (the two pages added to the sweep, MOM-138) and a rule: a block that adds a page runs the 390px header sweep too (backlog item, MOM-124).
+
+### F-083 · 2026-11-01 · build tool
+- **Asked:** Design the conversation for a person adding a goal after setup.
+- **What went wrong:** The first design marked one setup part as already approved for a returning person, which an existing check (no change to a part after it is approved) would have rejected on every turn.
+- **Why:** The design was written from the feature's intent before reading the checks the conversation already runs.
+- **Caught by:** The build agent, reading the checks before building.
+- **Led to:** A fix in this session (the design changed before code, MOM-132).
+
+### F-084 · 2026-11-01 · build tool
+- **Asked:** Show the playback for a goal being added after setup.
+- **What went wrong:** The playback kept its first-setup title, which describes the person's days and weeks, when an addition plays back only how the new goal is tracked.
+- **Why:** The shared card was reused without checking each of its words against the new case.
+- **Caught by:** The new browser spec.
+- **Led to:** A fix in this session (a title for an addition, MOM-132).
+
+### F-085 · 2026-11-01 · build tool
+- **Asked:** Check a live run's saved rows against what the person approved.
+- **What went wrong:** The live harness reported fewer saved sources than approved. The save was right: the harness read a column the table does not have, so its query returned nothing.
+- **Why:** The read-back query was written from memory of the schema, not the migration.
+- **Caught by:** The live run's own report, then checking the save directly.
+- **Led to:** A fix in this session (the harness query, MOM-132).
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
