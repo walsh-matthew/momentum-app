@@ -11,7 +11,7 @@
 //   reload opens straight on the question, and while a reply is slow, or after replies are thrown away, the question stays
 //   on screen (finding 10);
 // - nothing is saved before Save: the log page still has no targets at the final confirmation;
-// - after Save the goal's targets are there to log against, the tab's copy is gone, and a second setup is refused.
+// - after Save the goal's targets are there to log against, the tab's copy is gone, and a second first setup is not offered (adding to it is, tests/e2e/setup-add.spec.ts).
 // The scripted model is written for a fixed order, so the spec answers exactly the scripted lines. The spacing limit
 // (a second between one person's calls) can answer "wait"; the spec taps Try again, as a person would.
 //
@@ -274,9 +274,12 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(page).toHaveURL(/\/log$/);
       for (const title of targetTitles) await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
 
-      // First setup only.
+      // A second first setup is not offered: a person who has set up is asked what they would like to add (MOM-132 part 2).
       await page.goto('/setup');
-      await expect(page.getByRole('heading', { name: 'Setup is already done' })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: 'Add to your goals' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'What would you like to add?' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Setup is already done' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Start' })).toHaveCount(0);
       await page.waitForLoadState('networkidle');
     });
 

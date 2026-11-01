@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 //
-// The way back to guided setup on home (MOM-143). Setup is first-setup-only (migration 015), so home offers it only to a person
-// whose first setup is not saved, in one calm card with one link, and never to a person whose setup is saved. The old "No goals yet"
+// The way back to guided setup on home (MOM-143). The first setup is offered only to a person whose first setup is not saved, in one
+// calm card with one link, and never to a person whose setup is saved; a person whose setup is saved is offered the way to add to it
+// instead, one link (MOM-132 part 2). The old "No goals yet"
 // card no longer shows on home at all (MOM-115, trial subset): one message, one link.
 // What decides it is the scoreboard the page already read (no second read), and a scoreboard that could not be read offers nothing.
 
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AddGoalsLink } from '@/components/home/AddGoalsLink';
 import { SetupLinkCard } from '@/components/home/SetupLinkCard';
 import { AppShell } from '@/components/layout/AppShell';
 import { EMPTY_CHANNEL_VIEWS } from '@/types/channelViews';
@@ -83,11 +85,20 @@ describe('home with and without a saved setup', () => {
   const renderHome = (home: HomeScoreboard | null | undefined) =>
     render(<AppShell views={EMPTY_CHANNEL_VIEWS} connectedApps={[]} moveChains={{}} home={home} />);
   const setupLinks = () => screen.queryAllByRole('link', { name: 'Go to setup' });
+  // Once the first setup is saved, home offers the way to add to it (MOM-132 part 2): one link, to /setup, in the owner's words.
+  const expectAddLink = () => {
+    const links = screen.getAllByRole('link', { name: 'Add to your goals' });
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute('href')).toBe('/setup');
+    expect(document.querySelectorAll('a[href="/setup"]')).toHaveLength(1);
+  };
 
   it('no setup saved: the setup card shows with its one link, and the old "No goals yet" card is gone', () => {
     renderHome({ state: 'no_goals', setupSaved: false });
     expect(screen.getByRole('region', SETUP_CARD)).toBeTruthy();
     expect(setupLinks()).toHaveLength(1);
+    // The way to add is for a person who has something saved to add to.
+    expect(screen.queryByRole('link', { name: 'Add to your goals' })).toBeNull();
     // One message, one place: nothing else on the page says there are no goals or offers to start the first one.
     expect(screen.queryByRole('heading', NO_GOALS_CARD)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Set up your first goal' })).toBeNull();
@@ -105,21 +116,21 @@ describe('home with and without a saved setup', () => {
     renderHome(READY);
     expect(screen.queryByRole('region', SETUP_CARD)).toBeNull();
     expect(setupLinks()).toHaveLength(0);
-    expect(document.querySelector('a[href="/setup"]')).toBeNull();
+    expectAddLink();
     noOldGoalsCard();
   });
 
   it('a setup saved but still missing the time zone or day end: the same, no card and no "No goals yet"', () => {
     renderHome({ state: 'needs_day_anchors', anchor: 'time_zone', reason: 'not_set' });
     expect(screen.queryByRole('region', SETUP_CARD)).toBeNull();
-    expect(document.querySelector('a[href="/setup"]')).toBeNull();
+    expectAddLink();
     noOldGoalsCard();
   });
 
   it('a setup saved whose goals are all parked: no setup card and no "No goals yet"', () => {
     renderHome({ state: 'no_goals', setupSaved: true });
     expect(screen.queryByRole('region', SETUP_CARD)).toBeNull();
-    expect(document.querySelector('a[href="/setup"]')).toBeNull();
+    expectAddLink();
     noOldGoalsCard();
   });
 
@@ -134,6 +145,19 @@ describe('home with and without a saved setup', () => {
   it('signed out (no scoreboard passed): no setup card, and no old "No goals yet" card either', () => {
     renderHome(undefined);
     expect(screen.queryByRole('region', SETUP_CARD)).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Add to your goals' })).toBeNull();
     noOldGoalsCard();
+  });
+});
+
+describe('the way to add to a saved setup', () => {
+  it('is one quiet link in the owner’s words, to /setup, with no card and no heading of its own', () => {
+    render(<AddGoalsLink />);
+    const nav = screen.getByRole('navigation', { name: 'Add to your goals' });
+    const links = within(nav).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0].textContent).toBe('Add to your goals');
+    expect(links[0].getAttribute('href')).toBe('/setup');
+    expect(within(nav).queryAllByRole('heading')).toHaveLength(0);
   });
 });

@@ -348,20 +348,48 @@ function fakeClient() {
     auth: {
       getUser: async () => (fakeSave.user ? { data: { user: { id: fakeSave.user.id } }, error: null } : { data: { user: null }, error: { message: 'no session' } }),
     },
-    // Only what the setup service reads: whether the person has a goal.
+    // Only what the setup service reads: the person's goals (whether there is one, which are active) and their settings row. A chain of
+    // select, eq, order, limit and maybeSingle, as the real client's, over the in-memory tables; the columns asked for are ignored and
+    // the whole row is returned.
     from: (table: string) => {
-      if (table !== 'goals') throw new Error(`the fake does not model "${table}"`);
-      let userId: string | null = null;
+      if (table !== 'goals' && table !== 'person_settings') throw new Error(`the fake does not model "${table}"`);
+      const filters: [string, unknown][] = [];
+      let order: { column: string; ascending: boolean } | null = null;
+      let max: number | null = null;
+      const answer = (): { data: Row[] | null; error: { code: string } | null } => {
+        if (table === 'goals' && fakeSave.goalsReadError) return { data: null, error: { code: 'XX000' } };
+        let rows = fakeSave.tables[table].filter((r) => filters.every(([column, value]) => r[column] === value));
+        if (order) {
+          const { column, ascending } = order;
+          // Nulls last, whichever way it runs.
+          rows = [...rows].sort((a, b) => {
+            const x = a[column] as number | string | null | undefined;
+            const y = b[column] as number | string | null | undefined;
+            if (x == null || y == null) return x == null && y == null ? 0 : x == null ? 1 : -1;
+            return (x < y ? -1 : x > y ? 1 : 0) * (ascending ? 1 : -1);
+          });
+        }
+        return { data: max === null ? rows : rows.slice(0, max), error: null };
+      };
       const query = {
         select: () => query,
-        eq: (_column: string, value: string) => {
-          userId = value;
+        eq: (column: string, value: unknown) => {
+          filters.push([column, value]);
           return query;
         },
-        limit: async () =>
-          fakeSave.goalsReadError
-            ? { data: null, error: { code: 'XX000' } }
-            : { data: fakeSave.tables.goals.filter((g) => g.user_id === userId).slice(0, 1), error: null },
+        order: (column: string, options?: { ascending?: boolean }) => {
+          order = { column, ascending: options?.ascending !== false };
+          return query;
+        },
+        limit: async (n: number) => {
+          max = n;
+          return answer();
+        },
+        maybeSingle: async () => {
+          const { data, error } = answer();
+          return error ? { data: null, error } : { data: data?.[0] ?? null, error: null };
+        },
+        then: (resolve: (value: ReturnType<typeof answer>) => unknown) => Promise.resolve(answer()).then(resolve),
       };
       return query;
     },

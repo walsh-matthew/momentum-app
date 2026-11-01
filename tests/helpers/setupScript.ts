@@ -10,6 +10,7 @@ import type {
   GoalDraft,
   PlainWords,
   SetupChunk,
+  SetupDraft,
   SetupModel,
   SetupTopic,
   TargetDraft,
@@ -101,8 +102,13 @@ export interface Step {
 export class Script {
   readonly turns: AssistantTurn[] = [];
   readonly person: PersonLine[] = [];
-  private draft = emptyDraft();
+  private draft: SetupDraft;
   private pending: SetupChunk | null = null;
+
+  // `start` is the draft the conversation begins from: the blank one for a first setup, or a returning person's (MOM-132 part 2).
+  constructor(start: SetupDraft = emptyDraft()) {
+    this.draft = structuredClone(start);
+  }
 
   // The index the next assistant turn will have, to point at the reply to a turn about to be added.
   get next(): number {

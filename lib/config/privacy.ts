@@ -245,8 +245,14 @@ export const PROMPTS = {
       { field: 'retryFeedback', words: 'when its last try at a reply was not usable, which setup rule it broke and where' },
       { field: 'dateHint', words: 'the date a day or a length of time you named (like "Monday" or "two months") works out to' },
       { field: 'sourceNote', words: 'which app you named for tracking (like Hevy), and whether Momentum can read it yet' },
+      // MOM-132 part 2: adding a goal or a target after your first setup. A fixed note naming the topics that are already saved, never
+      // what they hold, and, when you add a target, the title of the goal you picked.
+      {
+        field: 'returningNote',
+        words: "when you add to a setup you have finished: a fixed note saying your time zone, day end, days and settings are already saved (never what they are), and, if you add a target, the title of the goal you picked",
+      },
     ],
-    leavesOut: 'other saved goals or tasks, their ids, or your email',
+    leavesOut: 'the time zone, day end, week start, days and settings you saved in an earlier setup, your other goals and tasks, their ids, or your email',
     note: null,
   },
   // The weekly review's one-line look back (MOM-113 block 3.3): field by field, against what lib/ai/review.ts's

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { quickPathReason, QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
 import type { FillInItem, QuickPathReason, QuickPathState, QuickStep, RecapSection } from '@/types/setupScreen';
+import { ADD_QUICK_WORDS } from '@/lib/setup/addWords';
 import { CARD_TEXT, CardLead } from './cardText';
 import { NeedsAnswer } from './NeedsAnswer';
 import { PlaybackLines } from './PlaybackLines';
@@ -34,6 +35,8 @@ interface QuickPathCardProps {
   onFill: (item: FillInItem, value: string, how: FillHow) => Promise<QuickPathState | null>;
   onSave: () => void;
   onStartOver: () => void;
+  // True when the card finishes an addition to a setup that is saved (MOM-132 part 2): the button and the headings say what is added.
+  adding?: boolean;
 }
 
 const isOpen = (step: QuickStep): boolean => step.items.some((item) => !item.answered);
@@ -50,7 +53,7 @@ const LINK = 'text-sm text-muted underline underline-offset-4 hover:text-foregro
 // step shows at a time ("1 of 3", with Back), with the step before it as one small line above; a wide screen shows every step in
 // one list. The last step's button is "Save my setup"; there is never a dimmed button, because a button that cannot be used is
 // not shown. Start again is a small link that asks first. The reason shows once, only while questions are left.
-export function QuickPathCard({ reason, sections, steps, stuck, saving, error, fillError, filling, deviceZone, today, onFill, onSave, onStartOver }: QuickPathCardProps) {
+export function QuickPathCard({ reason, sections, steps, stuck, saving, error, fillError, filling, deviceZone, today, onFill, onSave, onStartOver, adding = false }: QuickPathCardProps) {
   const wide = useIsWide();
   const [view, setView] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -62,7 +65,8 @@ export function QuickPathCard({ reason, sections, steps, stuck, saving, error, f
   const at = stepped ? Math.min(view ?? firstOpen, steps.length - 1) : -1;
   const locked = saving || filling;
 
-  const top = canSave ? QUICK_PATH_WORDS.readyTop : remaining > 0 ? QUICK_PATH_WORDS.topLine(remaining) : QUICK_PATH_WORDS.stuckTop;
+  const words = adding ? ADD_QUICK_WORDS : { save: QUICK_PATH_WORDS.save, saving: 'Saving…', readyTop: QUICK_PATH_WORDS.readyTop, topLine: QUICK_PATH_WORDS.topLine };
+  const top = canSave ? words.readyTop : remaining > 0 ? words.topLine(remaining) : QUICK_PATH_WORDS.stuckTop;
 
   // Sets one answer, then moves the card on: a step with one answer moves to the next once it is answered (unless it is the last);
   // any other stays put, and shows its Next button when all of it is answered.
@@ -116,7 +120,7 @@ export function QuickPathCard({ reason, sections, steps, stuck, saving, error, f
         {stuckNotes}
         {done && stuck.length === 0 && (
           <SetupButton tone="main" busy={locked} onClick={last ? onSave : () => setView(at + 1)}>
-            {last ? (saving ? 'Saving…' : QUICK_PATH_WORDS.save) : QUICK_PATH_WORDS.next}
+            {last ? (saving ? words.saving : words.save) : QUICK_PATH_WORDS.next}
           </SetupButton>
         )}
       </div>
@@ -159,7 +163,7 @@ export function QuickPathCard({ reason, sections, steps, stuck, saving, error, f
         {stuckNotes}
         {canSave && (
           <SetupButton tone="main" busy={locked} onClick={onSave}>
-            {saving ? 'Saving…' : QUICK_PATH_WORDS.save}
+            {saving ? words.saving : words.save}
           </SetupButton>
         )}
       </div>

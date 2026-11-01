@@ -7,7 +7,8 @@ import { AssistantTurnSchema, type AssistantTurn, type HardRuleId, type SetupDra
 import { checkTurn, type Violation } from './checks';
 import { dateStep } from './codeTurns';
 import { emptyDraft } from './draft';
-import { validateDraft, type DraftIssue } from './validate';
+import { SAVED_GOAL_KEY, returningDraft, type ReturningContext } from './returning';
+import { validateDraft, type DraftIssue, type SavedFacts } from './validate';
 
 export interface PersonLine {
   say: string;
@@ -25,6 +26,9 @@ export interface SetupEvalCase {
   expect: 'clean' | { violations: { turn: number; rule: Violation['rule'] }[] };
   // The person's today, for a case where code answers a relative date itself (lib/setup/codeTurns.ts, MOM-111 finding 8).
   today?: string;
+  // A person adding to a finished setup (MOM-132 part 2): the conversation starts from the returning draft, every turn is also held to
+  // the returning checks, and the final validation reads `saved` for the anchors the draft does not hold.
+  returning?: ReturningContext & { saved: SavedFacts };
 }
 
 export interface SetupModelInput {
@@ -73,7 +77,8 @@ export interface RunSetupEvalOptions {
 
 export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, options: RunSetupEvalOptions = {}): Promise<EvalReport> {
   const transcript: Transcript = [];
-  let draft = emptyDraft();
+  const returning = c.returning ? { mode: c.returning.mode, goalTitle: c.returning.goalTitle } : undefined;
+  let draft = returning ? returningDraft(returning.mode, returning.goalTitle) : emptyDraft();
   const turns: TurnReport[] = [];
   let personAt = 0;
   let personFits: boolean | undefined;
@@ -98,14 +103,21 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
       break;
     }
     const turn = parsed.data;
-    turns.push({ index, turn, violations: checkTurn(turn, { transcript: [...transcript], prevDraft: draft, personFits }), byCode });
+    turns.push({ index, turn, violations: checkTurn(turn, { transcript: [...transcript], prevDraft: draft, personFits, returning }), byCode });
     transcript.push({ role: 'assistant', turn });
     draft = turn.draft;
     report.draft = draft;
 
     if (turn.kind === 'final') {
       report.finished = true;
-      report.finalIssues = validateDraft(draft, transcript, 'final').issues;
+      report.finalIssues = validateDraft(draft, transcript, 'final', c.returning
+          ? {
+              saved: c.returning.saved,
+              existingGoalKey: c.returning.mode === 'add_target' ? SAVED_GOAL_KEY : undefined,
+              sayings: c.returning.goalTitle ? [c.returning.goalTitle] : [],
+            }
+          : {},
+      ).issues;
       break;
     }
     const line = options.reply ? options.reply(turn, index) : c.person[personAt++];

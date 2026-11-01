@@ -6,7 +6,9 @@
 
 import type { SetupEvalCase } from '@/lib/setup/evals';
 import { MEANING_TEXT } from '@/lib/setup/session';
+import { SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
 import { DAY_END_SAY } from '@/lib/setup/steps';
+import type { SavedFacts } from '@/lib/setup/validate';
 import type { AssistantTurn, HardRuleId, SetupModel } from '@/types/setup';
 import { Script, goal, goalOf, item, target, targetOf } from '../helpers/setupScript';
 
@@ -818,4 +820,244 @@ export const SETUP_CASES: ScriptedCase[] = [
     ideaNumbers: [50, 100, 150],
     ideasDetail: 'You said you read about 50 pages a week now.',
   }),
+];
+
+// ---------------------------------------------------------------------------
+// A person adding to a setup they have finished (MOM-132 part 2)
+// ---------------------------------------------------------------------------
+//
+// These start from the returning draft (lib/setup/returning.ts): the person's facts and settings are saved and are not in it, their
+// settings are approved, and for a target the goal is the saved one. Every turn is held to the same checks as a first setup plus the
+// returning checks, and the finished draft to the final validation with the saved anchors read from outside the draft. They sit apart
+// from SETUP_CASES, whose count and shape other tests pin. Every name, date and number is invented.
+
+// The anchors a returning person has saved in these cases (a Chicago person who checks in at nine and whose week starts Monday).
+export const RETURNING_SAVED: SavedFacts = { timeZone: 'America/Chicago', dayEnd: '21:00', weekStart: 1 };
+
+type ReturningParts = Omit<SetupEvalCase, 'person' | 'returning' | 'expect'> & { expect?: SetupEvalCase['expect'] };
+const returningCase = (c: ReturningParts, mode: ReturningMode, goalTitle: string | null, s: Script, saved: SavedFacts = RETURNING_SAVED): ScriptedCase => ({
+  expect: 'clean',
+  ...c,
+  returning: { mode, goalTitle, saved },
+  person: s.person,
+  script: s.turns,
+});
+
+const addGoalScript = (): Script => new Script(returningDraft('add_goal', null));
+const addTargetScript = (title: string): Script => new Script(returningDraft('add_target', title));
+const SOURCE_Q = 'Where do you track this now, if anywhere?';
+
+// Adding a new weekly habit goal: no question about the person's days, and the playback ends with the work items and sources only.
+function addGoalReading(): ScriptedCase {
+  const s = addGoalScript();
+  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to read more.' });
+  s.add({ topic: 'why', edit: (m) => m.goals.push(goal('g1', 'Read more')), question: 'Why does this matter to you?', reply: 'It helps me unwind.' });
+  s.add({ topic: 'breakup', edit: (m) => (goalOf(m, 'g1').why = 'it helps me unwind'), question: 'Is this one goal, or a few separate ones?', reply: 'Just this one.' });
+  s.playback('goals');
+  s.add({ topic: 'shape', question: SHAPE_Q, detail: SHAPE_DETAIL, reply: 'It keeps going.' });
+  s.add({ kind: 'proposal', topic: 'start_date', edit: (m) => (goalOf(m, 'g1').shape = 'ongoing'), question: `Start today, ${TODAY_WORDS}?`, reply: 'Yes, that works.' });
+  s.add({
+    topic: 'block_length',
+    edit: (m) => (goalOf(m, 'g1').startDate = TODAY),
+    accepted: ['goals.g1.startDate'],
+    say: 'You can keep going after it.',
+    question: BLOCK_Q,
+    reply: 'Ten weeks, and then I will see.',
+  });
+  s.add({
+    topic: 'target',
+    edit: (m) => (goalOf(m, 'g1').blockWeeks = 10),
+    said: ['goals.g1.blockWeeks'],
+    say: 'That way Momentum can show you how it is going from what you log.',
+    question: 'What would you like to count to know this is going well?',
+    reply: 'Reading sessions.',
+  });
+  s.add({ topic: 'floor', edit: (m) => goalOf(m, 'g1').targets.push(target('t1', 'Reading sessions')), question: floorQ('reading sessions'), reply: 'Two a week.' });
+  s.playback('targets', 'Yes.', {
+    edit: (m) => {
+      targetOf(m, 'g1', 't1').floor = 2;
+      goalOf(m, 'g1').items.push(item('i1', 'habit', 'Read for a while', { targetKey: 't1' }));
+    },
+    said: ['goals.g1.targets.t1.floor'],
+  });
+  s.add({ topic: 'source', question: SOURCE_Q, reply: 'No, I will log it myself.' });
+  // The last answer lands in the draft on the playback of "planning", which shows only the work items and the sources.
+  s.playback('planning', 'Yes.', { edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]) });
+  s.final();
+  return returningCase(
+    { id: 'return-g-reading', title: 'adding a weekly goal: no question about days or settings, and "planning" shows only the items and sources', rules: ['skip_answered', 'chunked_playback'] },
+    'add_goal',
+    null,
+    s,
+  );
+}
+
+// Adding a goal whose only target has a due date, for a person with no week start saved (they set up with due-date goals only).
+function addGoalDeadline(): ScriptedCase {
+  const s = addGoalScript();
+  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: "Finish a quilt for my sister's wedding." });
+  s.add({ topic: 'why', edit: (m) => m.goals.push(goal('g1', 'Finish the quilt')), question: 'Why does this matter to you?', reply: 'I promised it to someone.' });
+  s.add({ topic: 'breakup', edit: (m) => (goalOf(m, 'g1').why = 'I promised it to someone'), question: 'Is this one goal, or a few separate ones?', reply: 'Just the one goal.' });
+  s.playback('goals');
+  s.add({ topic: 'shape', question: SHAPE_Q, detail: SHAPE_DETAIL, reply: 'It has a deadline.' });
+  const dateAsked = s.next;
+  s.add({
+    topic: 'deadline_date',
+    edit: (m) => (goalOf(m, 'g1').shape = 'project'),
+    say: "That's the date we'll plan back from.",
+    question: 'Which day does it have to be done by?',
+    reply: 'June 14, 2027.',
+  });
+  const moveAsked = s.next;
+  s.add({ topic: 'date_can_move', say: 'If it can, moving it stays one of your options later.', question: 'Can that date move?', reply: 'No, the wedding date is fixed.' });
+  s.add({
+    kind: 'proposal',
+    topic: 'start_date',
+    edit: (m) => {
+      const g = goalOf(m, 'g1');
+      g.endDate = '2027-06-14';
+      g.items.push(item('i1', 'deadline_task', 'Quilt finished', { dueDate: '2027-06-14', dateCanMove: false }));
+    },
+    said: [`goals.g1.endDate@${dateAsked}`, `goals.g1.items.i1.dueDate@${dateAsked}`, `goals.g1.items.i1.dateCanMove@${moveAsked}`],
+    question: `Start today, ${TODAY_WORDS}?`,
+    reply: 'Yes, start today.',
+  });
+  s.add({
+    topic: 'target',
+    edit: (m) => (goalOf(m, 'g1').startDate = TODAY),
+    accepted: ['goals.g1.startDate'],
+    question: 'What would you count to know you are getting there?',
+    reply: 'Quilt blocks sewn.',
+  });
+  s.add({
+    topic: 'floor',
+    edit: (m) =>
+      goalOf(m, 'g1').targets.push(target('t1', 'Blocks sewn', { measure: 'quantity', unit: 'blocks', period: { kind: 'deadline', dueDate: '2027-06-14' }, carryOver: 'cumulative' })),
+    said: [`goals.g1.targets.t1.dueDate@${dateAsked}`],
+    question: 'How many by then?',
+    reply: 'Twelve blocks.',
+  });
+  s.playback('targets', 'Yes.', { edit: (m) => (targetOf(m, 'g1', 't1').floor = 12), said: ['goals.g1.targets.t1.floor'] });
+  s.add({ topic: 'source', question: SOURCE_Q, reply: 'I will log it by hand.' });
+  s.playback('planning', 'Yes.', { edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]) });
+  s.final();
+  return returningCase(
+    { id: 'return-g-deadline', title: 'adding a goal with a due date for a person with no week start saved: none is asked or needed', rules: ['skip_answered'] },
+    'add_goal',
+    null,
+    s,
+    { ...RETURNING_SAVED, weekStart: null },
+  );
+}
+
+// Adding a weekly target to a goal the person has. The goal's own title counts as their word, so a work item named after the goal's
+// activity ("Go for a run" under "Run more") names nothing they did not say. The browser spec uses this builder for the goal it seeds.
+export interface AddTargetOptions {
+  id: string;
+  goalTitle: string;
+  // What they count, in their words: the reply, the target's title, the word the questions use, and the work item that feeds it.
+  counted: { reply: string; title: string; word: string; itemTitle: string };
+  // A number with a unit makes a quantity target; none makes a count.
+  unit?: string;
+  floor: { reply: string; value: number };
+}
+
+export function addTargetCase(o: AddTargetOptions): ScriptedCase {
+  const s = addTargetScript(o.goalTitle);
+  const at = (suffix: string) => `goals.${SAVED_GOAL_KEY}.${suffix}`;
+  s.add({ topic: 'target', question: 'What would you like to count for this goal?', reply: o.counted.reply });
+  s.add({
+    topic: 'floor',
+    edit: (m) => goalOf(m, SAVED_GOAL_KEY).targets.push(target('t1', o.counted.title, o.unit ? { measure: 'quantity', unit: o.unit } : {})),
+    question: floorQ(o.counted.word),
+    reply: o.floor.reply,
+  });
+  s.playback('targets', 'Yes.', {
+    edit: (m) => {
+      targetOf(m, SAVED_GOAL_KEY, 't1').floor = o.floor.value;
+      goalOf(m, SAVED_GOAL_KEY).items.push(item('i1', 'habit', o.counted.itemTitle, { targetKey: 't1' }));
+    },
+    said: [at('targets.t1.floor')],
+  });
+  s.add({ topic: 'source', question: SOURCE_Q, reply: 'No, I will log it myself.' });
+  s.playback('planning', 'Yes.', { edit: (m) => (targetOf(m, SAVED_GOAL_KEY, 't1').sources = [{ kind: 'manual' }]) });
+  s.final();
+  return returningCase(
+    { id: o.id, title: `adding a weekly target to "${o.goalTitle}": only target questions, and the goal title counts as their word`, rules: ['skip_answered', 'chunked_playback'] },
+    'add_target',
+    o.goalTitle,
+    s,
+  );
+}
+
+const addTargetMiles = (): ScriptedCase =>
+  addTargetCase({
+    id: 'return-t-miles',
+    goalTitle: 'Run more',
+    counted: { reply: 'Miles.', title: 'Miles', word: 'miles', itemTitle: 'Go for a run' },
+    unit: 'miles',
+    floor: { reply: 'Six a week.', value: 6 },
+  });
+
+// Adding a target with a due date to a goal the person has, for a person with no week start saved.
+function addTargetDeadline(): ScriptedCase {
+  const s = addTargetScript('Finish the quilt');
+  s.add({ topic: 'target', question: 'What would you like to count for this goal?', reply: 'Quilt blocks sewn.' });
+  const dateAsked = s.next;
+  s.add({ topic: 'deadline_date', question: 'Which day should that be done by?', reply: 'June 14, 2027.' });
+  s.add({
+    topic: 'floor',
+    edit: (m) =>
+      goalOf(m, SAVED_GOAL_KEY).targets.push(
+        target('t1', 'Blocks sewn', { measure: 'quantity', unit: 'blocks', period: { kind: 'deadline', dueDate: '2027-06-14' }, carryOver: 'cumulative' }),
+      ),
+    said: [`goals.${SAVED_GOAL_KEY}.targets.t1.dueDate@${dateAsked}`],
+    question: 'How many by then?',
+    reply: 'Twelve blocks.',
+  });
+  s.playback('targets', 'Yes.', { edit: (m) => (targetOf(m, SAVED_GOAL_KEY, 't1').floor = 12), said: [`goals.${SAVED_GOAL_KEY}.targets.t1.floor`] });
+  s.add({ topic: 'source', question: SOURCE_Q, reply: 'I will log it by hand.' });
+  s.playback('planning', 'Yes.', { edit: (m) => (targetOf(m, SAVED_GOAL_KEY, 't1').sources = [{ kind: 'manual' }]) });
+  s.final();
+  return returningCase(
+    { id: 'return-t-deadline', title: 'adding a target with a due date to a goal they have, for a person with no week start saved', rules: ['skip_answered'] },
+    'add_target',
+    'Finish the quilt',
+    s,
+    { ...RETURNING_SAVED, weekStart: null },
+  );
+}
+
+// A turn that breaks one returning rule, each in its own short case. The violations must include a 'returning' one at the first turn.
+const bad = (id: string, title: string, mode: ReturningMode, goalTitle: string | null, build: (s: Script) => void): ScriptedCase => {
+  const s = goalTitle === null ? addGoalScript() : addTargetScript(goalTitle);
+  build(s);
+  // The conversation ends at the bad turn: the person has nothing more to say, so the runner stops there.
+  s.person.length = 0;
+  return returningCase({ id, title, rules: ['skip_answered'], expect: { violations: [{ turn: 0, rule: 'returning' }] } }, mode, goalTitle, s);
+};
+
+export const RETURNING_CASES: ScriptedCase[] = [
+  addGoalReading(),
+  addGoalDeadline(),
+  addTargetMiles(),
+  addTargetDeadline(),
+  bad('return-bad-asks-time-zone', 'a saved fact (the time zone) is asked again', 'add_goal', null, (s) =>
+    s.add({ topic: 'time_zone', question: 'Which time zone are you in?', reply: 'Chicago.' }),
+  ),
+  bad('return-bad-writes-a-fact', 'the draft writes a saved fact (the week start) the person was never asked for', 'add_goal', null, (s) =>
+    s.add({ topic: 'idea', edit: (m) => (m.person.weekStart = 1), question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to read more.' }),
+  ),
+  bad('return-bad-plays-back-settled', 'a part that is already approved (the goal) is played back again', 'add_target', 'Run more', (s) =>
+    s.add({ kind: 'playback', chunk: 'goals', reply: 'Yes.' }),
+  ),
+  bad('return-bad-asks-goal-shape', "the saved goal's own shape is asked again", 'add_target', 'Run more', (s) =>
+    s.add({ topic: 'shape', question: SHAPE_Q, detail: SHAPE_DETAIL, reply: 'It keeps going.' }),
+  ),
+  bad('return-bad-second-goal', 'a second goal is added while adding targets to one they have', 'add_target', 'Run more', (s) =>
+    s.add({ topic: 'target', edit: (m) => m.goals.push(goal('g2', 'Read more')), question: 'What would you like to count for this goal?', reply: 'Miles.' }),
+  ),
+  bad('return-bad-changes-the-goal', "the saved goal's title is changed", 'add_target', 'Run more', (s) =>
+    s.add({ topic: 'target', edit: (m) => (goalOf(m, SAVED_GOAL_KEY).title = 'Run a lot more'), question: 'What would you like to count for this goal?', reply: 'Miles.' }),
+  ),
 ];

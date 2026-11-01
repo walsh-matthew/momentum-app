@@ -71,6 +71,13 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
     'Never point at an earlier answer by name ("where you are now", "your baseline", "from what you said"). Quote the fact in the person\'s own words ("You said you read about 50 pages a week now."), or leave it out; the "detail" of starting ideas is that quote or null.',
   'plain.options_say':
     'On an ideas or interpretations turn, "say" is "" or one short line of a few words; the screen leads with its own line saying what the options are about.',
+  'returning.topic': 'That topic is already saved for this person: do not ask it. Ask only what the note from code says is still yours to ask.',
+  'returning.person':
+    'The person facts and settings are saved and are not part of this conversation: leave "person" and "settings" in the draft exactly as the current draft has them.',
+  'returning.goal':
+    'The saved goal is final and is the only goal in the draft: keep its fields exactly as the current draft has them and add only targets and items under it.',
+  'returning.chunk':
+    'Play back only the parts the note from code names, and keep the parts that are already approved in "approved".',
 };
 
 const DRAFT_CODES = new Set<ViolationCode>(['draft.no_source', 'draft.not_said', 'draft.not_accepted', 'draft.rule']);

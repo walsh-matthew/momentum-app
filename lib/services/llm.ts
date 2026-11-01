@@ -268,6 +268,8 @@ export interface RunSetupTurnArgs {
   dateHint?: string;
   // Which app code read in the person's answer to the source question (MOM-111 round 2).
   sourceNote?: string;
+  // For a person adding to a finished setup: the fixed note from lib/setup/returning.ts (MOM-132 part 2).
+  returningNote?: string;
   // How long this one call may take: the time the setup turn has left (MOM-111 round 2, C).
   timeoutMs?: number;
   // The smaller-model trial runs the same path on another model.
@@ -313,6 +315,7 @@ export async function runSetupTurn(args: RunSetupTurnArgs, deps: RunSetupTurnDep
             retryFeedback: args.retryFeedback,
             dateHint: args.dateHint,
             sourceNote: args.sourceNote,
+            returningNote: args.returningNote,
             timeoutMs: args.timeoutMs,
           },
           { ...deps.modelDeps, model },

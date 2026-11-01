@@ -6,6 +6,9 @@
 //   request says how far the conversation has got, so the fake keeps no state and any number of people can talk to it.
 //   With several scripts (MOM-111 round 2: the card screenshots need a date question), the person's first answer picks
 //   the script whose first line it is; the first script is the default, and answers the opening turn for all of them.
+// - (MOM-132 part 2) A setup request that carries the returning note (lib/setup/returning.ts: a person adding a goal, or a target for a
+//   goal they have) gets the script whose `mode` matches the note, picked from the scripts of that mode the same way; a script with no
+//   mode is for a first setup. The note's own words say which: "adds new goals only", or "adding targets to one goal".
 // - Every other request gets a 401 in the API's own error shape. The app turns that into "not configured", which is what the
 //   wizard spec expects, so those specs behave as they did when the key was empty.
 // - GET /__fake/last reports the newest setup request (how many, and the text of its last user message), so the spec can check
@@ -48,6 +51,8 @@ function lastUserText(body: MessagesBody): string {
 
 // One scripted conversation: Claude's turns, and the person's first answer that picks it.
 export interface FakeScript {
+  // Set for a person adding to a finished setup; left out for a first setup.
+  mode?: 'add_goal' | 'add_target';
   firstAnswer: string;
   turns: readonly AssistantTurn[];
 }
@@ -146,7 +151,10 @@ export function startFakeAnthropic(port: number, scripts: readonly FakeScript[])
       }
       const turnIndex = (body.messages ?? []).filter((m) => m.role === 'assistant').length;
       const said = firstAnswer(body);
-      const script = (scripts.find((s) => s.firstAnswer === said) ?? scripts[0]).turns;
+      const note = lastUserText(body);
+      const mode = note.includes('adds new goals only') ? 'add_goal' : note.includes('adding targets to one goal') ? 'add_target' : undefined;
+      const pool = scripts.filter((s) => s.mode === mode);
+      const script = (pool.find((s) => s.firstAnswer === said) ?? pool[0] ?? scripts[0]).turns;
       const turn = script[turnIndex];
       if (!turn) {
         send(500, { type: 'error', error: { type: 'api_error', message: `the script has no turn ${turnIndex}` } });

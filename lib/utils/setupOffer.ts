@@ -10,7 +10,7 @@ export function setupIsSaved(home: HomeScoreboard | null | undefined): boolean {
 }
 
 // Whether home offers the way back to guided setup: only to a person whose scoreboard was read and found no goal row at all, the
-// same fact setup's "already done" screen reads, so it costs no second read. Setup is first-setup-only until MOM-132.
+// same fact /setup reads to tell a first setup from an addition (MOM-132), so it costs no second read.
 export function setupIsOffered(home: HomeScoreboard | null | undefined): boolean {
   return home?.state === 'no_goals' && !setupIsSaved(home);
 }

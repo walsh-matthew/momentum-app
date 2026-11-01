@@ -45,6 +45,25 @@ export interface DraftIssue {
   code: DraftIssueCode;
 }
 export type DraftMode = 'progress' | 'final';
+
+// The person's saved time anchors, for an addition after first setup (MOM-132 part 2): the draft of an addition never holds them
+// (nothing saved is put in a draft), so the final check reads them from here instead of from the draft. Read on the server, from the
+// person's own rows.
+export interface SavedFacts {
+  timeZone: string | null;
+  dayEnd: string | null;
+  weekStart: number | null;
+}
+
+export interface ValidateOptions {
+  // Present only for an addition after first setup. A first setup passes nothing and is checked exactly as before.
+  saved?: SavedFacts;
+  // The key of a goal the person already has, when targets are being added to it: its own start and shape are saved, so the final
+  // check does not ask for them again.
+  existingGoalKey?: string;
+  // Saved words of the person's that count as theirs for the day and time check: the title of the goal targets are being added to.
+  sayings?: string[];
+}
 export interface DraftValidation {
   ok: boolean;
   issues: DraftIssue[];
@@ -132,8 +151,8 @@ function provenanceIssues(draft: SetupDraft, transcript: Transcript): DraftIssue
   return issues;
 }
 
-function dayTimeIssues(draft: SetupDraft, transcript: Transcript): DraftIssue[] {
-  const said = new Set(personWords(transcript).flatMap(dayTimeWords));
+function dayTimeIssues(draft: SetupDraft, transcript: Transcript, sayings: string[] = []): DraftIssue[] {
+  const said = new Set([...personWords(transcript), ...sayings].flatMap(dayTimeWords));
   const issues: DraftIssue[] = [];
   for (const { path, text } of freeTextLeaves(draft.model)) {
     const unsaid = dayTimeWords(text).filter((w) => !said.has(w));
@@ -144,14 +163,14 @@ function dayTimeIssues(draft: SetupDraft, transcript: Transcript): DraftIssue[] 
   return issues;
 }
 
-function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
+function goalIssues(goal: GoalDraft, mode: DraftMode, existing = false): DraftIssue[] {
   const issues: DraftIssue[] = [];
   const at = (path: string, message: string) => issues.push({ path: `goals.${goal.key}.${path}`, code: 'rule', message });
   const final = mode === 'final';
 
   if (goal.startDate && goal.endDate && goal.endDate <= goal.startDate) at('endDate', 'The end date must be after the start date.');
   if (goal.shape === 'ongoing' && goal.endDate) at('endDate', 'An ongoing goal has no end date; it runs in blocks.');
-  if (goal.shape === 'finite' && !goal.endDate && final) at('endDate', 'A goal with an end date needs the exact date.');
+  if (goal.shape === 'finite' && !goal.endDate && final && !existing) at('endDate', 'A goal with an end date needs the exact date.');
   if (goal.blockWeeks !== null && goal.shape !== null && goal.shape !== 'ongoing') at('blockWeeks', 'Only an ongoing goal has a first-block length.');
   if (goal.state === 'active' && goal.returnWhen) at('returnWhen', 'Only a parked goal has a way back.');
   if (goal.state === 'parked' && !goal.returnWhen && final) at('returnWhen', 'A parked goal needs a way back: a date, a season or condition, or "only when I ask".');
@@ -159,8 +178,9 @@ function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
     // A parked goal is set aside, not planned: it may have neither (migration 014, MOM-128). Any other goal needs both,
     // as the database requires (goals_shape_start_required).
     if (goal.state === 'active') {
-      if (!goal.startDate) at('startDate', 'The start date is missing. Propose today and let the person confirm it.');
-      if (!goal.shape) at('shape', 'Ask whether the goal is ongoing, has an end date, or is a project.');
+      // A goal the person already has keeps the start and shape it was saved with (MOM-132 part 2).
+      if (!goal.startDate && !existing) at('startDate', 'The start date is missing. Propose today and let the person confirm it.');
+      if (!goal.shape && !existing) at('shape', 'Ask whether the goal is ongoing, has an end date, or is a project.');
       if (goal.targets.length === 0) at('targets', 'An active goal needs at least one target.');
     }
     // With no shape there is no end date and no first block (the database says the same).
@@ -231,7 +251,7 @@ function goalIssues(goal: GoalDraft, mode: DraftMode): DraftIssue[] {
   return issues;
 }
 
-export function validateDraft(input: unknown, transcript: Transcript, mode: DraftMode): DraftValidation {
+export function validateDraft(input: unknown, transcript: Transcript, mode: DraftMode, options: ValidateOptions = {}): DraftValidation {
   const parsed = SetupDraftSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -249,7 +269,7 @@ export function validateDraft(input: unknown, transcript: Transcript, mode: Draf
   for (const goal of model.goals) {
     if (goalKeys.has(goal.key)) rule(`goals.${goal.key}.key`, 'Two goals share a key.');
     goalKeys.add(goal.key);
-    issues.push(...goalIssues(goal, mode));
+    issues.push(...goalIssues(goal, mode, goal.key === options.existingGoalKey));
   }
 
   const { person } = model;
@@ -269,9 +289,11 @@ export function validateDraft(input: unknown, transcript: Transcript, mode: Draf
     const targets = model.goals.flatMap((g) => g.targets);
     if (model.goals.length === 0) rule('goals', 'There is no goal to save.');
     if (targets.length > 0) {
-      if (person.timeZone === null) rule('person.timeZone', 'Ask the time zone before a target is saved.');
-      if (person.dayEnd === null) rule('person.dayEnd', 'Ask the day end before a target is saved.');
-      if (person.weekStart === null && targets.some((t) => t.period.kind !== 'deadline')) {
+      // An addition after first setup has the person's saved anchors, not draft ones (MOM-132 part 2).
+      const { saved } = options;
+      if ((person.timeZone ?? saved?.timeZone ?? null) === null) rule('person.timeZone', 'Ask the time zone before a target is saved.');
+      if ((person.dayEnd ?? saved?.dayEnd ?? null) === null) rule('person.dayEnd', 'Ask the day end before a target is saved.');
+      if ((person.weekStart ?? saved?.weekStart ?? null) === null && targets.some((t) => t.period.kind !== 'deadline')) {
         rule('person.weekStart', 'A weekly or day-slot target needs the week start. Ask for it.');
       }
     }
@@ -281,6 +303,6 @@ export function validateDraft(input: unknown, transcript: Transcript, mode: Draf
   }
 
   issues.push(...provenanceIssues(draft, transcript));
-  issues.push(...dayTimeIssues(draft, transcript));
+  issues.push(...dayTimeIssues(draft, transcript, options.sayings));
   return { ok: issues.length === 0, issues };
 }

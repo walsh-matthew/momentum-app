@@ -18,6 +18,12 @@ export const weekdayName = (n: number): string => WEEKDAY_NAMES[n - 1] ?? String
 export type ClockPath = 'person.dayEnd' | 'person.planning.time';
 
 export interface PlaybackOptions {
+  // The key of a goal the person already has, when targets are being added to it (MOM-132 part 2): the draft holds only its title, so
+  // its shape and start are not known here and no line is written about them.
+  savedGoalKey?: string;
+  // True for an addition to a finished setup (MOM-132 part 2): the final lines leave out first setup's "Everything can be changed on your settings
+  // page." (the person is not finishing a setup), and a target added to a goal they have reads as itself, not as "Your goal".
+  adding?: boolean;
   // The person's locale (their browser's, sent with each turn), so a time reads the way they write times. Without a usable
   // one, a time is shown as the person gave it.
   locale?: string | null;
@@ -242,7 +248,7 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
         );
       }
       for (const g of active) {
-        lines.push(describeShape(g, options));
+        if (g.key !== options.savedGoalKey) lines.push(describeShape(g, options));
         for (const t of g.targets) lines.push(`  ${describeTarget(g, t, active.length > 1, options)}`);
       }
       break;
@@ -326,12 +332,19 @@ export function renderFinal(model: SetupModel, options: PlaybackOptions = {}): s
   const active = model.goals.filter((g) => g.state === 'active');
   const several = active.length > 1;
   const counted: { line: string; things: number }[] = active.flatMap((g) => {
+    // In an addition a target is said on its own, as a sentence, never as "Your goal": a goal the person already has is not named at all
+    // (the card's heading names it), and a new goal is named once, by its title, on the line before its targets.
+    const saved = g.key === options.savedGoalKey;
+    const named = options.adding === true && !saved;
     if (g.targets.length === 0) return [{ line: `${goalLead(g, several)}: nothing is counted yet.`, things: 0 }];
-    return g.targets.map((t) => {
+    const targetLines = g.targets.map((t) => {
       const numbers = goalNumbers(t, options);
       const what = countedWords(t.title, options.said);
-      return { line: `${goalLead(g, several)}: ${numbers ?? `${what}, counted ${describePeriod(t, options, 'each')}`}.`, things: 1 };
+      const counted = numbers ?? `${what}, counted ${describePeriod(t, options, 'each')}`;
+      if (saved || named) return { line: `${counted.charAt(0).toUpperCase()}${counted.slice(1)}.`, things: 1 };
+      return { line: `${goalLead(g, several)}: ${counted}.`, things: 1 };
     });
+    return named ? [{ line: titleOf(g.title), things: 0 }, ...targetLines] : targetLines;
   });
   const parked = model.goals.length - active.length;
   // Room left after the parked line and the settings line; one line goes to "And N more" when they do not all fit.
@@ -341,6 +354,6 @@ export function renderFinal(model: SetupModel, options: PlaybackOptions = {}): s
   const hidden = counted.slice(shown.length).reduce((n, c) => n + c.things, 0);
   if (counted.length > shown.length) lines.push(hidden > 0 ? `And ${plural(hidden, 'more thing', 'more things')} to count.` : 'And more goals with nothing counted yet.');
   if (parked > 0) lines.push(`${plural(parked, 'goal', 'goals')} set aside for now, with a way back.`);
-  lines.push('Everything can be changed on your settings page.');
+  if (options.adding !== true) lines.push('Everything can be changed on your settings page.');
   return lines.slice(0, FINAL_MAX_LINES);
 }

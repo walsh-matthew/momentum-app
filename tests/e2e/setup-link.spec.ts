@@ -1,7 +1,7 @@
 // The way back to guided setup on home in a real browser against the local stack (MOM-143), at 390px (a phone) and 1280px. A
 // brand-new account has no saved setup, so home offers it in one card and the link reaches /setup without typing the address;
 // the old "No goals yet" card is not there beside it. An account with a saved setup (the rows setup creates, tests/e2e/support/
-// homeSeed.ts) is offered no second one. Any 5xx response from the app fails the spec.
+// homeSeed.ts) is offered no second one, only the way to add to it (MOM-132 part 2). Any 5xx response from the app fails the spec.
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,7 +43,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(page.getByRole('region', { name: 'This week' })).toBeVisible();
       await expect(page.getByRole('region', { name: 'Set up your goals' })).toHaveCount(0);
       await expect(page.getByRole('link', { name: 'Go to setup' })).toHaveCount(0);
-      await expect(page.locator('a[href="/setup"]')).toHaveCount(0);
+      // Home offers the way to add to what is saved, in one link, and not a first setup (MOM-132 part 2).
+      await expect(page.getByRole('link', { name: 'Add to your goals' })).toHaveCount(1);
+      await expect(page.locator('a[href="/setup"]')).toHaveCount(1);
       // The old model's empty state would say the opposite of what is true for this person: it never shows.
       await expect(page.getByRole('heading', { name: 'No goals yet' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Set up your first goal' })).toHaveCount(0);
