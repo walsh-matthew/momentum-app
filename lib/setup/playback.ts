@@ -91,7 +91,7 @@ export function describePeriod(t: TargetDraft, options: PlaybackOptions, style: 
 }
 
 // An amount of what the target counts: "2", "5000 pounds", "90 minutes", "3 items".
-function amount(t: TargetDraft, n: number): string {
+export function amount(t: Pick<TargetDraft, 'measure' | 'unit'>, n: number): string {
   switch (t.measure) {
     case 'count':
       return String(n);
@@ -109,7 +109,7 @@ const singular = (word: string): string => (/(ss|sh|ch|x)es$/i.test(word) ? word
 
 // An amount with what is counted, as the person's goal says it (MOM-111 round 3c, finding 3): "3 runs", "100 pages",
 // "90 minutes of practice", "5000 pounds lifted". For one, the counted thing's first plural word is made singular ("1 run").
-export function amountOf(t: TargetDraft, n: number, options: PlaybackOptions): string {
+export function amountOf(t: Pick<TargetDraft, 'title' | 'measure' | 'unit'>, n: number, options: PlaybackOptions = {}): string {
   const thing = countedWords(t.title, options.said);
   switch (t.measure) {
     case 'count': {

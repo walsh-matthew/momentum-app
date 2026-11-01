@@ -1,7 +1,8 @@
 // The scoreboard engine (MOM-108): pure functions, no database, no model, no network, no clock. "Today" and the
 // person's time anchors are inputs. Services call this; nothing here calls a service.
 
-export { snapshotPeriod, targetInForce } from './baseline';
+export { changeEffectiveFrom, nextWeekStart, snapshotPeriod, targetInForce, versionsWithChanges } from './baseline';
+export type { TargetChange } from './baseline';
 export { carryForwardSteps } from './carryover';
 export { FORECAST_TOLERANCE, PATTERN_DEFAULTS, TREND_PERIODS } from './constants';
 export { blockEndCrossing, levelCrossings, stepCompletions } from './crossings';

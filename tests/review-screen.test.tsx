@@ -11,7 +11,7 @@
 // - no review appears before the week start and the planning day are chosen, and nothing is guessed (principle 1),
 // - a week that has closed reads as "that week", and a slipping run is not pointed at the review the person is in.
 
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReviewNotice } from '@/components/home/ReviewNotice';
 import { ReviewScreen } from '@/components/review/ReviewScreen';
@@ -22,6 +22,7 @@ import type { RecapChange, RecapTarget, StoredRecap, StoredReview, WeeklyReviewF
 // The sitting on a ready review is a client component: it needs the router and the two actions, none of which this file calls.
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/app/actions/review', () => ({ askForReviewLine: vi.fn(), finishReview: vi.fn() }));
+vi.mock('@/app/actions/targetChange', () => ({ changeTarget: vi.fn() }));
 
 afterEach(cleanup);
 
@@ -76,6 +77,7 @@ const ready = (over: Partial<Extract<WeeklyReviewFacts, { state: 'ready' }>> = {
   priorities: [],
   offerReflection: true,
   adjustment: null,
+  edit: null,
   changes: [],
   ...over,
 });
@@ -267,6 +269,9 @@ describe('the recap (layer 1)', () => {
 
   it('puts what follows the recap after it, in the order of the layers: the line, the one question, the finish', () => {
     show(ready({ offerReflection: true, adjustment: { kind: 'slipping_check_in', targetId: 't1', periods: 2 } }));
+    // The finish is not there until the person has answered the question (MOM-146: no button that cannot be used).
+    expect(screen.queryByRole('region', { name: 'Finish your review' })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'No, keep it as it is' }));
     const order = ["This week's recap", 'A one-line look back', 'One thing to decide', 'Finish your review'];
     const positions = order.map((name) => {
       const el = screen.getByRole('region', { name });

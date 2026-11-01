@@ -88,6 +88,8 @@ function rowsOf(over: Partial<HomeRows> = {}, forecast: Partial<ForecastRows> = 
     entries: [],
     corrections: [],
     snapshots: [],
+    changes: [],
+    reviewedWeeks: [],
     forecast: { ...NO_FORECAST_ROWS, dayTypes: [WORK], ...forecast },
     ...over,
   };

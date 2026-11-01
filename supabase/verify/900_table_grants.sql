@@ -146,7 +146,13 @@ allow_list (rel, role, privs) as (values
 
   ('week_plan_day_types',     'anon',          ''),
   ('week_plan_day_types',     'authenticated', 'SELECT,INSERT,DELETE'),
-  ('week_plan_day_types',     'service_role',  '')
+  ('week_plan_day_types',     'service_role',  ''),
+
+  -- A change to a target's levels from a later period (020, MOM-146): the person's session writes it; every save is a new
+  -- row, and nobody changes or deletes one.
+  ('target_changes',          'anon',          ''),
+  ('target_changes',          'authenticated', 'SELECT,INSERT'),
+  ('target_changes',          'service_role',  '')
 ),
 roles (role) as (values ('anon'), ('authenticated'), ('service_role')),
 dml (ord, priv) as (values (1, 'SELECT'), (2, 'INSERT'), (3, 'UPDATE'), (4, 'DELETE')),

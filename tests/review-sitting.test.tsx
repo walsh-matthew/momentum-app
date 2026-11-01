@@ -7,9 +7,9 @@
 //   celebration is never paired with a request),
 // - a limit, an error or a thrown action leaves the review going on, with the button still there to try again,
 // - layer 3's one question has three equal choices, each says plainly what it did, and "Change it" says when nothing in the app
-//   can change that yet,
-// - the finish is one button that calls the action once with the person's choice, is off until a choice is made when something
-//   was offered, and cannot be tapped twice,
+//   can change that,
+// - the finish is one button that calls the action once with the person's choice, is not there until a choice is made when
+//   something was offered (MOM-146), and cannot be tapped twice,
 // - the words are plain (the round 3c rules apply to the review's cards too).
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -119,8 +119,8 @@ describe("layer 2: Claude's one-line look back", () => {
     fireEvent.click(screen.getByRole('button', { name: LINE_BUTTON }));
     expect(await screen.findByText('You have already asked Claude for a line today. Your review goes on without it.')).toBeTruthy();
     expect(screen.getByRole('button', { name: LINE_BUTTON })).toBeTruthy();
-    // The rest of the sitting is unaffected.
-    expect(screen.getByRole('button', { name: 'Finish review' })).toBeTruthy();
+    // The rest of the sitting is unaffected: the question is still there to answer.
+    expect(screen.getByRole('region', { name: 'One thing to decide' })).toBeTruthy();
   });
 
   it('shows the service\'s reason when it asked for nothing', async () => {
@@ -144,7 +144,7 @@ describe("layer 3: the one question, with three equal choices", () => {
     sitting();
     const card = screen.getByRole('region', { name: 'One thing to decide' });
     expect(within(card).getByRole('heading', { name: 'Want to change anything about “Workouts”?' })).toBeTruthy();
-    expect(within(card).getByText(/for 2 weeks in a row/)).toBeTruthy();
+    expect(within(card).getByText(/You didn't reach the number that still counts in a hard week, 2 weeks in a row\./)).toBeTruthy();
     expect(within(card).getByText(/It's your call\./)).toBeTruthy();
     // One heading in the card, and it is the question.
     expect(within(card).getAllByRole('heading')).toHaveLength(1);
@@ -154,20 +154,20 @@ describe("layer 3: the one question, with three equal choices", () => {
     sitting();
     const group = screen.getByRole('radiogroup', { name: 'Your choice' });
     const choices = within(group).getAllByRole('radio');
-    expect(choices.map((c) => c.textContent)).toEqual(['Yes, I want to change it', 'No, keep it as it is', 'Skip for now']);
+    expect(choices.map((c) => c.textContent)).toEqual(['Yes, I want to change it', 'No, keep it as it is', 'Ask me again next week']);
     expect(choices.every((c) => c.getAttribute('aria-checked') === 'false')).toBe(true);
   });
 
-  it('says plainly what each choice did, and that "change" changed nothing where nothing in the app can', () => {
+  it('says plainly what each choice did, and that "change" changed nothing where the edit does not cover the target', () => {
     sitting();
     const group = screen.getByRole('radiogroup', { name: 'Your choice' });
     fireEvent.click(within(group).getByRole('radio', { name: 'Yes, I want to change it' }));
-    expect(screen.getByText("Noted. Changing a target isn't in the app yet, so nothing was changed.")).toBeTruthy();
+    expect(screen.getByText("Noted. This target can't be changed here, so nothing was changed.")).toBeTruthy();
     fireEvent.click(within(group).getByRole('radio', { name: 'No, keep it as it is' }));
     expect(screen.getByText('Okay. It stays as it is.')).toBeTruthy();
     expect(screen.queryByText(/so nothing was changed/)).toBeNull();
-    fireEvent.click(within(group).getByRole('radio', { name: 'Skip for now' }));
-    expect(screen.getByText('Skipped. Nothing changes.')).toBeTruthy();
+    fireEvent.click(within(group).getByRole('radio', { name: 'Ask me again next week' }));
+    expect(screen.getByText("Okay. I'll ask again next week.")).toBeTruthy();
     // One choice is checked at a time, and it can be changed before finishing.
     expect(within(group).getAllByRole('radio').filter((c) => c.getAttribute('aria-checked') === 'true')).toHaveLength(1);
   });
@@ -176,7 +176,9 @@ describe("layer 3: the one question, with three equal choices", () => {
     sitting({ adjustment: REBASE });
     const card = screen.getByRole('region', { name: 'One thing to decide' });
     expect(within(card).getByRole('heading', { name: 'Raise the bar on “Workouts”?' })).toBeTruthy();
-    expect(within(card).getByText(/reached your aspiration, the number you hoped for, 3 weeks in a row\. You can aim higher from next week\. Past weeks keep the number they had\./)).toBeTruthy();
+    expect(within(card).getByText(/You reached the number you were hoping for 3 weeks in a row\. You can aim higher from next week\. Past weeks keep the number they had\./)).toBeTruthy();
+    // The question is "Raise the bar?", so the first answer is "Yes, raise it" (the label matches what was asked). The stored outcome is the same.
+    expect(screen.getAllByRole('radio').map((c) => c.textContent)).toEqual(['Yes, raise it', 'No, keep it as it is', 'Ask me again next week']);
   });
 
   it('presents a deadline forecast with the engine\'s own choices, and offers moving the date only when the engine did', () => {
@@ -212,36 +214,32 @@ describe("layer 3: the one question, with three equal choices", () => {
     expect(optionsInWords([])).toBe('');
   });
 
-  it('uses everyday words: it explains the floor and the aspiration where it uses them, and uses no jargon or percentage', () => {
+  it('uses everyday words: it says what a number is for and never "floor", "aspiration", "target" on their own, and no jargon or percentage', () => {
     for (const adjustment of [SLIPPING, REBASE, FORECAST]) {
       const v = adjustmentView(adjustment, titles);
-      const words = [v.question, v.detail, ...Object.values(v.afterChoice), ...Object.values(v.choices)].join(' ');
-      expect(words).not.toMatch(/baseline|protected|priorit|effort|outcome|block|slipping|%/i);
-      if (/floor/.test(words)) expect(words).toContain('the least that counts');
-      if (/aspiration/.test(words)) expect(words).toContain('the number you hoped for');
+      const words = [v.detail, ...Object.values(v.afterChoice), ...Object.values(v.choices)].join(' ');
+      expect(words).not.toMatch(/baseline|protected|priorit|effort|outcome|block|slipping|floor|aspiration|%/i);
     }
   });
 });
 
 describe('the finish: one button, once', () => {
-  it('is solid from the start; tapped with nothing chosen it says "Choose one first.", moves to the choices and saves nothing (MOM-145)', () => {
+  it('is not there until the question is answered, and then it is solid (MOM-146, MOM-145)', () => {
     sitting();
+    expect(screen.queryByRole('button', { name: 'Finish review' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Finish your review' })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'Ask me again next week' }));
     const finish = screen.getByRole('button', { name: 'Finish review' }) as HTMLButtonElement;
     expect(finish.disabled).toBe(false);
+    expect(finish.getAttribute('aria-disabled')).toBeNull();
+    // A hint about what to choose is not needed: the question is above and the button appears once it is answered.
     expect(screen.queryByText('Choose one first.')).toBeNull();
-    fireEvent.click(finish);
-    expect(screen.getByRole('alert').textContent).toBe('Choose one first.');
-    expect(document.activeElement).toBe(screen.getAllByRole('radio')[0]);
-    expect(finishReview).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('radio', { name: 'Skip for now' }));
-    expect(screen.queryByText('Choose one first.')).toBeNull();
-    expect(finish.disabled).toBe(false);
   });
 
   it.each([
     ['Yes, I want to change it', 'changed'],
     ['No, keep it as it is', 'declined'],
-    ['Skip for now', 'skipped'],
+    ['Ask me again next week', 'skipped'],
   ])('finishes with the choice "%s" as %s, calls the action once, and refreshes the page', async (label, outcome) => {
     sitting();
     fireEvent.click(screen.getByRole('radio', { name: label }));
@@ -266,7 +264,7 @@ describe('the finish: one button, once', () => {
     let resolve!: (v: ServiceResult<{ id: string; weekStart: string }>) => void;
     finishReview.mockReturnValue(new Promise((r) => (resolve = r)));
     sitting();
-    fireEvent.click(screen.getByRole('radio', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Ask me again next week' }));
     fireEvent.click(screen.getByRole('button', { name: 'Finish review' }));
     const saving = (await screen.findByRole('button', { name: 'Saving…' })) as HTMLButtonElement;
     // Busy, not disabled (MOM-145): still solid, says so, and ignores a second tap.
@@ -282,7 +280,7 @@ describe('the finish: one button, once', () => {
   it('says what went wrong, saves nothing and lets the person try again', async () => {
     finishReview.mockResolvedValueOnce({ ok: false, error: "You already finished this week's review." });
     sitting();
-    fireEvent.click(screen.getByRole('radio', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Ask me again next week' }));
     fireEvent.click(screen.getByRole('button', { name: 'Finish review' }));
     expect((await screen.findByRole('alert')).textContent).toBe("You already finished this week's review.");
     expect(refresh).not.toHaveBeenCalled();
@@ -293,7 +291,7 @@ describe('the finish: one button, once', () => {
   it('says so, and saves nothing, when the action itself fails', async () => {
     finishReview.mockRejectedValueOnce(new Error('network'));
     sitting();
-    fireEvent.click(screen.getByRole('radio', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Ask me again next week' }));
     fireEvent.click(screen.getByRole('button', { name: 'Finish review' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Could not save your weekly review. Nothing was saved.');
     expect(refresh).not.toHaveBeenCalled();

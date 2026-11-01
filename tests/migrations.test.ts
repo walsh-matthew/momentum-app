@@ -1123,3 +1123,93 @@ describe('the grants allow-list covers the goal model tables (supabase/verify/90
     expect(entry(table, 'service_role')).toBe(service);
   });
 });
+
+describe('migration 020 stores the changes a person makes to a target from a later period, append-only (MOM-146)', () => {
+  const sql = sqlOf('020');
+  const table = /create table public\.target_changes \(([\s\S]*?)\n\);/.exec(sql)?.[1] ?? '';
+  const fn = /create function public\.target_changes_set_created_at\(\)[\s\S]*?\n\$\$;/i.exec(sql)?.[0] ?? '';
+  const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '020_target_changes.sql'), 'utf8');
+
+  it('adds the one table and changes no applied table, function or grant', () => {
+    for (const earlier of files.slice(0, -1).map((f) => f.slice(0, 3))) expect(sqlOf(earlier), earlier).not.toMatch(/target_changes/);
+    const altered = [...sql.matchAll(/alter table public\.([a-z_]+)\s+(add|drop|alter|enable)\s+(\w+)/gi)].map((m) => `${m[1]} ${m[2]} ${m[3]}`.toLowerCase());
+    expect(altered).toEqual(['target_changes enable row']);
+    expect(files[files.length - 1]).toMatch(/^020_/);
+  });
+
+  it('points a change at the person\'s own target, with no ON DELETE action, and goes with the account', () => {
+    expect(table).toMatch(/user_id\s+uuid not null references public\.users \(id\) on delete cascade/);
+    expect(table).toMatch(/constraint target_changes_target_fk foreign key \(target_id, user_id\) references public\.targets \(id, user_id\),/);
+    expect(table).not.toMatch(/targets \(id, user_id\) on delete/);
+  });
+
+  it('has no unique key, so a second save for the same date is a second row (the newest created_at wins), and so no upsert', () => {
+    expect(table).not.toMatch(/\bunique\b/i);
+    expect(sql).not.toMatch(/create unique index/i);
+    expect(table).toMatch(/effective_from\s+date not null/);
+    expect(table).toMatch(/created_at\s+timestamptz not null default clock_timestamp\(\)/);
+  });
+
+  it('keeps the same level rules as a target: a floor above 0, an aspiration not below it, days 1 to 7', () => {
+    expect(table).toMatch(/constraint target_changes_floor_positive check \(floor > 0\)/);
+    expect(table).toMatch(/constraint target_changes_aspiration_above_floor check \(aspiration is null or aspiration >= floor\)/);
+    expect(table).toMatch(/constraint target_changes_slots_valid check/);
+    expect(table).toMatch(/cardinality\(slot_weekdays\) between 1 and 7/);
+    expect(table).toMatch(/floor\s+numeric not null/);
+  });
+
+  it('changes nothing else about a target: no measure, role, unit, period kind or due date column', () => {
+    const columns = [...table.matchAll(/^\s{2}([a-z_]+)\s+(?:uuid|date|timestamptz|numeric|smallint\[\])(?=[\s,])/gm)].map((m) => m[1]);
+    expect(columns).toEqual(['id', 'user_id', 'target_id', 'effective_from', 'floor', 'aspiration', 'slot_weekdays', 'created_at']);
+  });
+
+  it('turns row level security on, takes every default privilege back, and grants select and insert only', () => {
+    expect(sql).toMatch(/alter table public\.target_changes enable row level security/);
+    expect(sql).toMatch(/revoke all on table public\.target_changes from anon, authenticated, service_role/);
+    const grants = [...sql.matchAll(/grant ([a-z, ()_]+) on table public\.target_changes to ([a-z_]+)/g)].map((m) => `${m[2]}: ${m[1]}`);
+    expect(grants).toEqual(['authenticated: select, insert']);
+    expect(sql).not.toMatch(/grant [^;]*\b(update|delete|truncate|references|trigger|all)\b[^;]*on table public\.target_changes/i);
+  });
+
+  it('has an owner-only select and insert policy and no update or delete policy', () => {
+    const policies = [...sql.matchAll(/create policy "([^"]+)" on public\.target_changes\s+for (select|insert|update|delete|all)/g)].map((m) => `${m[1]} ${m[2]}`);
+    expect(policies).toEqual(['target_changes_select_own select', 'target_changes_insert_own insert']);
+    expect(sql).toMatch(/for select to authenticated using \(\(select auth\.uid\(\)\) = user_id\)/);
+    expect(sql).toMatch(/for insert to authenticated with check \(\(select auth\.uid\(\)\) = user_id\)/);
+  });
+
+  it('sets created_at in a BEFORE INSERT trigger, and the trigger function follows 012: no EXECUTE for any API role', () => {
+    expect(fn).toMatch(/returns trigger/);
+    expect(fn).toMatch(/set search_path = ''/);
+    expect(fn).toMatch(/new\.created_at := clock_timestamp\(\)/);
+    expect(sql).toMatch(/create trigger target_changes_set_created_at before insert on public\.target_changes\s+for each row execute function public\.target_changes_set_created_at\(\)/);
+    expect(sql).toMatch(/revoke execute on function public\.target_changes_set_created_at\(\) from public, anon, authenticated, service_role/);
+    expect(sql).not.toMatch(/grant execute on function public\.target_changes_set_created_at/i);
+  });
+
+  it('is checked by a verify script with checks that fail without the trigger, the grants or the foreign key', () => {
+    expect(verify).toMatch(/A second change for the same target and date is accepted \(no unique key, no upsert\)/);
+    expect(verify).toMatch(/The newest created_at is the second save, so it is the one that wins/);
+    expect(verify).toMatch(/It reads back within a minute of now, not a week ago/);
+    expect(verify).toMatch(/A person cannot rewrite their own change/);
+    expect(verify).toMatch(/A person cannot delete their own change/);
+    expect(verify).toMatch(/A change for another person''s target, in one''s own name, is refused by the composite foreign key/);
+    expect(verify).toMatch(/anon, authenticated and service_role cannot execute the trigger function/);
+    expect(verify).toMatch(/Calling the trigger function directly is refused by privilege for each of the three/);
+  });
+
+  it('leaves nothing behind on production: one block that always rolls back, then checks that run after it', () => {
+    expect(verify).toMatch(/raise exception 'mom146_rollback'/);
+    expect(verify.indexOf("raise exception 'mom146_rollback'")).toBeLessThan(verify.indexOf('The rollback left no throwaway account behind'));
+    expect(verify).toMatch(/The rollback left no goal, target, change or user row for either of them/);
+    const block = verify.slice(verify.indexOf('begin\n    insert into auth.users'), verify.indexOf("exception when others then\n    if sqlerrm"));
+    expect(block.match(/insert into auth\.users/g)).toHaveLength(1);
+  });
+
+  it('is in the grants allow-list with the approved grants', () => {
+    const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8');
+    for (const [role, privs] of [['anon', ''], ['authenticated', 'SELECT,INSERT'], ['service_role', '']]) {
+      expect(allow).toMatch(new RegExp(`\\('target_changes',\\s+'${role}',\\s+'${privs}'\\)`));
+    }
+  });
+});

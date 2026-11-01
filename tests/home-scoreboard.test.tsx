@@ -323,6 +323,20 @@ describe('patterns follow the person’s tone, and only a graded target has one'
     render(<TargetRow card={counted({ pattern: { kind: 'slipping', periods: 3 } })} tone="direct" />);
     expect(screen.getByText('Under the floor 3 weeks running.')).toBeTruthy();
   });
+
+  it('points a slipping run at the weekly review until that review is finished, then keeps only "Under the floor 3 weeks running." (MOM-146)', () => {
+    const slipping = (reviewed: boolean) => counted({ pattern: { kind: 'slipping', periods: 3, reviewed } });
+    render(<TargetRow card={slipping(false)} tone="middle" />);
+    expect(screen.getByText('Under the floor 3 weeks running. Worth a look at your weekly review.')).toBeTruthy();
+    cleanup();
+    render(<TargetRow card={slipping(true)} tone="middle" />);
+    expect(screen.getByText('Under the floor 3 weeks running.')).toBeTruthy();
+    expect(screen.queryByText(/weekly review/)).toBeNull();
+    cleanup();
+    // A card from before the field existed reads as not reviewed.
+    render(<TargetRow card={counted({ pattern: { kind: 'slipping', periods: 3 } })} tone="middle" />);
+    expect(screen.getByText(/Worth a look at your weekly review/)).toBeTruthy();
+  });
 });
 
 describe('a milestone shows its steps and due date, with no forecast', () => {

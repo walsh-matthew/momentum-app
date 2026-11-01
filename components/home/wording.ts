@@ -125,7 +125,8 @@ export interface PatternLine {
 }
 
 // A run of closed weeks, in the person's tone. Only a graded target has a pattern (the view never gives one otherwise).
-// On the weekly review itself (`inReview`) a slipping run is not pointed at "your weekly review": the person is in it.
+// On the weekly review itself, and once the review of the week the run ended in is finished (`inReview`), a slipping run is not pointed at
+// "your weekly review": the person is in it, or has been.
 export function patternLine(pattern: PatternView, tone: Tone, inReview = false): PatternLine {
   const run = weeks(pattern.periods);
   switch (pattern.kind) {

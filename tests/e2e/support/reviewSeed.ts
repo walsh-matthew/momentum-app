@@ -180,6 +180,23 @@ export async function seedReview(email: string, options: ReviewSeedOptions): Pro
   return { window, today, weekday };
 }
 
+// The changes a throwaway account has saved to a target's numbers (migration 020, MOM-146), read back as that person through row level
+// security with the local anon key (never the service role): the day each starts, the numbers and the days. Oldest save first.
+export async function readTargetChanges(
+  email: string,
+): Promise<Array<{ effective_from: string; floor: number; aspiration: number | null; slot_weekdays: number[] | null }>> {
+  const { serverEnv } = readLocalStackEnv();
+  const supabase = createClient<Database>(serverEnv.NEXT_PUBLIC_SUPABASE_URL, serverEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const signedIn = await supabase.auth.signInWithPassword({ email, password: PASSWORD });
+  if (signedIn.error || !signedIn.data.user) throw new Error('Could not sign the throwaway account in to read its changes.');
+  const rows = await supabase.from('target_changes').select('effective_from, floor, aspiration, slot_weekdays').order('created_at');
+  await supabase.auth.signOut({ scope: 'local' });
+  if (rows.error) throw new Error(`Could not read the saved changes (code ${rows.error.code}).`);
+  return rows.data;
+}
+
 // The finished reviews a throwaway account has stored, read back as that person through row level security with the local anon
 // key (never the service role): how many, and the one adjustment each offered with the choice made. Nothing else is read.
 export async function readFinishedReviews(email: string): Promise<Array<{ week_start: string; adjustment_kind: string | null; adjustment_outcome: string | null }>> {

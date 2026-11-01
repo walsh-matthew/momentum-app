@@ -80,6 +80,30 @@ export async function listUnconfirmedStartingPoints(): Promise<ServiceResult<Unc
     rowsByKind.set(kind, new Map((read.data as unknown as Row[]).map((row) => [String(row.id), row])));
   }
 
+  // A target's numbers the person has since changed in the review (MOM-146, migration 020) are what is saved there now: the newest
+  // change by its day, and by when it was saved for one day. A mark whose value they changed is theirs to skip.
+  const targetRows = rowsByKind.get('target');
+  if (targetRows && targetRows.size > 0) {
+    const changes = await supabase
+      .from('target_changes')
+      .select('target_id, effective_from, floor, aspiration, slot_weekdays, created_at')
+      .eq('user_id', userId)
+      .in('target_id', [...targetRows.keys()]);
+    if (changes.error) return { ok: false, error: LOAD_FAILED };
+    const newest = new Map<string, (typeof changes.data)[number]>();
+    for (const c of changes.data) {
+      const seen = newest.get(c.target_id);
+      if (!seen || c.effective_from > seen.effective_from || (c.effective_from === seen.effective_from && c.created_at > seen.created_at)) newest.set(c.target_id, c);
+    }
+    for (const [id, c] of newest) {
+      const row = targetRows.get(id);
+      if (!row) continue;
+      row.floor = c.floor;
+      row.aspiration = c.aspiration;
+      if (c.slot_weekdays !== null) row.slot_weekdays = c.slot_weekdays;
+    }
+  }
+
   let person: Row | null = null;
   if (marks.data.some((m) => m.subject_kind === 'person')) {
     const read = await supabase

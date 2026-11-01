@@ -28,6 +28,9 @@ import {
   floorsMet,
   localDay,
   specProblem,
+  targetInForce,
+  versionsWithChanges,
+  type TargetChange,
 } from '@/lib/engine';
 import { DEFAULT_CELEBRATION, DEFAULT_TONE } from '@/lib/home/defaults';
 import { forecastViews, planForecasts, type ForecastRows } from './forecastRows';
@@ -37,6 +40,7 @@ import type {
   GoalRow,
   PeriodSnapshotRow,
   PersonSettingsRow,
+  TargetChangeRow,
   TargetRow,
   WorkItemRow,
   WorkItemStepRow,
@@ -105,6 +109,9 @@ export type SnapshotRead = Pick<
   | 'carry_over_kind'
 >;
 
+// A change the person saved to a target's levels (migration 020, MOM-146).
+export type TargetChangeRead = Pick<TargetChangeRow, 'id' | 'target_id' | 'effective_from' | 'floor' | 'aspiration' | 'slot_weekdays' | 'created_at'>;
+
 export interface HomeRows {
   settings: SettingsRead | null;
   goals: GoalRead[];
@@ -114,6 +121,10 @@ export interface HomeRows {
   entries: EntryRead[];
   corrections: CorrectionRead[];
   snapshots: SnapshotRead[];
+  // Changes to a target's levels from a later period, newest save wins per target and day (lib/engine/baseline.ts).
+  changes: TargetChangeRead[];
+  // The first day of each week whose weekly review is finished (the latest few), so home does not point at a review that is done.
+  reviewedWeeks: string[];
   // The week plan and the deadline tasks' own columns, for the forecast.
   forecast: ForecastRows;
 }
@@ -165,12 +176,35 @@ export function toSpec(t: TargetRead, stepIds: string[]): TargetSpec {
 // A target counts from its goal's start date: the tables store no start of their own for a target. That is right while
 // every target is made at first setup; a target added later must store its own start or it would be graded on weeks it
 // did not exist (BACKLOG.md, MOM-112). blockEndsOn is the goal's stored end date, never computed here.
-export function toScoreboardTarget(t: TargetRead, goal: ActiveGoalRead, stepIds: string[]): ScoreboardTarget {
+export function toScoreboardTarget(t: TargetRead, goal: ActiveGoalRead, stepIds: string[], changes: readonly TargetChangeRead[] = []): ScoreboardTarget {
   return {
     id: t.id,
     startsOn: goal.start_date,
     blockEndsOn: goal.end_date,
-    versions: [{ effectiveFrom: goal.start_date, spec: toSpec(t, stepIds) }],
+    versions: versionsWithChanges(goal.start_date, toSpec(t, stepIds), toEngineChanges(changes, t.id)),
+  };
+}
+
+// The saved changes of one target, as the engine reads them. The database counts weekdays 1 to 7 from Monday; the engine 0 to 6 from Sunday.
+export function toEngineChanges(rows: readonly TargetChangeRead[], targetId: string): TargetChange[] {
+  return rows
+    .filter((c) => c.target_id === targetId)
+    .map((c) => ({
+      id: c.id,
+      effectiveFrom: c.effective_from,
+      levels: { floor: Number(c.floor), aspiration: c.aspiration === null ? null : Number(c.aspiration) },
+      days: c.slot_weekdays === null ? null : [...new Set(c.slot_weekdays.map(toWeekday))],
+      createdAt: c.created_at,
+    }));
+}
+
+// The target's row with the levels (and a day-slots target's days) of one version of it, for the screens that show a row.
+export function rowInForce<T extends Pick<TargetRead, 'floor' | 'aspiration' | 'slot_weekdays'>>(row: T, spec: TargetSpec): T {
+  return {
+    ...row,
+    floor: spec.levels === null ? null : spec.levels.floor,
+    aspiration: spec.levels === null ? null : spec.levels.aspiration,
+    slot_weekdays: spec.period.kind === 'day_slots' ? spec.period.days.map((d) => (d === 0 ? 7 : d)) : row.slot_weekdays,
   };
 }
 
@@ -293,7 +327,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
   for (const t of targets) {
     const stepIds = stepIdsOfTarget(t.id);
     stepIdsByTarget.set(t.id, stepIds);
-    const target = toScoreboardTarget(t, goalById.get(t.goal_id) as ActiveGoalRead, stepIds);
+    const target = toScoreboardTarget(t, goalById.get(t.goal_id) as ActiveGoalRead, stepIds, rows.changes);
     const spec = target.versions[0].spec;
     const grade = canGrade(anchors, spec.period.kind);
     if (!grade.ok) waiting.set(t.id, 'needs_week_start');
@@ -356,7 +390,14 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
 
   // ---- Target cards --------------------------------------------------------------------------------------------
   const weekStartsOn = anchors.weekStartsOn;
-  const cardOf = (t: TargetRead): TargetCardView => {
+  const engineById = new Map(engineTargets.map((e) => [e.id, e]));
+  const cardOf = (source: TargetRead): TargetCardView => {
+    // The levels and days in force for the period the card is about, and a change that has not taken effect yet.
+    const engineTarget = engineById.get(source.id);
+    const current = scoreboard.results.find((r) => r.targetId === source.id);
+    const t = engineTarget && current ? rowInForce(source, targetInForce(engineTarget, current.periodStart)) : source;
+    const coming = engineTarget?.versions.slice(1).filter((v) => v.effectiveFrom > today).sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : 1)).pop();
+    const change = coming?.spec.levels ? { from: coming.effectiveFrom, floor: coming.spec.levels.floor, aspiration: coming.spec.levels.aspiration } : null;
     const base = {
       id: t.id,
       title: t.title,
@@ -367,6 +408,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
       dueOn: t.due_date,
       floor: t.floor === null ? null : Number(t.floor),
       aspiration: t.aspiration === null ? null : Number(t.aspiration),
+      change,
     } as const;
     const wait = waiting.get(t.id);
     if (wait) return { ...base, status: wait };
@@ -378,7 +420,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
       ? (() => {
           const own = scoreboard.patterns.filter((p) => p.targetId === t.id);
           const found = PATTERN_ORDER.map((kind) => own.find((p) => p.kind === kind)).find((p) => p !== undefined);
-          return found ? { kind: found.kind, periods: found.periods } : null;
+          return found ? { kind: found.kind, periods: found.periods, reviewed: rows.reviewedWeeks.includes(found.endingPeriodStart) } : null;
         })()
       : null;
     const trend = scoreboard.trends.find((x) => x.targetId === t.id);

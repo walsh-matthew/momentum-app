@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ENFORCED_CONSTRAINTS, ENFORCED_PLAN_CONSTRAINTS, ENFORCED_REVIEW_CONSTRAINTS } from './helpers/fakeEntriesModel';
+import { ENFORCED_CONSTRAINTS, ENFORCED_PLAN_CONSTRAINTS, ENFORCED_REVIEW_CONSTRAINTS, ENFORCED_TARGET_CHANGE_CONSTRAINTS } from './helpers/fakeEntriesModel';
 
 // Statements only: comments say things like "never edited" and would match.
 const sql = readFileSync(join(process.cwd(), 'supabase', 'migrations', '013_goal_model_tables.sql'), 'utf8').replace(/--.*$/gm, '');
@@ -75,5 +75,25 @@ describe('the goal model fake matches migration 019', () => {
 
   it('person_day_types is read-only to the fake, which only seeds it', () => {
     expect(sql019).not.toMatch(/person_day_types to authenticated/);
+  });
+});
+
+// Migration 020 (MOM-146): the target_changes table the fake also stands in for.
+const sql020 = readFileSync(join(process.cwd(), 'supabase', 'migrations', '020_target_changes.sql'), 'utf8').replace(/--.*$/gm, '');
+
+describe('the goal model fake matches migration 020', () => {
+  it.each([...ENFORCED_TARGET_CHANGE_CONSTRAINTS])('%s exists in the SQL', (name) => {
+    expect(sql020).toMatch(new RegExp(`(constraint|policy)\\s+"?${name}"?\\b`, 'i'));
+  });
+
+  it('the person can select and insert a change and nothing else, as the fake allows', () => {
+    expect(sql020).toContain('grant select, insert on table public.target_changes to authenticated;');
+    expect(sql020).not.toMatch(/grant[^;]*\b(update|delete)\b[^;]*on table public\.target_changes/i);
+  });
+
+  it('created_at is set by a BEFORE INSERT trigger, and there is no unique key, as the fake does', () => {
+    expect(sql020).toMatch(/create trigger target_changes_set_created_at before insert on public\.target_changes/);
+    expect(sql020).toMatch(/new\.created_at := clock_timestamp\(\)/);
+    expect(sql020).not.toMatch(/\bunique\b/i);
   });
 });

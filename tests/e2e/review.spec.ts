@@ -15,10 +15,9 @@
 // Any 5xx response from the app fails the spec.
 
 import type { Page } from '@playwright/test';
-import { FINISH_NEEDS_CHOICE } from '@/components/review/sittingWording';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
-import { REVIEW_TITLES, laToday, readFinishedReviews, seedReview, shiftDay } from './support/reviewSeed';
+import { REVIEW_TITLES, laToday, readFinishedReviews, readTargetChanges, seedReview, shiftDay } from './support/reviewSeed';
 
 // What the fake model has been asked (tests/e2e/support/fakeAnthropic.ts): how many weekly-review lines, and the facts of the newest.
 const fakeLast = async (): Promise<{ reviewRequests: number; lastReviewFacts: string }> =>
@@ -38,6 +37,12 @@ function watchForServerErrors(page: Page): () => string[] {
 const FULL_WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 // "Mon, Oct 19": the same way the app writes a day.
 const formatDay = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+// A day as the app writes it after a change: "Mon, Nov 2", with the year only when it is not this year.
+const dayWords = (day: string) => {
+  const words = formatDay(day);
+  return day.slice(0, 4) === laToday().today.slice(0, 4) ? words : `${words}, ${day.slice(0, 4)}`;
+};
 
 // How far the review's content reaches past the right edge of the screen: nothing inside it may.
 const overflowOfReview = (page: Page) =>
@@ -125,11 +130,8 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(question.getByRole('heading', { name: `Want to change anything about “${REVIEW_TITLES.workouts}”?` })).toBeVisible();
       await expect(question.getByText(/weeks in a row/)).toBeVisible();
       await expect(question.getByRole('radio')).toHaveCount(3);
-      // MOM-145: Finish is solid and tappable; with nothing chosen a tap says what is missing and moves to the choices.
-      await expect(page.getByRole('button', { name: 'Finish review' })).toBeEnabled();
-      await page.getByRole('button', { name: 'Finish review' }).click();
-      await expect(page.getByRole('alert').filter({ hasText: FINISH_NEEDS_CHOICE })).toBeVisible();
-      await expect(question.getByRole('radio').first()).toBeFocused();
+      // The finish is not there until the question is answered (MOM-146): no button that cannot be used.
+      await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
       if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
 
       // Tap for the line: one request, which carries the person's own target title and nothing about the goal, a priority or a number.
@@ -144,10 +146,30 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       expect(after.lastReviewFacts).not.toContain(REVIEW_TITLES.priority);
       expect(after.lastReviewFacts).not.toMatch(/\d/);
 
-      // Choose, and be told plainly that nothing in the app changed.
+      // "Yes" opens the edit of that target in the same card (MOM-146). A number left empty is answered by one callout that names it.
       await question.getByRole('radio', { name: 'Yes, I want to change it' }).click();
-      await expect(question.getByText("Noted. Changing a target isn't in the app yet, so nothing was changed.")).toBeVisible();
+      const edit = question.getByRole('form', { name: 'Change this target' });
+      await expect(edit.getByText('In a hard week, how many workouts would still count?')).toBeVisible();
+      await expect(edit.getByText('Now: 2. Last week you did 0.')).toBeVisible();
+      // The reviewed week ended yesterday and the person's week began today, so the change starts today: the week right after the
+      // reviewed one, which is also the week they are in. Weeks before it keep their numbers.
+      const startsOn = seed.today;
+      await expect(edit.getByText(`This starts ${dayWords(startsOn)}. Weeks before that keep the numbers they had.`)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
+      await edit.getByRole('textbox', { name: /would still count/ }).fill('');
+      await edit.getByRole('button', { name: 'Save the change' }).click();
+      await expect(edit.getByRole('alert')).toHaveText('Enter a number above 0.');
+      await expect(edit.getByRole('textbox', { name: /would still count/ })).toBeFocused();
+      if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
+
+      // Save new numbers: the sentence says what was saved and from when, and only then is there something to finish.
+      await edit.getByRole('textbox', { name: /would still count/ }).fill('3');
+      await edit.getByRole('textbox', { name: /hoping for/ }).fill('5');
+      await edit.getByRole('button', { name: 'Save the change' }).click();
+      await expect(question.getByText(`Saved. From ${dayWords(startsOn)}: 3 workouts in a hard week, hoping for 5.`)).toBeVisible();
+      await expect(question.getByRole('form')).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Finish review' })).toBeEnabled();
+      expect(await readTargetChanges(email)).toEqual([{ effective_from: startsOn, floor: 3, aspiration: 5, slot_weekdays: null }]);
       if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
 
       // Finish once. The page reads back as a finished review, and planning follows in the same sitting as a link.
@@ -164,6 +186,16 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await page.reload();
       await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
+      // The reviewed week keeps the numbers it was judged by: nothing on the finished review says the new numbers.
+      await expect(page.getByText(/3 workouts in a hard week/)).toHaveCount(0);
+
+      // And the change shows on home: it started today, so the new numbers are the ones in force, and the slipping note no longer sends
+      // the person to a review they have just finished.
+      await page.goto('/');
+      await expect(page.getByText('Floor 3 a week · aspiration 5')).toBeVisible();
+      await expect(page.getByText('Under the floor 3 weeks running.', { exact: true })).toBeVisible();
+      await expect(page.getByText(/Worth a look at your weekly review/)).toHaveCount(0);
+      if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
       expect(serverErrors()).toEqual([]);
     });
   });
@@ -171,6 +203,30 @@ for (const [name, width] of Object.entries(WIDTHS)) {
 
 test.describe('the sitting in the situations a person can be in (390px)', () => {
   test.use({ viewport: { width: WIDTHS.phone, height: 900 } });
+
+  test('"Never mind" saves nothing and goes back to the three choices, and "Ask me again next week" is stored as skipped (MOM-146)', async ({ page }) => {
+    const serverErrors = watchForServerErrors(page);
+    const email = await signUpAndConfirm(page, 'sitting-nevermind');
+    const seed = await seedReview(email, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, week: 'none' });
+    await page.goto('/review');
+    await page.waitForLoadState('networkidle');
+    const question = page.getByRole('region', { name: 'One thing to decide' });
+    await question.getByRole('radio', { name: 'Yes, I want to change it' }).click();
+    await expect(question.getByRole('form', { name: 'Change this target' })).toBeVisible();
+    await question.getByRole('button', { name: 'Never mind' }).click();
+    await expect(question.getByRole('form')).toHaveCount(0);
+    await expect(question.getByRole('radio', { checked: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
+    expect(await readTargetChanges(email)).toEqual([]);
+
+    await question.getByRole('radio', { name: 'Ask me again next week' }).click();
+    await expect(question.getByText("Okay. I'll ask again next week.")).toBeVisible();
+    await page.getByRole('button', { name: 'Finish review' }).click();
+    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+    expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: 'slipping_check_in', adjustment_outcome: 'skipped' }]);
+    expect(await readTargetChanges(email)).toEqual([]);
+    expect(serverErrors()).toEqual([]);
+  });
 
   test('a reply that fails the checks twice is replaced by a plain line from Momentum, and says so', async ({ page }) => {
     const serverErrors = watchForServerErrors(page);

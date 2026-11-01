@@ -4,10 +4,11 @@
 // engine saw and what the answer is used for. Nothing is celebrated here and nothing is blocked: the three choices are equal,
 // and "Skip for now" is a choice, not a way out of a trap (principle 7, "every change has a way out").
 //
-// What "Yes, I want to change it" does today: nothing in the app edits a target or a deadline yet, so for those it records the
-// person's choice and says so plainly ("so nothing was changed"). The choice is still what kill criterion 4 measures. The
-// deadline forecast's "more time" is the one that can act today, through the week plan, which is after the review in the same
-// sitting.
+// What "Yes, I want to change it" does (MOM-146): for a slipping check-in and a re-baseline it opens the edit of that target's
+// numbers in the same card (components/review/TargetChangeForm.tsx), and the stored outcome stays 'changed'. Where the edit does not
+// cover the target, and for a deadline, it records the choice and says so plainly ("so nothing was changed"). The choice is still what
+// kill criterion 4 measures. The deadline forecast's "more time" is the one that can act today, through the week plan, which is
+// after the review in the same sitting.
 
 import type { ReviewAdjustmentOutcome } from '@/types/database.types';
 import type { ForecastOption, LayerThreeAdjustment } from '@/types/scoreboard';
@@ -27,13 +28,19 @@ export interface AdjustmentView {
 export const CHOICE_LABELS: Record<ReviewAdjustmentOutcome, string> = {
   changed: 'Yes, I want to change it',
   declined: 'No, keep it as it is',
-  skipped: 'Skip for now',
+  skipped: 'Ask me again next week',
 };
+
+// A question that offers to raise the bar is answered "Yes, raise it": the label matches what the person was asked.
+const RAISE_LABELS: Record<ReviewAdjustmentOutcome, string> = { ...CHOICE_LABELS, changed: 'Yes, raise it' };
 
 export const CHOICE_ORDER: readonly ReviewAdjustmentOutcome[] = ['changed', 'declined', 'skipped'];
 
 const KEPT = 'Okay. It stays as it is.';
-const SKIPPED = 'Skipped. Nothing changes.';
+const SKIPPED = "Okay. I'll ask again next week.";
+
+// "Yes" on a target the edit does not cover, or when there is nothing to open: the choice is recorded and nothing else is.
+const NOT_CHANGED_HERE = "Noted. This target can't be changed here, so nothing was changed.";
 
 // A target's title as the person wrote it, in curly quotes so a long or odd title still reads as a title.
 const quoted = (title: string) => `“${title}”`;
@@ -66,10 +73,10 @@ export function adjustmentView(adjustment: LayerThreeAdjustment, titles: Adjustm
       return {
         kind: adjustment.kind,
         question: title === null ? 'Want to change anything about this target?' : `Want to change anything about ${quoted(title)}?`,
-        detail: `You didn't reach your floor, the least that counts, for ${adjustment.periods} weeks in a row. One week isn't a pattern, but this might mean it doesn't fit right now. It's your call.`,
+        detail: `You didn't reach the number that still counts in a hard week, ${adjustment.periods} weeks in a row. One week isn't a pattern, but this might mean it doesn't fit right now. It's your call.`,
         choices: CHOICE_LABELS,
         afterChoice: {
-          changed: "Noted. Changing a target isn't in the app yet, so nothing was changed.",
+          changed: NOT_CHANGED_HERE,
           declined: KEPT,
           skipped: SKIPPED,
         },
@@ -80,10 +87,10 @@ export function adjustmentView(adjustment: LayerThreeAdjustment, titles: Adjustm
       return {
         kind: adjustment.kind,
         question: title === null ? 'Raise the bar on this target?' : `Raise the bar on ${quoted(title)}?`,
-        detail: `You reached your aspiration, the number you hoped for, ${adjustment.periods} weeks in a row. You can aim higher from next week. Past weeks keep the number they had.`,
-        choices: CHOICE_LABELS,
+        detail: `You reached the number you were hoping for ${adjustment.periods} weeks in a row. You can aim higher from next week. Past weeks keep the number they had.`,
+        choices: RAISE_LABELS,
         afterChoice: {
-          changed: "Noted. Changing a target isn't in the app yet, so nothing was changed.",
+          changed: NOT_CHANGED_HERE,
           declined: KEPT,
           skipped: SKIPPED,
         },

@@ -15,7 +15,7 @@ export const ME = '11111111-1111-4111-8111-111111111111';
 export const OTHER = '22222222-2222-4222-8222-222222222222';
 export const newId = () => crypto.randomUUID();
 
-type TableName = 'starting_points' | 'person_settings' | 'person_day_types' | 'goals' | 'targets' | 'work_items';
+type TableName = 'starting_points' | 'person_settings' | 'person_day_types' | 'goals' | 'targets' | 'work_items' | 'target_changes';
 
 export const ENFORCED_NAMES = [
   'starting_points_select_own',
@@ -34,6 +34,8 @@ export const sp = {
     goals: [] as Row[],
     targets: [] as Row[],
     work_items: [] as Row[],
+    // Migration 020: the changes a person saved to a target's numbers, read-only here.
+    target_changes: [] as Row[],
   } satisfies Record<TableName, Row[]>,
   user: null as { id: string } | null,
   rls: true,
