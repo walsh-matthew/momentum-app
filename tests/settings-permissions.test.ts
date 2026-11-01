@@ -18,6 +18,10 @@ describe('.claude/settings.json permissions', () => {
     expect(settings.permissions.allow).toContain('Bash(npm run stack:status)');
   });
 
+  it('allows the repository check without a prompt (MOM-124 item d)', () => {
+    expect(settings.permissions.allow).toContain('Bash(npm run project:check)');
+  });
+
   it('keeps every existing ask entry (push, db push, env, pr merge)', () => {
     expect(settings.permissions.ask).toEqual(
       expect.arrayContaining([

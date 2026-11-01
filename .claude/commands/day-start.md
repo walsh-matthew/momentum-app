@@ -5,6 +5,7 @@ disable-model-invocation: true
 
 Check the day's prerequisites and report what is missing (MOM-75, docs/mom-75-plan-execution-spec.md section 2.2). This command is read-only: it changes no file, makes no commit, and touches neither production nor Jira. Before each step, say in one line what you are checking. Run commands one at a time.
 
+0. **Repository check.** Run `npm run project:check`. If it exits non-zero, show its one line and stop: these commands belong to `walsh-matthew/momentum-app`, and nothing below runs in another repository.
 1. **Working tree.** `git branch --show-current`, then `git status --short`. Expected: a clean tree (`AGENTS.md`, `supabase/.branches/` and `supabase/snippets/` are git-ignored since MOM-68, so they no longer show). Only my uncommitted `docs/FAILURE_LOG.md` and `docs/RAID_LOG.md` may also show. List anything else, including any untracked file, as a problem.
 2. **main against GitHub.** `git fetch origin` (it only updates remote-tracking refs), then `git rev-parse main origin/main`. Say whether they match, or whether `main` is behind (a fast-forward fixes it) or has diverged.
 3. **Earlier days' work.** `git branch --no-merged origin/main` lists local branches with work that is not in `origin/main`; for each, show `git log origin/main..<branch> --oneline`. Check `gh --version`: if `gh` is installed, run `gh pr list --state open`; if not, say "gh is not installed: check open pull requests on GitHub".
