@@ -155,12 +155,24 @@ const shortWeekday = (date: string): string =>
 
 // What the person is told when an entry is saved but falls before its goal's start date. The engine counts nothing
 // before a target starts (types/scoreboard.ts), so the entry is kept and the person hears about it at once.
-async function startDateNotice(supabase: Client, userId: string, goalId: string, day: string | null): Promise<string | undefined> {
+async function startDateNotice(supabase: Client, userId: string, goalId: string, targetId: string | null, day: string | null): Promise<string | undefined> {
   if (day === null) return undefined;
   const { data, error } = await supabase.from('goals').select('start_date').eq('id', goalId).eq('user_id', userId).maybeSingle();
   if (error) {
     console.error('[manual-entry] could not check the goal start date', { code: error.code });
     return undefined;
+  }
+  // A target added to a goal that had already started has a start of its own (migration 021, MOM-132) and counts from that, not from
+  // its goal. That start is set once and cannot be moved, so this notice does not suggest moving it.
+  if (targetId !== null) {
+    const own = await supabase.from('targets').select('start_date').eq('id', targetId).eq('user_id', userId).maybeSingle();
+    if (own.error) {
+      console.error('[manual-entry] could not check the target start date', { code: own.error.code });
+      return undefined;
+    }
+    if (own.data?.start_date) {
+      return day >= own.data.start_date ? undefined : `Saved. It's before this target's start date (${shortDate(own.data.start_date, day)}), so it won't count.`;
+    }
   }
   // A parked goal may have no start yet (migration 014), and then nothing is before it.
   if (!data || data.start_date === null || day >= data.start_date) return undefined;
@@ -288,7 +300,7 @@ async function insertEntry(context: LoggingContext, entry: NewEntry, options: Lo
     console.error('[manual-entry] could not save an entry', { code: error?.code ?? 'no_row' });
     return { ok: false, error: SAVE_FAILED };
   }
-  const notice = await startDateNotice(supabase, userId, target.data.goalId, when.data.day);
+  const notice = await startDateNotice(supabase, userId, target.data.goalId, entry.targetId, when.data.day);
   return { ok: true, data: { entryId: data.id, ...(notice ? { notice } : {}) } };
 }
 
@@ -561,7 +573,7 @@ async function writeFirstTick(context: LoggingContext, step: StepContext, stepId
     console.error('[manual-entry] could not save a tick', { code: error?.code ?? 'no_row' });
     return { ok: false, error: SAVE_FAILED };
   }
-  const notice = await startDateNotice(supabase, userId, step.goalId, when.data.day);
+  const notice = await startDateNotice(supabase, userId, step.goalId, step.targetId, when.data.day);
   return { ok: true, data: { entryId: data.id, sourceId: source.data, ...(notice ? { notice } : {}) } };
 }
 
@@ -651,7 +663,7 @@ export async function getLogPanel(deps: { now?: () => number } = {}): Promise<Se
   const [settings, goals, targets, items, steps, source] = await Promise.all([
     supabase.from('person_settings').select('time_zone, day_end').eq('user_id', userId).maybeSingle(),
     supabase.from('goals').select('id, title, state, start_date').eq('user_id', userId),
-    supabase.from('targets').select('id, goal_id, title, measure, unit, created_at').eq('user_id', userId).order('created_at', { ascending: true }),
+    supabase.from('targets').select('id, goal_id, title, measure, unit, created_at, start_date').eq('user_id', userId).order('created_at', { ascending: true }),
     supabase.from('work_items').select('id, target_id, title, sort_order').eq('user_id', userId).order('sort_order', { ascending: true }),
     supabase.from('work_item_steps').select('id, work_item_id, title, sort_order').eq('user_id', userId).order('sort_order', { ascending: true }),
     findManualSource(supabase, userId),
@@ -725,7 +737,8 @@ export async function getLogPanel(deps: { now?: () => number } = {}): Promise<Se
     const target = byTarget.get(row.target_id);
     const chosenDay = textOf(row.evidence.chosenDay);
     const day = chosenDay ?? (anchors === null ? null : localDay(row.occurred_at, anchors));
-    const start = target ? goalStart.get(target.goal_id) : undefined;
+    // A target added later counts from its own start, else from its goal's (migration 021).
+    const start = target ? (target.start_date ?? goalStart.get(target.goal_id)) : undefined;
     return {
       id: row.id,
       targetId: row.target_id,

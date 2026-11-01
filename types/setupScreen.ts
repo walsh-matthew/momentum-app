@@ -103,3 +103,9 @@ export interface SetupSaved {
   goals: number;
   targets: number;
 }
+
+// What an addition after the first setup answers (MOM-132): the counts, and whether this tap only found the first one's answer
+// (the same approval sent twice writes once).
+export interface SetupAdded extends SetupSaved {
+  replayed: boolean;
+}

@@ -18,7 +18,8 @@
 //   entry exists and is not hidden; that entry belongs to a checklist target, so the engine raises the step's crossing
 //   from that target. A step of an item that feeds no target cannot be ticked yet (BACKLOG.md, MOM-110), so it shows as
 //   not done;
-// - the person's order of goals and targets: not stored, so a tie for the biggest crossing names every tied target.
+// - the person's order of goals and targets, for a goal or target saved before migration 021 (MOM-132): not stored, so a tie for the
+//   biggest crossing that involves one names every tied target. Newer rows carry it (setupOrder below).
 
 import {
   biggestCrossings,
@@ -68,7 +69,8 @@ import type {
 
 // The columns the service reads, no more.
 export type SettingsRead = Pick<PersonSettingsRow, 'time_zone' | 'week_start' | 'day_end' | 'tone' | 'celebrations'>;
-export type GoalRead = Pick<GoalRow, 'id' | 'title' | 'state' | 'shape' | 'start_date' | 'end_date' | 'created_at'>;
+// sort_order (migration 021) is optional on purpose: a row read without it is a row whose place is not stored, never a place of 0.
+export type GoalRead = Pick<GoalRow, 'id' | 'title' | 'state' | 'shape' | 'start_date' | 'end_date' | 'created_at'> & { sort_order?: GoalRow['sort_order'] };
 // Only a parked goal may lack a shape or a start (migration 014), so an active goal on home always has both.
 export type ActiveGoalRead = GoalRead & { shape: NonNullable<GoalRead['shape']>; start_date: string };
 const isActiveGoal = (g: GoalRead): g is ActiveGoalRead => g.state === 'active' && g.shape !== null && g.start_date !== null;
@@ -88,7 +90,12 @@ export type TargetRead = Pick<
   | 'qualifying_threshold'
   | 'carry_over_kind'
   | 'created_at'
->;
+> & {
+  // Migration 021 (MOM-132). Optional on purpose: a row read without start_date counts from its goal (never from "today"), and one
+  // read without sort_order has no stored place.
+  start_date?: TargetRow['start_date'];
+  sort_order?: TargetRow['sort_order'];
+};
 export type ItemRead = Pick<WorkItemRow, 'id' | 'goal_id' | 'target_id' | 'kind' | 'title' | 'due_date' | 'sort_order' | 'created_at'>;
 export type StepRead = Pick<WorkItemStepRow, 'id' | 'work_item_id' | 'title' | 'sort_order'>;
 export type EntryRead = Pick<EntryRow, 'id' | 'target_id' | 'source_id' | 'source_record_id' | 'occurred_at' | 'value' | 'evidence'>;
@@ -173,16 +180,38 @@ export function toSpec(t: TargetRead, stepIds: string[]): TargetSpec {
   };
 }
 
-// A target counts from its goal's start date: the tables store no start of their own for a target. That is right while
-// every target is made at first setup; a target added later must store its own start or it would be graded on weeks it
-// did not exist (BACKLOG.md, MOM-112). blockEndsOn is the goal's stored end date, never computed here.
+// The day a target starts counting (docs/DOMAIN_MODEL.md §1.3 "Start"): its OWN start when it has one (a target added to a goal that
+// had already started stores the date the person gave, migration 021), else its goal's start (every target made with its goal, and
+// every target saved before 021). Every place that needs "when did this target start" reads it here, so a target added later is never
+// graded, noticed or changed on weeks before it existed (RAID R-30).
+export function targetStart(t: Pick<TargetRead, 'start_date'>, goal: Pick<ActiveGoalRead, 'start_date'>): string {
+  return t.start_date ?? goal.start_date;
+}
+
+// blockEndsOn is the goal's stored end date, never computed here.
 export function toScoreboardTarget(t: TargetRead, goal: ActiveGoalRead, stepIds: string[], changes: readonly TargetChangeRead[] = []): ScoreboardTarget {
+  const startsOn = targetStart(t, goal);
   return {
     id: t.id,
-    startsOn: goal.start_date,
+    startsOn,
     blockEndsOn: goal.end_date,
-    versions: versionsWithChanges(goal.start_date, toSpec(t, stepIds), toEngineChanges(changes, t.id)),
+    versions: versionsWithChanges(startsOn, toSpec(t, stepIds), toEngineChanges(changes, t.id)),
   };
+}
+
+// The person's order as the ranking of the week's biggest crossing reads it (lib/engine/week.ts): target and item ids, the first goal's
+// first target first. Only what was stored is listed: a goal with no stored place (saved before migration 021), or a target with no
+// place, is left out, and the engine then names every tied target instead of picking one (an unknown order is never guessed). A goal's
+// targets come first, then its items that feed no target (their step crossings are ranked by the item).
+export function setupOrder(goals: readonly GoalRead[], targets: readonly TargetRead[], items: readonly ItemRead[]): string[] {
+  const placed = <T extends { id: string; sort_order?: number | null }>(rows: readonly T[]) =>
+    rows
+      .filter((r): r is T & { sort_order: number } => typeof r.sort_order === 'number')
+      .sort((a, b) => a.sort_order - b.sort_order || byText(a.id, b.id));
+  return placed(goals).flatMap((g) => [
+    ...placed(targets.filter((t) => t.goal_id === g.id)).map((t) => t.id),
+    ...placed(items.filter((i) => i.goal_id === g.id && i.target_id === null)).map((i) => i.id),
+  ]);
 }
 
 // The saved changes of one target, as the engine reads them. The database counts weekdays 1 to 7 from Monday; the engine 0 to 6 from Sunday.
@@ -414,7 +443,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
     if (wait) return { ...base, status: wait };
     const result = scoreboard.results.find((r) => r.targetId === t.id);
     // A target that starts after today has no result yet; it is not shown as graded or as a miss.
-    if (!result) return { ...base, status: 'not_started', startsOn: (goalById.get(t.goal_id) as ActiveGoalRead).start_date };
+    if (!result) return { ...base, status: 'not_started', startsOn: targetStart(source, goalById.get(t.goal_id) as ActiveGoalRead) };
 
     const pattern: PatternView | null = result.graded
       ? (() => {
@@ -468,9 +497,9 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
     } else {
       const tally = floorsMet(scoreboard, engineTargets);
       const week = entriesPerDay({ today, anchors, targets: engineTargets, entries });
-      // The person's order of goals and targets is not stored, so none is passed: every tied crossing is returned and
-      // named, in title then id order, and none is picked.
-      const biggest = biggestCrossings(crossings, { start: week.start, end: week.end });
+      // The person's order from setup breaks a tie only where it was stored for every tied target (migration 021); otherwise every
+      // tied crossing is returned and named, in title then id order, and none is picked.
+      const biggest = biggestCrossings(crossings, { start: week.start, end: week.end }, setupOrder(goals, targets, rows.items));
       const named = biggest
         .map((c) => {
           const id = c.kind === 'step' ? c.stepId : c.targetId;

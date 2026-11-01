@@ -31,8 +31,14 @@
 //
 // The save: FIRST SETUP ONLY. It validates the draft in 'final' mode, turns it into the payload save_guided_setup() reads
 // (migration 015) and makes that one call, which is one database transaction: everything the person approved, or nothing.
-// If the person already has a goal the function refuses and nothing is written. Adding a goal after the first setup is a
-// later piece of work and will be its own function.
+// If the person already has a goal the function refuses and nothing is written.
+//
+// Adding after the first setup (MOM-132, migration 021) is two saves of its own, never a loosening of that one: addApprovedGoals()
+// calls add_goals_after_setup() and addApprovedTargets() calls add_targets_after_setup(). Both take the same approved session as the
+// first save and send only the goals (or one goal's targets): never the person's facts, day types or priorities, so nothing already
+// saved changes. Each carries the id the browser made for this one approval; the same approval sent twice writes once and gets the
+// first answer back. A target added to a goal that has started stores the start date the person gave (no default), and is graded
+// only from it.
 
 import 'server-only';
 import { z } from 'zod';
@@ -51,7 +57,7 @@ import { recapSections } from '@/lib/setup/quickRecap';
 import { personWords } from '@/lib/setup/said';
 import { errorText } from '@/lib/setup/session';
 import { sourceNote } from '@/lib/setup/sources';
-import { draftToRows, toSavePayload } from '@/lib/setup/rows';
+import { draftToRows, toAddGoalsPayload, toAddTargetsPayload, toSavePayload, type SetupRows } from '@/lib/setup/rows';
 import { validateDraft } from '@/lib/setup/validate';
 import type { Json } from '@/types/database.types';
 import {
@@ -64,7 +70,7 @@ import {
   type AssistantTurn,
   type SetupSession,
 } from '@/types/setup';
-import type { QuickPathReason, QuickPathState, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import type { QuickPathReason, QuickPathState, SetupAdded, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { runSetupTurn } from './llm';
 import type { ServiceResult } from './result';
 
@@ -364,6 +370,15 @@ export async function getSetupStart(): Promise<ServiceResult<{ alreadySetUp: boo
   return { ok: true, data: { alreadySetUp: data.length > 0 } };
 }
 
+// The rows of an approved session, or the plain words for what is still missing. Shared by the first save and both additions, so
+// each holds a session to the same final validation before anything is sent.
+function approvedRows(session: SetupSession): ServiceResult<SetupRows> {
+  const rows = draftToRows(session.draft, session.transcript);
+  if (rows.ok) return { ok: true, data: rows.rows };
+  const missing = describeMissing(session.draft.model, rows.issues, { said: personWords(session.transcript) });
+  return { ok: false, error: `This setup can't be saved yet.${missing.length > 0 ? ` Still needed: ${missing.join(' ')}` : ''} Nothing was saved.` };
+}
+
 // Saves an approved setup, or nothing. `quickPath` is true only when the person tapped save on the quick path screen, which
 // shows every part and so counts as their approval of each. First setup only.
 export async function saveApprovedSetup(raw: unknown, quickPath: unknown = false): Promise<ServiceResult<SetupSaved>> {
@@ -373,13 +388,10 @@ export async function saveApprovedSetup(raw: unknown, quickPath: unknown = false
   if (!user.ok) return user;
 
   const session = quickPath === true ? withAllApproved(parsed.data) : parsed.data;
-  const rows = draftToRows(session.draft, session.transcript);
-  if (!rows.ok) {
-    const missing = describeMissing(session.draft.model, rows.issues, { said: personWords(session.transcript) });
-    return { ok: false, error: `This setup can't be saved yet.${missing.length > 0 ? ` Still needed: ${missing.join(' ')}` : ''} Nothing was saved.` };
-  }
+  const rows = approvedRows(session);
+  if (!rows.ok) return rows;
 
-  const { data, error } = await user.data.supabase.rpc('save_guided_setup', { p_payload: toSavePayload(rows.rows) as unknown as Json });
+  const { data, error } = await user.data.supabase.rpc('save_guided_setup', { p_payload: toSavePayload(rows.data) as unknown as Json });
   if (error) {
     // The code only: the message can quote what was sent.
     if (error.code === ALREADY_SET_UP_CODE) return { ok: false, error: ALREADY_SET_UP };
@@ -392,4 +404,85 @@ export async function saveApprovedSetup(raw: unknown, quickPath: unknown = false
     return { ok: false, error: SAVE_FAILED };
   }
   return { ok: true, data: { goals: counts.data.goals, targets: counts.data.targets } };
+}
+
+// ---------------------------------------------------------------------------
+// Adding after the first setup (MOM-132, migration 021)
+// ---------------------------------------------------------------------------
+
+// What each refusal of the two add functions says (the codes are migration 021's). The words are the ones the owner read at the design
+// stop; the database's own message can quote what was sent, so only its code is used and logged.
+export const ADD_SIGN_IN = 'Sign in to add to your goals.';
+export const ADD_FAILED = 'Could not add it. Nothing was saved. Your other goals are unchanged.';
+export const ADD_REFUSALS: Readonly<Record<string, string>> = {
+  MS002: 'You already have this one. Nothing was added. Change the title or the start date to add another.',
+  MS003: 'Finish your first setup before adding more.',
+  MS004: "That goal isn't active, so nothing was added.",
+  MS005: "That start date is outside the goal's dates. Nothing was added.",
+};
+export const START_AFTER_DUE = "The start date is after the target's due date. Nothing was added.";
+
+// The id the browser made for this one approval, sent so the same approval sent twice writes once. A quick-path save counts as the
+// approval of every part, as it does for the first setup.
+const AddGoalsRequestSchema = z.strictObject({ submissionId: z.string().uuid(), quickPath: z.boolean().optional() });
+const AddTargetsRequestSchema = z.strictObject({
+  submissionId: z.string().uuid(),
+  goalId: z.string().uuid(),
+  // The person's own date. It is never filled in here: a request without one is refused.
+  startDate: SuggestedDateSchema,
+  quickPath: z.boolean().optional(),
+});
+const AddedCountsSchema = z.object({ goals: z.number().int(), targets: z.number().int(), replayed: z.boolean().optional() });
+
+type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+// One call to an add function, its refusal in plain words, or its answer. The sign-in check and the session parse happen before.
+async function callAddition(supabase: Client, fn: 'add_goals_after_setup' | 'add_targets_after_setup', payload: Json): Promise<ServiceResult<SetupAdded>> {
+  const { data, error } = await supabase.rpc(fn, { p_payload: payload });
+  if (error) {
+    const code = error.code ?? 'none';
+    if (code in ADD_REFUSALS) return { ok: false, error: ADD_REFUSALS[code] };
+    console.error('[setup] could not add to a setup', { fn, code });
+    return { ok: false, error: ADD_FAILED };
+  }
+  const counts = AddedCountsSchema.safeParse(data);
+  if (!counts.success) {
+    console.error('[setup] an addition answered in an unexpected shape', { fn });
+    return { ok: false, error: ADD_FAILED };
+  }
+  return { ok: true, data: { goals: counts.data.goals, targets: counts.data.targets, replayed: counts.data.replayed === true } };
+}
+
+// Adds the approved goals (with their targets and items) to a person who has already set up. The session is held to the same final
+// validation as the first save. Nothing about the person is sent, so nothing already saved changes.
+export async function addApprovedGoals(raw: unknown, request: unknown): Promise<ServiceResult<SetupAdded>> {
+  const session = SetupSessionSchema.safeParse(raw);
+  const asked = AddGoalsRequestSchema.safeParse(request);
+  if (!session.success || !asked.success) return { ok: false, error: BAD_REQUEST };
+  const user = await signedInUserId();
+  if (!user.ok) return { ok: false, error: ADD_SIGN_IN };
+
+  const rows = approvedRows(asked.data.quickPath === true ? withAllApproved(session.data) : session.data);
+  if (!rows.ok) return rows;
+  return callAddition(user.data.supabase, 'add_goals_after_setup', toAddGoalsPayload(rows.data, asked.data.submissionId) as unknown as Json);
+}
+
+// Adds the approved session's one goal's targets (and the items that feed them) to a goal the person already has, starting on the
+// date they gave. The goal comes from the request and is checked by the database against the person's own goals; the target is graded
+// only from its start. A deadline target due before its start is refused here in plain words before anything is sent.
+export async function addApprovedTargets(raw: unknown, request: unknown): Promise<ServiceResult<SetupAdded>> {
+  const session = SetupSessionSchema.safeParse(raw);
+  const asked = AddTargetsRequestSchema.safeParse(request);
+  if (!session.success || !asked.success) return { ok: false, error: BAD_REQUEST };
+  const user = await signedInUserId();
+  if (!user.ok) return { ok: false, error: ADD_SIGN_IN };
+
+  const rows = approvedRows(asked.data.quickPath === true ? withAllApproved(session.data) : session.data);
+  if (!rows.ok) return rows;
+  const payload = toAddTargetsPayload(rows.data, asked.data.goalId, asked.data.startDate, asked.data.submissionId);
+  if (payload === null) return { ok: false, error: BAD_REQUEST };
+  if (payload.targets.some((t) => t.period_kind === 'deadline' && t.due_date != null && t.due_date < payload.start_date)) {
+    return { ok: false, error: START_AFTER_DUE };
+  }
+  return callAddition(user.data.supabase, 'add_targets_after_setup', payload as unknown as Json);
 }

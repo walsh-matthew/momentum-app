@@ -15,9 +15,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ADD_FAILED,
+  ADD_REFUSALS,
+  ADD_SIGN_IN,
   ALREADY_SET_UP,
   SETUP_FAILURE_MESSAGES,
+  START_AFTER_DUE,
   MAX_REPLY_RETRIES,
+  addApprovedGoals,
+  addApprovedTargets,
   getSetupStart,
   saveApprovedSetup,
   takeSetupTurn,
@@ -28,7 +34,7 @@ import { emptyDraft } from '@/lib/setup/draft';
 import { RETRY_FEEDBACK, retryFeedback } from '@/lib/setup/feedback';
 import { runSetupEval } from '@/lib/setup/evals';
 import { latestProvenance, provenanceLeaves } from '@/lib/setup/leaves';
-import { draftToRows, toSavePayload, type SetupRows } from '@/lib/setup/rows';
+import { draftToRows, toAddGoalsPayload, toAddTargetsPayload, toSavePayload, type SetupRows } from '@/lib/setup/rows';
 import { acceptedStartingPoints, startingPointForPath, type StartingPointMark } from '@/lib/setup/startingPoints';
 import { MAX_PERSON_CHARS, SETUP_TOPICS, type AssistantTurn, type SetupDraft, type SetupSession } from '@/types/setup';
 import { SETUP_CASES } from './setup-evals/cases';
@@ -779,11 +785,12 @@ describe('saveApprovedSetup: parked goals and incomplete drafts', () => {
 // The payload and the SQL read the same keys
 // ---------------------------------------------------------------------------
 
-describe('the payload and migrations 015, 016 and 017 agree', () => {
+describe('the payload and migrations 015, 016, 017 and 021 agree', () => {
   // 016 redefines save_guided_setup (CREATE OR REPLACE) to also read "metric", and 017 to also read "starting_points";
   // 015's and 016's own files are untouched, but the function they created is superseded, so the files together say what
   // the deployed function actually reads.
-  const sql = ['015_save_guided_setup.sql', '016_quantity_metric.sql', '017_starting_points.sql']
+  // 021 (MOM-132) replaces it once more and adds the two add functions and the writer they share.
+  const sql = ['015_save_guided_setup.sql', '016_quantity_metric.sql', '017_starting_points.sql', '021_add_after_setup.sql']
     .map((f) => readFileSync(join(process.cwd(), 'supabase', 'migrations', f), 'utf8').replace(/--.*$/gm, ''))
     .join('\n');
 
@@ -836,16 +843,22 @@ describe('the payload and migrations 015, 016 and 017 agree', () => {
   // The keys the function reads: ->> 'x' and -> 'x', and the columns named in its jsonb_to_recordset lists.
   const sqlKeys = (): Set<string> => {
     const out = new Set<string>();
-    for (const m of sql.matchAll(/->>?\s*'([a-z_]+)'/g)) out.add(m[1]);
-    for (const m of sql.matchAll(/as \w+ \(([^)]*)\)/g)) {
+    // 021: the saves read the shared writer's own answer (v_counts ->> 'work_items'); that is not part of any payload.
+    const payloadReads = sql.replace(/v_counts\s*->>?\s*'[a-z_]+'/g, '');
+    for (const m of payloadReads.matchAll(/->>?\s*'([a-z_]+)'/g)) out.add(m[1]);
+    for (const m of sql.matchAll(/jsonb_to_recordset\([^)]*\)\s*as \w+ \(([^)]*)\)/g)) {
       for (const column of m[1].split(',')) out.add(column.trim().split(/\s+/)[0]);
     }
     return out;
   };
 
   it('every key the function reads is one the app sends, and every key the app sends is one the function reads', () => {
-    const payload = toSavePayload(rows);
-    const sent = keysOf(payload);
+    // The first save's payload, and the two additions' own (migration 021): the submission id, the goal and the start.
+    const sent = new Set([
+      ...keysOf(toSavePayload(rows)),
+      ...keysOf(toAddGoalsPayload(rows, 'sub')),
+      ...keysOf(toAddTargetsPayload(rows, 'goal', '2026-11-09', 'sub')),
+    ]);
     const read = sqlKeys();
     expect([...read].filter((k) => !sent.has(k)).sort(), 'read by the SQL but never sent').toEqual([]);
     expect([...sent].filter((k) => !read.has(k)).sort(), 'sent by the app but never read by the SQL').toEqual([]);

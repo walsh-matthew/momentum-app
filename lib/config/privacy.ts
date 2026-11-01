@@ -36,8 +36,9 @@ export const STORED_GROUPS: readonly StoredGroup[] = [
   },
   {
     id: 'goals',
-    words: 'Your goals and the targets you set under them.',
-    tables: ['goals', 'targets', 'goal_channels'],
+    words:
+      "Your goals and the targets you set under them, the order you gave them in, and for a target you add later the day it starts counting. It also keeps a random id for each addition you approve, so tapping twice doesn't add it twice.",
+    tables: ['goals', 'targets', 'goal_channels', 'setup_additions'],
   },
   {
     id: 'work',

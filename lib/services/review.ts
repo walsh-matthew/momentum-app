@@ -45,6 +45,7 @@ import { buildStoredRecap, recapValues } from './reviewRecap';
 import { readUnconfirmedStartingPoints } from './startingPoints';
 import {
   rowInForce,
+  targetStart,
   toAnchors,
   toScoreboardEntries,
   toScoreboardTarget,
@@ -241,7 +242,7 @@ export function buildWeeklyReviewFacts(rows: ReviewRows, nowMs: number): WeeklyR
       days: latest.period.kind === 'day_slots' ? latest.period.days.map((d) => (d === 0 ? 7 : d)).sort((a, b) => a - b) : null,
       weekStartsOn: anchors.weekStartsOn,
       lastCounted: facts.find((f) => f.targetId === targetId)?.result.counted ?? null,
-      effectiveFrom: changeEffectiveFrom(window.end, today, (goalById.get(row.goal_id) as ActiveGoalRead).start_date, anchors.weekStartsOn),
+      effectiveFrom: changeEffectiveFrom(window.end, today, targetStart(row, goalById.get(row.goal_id) as ActiveGoalRead), anchors.weekStartsOn),
       today,
     };
   };
@@ -309,7 +310,7 @@ export async function getWeeklyReviewFacts(deps: WeeklyReviewFactsDeps = {}): Pr
     supabase
       .from('targets')
       .select(
-        'id, goal_id, title, measure, unit, role, period_kind, due_date, slot_weekdays, floor, aspiration, qualifying_threshold, carry_over_kind, created_at',
+        'id, goal_id, title, measure, unit, role, period_kind, due_date, slot_weekdays, floor, aspiration, qualifying_threshold, carry_over_kind, created_at, start_date',
       )
       .eq('user_id', userId),
     supabase.from('work_items').select('id, goal_id, target_id, kind, title, due_date, sort_order, created_at').eq('user_id', userId),
