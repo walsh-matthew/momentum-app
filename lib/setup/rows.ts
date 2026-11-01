@@ -173,6 +173,38 @@ function startingPointsOf(rows: SetupRows, isSubject: (subject: StartingPointSub
   return fields.length > 0 ? { starting_points: fields } : {};
 }
 
+// What add_goals_after_setup() takes (migration 021, MOM-132): the goals as the first-setup save reads them, with their targets,
+// items and starting-point marks, and the id the browser made for this one approval. Nothing about the person (facts, day types,
+// priorities) travels: an addition never touches what is already saved. There is no user id: the function takes the owner from the
+// session.
+export interface AddGoalsPayload {
+  submission_id: string;
+  goals: SavePayload['goals'];
+}
+
+// What add_targets_after_setup() takes: the new targets (and the items that feed them) of ONE goal the person already has, starting on
+// the date they gave. The goal's own columns, the person's facts and any mark on the goal itself are not sent.
+export interface AddTargetsPayload {
+  submission_id: string;
+  goal_id: string;
+  start_date: string;
+  targets: SavePayload['goals'][number]['targets'];
+  items: SavePayload['goals'][number]['items'];
+}
+
+// The goals of a validated draft as the add-a-goal payload. Pure. The goals come in the order the person gave them.
+export function toAddGoalsPayload(rows: SetupRows, submissionId: string): AddGoalsPayload {
+  return { submission_id: submissionId, goals: toSavePayload(rows).goals };
+}
+
+// The targets of a validated draft's one goal as the add-a-target payload. Pure. Null when the draft does not hold exactly one goal
+// with at least one target: adding targets is to one goal, and a draft of anything else is not what the person approved.
+export function toAddTargetsPayload(rows: SetupRows, goalId: string, startDate: string, submissionId: string): AddTargetsPayload | null {
+  const [goal, ...others] = toSavePayload(rows).goals;
+  if (goal === undefined || others.length > 0 || goal.targets.length === 0) return null;
+  return { submission_id: submissionId, goal_id: goalId, start_date: startDate, targets: goal.targets, items: goal.items };
+}
+
 // The rows of a validated draft as the one payload the save function takes. Pure.
 export function toSavePayload(rows: SetupRows): SavePayload {
   const lower = (name: string) => name.toLowerCase();

@@ -152,7 +152,13 @@ allow_list (rel, role, privs) as (values
   -- row, and nobody changes or deletes one.
   ('target_changes',          'anon',          ''),
   ('target_changes',          'authenticated', 'SELECT,INSERT'),
-  ('target_changes',          'service_role',  '')
+  ('target_changes',          'service_role',  ''),
+
+  -- One row per approved addition after the first setup (021, MOM-132): the person's session writes it (the two add functions
+  -- do), so a second tap gets the same answer. Nobody changes or deletes one.
+  ('setup_additions',         'anon',          ''),
+  ('setup_additions',         'authenticated', 'SELECT,INSERT'),
+  ('setup_additions',         'service_role',  '')
 ),
 roles (role) as (values ('anon'), ('authenticated'), ('service_role')),
 dml (ord, priv) as (values (1, 'SELECT'), (2, 'INSERT'), (3, 'UPDATE'), (4, 'DELETE')),

@@ -13,7 +13,7 @@ import { CHANGE_NOT_READ, CHANGE_SAVE_FAILED, checkChange } from '@/lib/review/t
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { SavedTargetChange } from '@/types/review';
 import type { ServiceResult } from './result';
-import { toAnchors, toWeekday } from './scoreboardRows';
+import { targetStart, toAnchors, toWeekday } from './scoreboardRows';
 
 const SIGNED_OUT = 'Sign in to change a target.';
 const NOT_FOUND = "That target couldn't be found. Nothing was changed.";
@@ -45,7 +45,7 @@ export async function saveTargetChange(raw: unknown, deps: TargetChangeDeps = {}
 
   const target = await supabase
     .from('targets')
-    .select('id, goal_id, measure, period_kind, floor')
+    .select('id, goal_id, measure, period_kind, floor, start_date')
     .eq('id', input.targetId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -77,7 +77,8 @@ export async function saveTargetChange(raw: unknown, deps: TargetChangeDeps = {}
   const planning = settings.data?.planning_weekday == null ? null : toWeekday(settings.data.planning_weekday);
   const reviewed = weeklyReviewWindow(today, anchors.weekStartsOn, planning);
   const reviewedEnd = reviewed === null ? addDays(weekRange(today, anchors.weekStartsOn).start, -1) : reviewed.end;
-  const effectiveFrom = changeEffectiveFrom(reviewedEnd, today, goal.data.start_date, anchors.weekStartsOn);
+  // Never before the target's own start (a target added to a started goal starts on the date the person gave, migration 021).
+  const effectiveFrom = changeEffectiveFrom(reviewedEnd, today, targetStart(row, { start_date: goal.data.start_date }), anchors.weekStartsOn);
 
   const { value } = checked;
   const { error } = await supabase.from('target_changes').insert({

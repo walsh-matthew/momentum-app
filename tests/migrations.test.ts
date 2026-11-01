@@ -1131,10 +1131,10 @@ describe('migration 020 stores the changes a person makes to a target from a lat
   const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '020_target_changes.sql'), 'utf8');
 
   it('adds the one table and changes no applied table, function or grant', () => {
-    for (const earlier of files.slice(0, -1).map((f) => f.slice(0, 3))) expect(sqlOf(earlier), earlier).not.toMatch(/target_changes/);
+    // Every migration before 020 (021 and later may mention the table; they are checked in their own tests).
+    for (const earlier of files.filter((f) => f < '020').map((f) => f.slice(0, 3))) expect(sqlOf(earlier), earlier).not.toMatch(/target_changes/);
     const altered = [...sql.matchAll(/alter table public\.([a-z_]+)\s+(add|drop|alter|enable)\s+(\w+)/gi)].map((m) => `${m[1]} ${m[2]} ${m[3]}`.toLowerCase());
     expect(altered).toEqual(['target_changes enable row']);
-    expect(files[files.length - 1]).toMatch(/^020_/);
   });
 
   it('points a change at the person\'s own target, with no ON DELETE action, and goes with the account', () => {
@@ -1210,6 +1210,150 @@ describe('migration 020 stores the changes a person makes to a target from a lat
     const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8');
     for (const [role, privs] of [['anon', ''], ['authenticated', 'SELECT,INSERT'], ['service_role', '']]) {
       expect(allow).toMatch(new RegExp(`\\('target_changes',\\s+'${role}',\\s+'${privs}'\\)`));
+    }
+  });
+});
+
+describe('migration 021 lets a person add a goal or a target after first setup, each through its own save (MOM-132)', () => {
+  const sql = sqlOf('021');
+  const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '021_add_after_setup.sql'), 'utf8');
+  const fnBody = (name: string) => new RegExp(`create (?:or replace )?function public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`, 'i').exec(sql)?.[0] ?? '';
+  const CALLABLE = ['write_setup_targets', 'save_guided_setup', 'add_goals_after_setup', 'add_targets_after_setup'];
+
+  it('changes the schema only by three nullable columns, one table and one trigger, and leaves every earlier migration as it was', () => {
+    for (const earlier of files.filter((f) => f < '021').map((f) => f.slice(0, 3))) expect(sqlOf(earlier), earlier).not.toMatch(/setup_additions|targets_freeze_start_date|write_setup_targets/);
+    const altered = [...sql.matchAll(/alter table public\.([a-z_]+)\s+(add|drop|alter|enable)\s+(\w+)/gi)].map((m) => `${m[1]} ${m[2]} ${m[3]}`.toLowerCase());
+    expect(altered).toEqual(['targets add column', 'goals add column', 'setup_additions enable row']);
+    // Nullable: null is "not stored" for an order and "from the goal" for a start, so no saved row has to change.
+    expect(sql).toMatch(/add column start_date date,\s+add column sort_order integer,/);
+    expect(sql).toMatch(/alter table public\.goals\s+add column sort_order integer,/);
+    expect(sql).not.toMatch(/add column (start_date|sort_order) [a-z]+ not null/);
+    expect(sql).toMatch(/targets_start_before_due check \(start_date is null or due_date is null or start_date <= due_date\)/);
+    expect(sql).toMatch(/targets_sort_order_check check \(sort_order is null or sort_order >= 0\)/);
+    expect(sql).toMatch(/goals_sort_order_check check \(sort_order is null or sort_order >= 0\)/);
+  });
+
+  it('freezes a target\'s start: it cannot be set on a row where it is null, changed, or cleared', () => {
+    const fn = fnBody('targets_freeze_start_date');
+    expect(fn).toMatch(/new\.start_date is distinct from old\.start_date/);
+    expect(fn).toMatch(/using errcode = '23514'/);
+    expect(sql).toMatch(/create trigger targets_freeze_start_date before update of start_date on public\.targets\s+for each row execute function public\.targets_freeze_start_date\(\)/);
+    expect(sql).toMatch(/revoke execute on function public\.targets_freeze_start_date\(\) from public, anon, authenticated, service_role/);
+    expect(sql).not.toMatch(/grant execute on function public\.targets_freeze_start_date/i);
+  });
+
+  it('stores one answer per approval, owner-only, and never rewrites or removes one', () => {
+    const table = /create table public\.setup_additions \(([\s\S]*?)\n\);/.exec(sql)?.[1] ?? '';
+    expect(table).toMatch(/user_id\s+uuid not null references public\.users \(id\) on delete cascade/);
+    expect(table).toMatch(/primary key \(user_id, id\)/);
+    expect(table).toMatch(/result\s+jsonb not null/);
+    expect(sql).toMatch(/revoke all on table public\.setup_additions from anon, authenticated, service_role/);
+    const grants = [...sql.matchAll(/grant ([a-z, ()_]+) on table public\.setup_additions to ([a-z_]+)/g)].map((m) => `${m[2]}: ${m[1]}`);
+    expect(grants).toEqual(['authenticated: select, insert']);
+    const policies = [...sql.matchAll(/create policy "([^"]+)" on public\.setup_additions\s+for (select|insert|update|delete|all)/g)].map((m) => `${m[1]} ${m[2]}`);
+    expect(policies).toEqual(['setup_additions_select_own select', 'setup_additions_insert_own insert']);
+    expect(sql).toMatch(/for select to authenticated using \(\(select auth\.uid\(\)\) = user_id\)/);
+    expect(sql).toMatch(/for insert to authenticated with check \(\(select auth\.uid\(\)\) = user_id\)/);
+  });
+
+  it('runs every function as the signed-in person with an empty search_path, and none as its owner', () => {
+    expect(sql).not.toMatch(/security definer/i);
+    for (const name of [...CALLABLE, 'targets_freeze_start_date']) {
+      const fn = fnBody(name);
+      expect(fn, name).not.toBe('');
+      expect(fn, name).toMatch(/security invoker/);
+      expect(fn, name).toMatch(/set search_path = ''/);
+      // Nothing is built as text and run: no dynamic SQL in any of them.
+      expect(fn, name).not.toMatch(/\bexecute\s+(format|'|\$)/i);
+    }
+    for (const name of ['write_setup_targets', 'add_goals_after_setup', 'add_targets_after_setup', 'save_guided_setup']) {
+      expect(fnBody(name), name).toMatch(/v_uid\s+uuid := auth\.uid\(\)/);
+      expect(fnBody(name), name).toMatch(/errcode = '42501'/);
+    }
+  });
+
+  it('lets no one but a signed-in person execute a function: PUBLIC, anon and service_role lose it, authenticated gets it', () => {
+    for (const [name, args] of [
+      ['write_setup_targets', 'uuid, jsonb, jsonb, date, integer'],
+      ['save_guided_setup', 'jsonb'],
+      ['add_goals_after_setup', 'jsonb'],
+      ['add_targets_after_setup', 'jsonb'],
+    ]) {
+      expect(sql, name).toMatch(new RegExp(`revoke execute on function public\\.${name}\\(${args}\\) from public, anon, authenticated, service_role;`));
+      expect(sql, name).toMatch(new RegExp(`grant execute on function public\\.${name}\\(${args}\\) to authenticated;`));
+    }
+    const grants = [...sql.matchAll(/grant execute on function public\.([a-z_]+)\([^)]*\) to ([a-z_, ]+);/g)];
+    expect(grants.map((m) => m[1]).sort()).toEqual([...CALLABLE].sort());
+    expect(grants.every((m) => m[2] === 'authenticated')).toBe(true);
+  });
+
+  it('keeps the first-setup save first-setup-only, with the answer it always had, and has it write the order through the shared writer', () => {
+    const fn = fnBody('save_guided_setup');
+    expect(fn).toMatch(/errcode = 'MS001'/);
+    expect(fn).toMatch(/if exists \(select 1 from public\.goals where user_id = v_uid\) then/);
+    expect(fn).toMatch(/jsonb_build_object\('goals', n_goals, 'targets', n_targets, 'work_items', n_items, 'steps', n_steps, 'bindings', n_bindings\)/);
+    expect(fn).toMatch(/with ordinality/);
+    expect(fn).toMatch(/\(v_ord - 1\)::integer/);
+    expect(fn).toMatch(/public\.write_setup_targets\(v_goal_id, v_goal -> 'targets', v_goal -> 'items', null, 0\)/);
+  });
+
+  it('makes each addition its own function: touches no person fact, day type or priority, updates no existing row, and answers a repeat with the first answer', () => {
+    for (const name of ['add_goals_after_setup', 'add_targets_after_setup']) {
+      const fn = fnBody(name);
+      expect(fn, name).not.toMatch(/person_settings|person_day_types|person_priorities/);
+      expect(fn, name).not.toMatch(/\bupdate\s+public\.|\bdelete\s+from\s+public\./i);
+      expect(fn, name).toMatch(/pg_advisory_xact_lock\(hashtextextended\('momentum:add_setup:' \|\| v_uid::text, 0\)\)/);
+      expect(fn, name).toMatch(/jsonb_build_object\('replayed', true\)/);
+      expect(fn, name).toMatch(/errcode = 'MS003'/);
+      expect(fn, name).toMatch(/insert into public\.setup_additions/);
+      // Only the keys named are read: no other key in the payload is accepted.
+      expect(fn, name).toMatch(/\(p_payload - 'submission_id'/);
+    }
+    expect(fnBody('add_goals_after_setup')).toMatch(/errcode = 'MS002'/);
+    expect(fnBody('add_goals_after_setup')).toMatch(/public\.write_setup_targets\(v_goal_id, v_goal -> 'targets', v_goal -> 'items', null, 0\)/);
+    const targets = fnBody('add_targets_after_setup');
+    expect(targets).toMatch(/errcode = 'MS004'/);
+    expect(targets).toMatch(/errcode = 'MS005'/);
+    expect(targets).toMatch(/v_start < v_goal\.start_date or \(v_goal\.end_date is not null and v_start > v_goal\.end_date\)/);
+    // The start is the person's own: it is read from the payload and refused when absent, never filled in.
+    expect(targets).toMatch(/v_start := \(p_payload ->> 'start_date'\)::date;/);
+    expect(targets).toMatch(/v_sub is null or v_goal_id is null or v_start is null/);
+    expect(targets).toMatch(/public\.write_setup_targets\(v_goal_id, p_payload -> 'targets', p_payload -> 'items', v_start, v_base\)/);
+  });
+
+  it('stores a target\'s own start only through the shared writer, and a target made with its goal gets none', () => {
+    const writer = fnBody('write_setup_targets');
+    expect(writer).toMatch(/p_target_start,\s+p_first_position \+ \(v_ord - 1\)::integer/);
+    expect(writer).toMatch(/errcode = 'MS004'/);
+    expect(fnBody('save_guided_setup')).toMatch(/, null, 0\)/);
+    expect(fnBody('add_goals_after_setup')).toMatch(/, null, 0\)/);
+  });
+
+  it('is checked by a verify script with checks that fail without the grants, the lock\'s repeat answer, the freeze or the foreign key', () => {
+    expect(verify).toMatch(/A repeat of the same submission returns the first answer, marked replayed, and writes nothing/);
+    expect(verify).toMatch(/Every row that existed is exactly as it was, and so are the person''s settings, day types and priorities/);
+    expect(verify).toMatch(/A start that was set cannot be changed to another date/);
+    expect(verify).toMatch(/A start that was set cannot be cleared/);
+    expect(verify).toMatch(/A target with no start of its own cannot be given one later/);
+    expect(verify).toMatch(/A start before the goal started is refused \(MS005\)/);
+    expect(verify).toMatch(/A start after the goal ends is refused \(MS005\)/);
+    expect(verify).toMatch(/An addition that fails part-way keeps nothing/);
+    expect(verify).toMatch(/PUBLIC cannot execute any of the five/);
+    expect(verify).toMatch(/anon and service_role cannot execute any of the five/);
+    expect(verify).toMatch(/The first-setup save still works and answers as it did/);
+  });
+
+  it('leaves nothing behind on production: one block that always rolls back, then checks that run after it', () => {
+    expect(verify).toMatch(/raise exception 'mom132_rollback'/);
+    expect(verify.indexOf("raise exception 'mom132_rollback'")).toBeLessThan(verify.indexOf('The rollback left no throwaway account behind'));
+    const block = verify.slice(verify.indexOf('begin\n    insert into auth.users'), verify.indexOf("exception when others then\n    if sqlerrm"));
+    expect(block.match(/insert into auth\.users/g)).toHaveLength(1);
+  });
+
+  it('is in the grants allow-list with the approved grants', () => {
+    const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8');
+    for (const [role, privs] of [['anon', ''], ['authenticated', 'SELECT,INSERT'], ['service_role', '']]) {
+      expect(allow).toMatch(new RegExp(`\\('setup_additions',\\s+'${role}',\\s+'${privs}'\\)`));
     }
   });
 });

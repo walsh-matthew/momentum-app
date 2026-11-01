@@ -272,6 +272,9 @@ export type GoalRow = {
   return_note: string | null;
   completion_mode: CompletionMode | null;
   tone: Tone | null;
+  // The place the person gave this goal in setup (migration 021), 0 first. Null when it was not stored (every goal saved before 021):
+  // no order is invented.
+  sort_order: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -294,6 +297,12 @@ export type TargetRow = {
   carry_over_kind: CarryOverKind;
   completion_mode: CompletionMode | null;
   tone: Tone | null;
+  // The target's OWN start (migration 021). Null means it counts from its goal's start, which is every target made with its goal. A
+  // target added to a goal later stores the date the person gave, and it is set once: a trigger refuses to set or change it afterwards.
+  // Read it through targetStart() (lib/services/scoreboardRows.ts), never as the goal's start.
+  start_date: string | null;
+  // The place the person gave this target within its goal (migration 021), 0 first. Null when not stored (saved before 021).
+  sort_order: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -476,6 +485,16 @@ export type TargetChangeRow = {
   // day_slots only: the weekdays the person named, 1 to 7 (Monday is 1). Null for a weekly target.
   slot_weekdays: number[] | null;
   // Set by a trigger to the database's own time, whatever an insert sends.
+  created_at: string;
+};
+
+// One approved addition after the first setup (migration 021, MOM-132): the id the browser made for that approval, and what the save
+// answered, so a second tap gets the same answer and writes nothing.
+export type SetupAdditionRow = {
+  id: string;
+  user_id: string;
+  kind: 'goals' | 'targets';
+  result: Json;
   created_at: string;
 };
 
@@ -987,6 +1006,7 @@ export type Database = {
           return_note?: string | null;
           completion_mode?: CompletionMode | null;
           tone?: Tone | null;
+          sort_order?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1005,6 +1025,7 @@ export type Database = {
           return_note?: string | null;
           completion_mode?: CompletionMode | null;
           tone?: Tone | null;
+          sort_order?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1038,6 +1059,9 @@ export type Database = {
           carry_over_kind: CarryOverKind;
           completion_mode?: CompletionMode | null;
           tone?: Tone | null;
+          // Migration 021: see TargetRow. A target made with its goal leaves start_date out.
+          start_date?: string | null;
+          sort_order?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1058,6 +1082,9 @@ export type Database = {
           carry_over_kind?: CarryOverKind;
           completion_mode?: CompletionMode | null;
           tone?: Tone | null;
+          // start_date is set once; a trigger (migration 021) refuses to set or change it on an existing row.
+          start_date?: string | null;
+          sort_order?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1497,6 +1524,28 @@ export type Database = {
           },
         ];
       };
+      // Migration 021: the person's session inserts one row per approved addition (the two add functions do it); no role updates or
+      // deletes one, so a stored answer is never rewritten.
+      setup_additions: {
+        Row: SetupAdditionRow;
+        Insert: {
+          id: string;
+          user_id: string;
+          kind: 'goals' | 'targets';
+          result: Json;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: 'setup_additions_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       // Migration 019: a pick is added and removed, never edited (no update grant).
       week_plan_picks: {
         Row: WeekPlanPickRow;
@@ -1614,6 +1663,27 @@ export type Database = {
         Args: { p_payload: Json };
         Returns: unknown;
       };
+      // Adds goals after the first setup, through its own save (migration 021, MOM-132). Payload { submission_id, goals }, built by
+      // toAddGoalsPayload() in lib/setup/rows.ts. Refuses (MS003) before a first setup and (MS002) a goal with the same title and
+      // start; a repeat of the same submission_id returns the first answer with replayed: true and writes nothing. Returns
+      // { goals, targets, work_items, steps, bindings } (and replayed on a repeat).
+      add_goals_after_setup: {
+        Args: { p_payload: Json };
+        Returns: unknown;
+      };
+      // Adds targets to a goal the person already has, starting on a date they gave (migration 021). Payload { submission_id, goal_id,
+      // start_date, targets, items }. Refuses a goal that is not theirs or is parked (MS004), a start outside the goal's dates (MS005)
+      // and a target with the same title and start (MS002). Returns the same counts as add_goals_after_setup.
+      add_targets_after_setup: {
+        Args: { p_payload: Json };
+        Returns: unknown;
+      };
+      // The one writer of a goal's targets, bindings, work items and steps (migration 021); the three saves above call it. Executable by
+      // signed-in users because they call it as the person; it writes only their own rows. App code does not call it.
+      write_setup_targets: {
+        Args: { p_goal_id: string; p_targets: Json; p_items: Json; p_target_start: string | null; p_first_position: number };
+        Returns: unknown;
+      };
     };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;
@@ -1658,6 +1728,7 @@ export type PeriodSnapshot = Tables<'period_snapshots'>;
 export type StartingPoint = Tables<'starting_points'>;
 export type WeeklyReview = Tables<'weekly_reviews'>;
 export type TargetChange = Tables<'target_changes'>;
+export type SetupAddition = Tables<'setup_additions'>;
 export type WeekPlanPick = Tables<'week_plan_picks'>;
 export type WeekPlanDayType = Tables<'week_plan_day_types'>;
 

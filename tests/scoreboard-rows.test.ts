@@ -13,6 +13,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildHomeScoreboard,
+  setupOrder,
+  targetStart,
   toAnchors,
   toScoreboardEntries,
   toScoreboardTarget,
@@ -762,5 +764,88 @@ describe('a slipping run on home and the weekly review', () => {
     const holding = counted(card(buildHomeScoreboard(worked({ reviewedWeeks: ['2026-10-19'] }), NOW), 'g1', 'workouts')).pattern;
     expect(holding).toMatchObject({ kind: 'holding', periods: 3 });
     expect(patternLine(holding!, 'middle', false).text).toBe(patternLine({ ...holding!, reviewed: false }, 'middle', false).text);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MOM-132 (migration 021): a target added later starts on its own date, and the person's order breaks a tie
+// ---------------------------------------------------------------------------
+
+describe('a target that was added to a goal that had already started counts from its own start (RAID R-30)', () => {
+  it('targetStart is the target’s own start when it has one, else its goal’s', () => {
+    const g = activeGoal('g', { start_date: '2026-10-05' });
+    expect(targetStart({ start_date: '2026-10-19' }, g)).toBe('2026-10-19');
+    expect(targetStart({ start_date: null }, g)).toBe('2026-10-05');
+    expect(targetStart({}, g)).toBe('2026-10-05');
+  });
+
+  it('the engine target starts on it, and its first version is dated from it', () => {
+    const t = toScoreboardTarget(target('t', 'g', { start_date: '2026-10-19' }), activeGoal('g', { start_date: '2026-10-05' }), []);
+    expect(t.startsOn).toBe('2026-10-19');
+    expect(t.versions[0].effectiveFrom).toBe('2026-10-19');
+  });
+
+  it('is shown as not started, with its own start day, while its goal has long since started', () => {
+    const r = rows({ goals: [goal('g', { start_date: '2026-10-05' })], targets: [target('t', 'g', { start_date: '2026-11-09' })] });
+    expect(card(buildHomeScoreboard(r, NOW), 'g', 't')).toMatchObject({ status: 'not_started', startsOn: '2026-11-09' });
+  });
+
+  it('is not called slipping for weeks before it existed, while the same target on its goal’s start is', () => {
+    // No entries. From the goal’s start (Oct 5) there are three missed closed weeks; from Oct 26 there are none closed.
+    const onGoalStart = rows({ goals: [goal('g', { start_date: '2026-10-05' })], targets: [target('t', 'g')] });
+    const added = rows({ goals: [goal('g', { start_date: '2026-10-05' })], targets: [target('t', 'g', { start_date: '2026-10-26' })] });
+    expect(counted(card(buildHomeScoreboard(onGoalStart, NOW), 'g', 't')).pattern).toMatchObject({ kind: 'slipping' });
+    expect(counted(card(buildHomeScoreboard(added, NOW), 'g', 't')).pattern).toBeNull();
+  });
+
+  it('adding it changes no other target’s card', () => {
+    const g = goal('g', { start_date: '2026-10-05' });
+    const one = target('old', 'g', { title: 'Old' });
+    const entries = on('old', '2026-10-27', '2026-10-28', '2026-10-29');
+    const without = ready(buildHomeScoreboard(rows({ goals: [g], targets: [one], entries }), NOW));
+    const withAdded = ready(buildHomeScoreboard(rows({ goals: [g], targets: [one, target('new', 'g', { title: 'New', start_date: '2026-10-26' })], entries }), NOW));
+    expect(withAdded.goals[0].targets.find((t) => t.id === 'old')).toEqual(without.goals[0].targets[0]);
+  });
+});
+
+describe('the person’s order from setup (migration 021): setupOrder, and the week’s headline', () => {
+  const placed = (id: string, sort_order: number | null, over: Partial<TargetRead> = {}) => target(id, over.goal_id ?? 'g', { sort_order, ...over });
+
+  it('lists the first goal’s first target first, then its items that feed no target', () => {
+    const goals = [goal('g2', { sort_order: 1 }), goal('g1', { sort_order: 0 })];
+    const targets = [placed('g2-a', 0, { goal_id: 'g2' }), placed('g1-b', 1, { goal_id: 'g1' }), placed('g1-a', 0, { goal_id: 'g1' })];
+    const items = [item('g1-milestone', 'g1', { sort_order: 2 }), item('g1-fed', 'g1', { target_id: 'g1-a', sort_order: 0 })];
+    expect(setupOrder(goals, targets, items)).toEqual(['g1-a', 'g1-b', 'g1-milestone', 'g2-a']);
+  });
+
+  it('leaves out a goal with no stored place, and a target with none: an unknown place is not guessed', () => {
+    const goals = [goal('old'), goal('new', { sort_order: 0 })];
+    const targets = [placed('old-a', 0, { goal_id: 'old' }), placed('new-a', 0, { goal_id: 'new' }), placed('new-b', null, { goal_id: 'new' })];
+    expect(setupOrder(goals, targets, [])).toEqual(['new-a']);
+  });
+
+  const tiedRows = (targets: TargetRead[], goals: GoalRead[] = [goal('g', { sort_order: 0 })]) =>
+    rows({ goals, targets, entries: targets.map((t) => entry(t.id, '2026-10-28')) });
+  const headline = (r: HomeRows) => {
+    const hero = ready(buildHomeScoreboard(r, NOW)).hero;
+    return hero?.kind === 'week' ? hero.headline : null;
+  };
+  const one = (id: string, title: string, sort_order: number | null, goalId = 'g') => placed(id, sort_order, { goal_id: goalId, title, floor: 1, aspiration: null });
+
+  it('names the target the person put first, whatever its title or id, when every tied target has a place', () => {
+    expect(headline(tiedRows([one('id-1', 'Apples', 1), one('id-2', 'Workouts', 0)]))).toEqual({ kind: 'floor', titles: ['Workouts'] });
+  });
+
+  it('puts the first goal’s target ahead of the second goal’s', () => {
+    const goals = [goal('g1', { sort_order: 1 }), goal('g2', { sort_order: 0 })];
+    expect(headline(tiedRows([one('a', 'Apples', 0, 'g1'), one('b', 'Workouts', 0, 'g2')], goals))).toEqual({ kind: 'floor', titles: ['Workouts'] });
+  });
+
+  it('names every tied target, in title order, when one of them has no stored place', () => {
+    expect(headline(tiedRows([one('id-1', 'Workouts', 0), one('id-2', 'Apples', null)]))).toEqual({ kind: 'floor', titles: ['Apples', 'Workouts'] });
+  });
+
+  it('names every tied target when the goal has no stored place (saved before 021)', () => {
+    expect(headline(tiedRows([one('id-1', 'Workouts', 0), one('id-2', 'Apples', 1)], [goal('g')]))).toEqual({ kind: 'floor', titles: ['Apples', 'Workouts'] });
   });
 });

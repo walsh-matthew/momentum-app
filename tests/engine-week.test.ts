@@ -155,7 +155,9 @@ describe('biggestCrossings: the week’s biggest crossing, never a ranking made 
     const day = '2026-10-14';
     const crossings = [floor('run', day), floor('workouts', day), floor('apps', day)];
     expect(biggestCrossings(crossings, WEEK, ['workouts', 'run', 'apps'])).toEqual([floor('workouts', day)]);
-    expect(biggestCrossings(crossings, WEEK, ['apps', 'workouts'])).toEqual([floor('apps', day)]);
+    // An order that leaves one of the tied targets out (its place was never stored) is not used: all three stay tied (MOM-132).
+    expect(biggestCrossings(crossings, WEEK, ['apps', 'workouts'])).toEqual([floor('apps', day), floor('run', day), floor('workouts', day)]);
+    expect(biggestCrossings(crossings, WEEK, ['apps', 'workouts', 'run'])).toEqual([floor('apps', day)]);
   });
 
   it('with no order given, returns every tied crossing in a stable order and picks none', () => {
@@ -166,10 +168,25 @@ describe('biggestCrossings: the week’s biggest crossing, never a ranking made 
     expect(b).toEqual(a);
   });
 
-  it('an order that lists some of the tied crossings ranks them above the ones it does not list', () => {
+  // MOM-132 (migration 021): a row saved before the order was stored has no place, and an unknown place is not guessed. Before, a
+  // listed target outranked an unlisted one, which would have let a new goal beat an old one for the headline.
+  it('an order that places only some of the tied crossings is not used: every tied crossing is returned and none is picked', () => {
     const day = '2026-10-14';
     const result = biggestCrossings([floor('run', day), floor('workouts', day)], WEEK, ['workouts']);
-    expect(result).toEqual([floor('workouts', day)]);
+    expect(result).toEqual([floor('run', day), floor('workouts', day)]);
+  });
+
+  it('the order decides only between crossings that are tied on day and kind', () => {
+    const day = '2026-10-14';
+    const order = ['run', 'workouts'];
+    expect(biggestCrossings([floor('run', day), aspiration('workouts', day)], WEEK, order)).toEqual([aspiration('workouts', day)]);
+    expect(biggestCrossings([floor('run', '2026-10-13'), floor('workouts', day)], WEEK, order)).toEqual([floor('workouts', day)]);
+  });
+
+  it('two crossings of the same target stay tied with each other when the order places that target', () => {
+    const day = '2026-10-14';
+    const result = biggestCrossings([step('prep', 's1', day), step('prep', 's2', day), step('other', 's3', day)], WEEK, ['prep', 'other']);
+    expect(result).toEqual([step('prep', 's1', day), step('prep', 's2', day)]);
   });
 
   it('ignores a crossing outside the week', () => {

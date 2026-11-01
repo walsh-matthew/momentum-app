@@ -56,10 +56,10 @@ export async function getHomeScoreboard(deps: HomeScoreboardDeps = {}): Promise<
 
   const [settings, goals, targets, items, steps, corrections, snapshots, changes, reviews, entries, picks, dayKinds, dayTypes] = await Promise.all([
     supabase.from('person_settings').select('time_zone, week_start, day_end, tone, celebrations').eq('user_id', userId).maybeSingle(),
-    supabase.from('goals').select('id, title, state, shape, start_date, end_date, created_at').eq('user_id', userId),
+    supabase.from('goals').select('id, title, state, shape, start_date, end_date, created_at, sort_order').eq('user_id', userId),
     supabase
       .from('targets')
-      .select('id, goal_id, title, measure, unit, role, period_kind, due_date, slot_weekdays, floor, aspiration, qualifying_threshold, carry_over_kind, created_at')
+      .select('id, goal_id, title, measure, unit, role, period_kind, due_date, slot_weekdays, floor, aspiration, qualifying_threshold, carry_over_kind, created_at, start_date, sort_order')
       .eq('user_id', userId),
     supabase
       .from('work_items')

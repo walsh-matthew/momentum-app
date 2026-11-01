@@ -71,20 +71,25 @@ const KIND_RANK: Record<Crossing['kind'], number> = { block_end: 4, aspiration: 
 export const crossingKey = (c: Crossing): string => (c.kind === 'step' ? (c.targetId ?? c.itemId ?? '') : c.targetId);
 
 // The week's biggest crossing: the latest day first; on the same day the bigger kind; and if those tie, the person's
-// own order from setup, given as a list of target and item ids with the first goal's first target first. Nothing else
-// breaks a tie: when the order is not given, or does not list them, every tied crossing is returned, in id order, so
-// the caller names them all and none is picked. Only crossings on days from week.start to week.end count.
+// own order from setup, given as a list of target and item ids with the first goal's first target first (migration 021 stores
+// it, MOM-132). The order is used only when it places EVERY crossing that is tied: a target whose place was never stored (one
+// saved before 021) has none, and an unknown place is not guessed, so it neither wins nor loses a tie against a placed one.
+// Otherwise (no order given, or it does not list them all) every tied crossing is returned, in id order, so the caller names
+// them all and none is picked. Only crossings on days from week.start to week.end count.
 export function biggestCrossings(crossings: Crossing[], week: { start: LocalDate; end: LocalDate }, order: readonly string[] = []): Crossing[] {
   const inWeek = crossings.filter((c) => c.on >= week.start && c.on <= week.end);
   if (inWeek.length === 0) return [];
-  const place = (c: Crossing) => {
-    const at = order.indexOf(crossingKey(c));
-    return at === -1 ? Number.POSITIVE_INFINITY : at;
-  };
-  // Positive when a is the bigger.
-  const bigger = (a: Crossing, b: Crossing) => (a.on === b.on ? 0 : a.on > b.on ? 1 : -1) || KIND_RANK[a.kind] - KIND_RANK[b.kind] || place(b) - place(a) || 0;
+  // Positive when a is the bigger by day and kind alone.
+  const bigger = (a: Crossing, b: Crossing) => (a.on === b.on ? 0 : a.on > b.on ? 1 : -1) || KIND_RANK[a.kind] - KIND_RANK[b.kind];
   const best = inWeek.reduce((top, c) => (bigger(c, top) > 0 ? c : top));
-  const tied = inWeek.filter((c) => bigger(c, best) === 0);
+  let tied = inWeek.filter((c) => bigger(c, best) === 0);
+  if (tied.length > 1) {
+    const places = tied.map((c) => order.indexOf(crossingKey(c)));
+    if (places.every((at) => at !== -1)) {
+      const first = Math.min(...places);
+      tied = tied.filter((_, i) => places[i] === first);
+    }
+  }
   return tied.sort((a, b) => {
     const keyA = `${crossingKey(a)}|${a.kind === 'step' ? a.stepId : ''}`;
     const keyB = `${crossingKey(b)}|${b.kind === 'step' ? b.stepId : ''}`;
