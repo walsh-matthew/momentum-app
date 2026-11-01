@@ -549,6 +549,20 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** Day-end step A's full run.
 - **Led to:** A fix in this session (the test waits for the buttons to be ready), recorded on MOM-147.
 
+### F-080 · 2026-10-30 · build tool
+- **Asked:** Fix conflicting project memory notes.
+- **What went wrong:** The thread proposed pinning only its new lines to the top of an oversized note, which would have favoured them over equally hidden older lines.
+- **Why:** It fixed the symptom for its own edits instead of the note's size.
+- **Caught by:** The owner.
+- **Led to:** A rule: a monthly memory size check (fixed in that session).
+
+### F-081 · 2026-11-01 · build tool
+- **Asked:** Start the build day.
+- **What went wrong:** The thread named the working folder in code formatting above the pastes, and the owner pasted it into the shell as a command.
+- **Why:** A label looked the same as a paste.
+- **Caught by:** The owner (a shell error).
+- **Led to:** A rule: say where a paste goes as plain text, and start every session's pastes with the folder change as its own paste.
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
