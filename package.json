@@ -37,7 +37,8 @@
     "plan": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-execution-plan.ts",
     "plan:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-plan-format.ts",
     "verify:sql": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/run-sql-verify.ts",
-    "stack:status": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/stack-status.ts"
+    "stack:status": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/stack-status.ts",
+    "project:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/project-check.ts"
   },
   "name": "momentum-app",
   "private": "true"

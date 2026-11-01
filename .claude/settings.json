@@ -9,7 +9,8 @@
       "Bash(npm run plan *)",
       "Bash(npm run plan:check *)",
       "Bash(npx supabase migration list *)",
-      "Bash(npm run stack:status)"
+      "Bash(npm run stack:status)",
+      "Bash(npm run project:check)"
     ],
     "ask": [
       "Bash(git push *)",

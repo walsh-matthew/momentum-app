@@ -12,8 +12,10 @@ Rules for every step:
 - CLAUDE.md wins over the block's prompt. `main` is protected: never merge into it, never push it, and never push any branch without my explicit OK.
 - Stage files by name. Never stage `docs/FAILURE_LOG.md`, `docs/RAID_LOG.md`, `AGENTS.md`, `supabase/.branches/` or `supabase/snippets/` (never `git add -A` or `git add .`), unless the day-end log review approved those entries.
 - Keep every stop the block's prompt has (design OKs, migrations, production steps) and wait at it.
+- Every time you stop to wait for me (a design OK, a migration, a push, any question), first send a mobile push notification with a one-line summary of what you need.
 - Blocks never edit `BACKLOG.md`. Put backlog notes in the Jira comment and the close-out; day-end step D writes `BACKLOG.md` once.
 
+0. **Repository check.** Run `npm run project:check`. If it exits non-zero, show its one line and stop: these commands belong to `walsh-matthew/momentum-app`, and nothing below runs in another repository.
 1. **Find the block.** Run `npm run plan:check -- --block $ARGUMENTS`. It prints the block's session, CLI Session Config, prerequisites note, prompt line range, branch name and gate. If it finds zero or several blocks, show its message and stop.
 2. **Preflight, each on its own.** `git status --short`: a clean tree is the expected state (`AGENTS.md`, `supabase/.branches/` and `supabase/snippets/` are git-ignored since MOM-68); only my uncommitted `docs/FAILURE_LOG.md` and `docs/RAID_LOG.md` may also show; anything else, including an untracked file, list it and stop. Then `git fetch origin`. Then `git rev-parse main origin/main`: equal is fine. If `main` is only behind (`git merge-base --is-ancestor main origin/main`), run `git switch main` and then `git pull --ff-only`, separately. If `main` has commits `origin/main` lacks, stop. (If I am already on this block's feature branch, do not switch.)
 3. **Fresh session.** If this conversation already holds work from a different block, tell me to run `/clear` and then `/run-block $ARGUMENTS` again, and stop.
