@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 //
-// The sidebar's channel selection in a DOM (MOM-44, MOM-88): the feed and the velocity hero follow the channel the
-// user picks, "All channels" is the default, and picking a channel never touches a task. These render the real
-// AppShell, sidebar, feed and hero with views built by the real buildChannelViews; only the server actions
-// behind the buttons are replaced. The views themselves are covered in tests/channel-views.test.ts.
+// Which old-model channel the feed shows (MOM-44, MOM-88, MOM-115 trial subset). Home no longer has a sidebar channel list, goal
+// cards, a weekly-pace button, a rebalance drawer or a nudge: nothing on the page picks a channel. The address (?channel=<goal id>)
+// still chooses the feed's channel, so an old shared link keeps working, and a bad value falls back to All channels. These render the
+// real AppShell, feed and hero with views built by the real buildChannelViews; only the server actions are replaced. The views
+// themselves are covered in tests/channel-views.test.ts, and the absence of the old controls in tests/old-controls-hidden.test.tsx.
 //
-// Completion is human-only (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6): every test that switches channel
-// also checks nothing was ticked, reopened or moved.
+// Completion is human-only (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6): nothing here ticks, reopens or moves a task by itself.
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '@/components/layout/AppShell';
@@ -38,10 +38,8 @@ vi.mock('@/app/actions/goals', () => ({
 vi.mock('@/app/actions/auth', () => ({ signOutAction: actions.signOutAction, authenticate: vi.fn() }));
 vi.mock('@/app/actions/integrations', () => ({ toggleConnectedApp: actions.toggleConnectedApp }));
 
-// The selected channel is the ?channel= in the address bar (MOM-88). Next.js keeps useSearchParams in sync with the
-// browser's own history API (pushState, replaceState and the back button; see the Next docs, "Shallow routing on
-// the client"). jsdom has no Next router, so this stand-in does the same job: it reads the live URL and re-renders
-// when it changes. That integration itself is Next's, not ours, and is not exercised here.
+// The channel is the ?channel= in the address bar (MOM-88). Next.js keeps useSearchParams in sync with the browser's own history
+// API. jsdom has no Next router, so this stand-in does the same job: it reads the live URL and re-renders when it changes.
 vi.mock('next/navigation', async () => {
   const { useSyncExternalStore } = await import('react');
   const subscribe = (notify: () => void) => {
@@ -55,13 +53,6 @@ vi.mock('next/navigation', async () => {
   const read = () => window.location.search;
   return { useSearchParams: () => new URLSearchParams(useSyncExternalStore(subscribe, read, read)) };
 });
-
-// pushState does not notify anyone by itself; Next's router does, so tell the stand-in above. Patched once.
-const realPushState = window.history.pushState.bind(window.history);
-window.history.pushState = (...args: Parameters<History['pushState']>) => {
-  realPushState(...args);
-  window.dispatchEvent(new Event('test:url-changed'));
-};
 
 const TODAY = '2026-10-23';
 let n = 0;
@@ -108,18 +99,15 @@ const tasks = [
 ];
 
 function renderShell(views = buildChannelViews(goals, tasks, [], TODAY)) {
-  const ui = (v: typeof views) => (
-    <AppShell views={v} connectedApps={[]} moveChains={{}} />
-  );
+  const ui = (v: typeof views) => <AppShell views={v} connectedApps={[]} moveChains={{}} />;
   const result = render(ui(views));
   return { ...result, rerenderWith: (v: typeof views) => result.rerender(ui(v)) };
 }
 
-const sidebar = () => within(screen.getByRole('complementary', { name: 'Goal channels' }));
 const velocity = () => screen.queryByRole('region', { name: 'Velocity' });
-const channelButton = (name: string) => sidebar().getByRole('button', { name });
-const current = () => sidebar().getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page');
 const bodyText = () => document.body.textContent ?? '';
+// The channel the feed is for is named above the heading ("All channels" when none is chosen).
+const shownChannel = () => screen.getByRole('main').querySelector('.eyebrow')?.textContent;
 
 beforeEach(() => {
   Object.values(actions).forEach((fn) => fn.mockReset());
@@ -127,125 +115,90 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('the sidebar lists the user\'s real channels', () => {
-  it('shows All channels first, then each active goal, instead of placeholders', () => {
-    renderShell();
-    const names = sidebar()
-      .getAllByRole('button')
-      .map((b) => b.textContent);
-    expect(names.slice(0, 3)).toEqual(['All channels', 'Career Pivot', 'Side Project']);
-    for (const placeholder of ['Health', 'Finances']) expect(names).not.toContain(placeholder);
-  });
-
-  it('starts on All channels', () => {
-    renderShell();
-    expect(current().map((b) => b.textContent)).toEqual(['All channels']);
-  });
-
-  it('a user with no goals sees only All channels and the no-goals state', () => {
-    renderShell(EMPTY_CHANNEL_VIEWS);
-    expect(current().map((b) => b.textContent)).toEqual(['All channels']);
-    expect(screen.getByRole('heading', { name: 'No goals yet' })).toBeTruthy();
-    expect(velocity()).toBeNull();
-  });
-});
-
 describe('the default: all active channels', () => {
-  it('the feed holds the earliest task across every channel, with the other channels\' tasks queued', () => {
+  it("the feed holds the earliest task across every channel, with the other channels' tasks queued", () => {
     renderShell();
     const main = within(screen.getByRole('main'));
+    expect(shownChannel()).toBe('All channels');
     // Side's week 1 task comes before Career's week 5 task.
     expect(main.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
     expect(main.getByText('Career open task')).toBeTruthy();
   });
 
-  it('with several goals it gives no single velocity and says to choose a channel', () => {
+  it('with several goals it shows no single velocity, and no note pointing at a channel list that is not there', () => {
     renderShell();
-    const note = velocity()!;
-    expect(note.textContent).toContain('Choose a channel in the sidebar');
-    expect(note.textContent).not.toMatch(/\/100/);
+    expect(velocity()).toBeNull();
+    expect(bodyText()).not.toContain('Choose a channel');
   });
 
-  it('with one goal the hero is that goal\'s velocity, as before', () => {
+  it("with one goal the hero is that goal's velocity, as before", () => {
     renderShell(buildChannelViews([goals[0]], tasks, [], TODAY));
     expect(velocity()!.textContent).toContain('Week 5');
     expect(velocity()!.textContent).toContain('2 of 3 tasks ticked');
-    expect(velocity()!.textContent).not.toContain('Choose a channel');
+  });
+
+  it('a user with no goals sees no old-model feed at all: no heading, no velocity, no "No goals yet"', () => {
+    renderShell(EMPTY_CHANNEL_VIEWS);
+    expect(screen.queryByRole('heading', { name: 'Make today count.' })).toBeNull();
+    expect(screen.getByRole('main').textContent).toBe('Momentum home');
+    expect(screen.queryByRole('heading', { name: 'No goals yet' })).toBeNull();
+    expect(velocity()).toBeNull();
   });
 });
 
-describe('switching channels', () => {
-  it('shows only that channel\'s tasks and updates the hero to that channel\'s velocity', () => {
-    renderShell();
+describe('the channel in the address', () => {
+  const careerId = 'career';
+  const sideId = 'side';
+  const views = () => buildChannelViews(goals, tasks, [], TODAY);
+  const renderAt = (search: string, v = views()) => {
+    window.history.replaceState(null, '', `/${search}`);
+    return renderShell(v);
+  };
 
-    fireEvent.click(channelButton('Career Pivot'));
-    expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
-    let main = within(screen.getByRole('main'));
-    expect(main.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
+  it('lands on that channel straight away, as a reload or a shared link would, and shows only its tasks', () => {
+    renderAt(`?channel=${careerId}`);
+    expect(shownChannel()).toBe('Career Pivot');
+    expect(screen.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
     expect(bodyText()).not.toContain('Side focus task');
     expect(bodyText()).not.toContain('Side kickoff done');
-    expect(main.getByText('Career Pivot')).toBeTruthy(); // the channel is named under the heading
     expect(velocity()!.textContent).toContain('Week 5');
     expect(velocity()!.textContent).toContain('2 of 3 tasks ticked');
+  });
 
-    fireEvent.click(channelButton('Side Project'));
-    expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
-    main = within(screen.getByRole('main'));
-    expect(main.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
+  it('lands on the other channel just as well, with its own score from its own start date', () => {
+    renderAt(`?channel=${sideId}`);
+    expect(shownChannel()).toBe('Side Project');
+    expect(screen.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
     expect(bodyText()).not.toContain('Career open task');
-    expect(bodyText()).not.toContain('Career shipped demo');
     expect(velocity()!.textContent).toContain('Week 1');
     expect(velocity()!.textContent).toContain('1 of 4 tasks ticked');
   });
 
-  it('the two channels show different scores, from their own start dates', () => {
-    renderShell();
-    fireEvent.click(channelButton('Career Pivot'));
-    const careerScore = velocity()!.textContent;
-    fireEvent.click(channelButton('Side Project'));
-    const sideScore = velocity()!.textContent;
-    expect(careerScore).toContain('67/100'); // 2 of 3
-    expect(sideScore).toContain('25/100'); // 1 of 4
+  it('is decided while rendering, so the server HTML and the first browser render agree (no flash, no hydration warning)', () => {
+    window.history.replaceState(null, '', `/?channel=${careerId}`);
+    const ui = <AppShell views={views()} connectedApps={[]} moveChains={{}} />;
+
+    const html = renderToString(ui);
+    expect(html).toContain('Career open task');
+    expect(html).not.toContain('Side focus task');
+
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const container = document.body.appendChild(document.createElement('div'));
+    container.innerHTML = html;
+    render(ui, { container, hydrate: true });
+    expect(errors.mock.calls.map((c) => String(c[0]))).toEqual([]);
+    errors.mockRestore();
+    expect(shownChannel()).toBe('Career Pivot');
   });
 
-  it('going back to All channels restores the full feed and the choose-a-channel note', () => {
-    renderShell();
-    fireEvent.click(channelButton('Career Pivot'));
-    fireEvent.click(channelButton('All channels'));
-    expect(current().map((b) => b.textContent)).toEqual(['All channels']);
-    expect(screen.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
-    expect(velocity()!.textContent).toContain('Choose a channel in the sidebar');
+  it('does not call a server action just by opening on a channel', () => {
+    renderAt(`?channel=${careerId}`);
+    for (const fn of Object.values(actions)) expect(fn).not.toHaveBeenCalled();
   });
 
-  it('keeps Recently done to the selected channel, with its own Reopen buttons', () => {
-    renderShell();
-    fireEvent.click(channelButton('Side Project'));
-    expect(screen.getByRole('button', { name: 'Reopen Side kickoff done' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Reopen Career shipped demo' })).toBeNull();
-  });
-
-  it('a channel with no tasks shows the empty state and an empty velocity message', () => {
-    const emptyGoals = [...goals, { id: 'new', title: 'Brand New', status: 'active' as const, start_date: TODAY }];
-    renderShell(buildChannelViews(emptyGoals, tasks, [], TODAY));
-    fireEvent.click(channelButton('Brand New'));
-    expect(screen.getByRole('heading', { name: 'No tasks yet' })).toBeTruthy();
-    expect(velocity()!.textContent).toContain('appears once this week has tasks due');
-  });
-
-  it('never ticks, reopens or moves a task: switching only changes what is shown', () => {
-    renderShell();
-    for (const name of ['Career Pivot', 'Side Project', 'All channels', 'Career Pivot']) fireEvent.click(channelButton(name));
-    expect(actions.toggleTaskStatus).not.toHaveBeenCalled();
-    expect(actions.applyRebalanceProposal).not.toHaveBeenCalled();
-    expect(actions.askClaudeToRebalance).not.toHaveBeenCalled();
-    expect(actions.createGoalWithPlanAction).not.toHaveBeenCalled();
-    expect(actions.generateWeekOnePlanAction).not.toHaveBeenCalled();
-  });
-
-  it('a click on a task in the selected channel still goes through the user\'s own toggle', async () => {
+  it("a click on a task in that channel still goes through the user's own toggle", async () => {
     actions.toggleTaskStatus.mockResolvedValue({ ok: true, data: {} });
-    renderShell();
-    fireEvent.click(channelButton('Career Pivot'));
+    renderAt(`?channel=${careerId}`);
     expect(actions.toggleTaskStatus).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('checkbox'));
@@ -254,298 +207,8 @@ describe('switching channels', () => {
     expect(status).toBe('done');
     expect(id).toBe(tasks.find((t) => t.title === 'Career open task')!.id);
   });
-});
 
-describe('the selection survives the page refreshing its data', () => {
-  it('keeps the selected channel when new data arrives (a tick refreshes the page)', () => {
-    const view = renderShell();
-    fireEvent.click(channelButton('Side Project'));
-
-    const ticked = tasks.map((t) => (t.title === 'Side focus task' ? { ...t, status: 'done' as const, completed_at: '2026-10-23T08:00:00Z' } : t));
-    view.rerenderWith(buildChannelViews(goals, ticked, [], TODAY));
-
-    expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
-    expect(screen.getByRole('heading', { name: 'Side second task' })).toBeTruthy();
-    expect(velocity()!.textContent).toContain('2 of 4 tasks ticked');
-  });
-
-  it('falls back to All channels if the selected channel is no longer there', () => {
-    const view = renderShell();
-    fireEvent.click(channelButton('Side Project'));
-
-    const paused = [goals[0], { ...goals[1], status: 'paused' as const }];
-    view.rerenderWith(buildChannelViews(paused, tasks, [], TODAY));
-
-    expect(sidebar().queryByRole('button', { name: 'Side Project' })).toBeNull();
-    expect(current().map((b) => b.textContent)).toEqual(['All channels']);
-    expect(screen.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
-    expect(bodyText()).not.toContain('Side focus task');
-  });
-
-  it('shows a newly created goal in the sidebar without losing the selection', () => {
-    const view = renderShell();
-    fireEvent.click(channelButton('Career Pivot'));
-
-    const created = [...goals, { id: 'fresh', title: 'Fresh Goal', status: 'active' as const, start_date: TODAY }];
-    view.rerenderWith(buildChannelViews(created, tasks, [], TODAY));
-
-    expect(channelButton('Fresh Goal')).toBeTruthy();
-    expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
-  });
-});
-
-// MOM-77: below 1200px the page is one scrolling column with no tab bar. The goal cards in the feed pick the channel
-// through the same ?channel= address as the sidebar (more in tests/layout.test.tsx).
-describe('on a phone', () => {
-  it('has no tab bar, and a goal card picks the channel in the same feed', () => {
-    renderShell();
-    expect(screen.queryByRole('navigation', { name: 'Workspace sections' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Channels' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Feed' })).toBeNull();
-
-    fireEvent.click(within(screen.getByRole('region', { name: 'Your goals' })).getByRole('link', { name: /Career Pivot/ }));
-
-    expect(screen.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
-    expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
-  });
-});
-
-// MOM-87: the rebalance side card and drawer follow the selected channel too.
-describe('rebalancing follows the selected channel', () => {
-  // jsdom has no <dialog>.showModal; this stand-in only opens and closes it, which is all the drawer needs.
-  beforeEach(() => {
-    HTMLDialogElement.prototype.showModal = function showModal() {
-      this.setAttribute('open', '');
-    };
-    HTMLDialogElement.prototype.close = function close() {
-      this.removeAttribute('open');
-    };
-  });
-
-  // Career Pivot (plan week 5) has an open task left over in week 2, so it has something to carry over.
-  // Side Project (week 1) is on track.
-  const behindTask = task('career', 2, { title: 'Career behind task' });
-  const rebalanceTasks = [...tasks, behindTask];
-  const rebalanceViews = () => buildChannelViews(goals, rebalanceTasks, [], TODAY);
-
-  const openAssistantTab = () => fireEvent.click(screen.getByRole('tab', { name: 'AI Assistant' }));
-  const sideCard = () => within(screen.getByRole('region', { name: 'Rebalance' }));
-  const openDrawer = () => fireEvent.click(sidebar().getByRole('button', { name: 'Adjust Weekly Pace' }));
-  const drawer = () => within(screen.getByRole('dialog', { name: 'Rebalance your plan' }));
-  // The drawer has a header × ("Close without changing anything") and a footer button; either closes it.
-  const closeDrawer = () => fireEvent.click(screen.getAllByRole('button', { name: /^Close/ })[0]);
-
-  describe('the side card', () => {
-    it('asks for a channel under All channels when several goals are active', () => {
-      renderShell(rebalanceViews());
-      openAssistantTab();
-      expect(sideCard().getByText(/Choose a channel in the sidebar/)).toBeTruthy();
-      expect(sideCard().queryByRole('button', { name: 'Review proposal' })).toBeNull();
-    });
-
-    it('shows each channel\'s own proposal when it is selected', () => {
-      renderShell(rebalanceViews());
-      openAssistantTab();
-
-      fireEvent.click(channelButton('Career Pivot'));
-      expect(sideCard().getByText('1 to carry over')).toBeTruthy();
-      expect(sideCard().getByRole('button', { name: 'Review proposal' })).toBeTruthy();
-
-      fireEvent.click(channelButton('Side Project'));
-      expect(sideCard().getByText(/on track/)).toBeTruthy();
-      expect(sideCard().queryByText('1 to carry over')).toBeNull();
-      expect(sideCard().queryByRole('button', { name: 'Review proposal' })).toBeNull();
-    });
-
-    it('with a single goal the card shows that goal\'s proposal under All channels', () => {
-      renderShell(buildChannelViews([goals[0]], rebalanceTasks, [], TODAY));
-      openAssistantTab();
-      expect(sideCard().getByText('1 to carry over')).toBeTruthy();
-    });
-  });
-
-  describe('the drawer', () => {
-    it('under All channels with several goals it says to choose a channel, and offers no Claude button', () => {
-      renderShell(rebalanceViews());
-      openDrawer();
-      expect(drawer().getByText(/Choose a channel in the sidebar, then open this again/)).toBeTruthy();
-      expect(drawer().queryByRole('button', { name: /Ask Claude/ })).toBeNull();
-      expect(actions.askClaudeToRebalance).not.toHaveBeenCalled();
-    });
-
-    it('shows the selected channel\'s tasks and week, and only that channel\'s', () => {
-      renderShell(rebalanceViews());
-      fireEvent.click(channelButton('Career Pivot'));
-      openDrawer();
-      expect(drawer().getByText('Career behind task')).toBeTruthy();
-      expect(drawer().getByText(/week 5 of the plan/)).toBeTruthy();
-      expect(drawer().queryByText(/Side/)).toBeNull();
-      closeDrawer();
-
-      fireEvent.click(channelButton('Side Project'));
-      openDrawer();
-      expect(drawer().getByText('Nothing is behind, so there is nothing to rebalance.')).toBeTruthy();
-      expect(drawer().getByText(/week 1 of the plan/)).toBeTruthy();
-      expect(drawer().queryByText('Career behind task')).toBeNull();
-    });
-
-    it('"Ask Claude" sends the id of the channel the drawer is showing, and only when clicked', async () => {
-      actions.askClaudeToRebalance.mockResolvedValue({ ok: false, error: 'Please wait a few seconds before asking again.' });
-      renderShell(rebalanceViews());
-
-      fireEvent.click(channelButton('Career Pivot'));
-      openDrawer();
-      expect(actions.askClaudeToRebalance).not.toHaveBeenCalled();
-      fireEvent.click(drawer().getByRole('button', { name: 'Ask Claude to review' }));
-      await vi.waitFor(() => expect(actions.askClaudeToRebalance).toHaveBeenCalledTimes(1));
-      expect(actions.askClaudeToRebalance).toHaveBeenLastCalledWith('career');
-      await vi.waitFor(() => expect(drawer().getByRole('alert').textContent).toContain('Please wait'));
-      closeDrawer();
-
-      fireEvent.click(channelButton('Side Project'));
-      openDrawer();
-      fireEvent.click(drawer().getByRole('button', { name: 'Ask Claude to review' }));
-      await vi.waitFor(() => expect(actions.askClaudeToRebalance).toHaveBeenCalledTimes(2));
-      expect(actions.askClaudeToRebalance).toHaveBeenLastCalledWith('side');
-    });
-
-    it('with a single goal "Ask Claude" sends that goal\'s id even under All channels', async () => {
-      actions.askClaudeToRebalance.mockResolvedValue({ ok: false, error: 'x' });
-      renderShell(buildChannelViews([goals[1]], tasks, [], TODAY));
-      openDrawer();
-      fireEvent.click(drawer().getByRole('button', { name: 'Ask Claude to review' }));
-      await vi.waitFor(() => expect(actions.askClaudeToRebalance).toHaveBeenCalledWith('side'));
-    });
-
-    it('switching channels, opening the drawer and closing it change nothing in the plan', () => {
-      renderShell(rebalanceViews());
-      for (const name of ['Career Pivot', 'Side Project', 'All channels']) {
-        fireEvent.click(channelButton(name));
-        openDrawer();
-        closeDrawer();
-      }
-      expect(actions.applyRebalanceProposal).not.toHaveBeenCalled();
-      expect(actions.askClaudeToRebalance).not.toHaveBeenCalled();
-      expect(actions.toggleTaskStatus).not.toHaveBeenCalled();
-    });
-  });
-});
-
-// MOM-88: the selected channel survives a reload because it is in the address bar.
-describe('the selected channel is kept in the address bar', () => {
-  const careerId = 'career';
-  const sideId = 'side';
-  const views = () => buildChannelViews(goals, tasks, [], TODAY);
-  const here = () => `${window.location.pathname}${window.location.search}`;
-  const renderAt = (search: string, v = views()) => {
-    window.history.replaceState(null, '', `/${search}`);
-    return renderShell(v);
-  };
-
-  describe('opening the page with a stored selection', () => {
-    it('lands on that channel straight away, as a reload or a shared link would', () => {
-      renderAt(`?channel=${careerId}`);
-      expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
-      expect(screen.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
-      expect(bodyText()).not.toContain('Side focus task');
-      expect(velocity()!.textContent).toContain('Week 5');
-    });
-
-    it('lands on the other channel just as well', () => {
-      renderAt(`?channel=${sideId}`);
-      expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
-      expect(screen.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
-      expect(velocity()!.textContent).toContain('Week 1');
-    });
-
-    it('starts on All channels when there is nothing stored', () => {
-      renderAt('');
-      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
-    });
-
-    it('is decided while rendering, so the server HTML and the first browser render agree (no flash, no hydration warning)', () => {
-      window.history.replaceState(null, '', `/?channel=${careerId}`);
-      const ui = <AppShell views={views()} connectedApps={[]} moveChains={{}} />;
-
-      const html = renderToString(ui);
-      expect(html).toContain('Career open task');
-      expect(html).not.toContain('Side focus task');
-
-      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const container = document.body.appendChild(document.createElement('div'));
-      container.innerHTML = html;
-      render(ui, { container, hydrate: true });
-      expect(errors.mock.calls.map((c) => String(c[0]))).toEqual([]);
-      errors.mockRestore();
-      expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
-    });
-
-    it('does not call a server action just by opening on a channel', () => {
-      renderAt(`?channel=${careerId}`);
-      for (const fn of Object.values(actions)) expect(fn).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('choosing a channel updates the address', () => {
-    it('puts the channel in the address, and clears it again for All channels', () => {
-      renderAt('');
-      fireEvent.click(channelButton('Career Pivot'));
-      expect(here()).toBe(`/?channel=${careerId}`);
-      fireEvent.click(channelButton('Side Project'));
-      expect(here()).toBe(`/?channel=${sideId}`);
-      fireEvent.click(channelButton('All channels'));
-      expect(here()).toBe('/');
-      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
-    });
-
-    it('keeps any other parameters in the address', () => {
-      renderAt('?utm_source=mail&channel=side');
-      fireEvent.click(channelButton('Career Pivot'));
-      expect(new URLSearchParams(window.location.search).get('utm_source')).toBe('mail');
-      expect(new URLSearchParams(window.location.search).get('channel')).toBe(careerId);
-      fireEvent.click(channelButton('All channels'));
-      expect(here()).toBe('/?utm_source=mail');
-    });
-
-    it('does not add a history entry when the address would not change', () => {
-      renderAt(`?channel=${careerId}`);
-      const before = window.history.length;
-      fireEvent.click(channelButton('Career Pivot'));
-      fireEvent.click(channelButton('Career Pivot'));
-      expect(window.history.length).toBe(before);
-      fireEvent.click(channelButton('Side Project'));
-      expect(window.history.length).toBe(before + 1);
-    });
-
-    it('the back button steps back through the choices', async () => {
-      renderAt('');
-      fireEvent.click(channelButton('Career Pivot'));
-      fireEvent.click(channelButton('Side Project'));
-      expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
-
-      window.history.back();
-      await waitFor(() => expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']));
-      expect(screen.getByRole('heading', { name: 'Career open task' })).toBeTruthy();
-
-      window.history.back();
-      await waitFor(() => expect(current().map((b) => b.textContent)).toEqual(['All channels']));
-    });
-
-    it('fetches nothing and runs no server action', () => {
-      renderAt('');
-      fireEvent.click(channelButton('Career Pivot'));
-      fireEvent.click(channelButton('All channels'));
-      for (const fn of Object.values(actions)) expect(fn).not.toHaveBeenCalled();
-    });
-
-    it('a goal card on a phone updates the address the same way', () => {
-      renderAt('');
-      fireEvent.click(within(screen.getByRole('region', { name: 'Your goals' })).getByRole('link', { name: /Side Project/ }));
-      expect(here()).toBe(`/?channel=${sideId}`);
-    });
-  });
-
-  describe('a stored selection that is not one of the user\'s channels falls back to All channels', () => {
+  describe("a value that is not one of the user's channels falls back to All channels", () => {
     it.each([
       ['an id that does not exist', '?channel=00000000-0000-4000-8000-00000000dead'],
       ['an id with the wrong case', '?channel=CAREER'],
@@ -558,65 +221,48 @@ describe('the selected channel is kept in the address bar', () => {
       ['a very long value', `?channel=${'x'.repeat(5000)}`],
     ])('%s', (_name, search) => {
       renderAt(search);
-      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+      expect(shownChannel()).toBe('All channels');
       expect(screen.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
-      expect(velocity()!.textContent).toContain('Choose a channel in the sidebar');
     });
 
     it('a repeated parameter uses the first value, and an invalid first value means All channels', () => {
       renderAt(`?channel=${careerId}&channel=${sideId}`);
-      expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
+      expect(shownChannel()).toBe('Career Pivot');
       cleanup();
       renderAt(`?channel=nope&channel=${careerId}`);
-      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+      expect(shownChannel()).toBe('All channels');
     });
 
-    it('another user\'s goal id is not a channel here, and none of their data is shown', () => {
+    it("another user's goal id is not a channel here, and none of their data is shown", () => {
       // The page only builds views from the signed-in user's own goals, so a foreign id is simply not in them.
       const foreign = '99999999-9999-4999-8999-999999999999';
       renderAt(`?channel=${foreign}`);
-      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+      expect(shownChannel()).toBe('All channels');
       expect(bodyText()).not.toContain(foreign);
     });
 
     it('a goal that has been paused is not a channel, and the page does not show its tasks', () => {
       const paused = [goals[0], { ...goals[1], status: 'paused' as const }];
       renderAt(`?channel=${sideId}`, buildChannelViews(paused, tasks, [], TODAY));
-      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
-      expect(sidebar().queryByRole('button', { name: 'Side Project' })).toBeNull();
+      expect(shownChannel()).toBe('All channels');
       expect(bodyText()).not.toContain('Side focus task');
     });
 
-    it('the stored selection comes back by itself if the goal becomes active again', () => {
+    it('the address comes back to its channel by itself if the goal becomes active again', () => {
       const paused = [goals[0], { ...goals[1], status: 'paused' as const }];
       const view = renderAt(`?channel=${sideId}`, buildChannelViews(paused, tasks, [], TODAY));
-      expect(current().map((b) => b.textContent)).toEqual(['All channels']);
+      expect(shownChannel()).toBe('All channels');
       view.rerenderWith(views());
-      expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
-    });
-
-    it('choosing All channels clears an invalid parameter from the address', () => {
-      renderAt('?channel=nope&keep=1');
-      fireEvent.click(channelButton('All channels'));
-      expect(here()).toBe('/?keep=1');
-    });
-
-    it('choosing a real channel replaces an invalid one', () => {
-      renderAt('?channel=nope');
-      fireEvent.click(channelButton('Side Project'));
-      expect(here()).toBe(`/?channel=${sideId}`);
-      expect(current().map((b) => b.textContent)).toEqual(['Side Project']);
+      expect(shownChannel()).toBe('Side Project');
     });
   });
 
-  describe('the selection survives the page refreshing its data', () => {
-    it('keeps the channel from the address when new data arrives', () => {
-      const view = renderAt(`?channel=${careerId}`);
-      const ticked = tasks.map((t) => (t.title === 'Career open task' ? { ...t, status: 'done' as const, completed_at: '2026-10-23T08:00:00Z' } : t));
-      view.rerenderWith(buildChannelViews(goals, ticked, [], TODAY));
-      expect(current().map((b) => b.textContent)).toEqual(['Career Pivot']);
-      expect(velocity()!.textContent).toContain('3 of 3 tasks ticked');
-    });
+  it('keeps the channel from the address when new data arrives (a tick refreshes the page)', () => {
+    const view = renderAt(`?channel=${careerId}`);
+    const ticked = tasks.map((t) => (t.title === 'Career open task' ? { ...t, status: 'done' as const, completed_at: '2026-10-23T08:00:00Z' } : t));
+    view.rerenderWith(buildChannelViews(goals, ticked, [], TODAY));
+    expect(shownChannel()).toBe('Career Pivot');
+    expect(velocity()!.textContent).toContain('3 of 3 tasks ticked');
   });
 });
 

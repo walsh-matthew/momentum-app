@@ -86,8 +86,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(hevy.getByRole('status')).toHaveText('Up to date. Nothing new from Hevy.');
       expect(await countEntries(email)).toBe(2);
 
-      // The card and its button stay inside the screen (the page's own signed-in header is wider than a phone at 390px
-      // today, which is not this card's doing: it is in the ticket's notes).
+      // The card and its button stay inside the screen.
       for (const box of [await hevy.boundingBox(), await hevy.getByRole('button', { name: 'Sync now' }).boundingBox()]) {
         expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
       }

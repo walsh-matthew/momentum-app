@@ -14,7 +14,8 @@ import { MACHINE_DATE } from '@/lib/dates/casual';
 import { emptyDraft } from '@/lib/setup/draft';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
 import { optionsLead } from '@/lib/setup/optionsLead';
-import { quickPathSections } from '@/lib/setup/quickPath';
+import { recapSections } from '@/lib/setup/quickRecap';
+import { quickProps } from './helpers/quickPath';
 import { MEANING_LINK, MEANING_TEXT, PICK_DATE, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import { SETUP_CHUNKS, type AssistantTurn, type TurnKind } from '@/types/setup';
 import { goal, item, target } from './helpers/setupScript';
@@ -202,7 +203,7 @@ describe('no date reaches a setup screen as YYYY-MM-DD (finding 7)', () => {
     expect(final.container.textContent).not.toMatch(MACHINE_DATE);
     cleanup();
     const quick = render(
-      <QuickPathCard reason="over_turns" message="Done." sections={quickPathSections(m, { today: TODAY })} missing={[]} canSave saving={false} error={null} onSave={() => {}} onStartOver={() => {}} />,
+      <QuickPathCard {...quickProps({ sections: recapSections(m, { today: TODAY }) })} />,
     );
     expect(quick.container.textContent).not.toMatch(MACHINE_DATE);
     expect(quick.container.textContent).toContain('Monday, Jun 14, 2027');

@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 //
-// The main feed's empty states in a DOM (MOM-18, MOM-93): signed out, could not load, no goals, no tasks and all done. These render
-// the real components, MainFeed and AppShell with views built by the real buildChannelViews; only the server
-// actions behind the buttons are replaced. Which state applies is decided by buildChannelViews and the page
-// (tests/feed-state.test.ts); here MainFeed must follow the state it is given, never the shape of the feed.
+// The main feed's states in a DOM (MOM-18, MOM-93, MOM-115 trial subset): signed out, could not load, no goals, no tasks and all done.
+// The state components are tested on their own. On home, only the signed-out card, tasks and the finished list show; the empty and failed
+// states, which offered the old wizard or said "No goals yet" to a person whose setup may be saved, are hidden (the scoreboard and the
+// setup card speak for the goal model). These render the real components, MainFeed and AppShell with views built by the real
+// buildChannelViews. Which state applies is decided by buildChannelViews and the page (tests/feed-state.test.ts).
 //
-// Completion is human-only (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6): opening the wizard or showing an
-// empty state never ticks, reopens, creates or moves anything.
+// Completion is human-only (docs/NINETY_DAY_PLAN_CONTEXT.md §3, §5 rule 6): showing a state never ticks, reopens, creates or moves
+// anything.
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -105,17 +106,9 @@ const finished = (goalId: string, week: number, over: Partial<MicroTask> = {}) =
   task(goalId, week, { status: 'done', completed_at: '2026-10-22T09:00:00Z', ...over });
 const goal = (id: string, title: string) => ({ id, title, status: 'active' as const, start_date: '2026-09-23' });
 
-// jsdom has no <dialog>.showModal; this stand-in only opens and closes it, which is all the wizard needs
-// (the same one tests/channel-selection.test.tsx uses for the rebalance drawer).
 beforeEach(() => {
   Object.values(actions).forEach((fn) => fn.mockReset());
   window.history.replaceState(null, '', '/');
-  HTMLDialogElement.prototype.showModal = function showModal() {
-    this.setAttribute('open', '');
-  };
-  HTMLDialogElement.prototype.close = function close() {
-    this.removeAttribute('open');
-  };
 });
 afterEach(cleanup);
 
@@ -222,15 +215,15 @@ describe('MainFeed chooses the screen from the state it is given', () => {
     all_done: { focus: null, upNext: [], recentlyDone: [last] },
     tasks: { focus: task('g', 2, { title: 'Do this now' }), upNext: [task('g', 3, { title: 'Then this' })], recentlyDone: [] },
   };
-  const headings: Record<Exclude<FeedState, 'tasks'>, string> = {
+  // Home shows the old model's feed only when it has something to show (MOM-115, trial subset): the signed-out card, tasks, or the
+  // finished list. The empty and failed states are not shown; the components themselves are tested above.
+  const hidden = ['load_failed', 'no_goals', 'no_tasks'] as const;
+  const headings: Record<'signed_out' | 'all_done', string> = {
     signed_out: 'Sign in to see your plan',
-    load_failed: "We couldn't load your plan",
-    no_goals: 'No goals yet',
-    no_tasks: 'No tasks yet',
     all_done: 'All done',
   };
-  const renderFeed = (feedState: FeedState, feed: FocusFeed = feeds[feedState], onNewGoal = () => {}) =>
-    render(<MainFeed feedState={feedState} feed={feed} velocity={null} moveChains={{}} onNewGoal={onNewGoal} />);
+  const renderFeed = (feedState: FeedState, feed: FocusFeed = feeds[feedState]) =>
+    render(<MainFeed feedState={feedState} feed={feed} velocity={null} moveChains={{}} />);
 
   it.each(Object.keys(headings) as (keyof typeof headings)[])('%s shows its own screen and no other', (state) => {
     renderFeed(state);
@@ -244,11 +237,22 @@ describe('MainFeed chooses the screen from the state it is given', () => {
     noActionCalled();
   });
 
+  it.each(hidden)('%s shows nothing at all: no heading above an empty space, no offer of the old wizard', (state) => {
+    const { container } = renderFeed(state);
+    expect(container.textContent).toBe('');
+    expect(screen.queryByRole('main')).toBeNull();
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    noActionCalled();
+  });
+
   it('tasks shows the focus card and its lists, and no empty state', () => {
     renderFeed('tasks');
     expect(screen.getByRole('heading', { name: 'Do this now' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Up next' })).toBeTruthy();
-    for (const text of Object.values(headings)) expect(screen.queryByRole('heading', { name: text })).toBeNull();
+    for (const text of ['No goals yet', 'No tasks yet', "We couldn't load your plan"]) {
+      expect(screen.queryByRole('heading', { name: text })).toBeNull();
+    }
   });
 
   it('signed_out links to /login and shows nothing of a plan', () => {
@@ -257,31 +261,12 @@ describe('MainFeed chooses the screen from the state it is given', () => {
     expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 
-  it('load_failed offers Try again and no way to start a goal, whatever onNewGoal is', () => {
-    const onNewGoal = vi.fn();
-    renderFeed('load_failed', emptyFeed, onNewGoal);
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Try again']);
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(onNewGoal).not.toHaveBeenCalled();
-    expect(actions.routerRefresh).toHaveBeenCalledTimes(1);
-  });
-
-  it('load_failed shows the failure even when the feed it is handed has work in it', () => {
-    renderFeed('load_failed', feeds.tasks);
-    expect(screen.getByRole('heading', { name: "We couldn't load your plan" })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Do this now' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Up next' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'No goals yet' })).toBeNull();
-  });
-
-  it('no_goals and no_tasks open the wizard through onNewGoal', () => {
-    const onNewGoal = vi.fn();
-    renderFeed('no_goals', emptyFeed, onNewGoal);
-    fireEvent.click(screen.getByRole('button', { name: 'Set up your first goal' }));
-    cleanup();
-    renderFeed('no_tasks', emptyFeed, onNewGoal);
-    fireEvent.click(screen.getByRole('button', { name: 'Start another goal' }));
-    expect(onNewGoal).toHaveBeenCalledTimes(2);
+  it('a hidden state stays hidden even when the feed it is handed has work in it', () => {
+    for (const state of hidden) {
+      const { container } = renderFeed(state, feeds.tasks);
+      expect(container.textContent, state).toBe('');
+      cleanup();
+    }
   });
 
   it('all_done keeps the Recently done list beneath the completion state, so the last task can be reopened', async () => {
@@ -298,135 +283,57 @@ describe('MainFeed chooses the screen from the state it is given', () => {
 
   it('never works the screen out from the feed: an empty feed in the tasks state shows no empty state', () => {
     renderFeed('tasks', emptyFeed);
-    for (const text of Object.values(headings)) expect(screen.queryByRole('heading', { name: text })).toBeNull();
+    for (const text of ['No goals yet', 'No tasks yet', "We couldn't load your plan"]) {
+      expect(screen.queryByRole('heading', { name: text })).toBeNull();
+    }
     expect(screen.queryAllByRole('button')).toHaveLength(0);
-  });
-
-  it('never works the screen out from the feed: a feed with work in the no_tasks state still shows no tasks', () => {
-    renderFeed('no_tasks', feeds.tasks);
-    expect(screen.getByRole('heading', { name: 'No tasks yet' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Do this now' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Up next' })).toBeNull();
   });
 });
 
-describe('the empty states in the app shell', () => {
-  const wizard = () => screen.queryByRole('dialog', { name: 'New goal wizard' });
-  const wizardElements = () => document.querySelectorAll('dialog[aria-label="New goal wizard"]');
-  const sidebar = () => within(screen.getByRole('complementary', { name: 'Goal channels' }));
+describe('the old empty states in the app shell', () => {
   const renderShell = (views = EMPTY_CHANNEL_VIEWS) =>
     render(<AppShell views={views} connectedApps={[]} moveChains={{}} />);
+  const oldControls = [
+    'New Goal Wizard',
+    '+ New Goal Wizard',
+    'Adjust Weekly Pace',
+    'Set up your first goal',
+    'Start another goal',
+  ];
 
   it('signed out: shows the sign-in call to action in the feed, with no channels and no plan', () => {
     renderShell(SIGNED_OUT_CHANNEL_VIEWS);
     const main = within(screen.getByRole('main'));
     expect(main.getByRole('heading', { name: 'Sign in to see your plan' })).toBeTruthy();
     expect(main.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/login');
-    expect(sidebar().getAllByRole('button').map((b) => b.textContent)).toContain('All channels');
     expect(screen.queryByRole('region', { name: 'Velocity' })).toBeNull();
     noActionCalled();
   });
 
-  it('could not load: Try again, no goal prompt, and the wizard and pace actions are disabled everywhere', () => {
-    renderShell(LOAD_FAILED_CHANNEL_VIEWS);
-    const main = within(screen.getByRole('main'));
-    expect(main.getByRole('heading', { name: "We couldn't load your plan" })).toBeTruthy();
-    expect(main.queryByRole('heading', { name: 'No goals yet' })).toBeNull();
-    expect(main.queryByRole('button', { name: 'Set up your first goal' })).toBeNull();
-
-    // The sidebar and the banner still show these actions, but they cannot be used: they need data that was not read.
-    const buttons = [
-      sidebar().getByRole('button', { name: '+ New Goal Wizard' }),
-      sidebar().getByRole('button', { name: 'Adjust Weekly Pace' }),
-      screen.getByRole('button', { name: 'New Goal Wizard' }),
-      within(screen.getByRole('group', { name: 'Quick goal actions' })).getByRole('button', { name: 'Adjust Weekly Pace' }),
-    ];
-    expect(buttons).toHaveLength(4);
-    for (const b of buttons) {
-      expect((b as HTMLButtonElement).disabled).toBe(true);
-      fireEvent.click(b);
+  it.each([
+    ['could not load', LOAD_FAILED_CHANNEL_VIEWS],
+    ['a successful read with no goals', buildChannelViews([], [], [], TODAY)],
+    ['a goal with no tasks', buildChannelViews([goal('new', 'Brand New')], [], [], TODAY)],
+  ])('%s: none of the old empty states and none of the old wizard\'s buttons', (_name, views) => {
+    renderShell(views);
+    for (const text of ["We couldn't load your plan", 'No goals yet', 'No tasks yet']) {
+      expect(screen.queryByRole('heading', { name: text }), text).toBeNull();
     }
-    expect(wizard()).toBeNull();
+    for (const name of oldControls) expect(screen.queryByRole('button', { name }), name).toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();
-    // No nudge, nothing to tick, and nothing was written.
-    expect(screen.queryByRole('heading', { name: 'A little room to rebalance?' })).toBeNull();
     expect(screen.queryByRole('checkbox')).toBeNull();
+    // The page still has its one heading, out of sight, and no old heading above an empty space.
+    expect(screen.getByRole('heading', { level: 1, name: 'Momentum home' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Make today count.' })).toBeNull();
     noActionCalled();
   });
 
-  it('a successful read with no goals still shows the no-goals state, with its actions enabled', () => {
-    renderShell(buildChannelViews([], [], [], TODAY));
-    expect(screen.queryByRole('heading', { name: "We couldn't load your plan" })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'No goals yet' })).toBeTruthy();
-    expect((sidebar().getByRole('button', { name: '+ New Goal Wizard' }) as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it('no goals: the call to action opens the goal wizard, which is closed until then', () => {
-    renderShell(buildChannelViews([], [], [], TODAY));
-    expect(wizard()).toBeNull();
-
-    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'Set up your first goal' }));
-
-    expect(wizard()).toBeTruthy();
-    expect(within(wizard()!).getByRole('heading', { name: 'New goal' })).toBeTruthy();
-    // Opening it creates nothing: only the user's answers do.
-    noActionCalled();
-  });
-
-  it('the call to action and "+ New Goal Wizard" open the same single wizard', () => {
-    renderShell(buildChannelViews([], [], [], TODAY));
-    expect(wizardElements()).toHaveLength(1);
-
-    fireEvent.click(sidebar().getByRole('button', { name: '+ New Goal Wizard' }));
-    expect(wizard()).toBeTruthy();
-    expect(wizardElements()).toHaveLength(1);
-    expect(wizardElements()[0].closest('aside')).toBeNull(); // not inside the sidebar panel
-    expect(screen.getAllByRole('heading', { name: 'New goal' })).toHaveLength(1);
-
-    // Cancel it in the wizard, then open it again from the feed.
-    fireEvent.click(within(wizard()!).getByRole('button', { name: 'Cancel' }));
-    expect(wizard()).toBeNull();
-    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'Set up your first goal' }));
-    expect(wizard()).toBeTruthy();
-    expect(wizardElements()).toHaveLength(1);
-    noActionCalled();
-  });
-
-  it('a goal with no tasks: its channel shows the no-tasks state, and its button opens the wizard', () => {
-    renderShell(buildChannelViews([goal('new', 'Brand New')], [], [], TODAY));
-    fireEvent.click(sidebar().getByRole('button', { name: 'Brand New' }));
-
-    const main = within(screen.getByRole('main'));
-    expect(main.getByRole('heading', { name: 'No tasks yet' })).toBeTruthy();
-    expect(main.getByText(/Brand New has no tasks yet/)).toBeTruthy();
-    expect(wizard()).toBeNull();
-
-    fireEvent.click(main.getByRole('button', { name: 'Start another goal' }));
-    expect(wizard()).toBeTruthy();
-    noActionCalled();
-  });
-
-  it('a finished channel shows the completion state beside one that still has work, and keeps its undo', () => {
-    const tasks = [
-      finished('career', 5, { title: 'Career shipped demo' }),
-      finished('career', 5, { title: 'Career wrote notes' }),
-      task('side', 1, { title: 'Side focus task' }),
-    ];
-    renderShell(buildChannelViews([goal('career', 'Career Pivot'), goal('side', 'Side Project')], tasks, [], TODAY));
-
-    // All channels still has work.
-    expect(screen.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'All done' })).toBeNull();
-
-    fireEvent.click(sidebar().getByRole('button', { name: 'Career Pivot' }));
+  it('a finished channel shows the completion state, with its undo', () => {
+    const tasks = [finished('career', 5, { title: 'Career shipped demo' }), finished('career', 5, { title: 'Career wrote notes' })];
+    renderShell(buildChannelViews([goal('career', 'Career Pivot')], tasks, [], TODAY));
     const main = within(screen.getByRole('main'));
     expect(main.getByRole('heading', { name: 'All done' })).toBeTruthy();
     expect(main.getByRole('button', { name: 'Reopen Career shipped demo' })).toBeTruthy();
-    expect(main.queryByRole('heading', { name: 'Side focus task' })).toBeNull();
-
-    fireEvent.click(sidebar().getByRole('button', { name: 'Side Project' }));
-    expect(screen.getByRole('heading', { name: 'Side focus task' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'All done' })).toBeNull();
     expect(actions.toggleTaskStatus).not.toHaveBeenCalled();
   });
 

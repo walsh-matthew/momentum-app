@@ -1,8 +1,9 @@
 'use server';
 
 import type { ServiceResult } from '@/lib/services/result';
-import { saveApprovedSetup, takeSetupTurn } from '@/lib/services/setup';
-import type { SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import { fillQuickPathItem, saveApprovedSetup, takeSetupTurn } from '@/lib/services/setup';
+import type { SetupSession } from '@/types/setup';
+import type { QuickPathState, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 
 // Server Actions are reachable by direct POST, so both take `unknown`: the service parses the conversation against the
 // schemas, bounds its size, authenticates through the session cookie and never takes a user from the request.
@@ -21,4 +22,10 @@ export async function askSetupTurn(session: unknown): Promise<ServiceResult<Setu
 // The pages that show the new goals, / and /log, render per request, so they need no revalidation.
 export async function saveSetup(session: unknown, quickPath: unknown): Promise<ServiceResult<SetupSaved>> {
   return saveApprovedSetup(session, quickPath);
+}
+
+// Runs when the person sets one missing item on the quick path card: no Claude call, nothing stored. It answers with the session
+// that holds the value and the card's new state, or why the value was refused.
+export async function fillQuickPathItemAction(request: unknown): Promise<ServiceResult<QuickPathState & { session: SetupSession }>> {
+  return fillQuickPathItem(request);
 }

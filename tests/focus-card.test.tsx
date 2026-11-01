@@ -263,7 +263,7 @@ describe('the whole feed', () => {
   });
   // The state is passed in, as buildChannelViews would decide it; MainFeed never works it out from the feed.
   const renderFeed = (f: FocusFeed, feedState: FeedState = 'tasks') =>
-    render(<MainFeed feedState={feedState} feed={f} velocity={null} moveChains={{}} onNewGoal={() => {}} />);
+    render(<MainFeed feedState={feedState} feed={f} velocity={null} moveChains={{}} />);
 
   it('shows the focus task, then Up next, then Recently done, and calls nothing on load', () => {
     renderFeed(feed());
@@ -294,9 +294,9 @@ describe('the whole feed', () => {
     await waitFor(() => expect(actions.toggle).toHaveBeenCalledWith(last.id, 'todo'));
   });
 
-  it('with no tasks at all it shows the no-tasks state, whose only control is the new-goal button', () => {
-    renderFeed({ focus: null, upNext: [], recentlyDone: [] }, 'no_tasks');
-    expect(screen.getByRole('heading', { name: 'No tasks yet' })).toBeTruthy();
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Start another goal']);
+  it('with no tasks at all it shows nothing from the old model, and no button to start a goal (MOM-115)', () => {
+    const { container } = renderFeed({ focus: null, upNext: [], recentlyDone: [] }, 'no_tasks');
+    expect(container.textContent).toBe('');
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 });

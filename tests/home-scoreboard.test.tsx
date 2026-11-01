@@ -10,8 +10,8 @@
 // - the person's titles are kept as written and never singularised, and a tie names every tied target,
 // - the hero follows the person's celebration setting, and the empty state is calm, never 0%.
 
-import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GoalScoreboardCard } from '@/components/home/GoalScoreboardCard';
 import { HomeHeroCard } from '@/components/home/HomeHeroCard';
 import { HomeScoreboardSection } from '@/components/home/HomeScoreboardSection';
@@ -390,9 +390,23 @@ describe('a goal card', () => {
 });
 
 describe('the section above the feed', () => {
-  it('says in words when the scoreboard could not be read, which is not having no goals', () => {
+  it('says in words when the scoreboard could not be read, which is not having no goals, with one Reload button', () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload });
     render(<HomeScoreboardSection home={null} />);
-    expect(screen.getByRole('status').textContent).toContain('Could not load your scoreboard.');
+    const alert = within(screen.getByRole('alert'));
+    expect(alert.getByRole('heading', { name: "Your goals didn't load just now." })).toBeTruthy();
+    expect(alert.getByText('Nothing is lost.')).toBeTruthy();
+    // One solid button, never greyed out, and no offer of setup or the old wizard (never assume).
+    const buttons = alert.getAllByRole('button');
+    expect(buttons.map((b) => b.textContent)).toEqual(['Reload']);
+    expect((buttons[0] as HTMLButtonElement).disabled).toBe(false);
+    expect(buttons[0].className).toContain('bg-primary');
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(reload).not.toHaveBeenCalled();
+    fireEvent.click(buttons[0]);
+    expect(reload).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
   });
 
   it('shows nothing for a person with no goals in the goal model', () => {

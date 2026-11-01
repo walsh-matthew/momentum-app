@@ -114,3 +114,9 @@ export async function signUpAndConfirm(page: Page, label: string): Promise<strin
   await expect(page).toHaveURL(/\/$/);
   return email;
 }
+
+// Home has loaded. Its one heading is out of sight when the old model's feed (which has its own) is not shown (MOM-115), so it is
+// attached rather than visible.
+export async function expectHomeLoaded(page: Page) {
+  await expect(page.getByRole('heading', { level: 1, name: 'Momentum home' })).toBeAttached();
+}
