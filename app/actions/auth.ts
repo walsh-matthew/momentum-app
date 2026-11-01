@@ -26,7 +26,9 @@ export async function authenticate(_previous: AuthFormState, formData: FormData)
     const result = await signUpWithPassword(credentials, `${await requestOrigin()}/auth/callback`, captchaToken);
     if (!result.ok) return { error: result.error, notice: null };
     if (result.data.confirmationRequired) {
-      return { error: null, notice: 'Check your email for a confirmation link, then sign in.' };
+      // The create-account card shows its "Check your email" state for this address (MOM-150).
+      const sentTo = typeof credentials.email === 'string' ? credentials.email.trim() : '';
+      return { error: null, notice: null, sentTo };
     }
     redirect('/');
   }
