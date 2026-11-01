@@ -9,6 +9,7 @@ import { mkdirSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import type { Page } from '@playwright/test';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
+import { seedForecast } from './support/forecastSeed';
 import { seedPlan } from './support/planSeed';
 
 const SHOTS = process.env.HEADER_SCREENSHOT_DIR;
@@ -28,9 +29,15 @@ const SIGNED_IN = [
   { path: '/log', header: false, name: 'log' },
   { path: '/setup', header: false, name: 'setup' },
   { path: '/privacy', header: false, name: 'privacy' },
+  { path: '/plan/kinds', header: false, name: 'plan-kinds' },
 ] as const;
+// Signed-in pages whose address names one of the person's own rows, so they need a seeded row to show more than a refusal. Each
+// is checked in its own test below, with an account seeded for it.
+const SIGNED_IN_ROW = [{ path: '/task/[id]', header: false, name: 'task' }] as const;
 // Pages a signed-out visitor sees, which have no signed-in row to check.
 const SIGNED_OUT = ['/login', '/auth/reset'];
+
+type SweptPage = { path: string; header: boolean; name: string };
 
 const routesOnDisk = (): string[] => {
   const found: string[] = [];
@@ -47,8 +54,38 @@ const routesOnDisk = (): string[] => {
 const sideways = (page: Page) =>
   page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, view: window.innerWidth }));
 
+// One page's checks at 390px, at the address `href` (the route's own path, or a row's address for a page in SIGNED_IN_ROW): the
+// page shows its heading, does not scroll sideways, and has a way home and a Sign out fully on the screen.
+async function checkPage(page: Page, route: SweptPage, href: string): Promise<void> {
+  await page.goto(href);
+  await expect(page.locator('main h1, main h2').first()).toBeVisible();
+  await page.waitForLoadState('networkidle');
+
+  const { scroll, view } = await sideways(page);
+  expect(scroll, `${route.path} scrolls sideways`).toBeLessThanOrEqual(view);
+
+  // The header is inside a region on the page, so it is not a "banner" landmark there; the class names it. Without it, the
+  // page's own back row holds the way home and Sign out.
+  const scope = route.header ? page.locator('.mobile-header') : page.getByRole('navigation', { name: 'Page' });
+  const signOut = scope.getByRole('button', { name: 'Sign out' });
+  await expect(signOut, `${route.path} has a Sign out`).toBeVisible();
+  const home = route.header ? scope.getByRole('link', { name: 'Momentum home' }) : scope.getByRole('link', { name: 'Back to home' });
+  await expect(home, `${route.path} has a way home`).toBeVisible();
+  for (const button of await signOut.all()) {
+    const box = await button.boundingBox();
+    expect(box, `${route.path}: Sign out has a box`).not.toBeNull();
+    expect(box!.x, `${route.path}: Sign out starts on the screen`).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width, `${route.path}: Sign out ends on the screen`).toBeLessThanOrEqual(WIDTHS.phone);
+  }
+
+  if (SHOTS) {
+    mkdirSync(SHOTS, { recursive: true });
+    await page.screenshot({ path: join(SHOTS, `${route.name}-${DARK ? 'dark' : 'light'}-${WIDTHS.phone}.png`) });
+  }
+}
+
 test('every page in app/ is in the 390px sweep or is a signed-out page', () => {
-  const listed = [...SIGNED_IN.map((p) => p.path), ...SIGNED_OUT].sort();
+  const listed = [...SIGNED_IN.map((p) => p.path), ...SIGNED_IN_ROW.map((p) => p.path), ...SIGNED_OUT].sort();
   expect(routesOnDisk()).toEqual(listed);
 });
 
@@ -59,32 +96,26 @@ test.describe(`at ${WIDTHS.phone}px with a long email address`, () => {
     test.setTimeout(240_000);
     const email = await signUpAndConfirm(page, LONG_LABEL);
     await seedPlan(email, { timeZone: LA, weekStart: 1, weekly: true });
-    if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
-    for (const route of SIGNED_IN) {
-      await page.goto(route.path);
-      await expect(page.locator('main h1, main h2').first()).toBeVisible();
-      await page.waitForLoadState('networkidle');
+    for (const route of SIGNED_IN) await checkPage(page, route, route.path);
+  });
 
-      const { scroll, view } = await sideways(page);
-      expect(scroll, `${route.path} scrolls sideways`).toBeLessThanOrEqual(view);
-
-      // The header is inside a region on the page, so it is not a "banner" landmark there; the class names it. Without it, the
-      // page's own back row holds the way home and Sign out.
-      const scope = route.header ? page.locator('.mobile-header') : page.getByRole('navigation', { name: 'Page' });
-      const signOut = scope.getByRole('button', { name: 'Sign out' });
-      await expect(signOut, `${route.path} has a Sign out`).toBeVisible();
-      const home = route.header ? scope.getByRole('link', { name: 'Momentum home' }) : scope.getByRole('link', { name: 'Back to home' });
-      await expect(home, `${route.path} has a way home`).toBeVisible();
-      for (const button of await signOut.all()) {
-        const box = await button.boundingBox();
-        expect(box, `${route.path}: Sign out has a box`).not.toBeNull();
-        expect(box!.x, `${route.path}: Sign out starts on the screen`).toBeGreaterThanOrEqual(0);
-        expect(box!.x + box!.width, `${route.path}: Sign out ends on the screen`).toBeLessThanOrEqual(WIDTHS.phone);
-      }
-
-      if (SHOTS) await page.screenshot({ path: join(SHOTS, `${route.name}-${DARK ? 'dark' : 'light'}-${WIDTHS.phone}.png`) });
-    }
+  // A deadline task's own page (MOM-138) needs a task of the person's own; without one it shows only a refusal.
+  test('a deadline task’s page does not scroll sideways, and Sign out is fully on the screen', async ({ page }) => {
+    const email = await signUpAndConfirm(page, LONG_LABEL);
+    const { taskId } = await seedForecast(email, {
+      timeZone: LA,
+      weekStart: 1,
+      weekly: true,
+      dueInDays: 1,
+      estimateMinutes: 1200,
+      plannedDays: [
+        { offset: 0, kind: true },
+        { offset: 1, kind: true },
+      ],
+    });
+    const [task] = SIGNED_IN_ROW;
+    await checkPage(page, task, `/task/${taskId}`);
   });
 });
 

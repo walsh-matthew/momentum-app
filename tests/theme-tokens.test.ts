@@ -100,6 +100,10 @@ describe('dark is unchanged', () => {
     '.review-sitting', '.review-card', '.review-card .home-note', '.review-card .review-line', '.review-choices', '.review-card .review-after',
     // MOM-113 block 3.4: "Still right for you?", the same way.
     '.review-fit-rows', '.review-fit-target', '.review-card .review-fit-name', '.review-fit-row','.review-card .review-fit-sentence', '.review-fit-answers',
+    // MOM-138: a deadline task's steps on its edit screen, the same way: tokens only, no pre-palette form to compare.
+    '.edit-steps', '.edit-step', '.edit-step-title', ".edit-step[data-done='true'] .edit-step-title", '.edit-step-actions',
+    // MOM-138: the row of links under a forecast line, the same way.
+    '.home-forecast-links',
   ]);
   const isSharedCard = (r: CssRule) => r.selector.startsWith('.card-surface,');
 

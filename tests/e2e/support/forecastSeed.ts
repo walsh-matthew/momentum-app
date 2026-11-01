@@ -22,10 +22,16 @@ export interface ForecastSeedOptions extends HomeSeedOptions {
   estimateMinutes: number | null;
   // The days the task is put on, as days from today, and whether the person said what kind of day each is.
   plannedDays: { offset: number; kind: boolean }[];
+  // MOM-138. The hours the kind of day "Work day" usually gives (3 when left out); null leaves it with no usual time.
+  workHours?: number | null;
+  // Whether setup recorded that the date can move (true when left out).
+  dateCanMove?: boolean;
+  // The person marked the task done (false when left out).
+  finished?: boolean;
 }
 
-// Returns today and the due date, in the person's own days.
-export async function seedForecast(email: string, options: ForecastSeedOptions): Promise<{ today: string; dueOn: string }> {
+// Returns today and the due date, in the person's own days, and the ids of the deadline task and the kind of day.
+export async function seedForecast(email: string, options: ForecastSeedOptions): Promise<{ today: string; dueOn: string; taskId: string; kindId: string }> {
   await seedHome(email, options);
   const { today } = laToday();
   const dueOn = shiftDay(today, options.dueInDays);
@@ -46,7 +52,16 @@ export async function seedForecast(email: string, options: ForecastSeedOptions):
 
   const goal = must(await supabase.from('goals').select('id').eq('user_id', userId).eq('title', HOME_TITLES.goal).single(), 'the goal');
   const kind = must(
-    await supabase.from('person_day_types').insert({ user_id: userId, name: FORECAST_TITLES.work, capacity_unit: 'hours', capacity_amount: 3 }).select('id').single(),
+    await supabase
+      .from('person_day_types')
+      .insert({
+        user_id: userId,
+        name: FORECAST_TITLES.work,
+        capacity_unit: options.workHours === null ? null : 'hours',
+        capacity_amount: options.workHours === null ? null : (options.workHours ?? 3),
+      })
+      .select('id')
+      .single(),
     'the kind of day',
   );
   const task = must(
@@ -58,8 +73,9 @@ export async function seedForecast(email: string, options: ForecastSeedOptions):
         kind: 'deadline_task',
         title: FORECAST_TITLES.task,
         due_date: dueOn,
-        date_can_move: true,
+        date_can_move: options.dateCanMove ?? true,
         estimate_minutes: options.estimateMinutes,
+        ...(options.finished ? { completed_at: new Date().toISOString(), completed_via: 'person' as const } : {}),
       })
       .select('id')
       .single(),
@@ -82,5 +98,5 @@ export async function seedForecast(email: string, options: ForecastSeedOptions):
 
   // Local scope only: the default (global) revokes every session the account has, including the browser's.
   await supabase.auth.signOut({ scope: 'local' });
-  return { today, dueOn };
+  return { today, dueOn, taskId: task.id, kindId: kind.id };
 }

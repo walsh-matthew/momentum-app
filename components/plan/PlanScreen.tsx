@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { chooseDayKind, clearKindOfDay, copyKindsFromLastWeek, planHabitSetDays, planItem, unplanItem } from '@/app/actions/plan';
+import { CHANGE_KIND_TIMES } from '@/components/forecast/wording';
 import { formatDay, weekdayLetter } from '@/components/home/wording';
 import type { PlanItemView } from '@/types/plan';
 import { usePlanAction } from './usePlanAction';
@@ -140,6 +141,9 @@ export function PlanScreen({ plan }: PlanScreenProps) {
                 {COPY_KINDS}
               </button>
             )}
+            <Link href="/plan/kinds" className="review-link">
+              {CHANGE_KIND_TIMES}
+            </Link>
             <ul className="plan-kinds">
               {plan.days.map((day) => (
                 <li key={day.date}>

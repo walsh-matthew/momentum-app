@@ -307,6 +307,8 @@ describe('never assume: a day, a kind or a time the person did not give is not g
       state: 'kind_without_time',
       date: '2026-10-30',
       kindName: 'Rest day',
+      // The kind's own id, so home's line can lead to where its usual time is set (MOM-138).
+      kindId: 'k-rest',
     });
   });
 
