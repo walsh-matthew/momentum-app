@@ -128,7 +128,12 @@ export function ReviewScreen({ facts }: ReviewScreenProps) {
             <RecapBody recap={facts.recap} tone={facts.tone} today={facts.today} />
           </section>
           <ChangesSince changes={facts.changes} today={facts.today} />
-          <ReviewSitting offerLine={offerLine} adjustment={adjustment} edit={facts.edit} />
+          <ReviewSitting
+            offerLine={offerLine}
+            adjustment={adjustment}
+            edit={facts.edit}
+            stillRight={{ items: facts.stillRight.asking, edits: facts.stillRight.edits }}
+          />
         </>
       );
     }

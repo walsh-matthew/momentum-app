@@ -98,6 +98,8 @@ describe('dark is unchanged', () => {
     // MOM-113 block 3.3: the weekly review's sitting after the recap. Written after the light palette, with tokens only, on the
     // shared card surface, so they have no pre-palette form to compare.
     '.review-sitting', '.review-card', '.review-card .home-note', '.review-card .review-line', '.review-choices', '.review-card .review-after',
+    // MOM-113 block 3.4: "Still right for you?", the same way.
+    '.review-fit-rows', '.review-fit-target', '.review-card .review-fit-name', '.review-fit-row','.review-card .review-fit-sentence', '.review-fit-answers',
   ]);
   const isSharedCard = (r: CssRule) => r.selector.startsWith('.card-surface,');
 

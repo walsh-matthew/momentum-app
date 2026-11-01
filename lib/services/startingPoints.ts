@@ -9,7 +9,7 @@
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { STARTING_POINT_OUTCOMES, type StartingPointKind, type StartingPointOutcome } from '@/types/database.types';
-import type { UnconfirmedStartingPoint } from '@/types/review';
+import { STILL_RIGHT_FIELDS, type UnconfirmedStartingPoint } from '@/types/review';
 import type { ServiceResult } from './result';
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -57,8 +57,11 @@ async function signedIn(): Promise<ServiceResult<{ userId: string; supabase: Cli
 export async function listUnconfirmedStartingPoints(): Promise<ServiceResult<UnconfirmedStartingPoint[]>> {
   const user = await signedIn();
   if (!user.ok) return user;
-  const { userId, supabase } = user.data;
+  return readUnconfirmedStartingPoints(user.data.supabase, user.data.userId);
+}
 
+// The same read for a caller that has already signed the person in (the weekly review reads it with the rest of its facts).
+export async function readUnconfirmedStartingPoints(supabase: Client, userId: string): Promise<ServiceResult<UnconfirmedStartingPoint[]>> {
   const marks = await supabase
     .from('starting_points')
     .select('id, subject_kind, day_type_id, goal_id, target_id, work_item_id, field, created_at')
@@ -83,6 +86,8 @@ export async function listUnconfirmedStartingPoints(): Promise<ServiceResult<Unc
   // A target's numbers the person has since changed in the review (MOM-146, migration 020) are what is saved there now: the newest
   // change by its day, and by when it was saved for one day. A mark whose value they changed is theirs to skip.
   const targetRows = rowsByKind.get('target');
+  // The targets whose numbers the person has changed: any saved change counts as theirs (MOM-113 block 3.4).
+  const changedTargets = new Set<string>();
   if (targetRows && targetRows.size > 0) {
     const changes = await supabase
       .from('target_changes')
@@ -92,6 +97,7 @@ export async function listUnconfirmedStartingPoints(): Promise<ServiceResult<Unc
     if (changes.error) return { ok: false, error: LOAD_FAILED };
     const newest = new Map<string, (typeof changes.data)[number]>();
     for (const c of changes.data) {
+      changedTargets.add(c.target_id);
       const seen = newest.get(c.target_id);
       if (!seen || c.effective_from > seen.effective_from || (c.effective_from === seen.effective_from && c.created_at > seen.created_at)) newest.set(c.target_id, c);
     }
@@ -118,7 +124,9 @@ export async function listUnconfirmedStartingPoints(): Promise<ServiceResult<Unc
   const points: UnconfirmedStartingPoint[] = [];
   for (const m of marks.data) {
     if (m.subject_kind === 'person') {
-      if (person) points.push({ id: m.id, kind: 'person', field: m.field, subject: null, value: asText(person[m.field]), createdAt: m.created_at });
+      if (person) {
+        points.push({ id: m.id, kind: 'person', field: m.field, subject: null, value: asText(person[m.field]), createdAt: m.created_at, targetId: null, changed: false });
+      }
       continue;
     }
     const id = m[SUBJECT_ID[m.subject_kind]];
@@ -131,6 +139,8 @@ export async function listUnconfirmedStartingPoints(): Promise<ServiceResult<Unc
       subject: asText(row[SUBJECTS[m.subject_kind].label]),
       value: asText(row[m.field]),
       createdAt: m.created_at,
+      targetId: m.subject_kind === 'target' ? m.target_id : null,
+      changed: m.subject_kind === 'target' && m.target_id !== null && (STILL_RIGHT_FIELDS as readonly string[]).includes(m.field) && changedTargets.has(m.target_id),
     });
   }
   return { ok: true, data: points };

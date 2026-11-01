@@ -53,11 +53,20 @@ describe('listUnconfirmedStartingPoints: what the review reads', () => {
     expect(result).toEqual({
       ok: true,
       data: [
-        { id: mine.marks[0].id, kind: 'person', field: 'day_end', subject: null, value: '21:00:00', createdAt: mine.marks[0].created_at },
-        { id: mine.marks[1].id, kind: 'day_type', field: 'capacity_amount', subject: 'Work day', value: '2', createdAt: mine.marks[1].created_at },
-        { id: mine.marks[2].id, kind: 'goal', field: 'start_date', subject: 'Get fit', value: '2026-10-29', createdAt: mine.marks[2].created_at },
-        { id: mine.marks[3].id, kind: 'target', field: 'slot_weekdays', subject: 'Gym', value: '1,3', createdAt: mine.marks[3].created_at },
-        { id: mine.marks[4].id, kind: 'work_item', field: 'estimate_minutes', subject: 'Book a trainer', value: '60', createdAt: mine.marks[4].created_at },
+        { id: mine.marks[0].id, kind: 'person', field: 'day_end', subject: null, value: '21:00:00', createdAt: mine.marks[0].created_at, targetId: null, changed: false },
+        { id: mine.marks[1].id, kind: 'day_type', field: 'capacity_amount', subject: 'Work day', value: '2', createdAt: mine.marks[1].created_at, targetId: null, changed: false },
+        { id: mine.marks[2].id, kind: 'goal', field: 'start_date', subject: 'Get fit', value: '2026-10-29', createdAt: mine.marks[2].created_at, targetId: null, changed: false },
+        {
+          id: mine.marks[3].id,
+          kind: 'target',
+          field: 'slot_weekdays',
+          subject: 'Gym',
+          value: '1,3',
+          createdAt: mine.marks[3].created_at,
+          targetId: sp.tables.targets[0].id,
+          changed: false,
+        },
+        { id: mine.marks[4].id, kind: 'work_item', field: 'estimate_minutes', subject: 'Book a trainer', value: '60', createdAt: mine.marks[4].created_at, targetId: null, changed: false },
       ],
     });
   });
@@ -74,6 +83,21 @@ describe('listUnconfirmedStartingPoints: what the review reads', () => {
     expect(result.ok && result.data.find((p) => p.id === mine.marks[3].id)?.value).toBe('2,4');
     // One read of the changes, however many targets have a mark.
     expect(sp.reads.target_changes).toBe(1);
+  });
+
+  it("marks a target's floor, aspiration and days as changed once the person has saved a change to that target, and nothing else (MOM-113 block 3.4)", async () => {
+    const mine = seedSetup(ME);
+    const targetId = sp.tables.targets[0].id;
+    const floorMark = add('starting_points', markRow(ME, { subject_kind: 'target', target_id: targetId }, 'floor'));
+    const thresholdMark = add('starting_points', markRow(ME, { subject_kind: 'target', target_id: targetId }, 'qualifying_threshold'));
+    const before = await listUnconfirmedStartingPoints();
+    expect(before.ok && before.data.filter((p) => p.changed)).toEqual([]);
+    add('target_changes', { id: newId(), user_id: ME, target_id: targetId, effective_from: '2026-11-02', floor: 3, aspiration: null, slot_weekdays: null, created_at: '2026-10-31T10:00:00.000000+00:00' });
+    const after = await listUnconfirmedStartingPoints();
+    const changed = after.ok ? after.data.filter((p) => p.changed).map((p) => p.id) : [];
+    // Days and floor are the person's own now; the qualifying threshold cannot be changed by a saved change, and no other kind is touched.
+    expect(changed.sort()).toEqual([mine.marks[3].id, floorMark.id].sort());
+    expect(changed).not.toContain(thresholdMark.id);
   });
 
   it('reads once for each kind that has a mark, never once for each mark', async () => {

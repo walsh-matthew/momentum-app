@@ -9,15 +9,30 @@
 // getReviewPrompt() answers only "is a review due, or already done?", for the one line home shows. It reads the settings and
 // this week's record, never the scoreboard, so home does not read every entry a second time. Neither function makes a
 // Claude call.
+//
+// "Still right for you?" (MOM-113 block 3.4): when the review asked about setup suggestions, the person's answers arrive with the finish.
+// The server recomputes which marks were asked (never trusts the browser for that), stores the review first (adjustment kind
+// 'still_right', holding mark ids, fields and answers and nothing the person said), and then records each answer through
+// answerStartingPoint(). A mark the person had already changed is recorded as changed, unless they answered it in this sitting. If an
+// answer cannot be written, the review stays finished and that mark is asked again at the next review.
 
 import { canGrade, localDay, weeklyReviewWindow } from '@/lib/engine';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { REVIEW_ADJUSTMENT_OUTCOMES, type Json, type PersonSettingsRow } from '@/types/database.types';
+import {
+  REVIEW_ADJUSTMENT_OUTCOMES,
+  STARTING_POINT_OUTCOMES,
+  type Json,
+  type PersonSettingsRow,
+  type ReviewAdjustmentKind,
+  type ReviewAdjustmentOutcome,
+  type StartingPointOutcome,
+} from '@/types/database.types';
 import type { ReviewPrompt } from '@/types/review';
 import type { ReviewWindow } from '@/types/scoreboard';
 import type { ServiceResult } from './result';
 import { getWeeklyReviewFacts, type WeeklyReviewFactsDeps } from './review';
 import { toAnchors, toWeekday } from './scoreboardRows';
+import { answerStartingPoint } from './startingPoints';
 
 const SIGNED_OUT = 'Sign in to finish your weekly review.';
 const NOT_READY = 'There is no weekly review to finish right now.';
@@ -30,9 +45,25 @@ export interface FinishedReview {
   weekStart: string;
 }
 
+// The answers to "Still right for you?" as the browser sent them: mark id to kept or changed. Ids that are not marks of this review are
+// left out (they can touch nothing); a value that is not an answer, or a shape that is not a plain object, is refused.
+function readAnswers(raw: unknown, known: ReadonlySet<string>): Map<string, StartingPointOutcome> | null {
+  const answers = new Map<string, StartingPointOutcome>();
+  if (raw === undefined || raw === null) return answers;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return null;
+  for (const [id, value] of Object.entries(raw)) {
+    const answer = STARTING_POINT_OUTCOMES.find((o) => o === value);
+    if (answer === undefined) return null;
+    if (known.has(id)) answers.set(id, answer);
+  }
+  return answers;
+}
+
 // Stores the review that is due now, with the person's choice about the one adjustment it offered. `outcome` is required
 // when an adjustment was offered and must be absent when none was: a choice with nothing offered cannot be recorded.
-export async function recordFinishedReview(outcome: unknown, deps: WeeklyReviewFactsDeps = {}): Promise<ServiceResult<FinishedReview>> {
+// `answers` are the person's answers to "Still right for you?" when the review asked it; that card takes the adjustment's place, so
+// `outcome` is absent then and every mark that was asked needs an answer.
+export async function recordFinishedReview(outcome: unknown, deps: WeeklyReviewFactsDeps = {}, answers?: unknown): Promise<ServiceResult<FinishedReview>> {
   const supabase = await createSupabaseServerClient();
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth.user) return { ok: false, error: SIGNED_OUT };
@@ -44,9 +75,32 @@ export async function recordFinishedReview(outcome: unknown, deps: WeeklyReviewF
   if (facts.state === 'reviewed') return { ok: false, error: ALREADY_FINISHED };
   if (facts.state !== 'ready') return { ok: false, error: NOT_READY };
 
-  const chosen = outcome === undefined || outcome === null ? null : (REVIEW_ADJUSTMENT_OUTCOMES.find((o) => o === outcome) ?? false);
-  if (chosen === false) return { ok: false, error: BAD_REQUEST };
-  if ((facts.adjustment === null) !== (chosen === null)) return { ok: false, error: BAD_REQUEST };
+  const { asking, changed } = facts.stillRight;
+  const marks = [...asking, ...changed];
+  const given = readAnswers(answers, new Set(marks.map((m) => m.id)));
+  if (given === null) return { ok: false, error: BAD_REQUEST };
+  // The card was shown when something was asked, or when the person answered marks in this sitting (their change moved them out of
+  // the asked list). Either way it took the engine's adjustment's place, so no choice about one comes with it.
+  const stillRight = asking.length > 0 || given.size > 0;
+
+  let chosen: ReviewAdjustmentOutcome | null;
+  let kind: ReviewAdjustmentKind | null;
+  let adjustment: Json | null;
+  if (stillRight) {
+    if (outcome !== undefined && outcome !== null) return { ok: false, error: BAD_REQUEST };
+    if (asking.some((m) => !given.has(m.id))) return { ok: false, error: BAD_REQUEST };
+    const items = marks.filter((m) => given.has(m.id)).map((m) => ({ id: m.id, field: m.field, outcome: given.get(m.id) as StartingPointOutcome }));
+    kind = 'still_right';
+    adjustment = { v: 1, items };
+    chosen = items.some((i) => i.outcome === 'changed') ? 'changed' : 'declined';
+  } else {
+    const picked = outcome === undefined || outcome === null ? null : (REVIEW_ADJUSTMENT_OUTCOMES.find((o) => o === outcome) ?? false);
+    if (picked === false) return { ok: false, error: BAD_REQUEST };
+    if ((facts.adjustment === null) !== (picked === null)) return { ok: false, error: BAD_REQUEST };
+    chosen = picked;
+    kind = facts.adjustment?.kind ?? null;
+    adjustment = facts.adjustment === null ? null : (facts.adjustment as unknown as Json);
+  }
 
   const { data, error } = await supabase
     .from('weekly_reviews')
@@ -55,8 +109,8 @@ export async function recordFinishedReview(outcome: unknown, deps: WeeklyReviewF
       week_start: facts.window.start,
       week_end: facts.window.end,
       recap: facts.recap as unknown as Json,
-      adjustment_kind: facts.adjustment?.kind ?? null,
-      adjustment: facts.adjustment === null ? null : (facts.adjustment as unknown as Json),
+      adjustment_kind: kind,
+      adjustment,
       adjustment_outcome: chosen,
     })
     .select('id')
@@ -66,6 +120,15 @@ export async function recordFinishedReview(outcome: unknown, deps: WeeklyReviewF
     // The code only: the message can quote the row.
     console.error('[weekly-review] could not save a finished review', { code: error.code ?? 'none' });
     return { ok: false, error: FINISH_FAILED };
+  }
+
+  // Each mark gets its one answer: the person's own, or changed for one they had already changed. A failure is logged and the review
+  // stays finished; that mark is asked again at the next review.
+  for (const mark of marks) {
+    const answer = given.get(mark.id) ?? (changed.some((c) => c.id === mark.id) ? 'changed' : null);
+    if (answer === null) continue;
+    const saved = await answerStartingPoint(mark.id, answer, deps);
+    if (!saved.ok) console.error('[weekly-review] could not record an answer to a starting point');
   }
   return { ok: true, data: { id: data.id, weekStart: facts.window.start } };
 }

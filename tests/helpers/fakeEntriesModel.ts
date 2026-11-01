@@ -17,6 +17,8 @@
 //   and each points at the same person's own item or day type.
 // - target_changes (migration 020): select and insert only, its CHECKs, the same-person target key, and the trigger that sets created_at
 //   (the fake's clock, so a later save is always later) whatever an insert sends. No unique key: a second save is a second row.
+// - starting_points (migration 017, read by the weekly review since MOM-113 block 3.4): select; an unanswered mark can be answered and an answered one
+//   cannot, only answered_at and outcome can be updated, the outcome is kept or changed, and both are set together.
 // ENFORCED_CONSTRAINTS, ENFORCED_REVIEW_CONSTRAINTS, ENFORCED_PLAN_CONSTRAINTS and ENFORCED_TARGET_CHANGE_CONSTRAINTS list every name it enforces;
 // tests/fake-entries-model.test.ts checks each one exists in the SQL.
 
@@ -44,7 +46,8 @@ type TableName =
   | 'weekly_reviews'
   | 'week_plan_picks'
   | 'week_plan_day_types'
-  | 'target_changes';
+  | 'target_changes'
+  | 'starting_points';
 
 // What the authenticated role may do on each table (migration 013, section 7).
 const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'delete'>> = {
@@ -66,6 +69,8 @@ const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'de
   week_plan_day_types: new Set(['select', 'insert', 'update', 'delete']),
   // 020: append-only. No update and no delete grant for the person.
   target_changes: new Set(['select', 'insert']),
+  // 017: a mark is selected and answered (answered_at and outcome only, see run()); setup writes it, through save_guided_setup.
+  starting_points: new Set(['select', 'insert', 'update']),
 };
 
 export const ENFORCED_CONSTRAINTS = [
@@ -114,6 +119,9 @@ export const ENFORCED_TARGET_CHANGE_CONSTRAINTS = [
   'target_changes_target_fk',
 ] as const;
 
+// Migration 017's constraints and policy the fake enforces; the names are checked against the SQL.
+export const ENFORCED_STARTING_POINT_CONSTRAINTS = ['starting_points_outcome_check', 'starting_points_answered_together', 'starting_points_update_own'] as const;
+
 export const gm = {
   tables: {
     person_settings: [] as Row[],
@@ -131,6 +139,7 @@ export const gm = {
     week_plan_picks: [] as Row[],
     week_plan_day_types: [] as Row[],
     target_changes: [] as Row[],
+    starting_points: [] as Row[],
   } satisfies Record<TableName, Row[]>,
   user: null as { id: string } | null,
   rls: true,
@@ -274,6 +283,12 @@ function checkViolation(table: TableName, row: Row): Violation | null {
     const none = [row.adjustment_kind === null, row.adjustment === null, row.adjustment_outcome === null];
     if (!(none.every(Boolean) || none.every((n) => !n))) return { code: '23514', name: 'weekly_reviews_adjustment_together' };
   }
+  if (table === 'starting_points') {
+    if (row.outcome !== null && row.outcome !== undefined && row.outcome !== 'kept' && row.outcome !== 'changed') {
+      return { code: '23514', name: 'starting_points_outcome_check' };
+    }
+    if (((row.answered_at ?? null) === null) !== ((row.outcome ?? null) === null)) return { code: '23514', name: 'starting_points_answered_together' };
+  }
   if (table === 'target_changes') {
     if (typeof row.floor !== 'number' || !(row.floor > 0)) return { code: '23514', name: 'target_changes_floor_positive' };
     if (row.aspiration !== null && row.aspiration !== undefined && (typeof row.aspiration !== 'number' || row.aspiration < row.floor)) {
@@ -395,6 +410,10 @@ class Query implements PromiseLike<Result> {
   }
   eq(column: string, value: unknown) {
     this.filters.push((r) => r[column] === value);
+    return this;
+  }
+  is(column: string, value: null) {
+    this.filters.push((r) => (r[column] ?? null) === value);
     return this;
   }
   in(column: string, values: unknown[]) {
@@ -534,8 +553,15 @@ class Query implements PromiseLike<Result> {
       return this.returning ? this.shape(added) : { data: null, error: null };
     }
 
-    const rows = this.matched();
+    let rows = this.matched();
     if (this.op === 'update') {
+      // 017: UPDATE is granted for answered_at and outcome alone, and the policy only lets an unanswered mark be answered.
+      if (this.table === 'starting_points') {
+        if (Object.keys(this.payload as Row).some((column) => column !== 'answered_at' && column !== 'outcome')) {
+          return failure('42501', 'permission denied for table starting_points');
+        }
+        if (gm.rls) rows = rows.filter((r) => (r.answered_at ?? null) === null);
+      }
       // 019: UPDATE on a day kind is granted for day_type_id alone, so a statement that sets any other column is refused.
       if (this.table === 'week_plan_day_types' && Object.keys(this.payload as Row).some((column) => column !== 'day_type_id')) {
         return failure('42501', 'permission denied for table week_plan_day_types');

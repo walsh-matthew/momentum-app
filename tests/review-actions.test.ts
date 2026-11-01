@@ -11,7 +11,9 @@ const recordFinishedReview = vi.fn();
 
 vi.mock('next/cache', () => ({ revalidatePath: (path: string) => revalidatePath(path) }));
 vi.mock('@/lib/services/reviewReflection', () => ({ getReviewLine: () => getReviewLine() }));
-vi.mock('@/lib/services/reviewRecords', () => ({ recordFinishedReview: (outcome: unknown) => recordFinishedReview(outcome) }));
+vi.mock('@/lib/services/reviewRecords', () => ({
+  recordFinishedReview: (outcome: unknown, deps: unknown, answers: unknown) => recordFinishedReview(outcome, deps, answers),
+}));
 
 import { askForReviewLine, finishReview } from '@/app/actions/review';
 
@@ -36,14 +38,14 @@ describe('finishReview', () => {
   it('passes the choice to the service as it came (the service validates it) and refreshes the review and home once saved', async () => {
     recordFinishedReview.mockResolvedValue({ ok: true, data: { id: 'r1', weekStart: '2026-10-19' } });
     expect(await finishReview('declined')).toEqual({ ok: true, data: { id: 'r1', weekStart: '2026-10-19' } });
-    expect(recordFinishedReview).toHaveBeenCalledWith('declined');
+    expect(recordFinishedReview).toHaveBeenCalledWith('declined', {}, undefined);
     expect(revalidatePath.mock.calls.map((c) => c[0]).sort()).toEqual(['/', '/review']);
   });
 
   it('hands a choice it cannot read to the service untouched, so the service is the one that refuses it', async () => {
     recordFinishedReview.mockResolvedValue({ ok: false, error: 'That choice could not be read. Nothing was saved.' });
     expect(await finishReview({ outcome: 'changed' })).toEqual({ ok: false, error: 'That choice could not be read. Nothing was saved.' });
-    expect(recordFinishedReview).toHaveBeenCalledWith({ outcome: 'changed' });
+    expect(recordFinishedReview).toHaveBeenCalledWith({ outcome: 'changed' }, {}, undefined);
   });
 
   it('refreshes nothing when nothing was saved', async () => {
@@ -52,7 +54,14 @@ describe('finishReview', () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it('takes the choice and nothing else: no user, no week, no time', () => {
-    expect(finishReview.length).toBe(1);
+  it('hands the answers to "Still right for you?" to the service untouched, with no choice about an adjustment (MOM-113 block 3.4)', async () => {
+    recordFinishedReview.mockResolvedValue({ ok: true, data: { id: 'r1', weekStart: '2026-10-19' } });
+    const answers = { 'mark-1': 'kept', 'mark-2': 'changed' };
+    await finishReview(null, answers);
+    expect(recordFinishedReview).toHaveBeenCalledWith(null, {}, answers);
+  });
+
+  it('takes the choice and the answers and nothing else: no user, no week, no time, and never a clock', () => {
+    expect(finishReview.length).toBe(2);
   });
 });

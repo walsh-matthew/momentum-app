@@ -78,6 +78,7 @@ const ready = (over: Partial<Extract<WeeklyReviewFacts, { state: 'ready' }>> = {
   offerReflection: true,
   adjustment: null,
   edit: null,
+  stillRight: { asking: [], changed: [], edits: [] },
   changes: [],
   ...over,
 });
