@@ -27,6 +27,8 @@ export const ADD_WORDS = {
 
   // The card before the conversation, in returning mode. The body is first setup's own intro, word for word.
   introHeading: "Let's add to your goals",
+  // The same card when targets are added to one goal: it names the goal (the owner, 2026-11-02). The body is the same.
+  introTarget: (goal: string): string => `Let's add to "${goal}"`,
 
   // The start question for a target.
   startLead: 'When should this target start counting?',

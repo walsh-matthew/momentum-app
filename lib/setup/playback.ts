@@ -332,15 +332,19 @@ export function renderFinal(model: SetupModel, options: PlaybackOptions = {}): s
   const active = model.goals.filter((g) => g.state === 'active');
   const several = active.length > 1;
   const counted: { line: string; things: number }[] = active.flatMap((g) => {
+    // In an addition a target is said on its own, as a sentence, never as "Your goal": a goal the person already has is not named at all
+    // (the card's heading names it), and a new goal is named once, by its title, on the line before its targets.
+    const saved = g.key === options.savedGoalKey;
+    const named = options.adding === true && !saved;
     if (g.targets.length === 0) return [{ line: `${goalLead(g, several)}: nothing is counted yet.`, things: 0 }];
-    return g.targets.map((t) => {
+    const targetLines = g.targets.map((t) => {
       const numbers = goalNumbers(t, options);
       const what = countedWords(t.title, options.said);
       const counted = numbers ?? `${what}, counted ${describePeriod(t, options, 'each')}`;
-      // A target added to a goal the person already has is not "your goal": it is said on its own, as a sentence.
-      if (g.key === options.savedGoalKey) return { line: `${counted.charAt(0).toUpperCase()}${counted.slice(1)}.`, things: 1 };
+      if (saved || named) return { line: `${counted.charAt(0).toUpperCase()}${counted.slice(1)}.`, things: 1 };
       return { line: `${goalLead(g, several)}: ${counted}.`, things: 1 };
     });
+    return named ? [{ line: titleOf(g.title), things: 0 }, ...targetLines] : targetLines;
   });
   const parked = model.goals.length - active.length;
   // Room left after the parked line and the settings line; one line goes to "And N more" when they do not all fit.

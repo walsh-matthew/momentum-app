@@ -340,7 +340,7 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
   if (phase === 'intro') {
     return (
       <section aria-labelledby="setup-intro" className="channel-card space-y-4 p-4">
-        <CardLead id="setup-intro">{adding ? ADD_WORDS.introHeading : "Let's set up your goals"}</CardLead>
+        <CardLead id="setup-intro">{adding ? (startTarget ? ADD_WORDS.introTarget(startTarget.title) : ADD_WORDS.introHeading) : "Let's set up your goals"}</CardLead>
         <p className={CARD_TEXT.body}>
           A short conversation with Claude, one question at a time. If a question isn&apos;t clear, just ask what it means. Nothing
           is saved until you approve it at the end. What you

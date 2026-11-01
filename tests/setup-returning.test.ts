@@ -156,8 +156,20 @@ describe('the final lines of an addition', () => {
     expect(await finalLines('return-t-miles', { adding: true, savedGoalKey: SAVED_GOAL_KEY })).toEqual(['At least 6 miles a week.']);
   });
 
-  it('a new goal is still "Your goal", without the settings-page line', async () => {
-    expect(await finalLines('return-g-reading', { adding: true })).toEqual(['Your goal: at least 2 reading sessions a week.']);
+  it('a new goal is named once by its title, then its targets read as sentences, with no "Your goal:" and no settings-page line', async () => {
+    expect(await finalLines('return-g-reading', { adding: true })).toEqual(['Read more', 'At least 2 reading sessions a week.']);
+  });
+
+  it('a new goal with several targets names the goal once, ahead of all of them', async () => {
+    const c = RETURNING_CASES.find((x) => x.id === 'return-g-reading')!;
+    const report = await runSetupEval(c, scriptedModel(c.script));
+    const model = structuredClone(report.draft.model);
+    model.goals[0].targets.push({ ...model.goals[0].targets[0], key: 't2', title: 'Pages', floor: 30 });
+    const lines = renderFinal(model, { adding: true });
+    expect(lines[0]).toBe('Read more');
+    expect(lines.filter((l) => l === 'Read more')).toHaveLength(1);
+    expect(lines).toHaveLength(3);
+    expect(lines.join(' ')).not.toMatch(/Your goal/);
   });
 
   it('a first setup keeps the line it has always had', async () => {

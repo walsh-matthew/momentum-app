@@ -19,6 +19,9 @@ describe('the approved words, verbatim', () => {
     expect(ADD_WORDS.newGoal).toBe('A new goal');
     expect(ADD_WORDS.newTarget).toBe('A target for a goal I already have');
     expect(ADD_WORDS.backHome).toBe('Back to home');
+    // The card before the conversation: its heading names the goal when targets are added to one (the owner, 2026-11-02).
+    expect(ADD_WORDS.introHeading).toBe("Let's add to your goals");
+    expect(ADD_WORDS.introTarget('Run more')).toBe(`Let's add to "Run more"`);
   });
 
   it('which goal', () => {

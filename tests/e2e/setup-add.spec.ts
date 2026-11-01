@@ -61,6 +61,10 @@ const SHOT_ORDER = [
 // A screenshot of the page as it stands, when the owner asked for them.
 async function shot(page: Page, width: number, name: (typeof SHOT_ORDER)[number]): Promise<void> {
   if (!SHOTS) return;
+  // SETUP_ADD_SHOT_ONLY (screen names, comma separated) and SETUP_ADD_SHOT_WIDTH re-shoot only some screens, as the owner asks.
+  const only = process.env.SETUP_ADD_SHOT_ONLY?.split(',').map((x) => x.trim());
+  if (only && !only.includes(name)) return;
+  if (process.env.SETUP_ADD_SHOT_WIDTH && Number(process.env.SETUP_ADD_SHOT_WIDTH) !== width) return;
   mkdirSync(SHOTS, { recursive: true });
   await page.waitForLoadState('networkidle');
   const number = String(SHOT_ORDER.indexOf(name) + 1).padStart(2, '0');
@@ -220,6 +224,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       expect(sent).not.toContain(HOME_TITLES.goal);
 
       await expect(page.getByText("Your other goals and everything you've logged stay exactly as they are.")).toBeVisible();
+      // The goal's title first, then its targets as sentences: no "Your goal:" prefix.
+      expect(await page.locator('main li').allTextContents()).toEqual(['Read more', 'At least 2 reading sessions a week.']);
+      await expect(page.getByText(/Your goal:/)).toHaveCount(0);
       await readable(page, width);
       await shot(page, width, 'final-goal');
 
@@ -267,7 +274,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await readable(page, width);
       await shot(page, width, 'which-goal');
       await page.getByRole('button', { name: HOME_TITLES.goal, exact: true }).click();
-      await expect(page.getByRole('heading', { name: "Let's add to your goals" })).toBeVisible();
+      // Targets added to one goal: the card names the goal.
+      await expect(page.getByRole('heading', { name: `Let's add to "${HOME_TITLES.goal}"` })).toBeVisible();
+      await expect(page.getByRole('heading', { name: "Let's add to your goals" })).toHaveCount(0);
       await shot(page, width, 'intro-target');
       await page.getByRole('button', { name: 'Start' }).click();
 

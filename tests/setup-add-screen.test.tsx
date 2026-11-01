@@ -155,7 +155,10 @@ describe('the conversation for a target', () => {
     renderAdd();
     fireEvent.click(await screen.findByRole('button', { name: 'A target for a goal I already have' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Run more' }));
-    expect(await screen.findByRole('heading', { name: "Let's add to your goals" })).toBeTruthy();
+    // Targets added to one goal: the card names the goal; the body is the same as for a new goal.
+    expect(await screen.findByRole('heading', { name: `Let's add to "Run more"` })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: "Let's add to your goals" })).toBeNull();
+    expect(screen.getByText(/A short conversation with Claude, one question at a time\./)).toBeTruthy();
     fireEvent.click(button('Start'));
     await screen.findByText(RETURNING_FIRST_LINE);
     const sent = actions.ask.mock.calls[0][0];
@@ -172,6 +175,9 @@ describe('the final card for a goal', () => {
   it('asks "Add this goal?" in the approved words, with the two buttons, and saves nothing until Add it', async () => {
     renderAdd();
     expect(await screen.findByRole('heading', { name: 'Add this goal?' })).toBeTruthy();
+    // The goal's title first, then its targets as sentences: no "Your goal:" prefix.
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Read more', 'At least 2 reading sessions a week.']);
+    expect(screen.queryByText(/Your goal:/)).toBeNull();
     expect(screen.getByText("Your other goals and everything you've logged stay exactly as they are.")).toBeTruthy();
     expect(button('Add it').getAttribute('data-tone')).toBe('main');
     expect(button('Change something')).toBeTruthy();

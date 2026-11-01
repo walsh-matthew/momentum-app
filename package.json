@@ -33,6 +33,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "eval:setup:pilot": "vitest run --config vitest.live.config.mts",
+    "eval:setup:add": "vitest run --config vitest.live.config.mts tests/live/setup-add.live.ts",
     "eval:review:line": "vitest run --config vitest.live.config.mts tests/live/review-line.live.ts",
     "plan": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-execution-plan.ts",
     "plan:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-plan-format.ts",
