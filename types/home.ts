@@ -103,7 +103,8 @@ export type ForecastView =
   | { state: 'nothing_set_aside' }
   // A day the task is on has no kind, or its kind has no usual time: the capacity is not known.
   | { state: 'day_without_kind'; date: LocalDate }
-  | { state: 'kind_without_time'; date: LocalDate; kindName: string }
+  // `kindId` is the kind's own id, so the line can lead to the place where its usual time is set (MOM-138).
+  | { state: 'kind_without_time'; date: LocalDate; kindName: string; kindId: string }
   // The person counts their time in sessions, and a task is sized in minutes.
   | { state: 'counted_in_sessions' };
 
@@ -117,6 +118,9 @@ export interface MilestoneView {
   dueOn: LocalDate | null;
   steps: StepView[];
   stepsDone: number;
+  // What setup recorded about the due date (a deadline task only): "move the date" leads to an edit only when it can move
+  // (MOM-138). False for a milestone and for a task whose answer was never recorded; nothing is assumed.
+  dateCanMove: boolean;
   forecast: ForecastView | null;
 }
 

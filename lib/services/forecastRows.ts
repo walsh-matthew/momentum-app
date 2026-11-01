@@ -118,7 +118,7 @@ export function planForecasts(input: ForecastInput): PlannedForecasts {
     for (const date of days) {
       const type = typeById.get(kindOnDay.get(date) ?? '');
       if (type === undefined) blocked = blocked ?? { state: 'day_without_kind', date };
-      else if (type.capacity_amount === null || type.capacity_unit === null) blocked = blocked ?? { state: 'kind_without_time', date, kindName: type.name };
+      else if (type.capacity_amount === null || type.capacity_unit === null) blocked = blocked ?? { state: 'kind_without_time', date, kindName: type.name, kindId: type.id };
       else if (type.capacity_unit === 'sessions') blocked = blocked ?? { state: 'counted_in_sessions' };
       else availableDays.push({ date, capacity: (Number(type.capacity_amount) * MINUTES_PER_HOUR) / (onDay.get(date)?.size ?? 1) });
     }

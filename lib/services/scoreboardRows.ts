@@ -398,6 +398,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
   const stepTitleById = new Map(rows.steps.map((s) => [s.id, s.title]));
 
   // ---- Milestones: steps done and the due date, and a deadline task's forecast ---------------------------------
+  const canMoveById = new Map(rows.forecast.items.map((i) => [i.id, i.date_can_move === true]));
   const milestoneOf = (item: ItemRead): MilestoneView => {
     const steps = stepsOfItem(item.id).map((s) => ({ id: s.id, title: s.title, done: tickedOn.has(s.id) }));
     const feeding = item.target_id === null ? undefined : targetById.get(item.target_id);
@@ -410,6 +411,7 @@ export function buildHomeScoreboard(rows: HomeRows, nowMs: number): HomeScoreboa
       dueOn: item.due_date ?? (feeding?.period_kind === 'deadline' ? feeding.due_date : null),
       steps,
       stepsDone: steps.filter((s) => s.done).length,
+      dateCanMove: item.kind === 'deadline_task' && canMoveById.get(item.id) === true,
       forecast: forecasts.get(item.id) ?? null,
     };
   };

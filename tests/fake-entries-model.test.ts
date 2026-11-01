@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ENFORCED_CONSTRAINTS,
+  ENFORCED_FORECAST_EDIT_CONSTRAINTS,
   ENFORCED_PLAN_CONSTRAINTS,
   ENFORCED_REVIEW_CONSTRAINTS,
   ENFORCED_STARTING_POINT_CONSTRAINTS,
@@ -33,6 +34,15 @@ describe('the goal model fake matches migration 013', () => {
     ['period_snapshots', 'select, insert'],
   ])('%s grants the authenticated role at least what the fake allows the service', (table, grant) => {
     expect(sql).toContain(`grant ${grant} on table public.${table} to authenticated;`);
+  });
+
+  // MOM-138: a person edits their own day types, tasks and steps after setup, so the fake allows it and enforces the same rules.
+  it.each([...ENFORCED_FORECAST_EDIT_CONSTRAINTS])('%s (forecast edits) exists in the SQL', (name) => {
+    expect(sql).toMatch(new RegExp(`constraint\\s+"?${name}"?\\b`, 'i'));
+  });
+
+  it('a person can select, insert, update and delete their own day types, as the fake allows', () => {
+    expect(sql).toContain('grant select, insert, update, delete on table public.person_day_types to authenticated;');
   });
 
   it('an entry can be neither updated nor deleted by the person: a removal is a correction', () => {

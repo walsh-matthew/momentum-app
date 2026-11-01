@@ -53,11 +53,12 @@ type TableName =
 const GRANTS: Record<TableName, ReadonlySet<'select' | 'insert' | 'update' | 'delete'>> = {
   person_settings: new Set(['select']),
   person_priorities: new Set(['select', 'insert', 'update', 'delete']),
-  person_day_types: new Set(['select']),
+  person_day_types: new Set(['select', 'insert', 'update', 'delete']),
   goals: new Set(['select']),
   targets: new Set(['select']),
-  work_items: new Set(['select']),
-  work_item_steps: new Set(['select', 'update']),
+  // 013, section 7 (and supabase/verify/900_table_grants.sql): a person edits their own day types, items and steps (MOM-138).
+  work_items: new Set(['select', 'insert', 'update', 'delete']),
+  work_item_steps: new Set(['select', 'insert', 'update', 'delete']),
   sources: new Set(['select', 'insert', 'update', 'delete']),
   entries: new Set(['select', 'insert']),
   entry_corrections: new Set(['select', 'insert', 'update', 'delete']),
@@ -119,6 +120,20 @@ export const ENFORCED_TARGET_CHANGE_CONSTRAINTS = [
   'target_changes_target_fk',
 ] as const;
 
+// Migration 013's constraints the forecast edits depend on (MOM-138) and the fake enforces; the names are checked against the SQL.
+export const ENFORCED_FORECAST_EDIT_CONSTRAINTS = [
+  'work_items_title_not_blank',
+  'work_items_due_date_matches_kind',
+  'work_items_date_can_move_matches_kind',
+  'work_items_estimate_check',
+  'work_item_steps_title_not_blank',
+  'work_item_steps_item_fk',
+  'person_day_types_name_not_blank',
+  'person_day_types_capacity_unit_check',
+  'person_day_types_capacity_amount_check',
+  'person_day_types_capacity_both_or_neither',
+] as const;
+
 // Migration 017's constraints and policy the fake enforces; the names are checked against the SQL.
 export const ENFORCED_STARTING_POINT_CONSTRAINTS = ['starting_points_outcome_check', 'starting_points_answered_together', 'starting_points_update_own'] as const;
 
@@ -149,6 +164,8 @@ export const gm = {
   failNextWrite: null as { table: TableName; message: string } | null,
   // When set, the next read of this table fails, like a database that cannot be reached.
   failNextRead: null as { table: TableName; message: string } | null,
+  // Runs just before every write reaches a table, so a test can change a row between a service's read and its write (a race).
+  beforeWrite: null as ((table: TableName, op: 'insert' | 'update' | 'delete') => void) | null,
   clock: 0,
   // The database's own time (an ISO instant), which weekly_reviews.finished_at takes whatever an insert sends. Null: the fake's clock.
   dbNow: null as string | null,
@@ -161,6 +178,7 @@ export function resetGoalModel(user: { id: string } | null = null): void {
   gm.writes = [];
   gm.failNextWrite = null;
   gm.failNextRead = null;
+  gm.beforeWrite = null;
   gm.clock = 0;
   gm.dbNow = null;
 }
@@ -263,9 +281,26 @@ function checkViolation(table: TableName, row: Row): Violation | null {
     if (isBlank(row.source_record_id)) return { code: '23514', name: 'entry_corrections_record_id_not_blank' };
   }
   if (table === 'work_item_steps') {
+    if (isBlank(row.title)) return { code: '23514', name: 'work_item_steps_title_not_blank' };
     if ((row.completed_at === null) !== (row.completed_via === null)) {
       return { code: '23514', name: 'work_item_steps_completed_together' };
     }
+  }
+  if (table === 'work_items') {
+    const deadline = row.kind === 'deadline_task';
+    if (isBlank(row.title)) return { code: '23514', name: 'work_items_title_not_blank' };
+    if (deadline !== ((row.due_date ?? null) !== null)) return { code: '23514', name: 'work_items_due_date_matches_kind' };
+    if (deadline !== ((row.date_can_move ?? null) !== null)) return { code: '23514', name: 'work_items_date_can_move_matches_kind' };
+    const estimate = row.estimate_minutes ?? null;
+    if (estimate !== null && !(deadline && typeof estimate === 'number' && estimate > 0)) return { code: '23514', name: 'work_items_estimate_check' };
+  }
+  if (table === 'person_day_types') {
+    const unit = row.capacity_unit ?? null;
+    const amount = row.capacity_amount ?? null;
+    if (isBlank(row.name)) return { code: '23514', name: 'person_day_types_name_not_blank' };
+    if (unit !== null && unit !== 'hours' && unit !== 'sessions') return { code: '23514', name: 'person_day_types_capacity_unit_check' };
+    if (amount !== null && !(typeof amount === 'number' && amount >= 0)) return { code: '23514', name: 'person_day_types_capacity_amount_check' };
+    if ((unit === null) !== (amount === null)) return { code: '23514', name: 'person_day_types_capacity_both_or_neither' };
   }
   if (table === 'weekly_reviews') {
     const start = Date.parse(`${String(row.week_start)}T00:00:00Z`);
@@ -333,6 +368,9 @@ function foreignKeyViolation(table: TableName, row: Row): Violation | null {
   }
   if (table === 'entry_corrections' && !owned('sources', row.source_id, row.user_id)) {
     return { code: '23503', name: 'entry_corrections_source_fk' };
+  }
+  if (table === 'work_item_steps' && !owned('work_items', row.work_item_id, row.user_id)) {
+    return { code: '23503', name: 'work_item_steps_item_fk' };
   }
   if (table === 'target_changes' && !owned('targets', row.target_id, row.user_id)) {
     return { code: '23503', name: 'target_changes_target_fk' };
@@ -513,6 +551,8 @@ class Query implements PromiseLike<Result> {
       gm.failNextWrite = null;
       return failure('XX000', message);
     }
+
+    gm.beforeWrite?.(this.table, this.op);
 
     if (this.op === 'insert') {
       const incoming = Array.isArray(this.payload) ? this.payload : [this.payload as Row];

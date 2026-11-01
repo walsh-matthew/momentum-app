@@ -34,6 +34,7 @@ const milestone = (forecast: ForecastView | null, over: Partial<MilestoneView> =
     { id: 's2', title: 'Send it', done: false },
   ],
   stepsDone: 1,
+  dateCanMove: false,
   forecast,
   ...over,
 });
@@ -50,7 +51,7 @@ const STATES: [string, ForecastView][] = [
   ['not enough to say', { state: 'not_enough_data' }],
   ['nothing set aside', { state: 'nothing_set_aside' }],
   ['a day with no kind', { state: 'day_without_kind', date: '2026-10-30' }],
-  ['a kind with no usual time', { state: 'kind_without_time', date: '2026-10-30', kindName: 'Rest day' }],
+  ['a kind with no usual time', { state: 'kind_without_time', date: '2026-10-30', kindName: 'Rest day', kindId: 'k1' }],
   ['time counted in sessions', { state: 'counted_in_sessions' }],
 ];
 
@@ -119,14 +120,14 @@ describe('what each verdict says', () => {
   it('asks for what is missing and says nothing about whether it fits', () => {
     expect(text({ state: 'nothing_set_aside' })).toBe("You haven't set aside any days for this yet.");
     expect(text({ state: 'day_without_kind', date: '2026-10-30' })).toContain('Say what kind of day Fri, Oct 30 is');
-    expect(text({ state: 'kind_without_time', date: '2026-10-30', kindName: 'Rest day' })).toContain('"Rest day" has no usual amount of time yet');
+    expect(text({ state: 'kind_without_time', date: '2026-10-30', kindName: 'Rest day', kindId: 'k1' })).toContain('"Rest day" has no usual amount of time yet');
     for (const missing of [{ state: 'nothing_set_aside' }, { state: 'day_without_kind', date: '2026-10-30' }, { state: 'counted_in_sessions' }, { state: 'not_enough_data' }] as ForecastView[]) {
       expect(text(missing)).not.toMatch(/look like enough|close to|look short/i);
     }
   });
 
   it('uses the person’s own kind of day name, kept as written', () => {
-    expect(forecastLine({ state: 'kind_without_time', date: '2026-10-30', kindName: 'Gym + study' }, TODAY).text).toContain('"Gym + study"');
+    expect(forecastLine({ state: 'kind_without_time', date: '2026-10-30', kindName: 'Gym + study', kindId: 'k2' }, TODAY).text).toContain('"Gym + study"');
   });
 });
 

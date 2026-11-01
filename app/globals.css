@@ -848,6 +848,13 @@ button:disabled {
   margin-top: 0;
   overflow-wrap: anywhere;
 }
+/* The links under a forecast line (MOM-138): side by side where they fit, each still at least 44px tall, so a line with three ways
+   forward is not three tall rows. */
+.home-forecast-links {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 18px;
+}
 .home-next {
   margin-top: 6px;
   color: var(--text-lime-1);
@@ -1929,4 +1936,36 @@ button:disabled {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* The steps of a deadline task on its edit screen (MOM-138): a row each, the words first and the buttons beside them, wrapping
+   below on a narrow phone so nothing scrolls sideways. A ticked step has only its "Done" chip. */
+.edit-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.edit-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  border-top: 1px solid rgb(var(--ink) / 7%);
+  padding-top: 8px;
+}
+.edit-step-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.edit-step[data-done='true'] .edit-step-title {
+  color: var(--muted);
+}
+.edit-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
