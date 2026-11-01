@@ -10,6 +10,7 @@ import {
   PROVIDER_NOTICES,
   SERVICES,
   STORED_GROUPS,
+  NOTICE_REVIEWED_ON,
   TERMS_CHECKED_ON,
   joinWords,
 } from '@/lib/config/privacy';
@@ -146,7 +147,7 @@ export function PrivacyNotice({ signedIn = false }: PrivacyNoticeProps) {
 
       <footer className="flex flex-col gap-2 text-muted">
         <p>{NOTICE_CHANGE_LINE}</p>
-        <p>Last reviewed {TERMS_CHECKED_ON}.</p>
+        <p>Last reviewed {NOTICE_REVIEWED_ON}.</p>
         {!signedIn && (
           <Link href="/login" className={LINK_CLASS}>
             Back to sign in

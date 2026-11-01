@@ -321,7 +321,11 @@ export const GOOGLE_TESTING_LINE =
 
 export const SERVICES = {
   vercel: { name: 'Vercel', does: 'hosting' },
-  supabase: { name: 'Supabase', does: 'database and sign-in email' },
+  supabase: { name: 'Supabase', does: 'database and sign-in' },
+  resend: {
+    name: 'Resend',
+    does: 'sends the sign-up and password-reset emails from Momentum at hello@ownaccordlabs.com, and sees your email address and what each email says',
+  },
   turnstile: {
     name: 'Cloudflare Turnstile',
     does: 'checks sign-up, sign-in and password-reset requests for bots, and sees details of your browser and network connection',
@@ -356,6 +360,10 @@ export const DEVICE_STORAGE = {
 // ---------------------------------------------------------------------------
 
 export const TERMS_CHECKED_ON = '2026-10-27';
+
+// When the notice itself was last read through and changed (the footer's "Last reviewed"). Separate from the line above, which
+// is only about Anthropic's pages: changing the notice does not mean those pages were checked again.
+export const NOTICE_REVIEWED_ON = '2026-10-31';
 
 export const ANTHROPIC_TERMS = {
   noTraining: {

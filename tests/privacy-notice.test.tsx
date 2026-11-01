@@ -20,6 +20,7 @@ import {
   PROVIDER_NOTICES,
   SERVICES,
   STORED_GROUPS,
+  NOTICE_REVIEWED_ON,
   TERMS_CHECKED_ON,
   joinWords,
 } from '@/lib/config/privacy';
@@ -112,6 +113,12 @@ describe('the privacy notice', () => {
     expect(claude).toContain(`Never sent: ${NEVER_SENT}`);
   });
 
+  it("dates the notice's own last review, apart from the date Anthropic's terms were checked (MOM-149)", () => {
+    render(<PrivacyNotice />);
+    expect(NOTICE_REVIEWED_ON).toBe('2026-10-31');
+    expect(screen.getByText(`Last reviewed ${NOTICE_REVIEWED_ON}.`)).toBeTruthy();
+  });
+
   it("quotes Anthropic's terms with links and the date they were checked", () => {
     render(<PrivacyNotice />);
     const claude = screen.getByRole('region', { name: 'What is sent to Claude (Anthropic)' });
@@ -140,6 +147,14 @@ describe('the privacy notice', () => {
     expect(who).toContain('Cloudflare Turnstile');
     expect(who).toMatch(/sign-up, sign-in and password-reset requests for bots/);
     expect(who).toMatch(/details of your browser and network connection/);
+  });
+
+  it('names the email provider and the sending address (MOM-149)', () => {
+    render(<PrivacyNotice />);
+    const who = region('Who can see your data');
+    expect(who).toContain('Resend');
+    expect(who).toContain('hello@ownaccordlabs.com');
+    expect(who).toMatch(/sees your email address and what each email says/);
   });
 
   it('says what is kept on the device: the sign-in cookie, and a running timer (MOM-110)', () => {
