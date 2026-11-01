@@ -55,7 +55,7 @@ Before writing or changing any domain logic, read these files. They override ass
 ### 2. Git Branching Standard
 - **Rule:** Never commit directly to `main`. Work on a feature branch and merge it through a pull request.
 - **`main` is protected** in GitHub: a pull request needs the CI jobs `checks` and `database` (`.github/workflows/ci.yml`) to pass before it can merge, and nothing is pushed to `main` directly.
-- **Pushing and pull requests:** push the feature branch and open the pull request only when the owner says so (at day-end). Merge it with a merge commit once CI is green, then delete the branch.
+- **Pushing and pull requests:** push the feature branch and open the pull request only when the owner says so (at day-end). Exception: a branch that carries a migration is pushed mid-day with the owner's OK, so the migration reaches production after CI is green and before its pull request merges (see /run-block step 7). Merge it with a merge commit once CI is green, then delete the branch.
 - **Branch Naming Pattern:** `feature/MOM-<number>-short-description`
 - **Examples:**
   - `feature/MOM-8-project-safeguards`
