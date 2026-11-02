@@ -27,6 +27,9 @@ export function isSentenceTitle(title: string): boolean {
   return text.split(/\s+/).length > TITLE_MAX_WORDS;
 }
 
+// Is this draft path a title (a goal's, target's or work item's)? A clean version of one is the short name, never a sentence.
+export const isTitlePath = (path: string): boolean => path.endsWith('.title');
+
 // Every title the playback or home prints as a name, by the path the retry note names. A day type's path leaves its name out:
 // the name is the person's own word and never goes into a note to Claude.
 export function titleLeaves(model: SetupModel): { path: string; title: string }[] {

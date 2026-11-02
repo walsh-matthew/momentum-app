@@ -45,7 +45,13 @@ export interface DraftIssue {
   path: string;
   message: string;
   code: DraftIssueCode;
+  // Which way a unit mistake is fixed, so the retry can say so (checks.ts maps it to a retry line).
+  hint?: 'unit_extra' | 'unit_missing';
 }
+
+// Words for the two unit mistakes (MOM-167 title-check fix). A count, a time and a checklist have no unit; only a quantity has one.
+export const UNIT_EXTRA_MESSAGE = 'Only a quantity has a unit. Leave the unit empty and keep what is counted, timed or ticked off in the title.';
+export const UNIT_MISSING_MESSAGE = 'A quantity needs a unit. Ask what it is measured in, or make it a count if it is only counted.';
 export type DraftMode = 'progress' | 'final';
 
 // The person's saved time anchors, for an addition after first setup (MOM-132 part 2): the draft of an addition never holds them
@@ -195,7 +201,13 @@ function goalIssues(goal: GoalDraft, mode: DraftMode, existing = false): DraftIs
     const tat = (path: string, message: string) => at(`targets.${t.key}.${path}`, message);
     if (targetKeys.has(t.key)) tat('key', 'Two targets share a key.');
     targetKeys.add(t.key);
-    if ((t.measure === 'quantity') !== (t.unit !== null)) tat('unit', 'A quantity needs a unit, and no other measure has one.');
+    if (t.measure === 'quantity' && t.unit === null) {
+      tat('unit', UNIT_MISSING_MESSAGE);
+      issues[issues.length - 1].hint = 'unit_missing';
+    } else if (t.measure !== 'quantity' && t.unit !== null) {
+      tat('unit', UNIT_EXTRA_MESSAGE);
+      issues[issues.length - 1].hint = 'unit_extra';
+    }
     if (t.aspiration !== null && t.floor === null) tat('aspiration', 'An aspiration needs a floor beneath it.');
     if (t.aspiration !== null && t.floor !== null && t.aspiration < t.floor) tat('aspiration', 'The aspiration cannot be below the floor.');
     if (t.carryOver === 'cumulative' && t.period.kind !== 'deadline') tat('carryOver', 'A shortfall that stays owed needs a deadline.');

@@ -9,6 +9,7 @@ import type { SetupDraft, SetupModel, Transcript } from '@/types/setup';
 import { unsaidActivities } from './activities';
 import { withFreeText } from './leaves';
 import { personWords } from './said';
+import { isSentenceTitle, isTitlePath } from './titles';
 import { datesIn, dayTimeWords, numbersIn, sentencesOf, timesIn, type MentionedDate } from './text';
 
 // Longer than this many characters beyond the words it cleans up is a rewrite, not a clean-up.
@@ -34,13 +35,15 @@ export function paraphraseAddsNothing(clean: string, raw: string, said: readonly
 }
 
 // The model as the person is shown it and, once approved, as it is saved: every clean version that passes the check put in
-// place of the words it cleans up. The values that need a source (numbers, dates, times) are not free text and never change.
+// place of the words it cleans up, except that a title keeps its own words when the clean version reads as a sentence. The values that need a source (numbers, dates, times) are not free text and never change.
 export function shownModel(draft: SetupDraft, transcript: Transcript): SetupModel {
   if (draft.plain.length === 0) return draft.model;
   const said = personWords(transcript);
   const plain = new Map(draft.plain.map((p) => [p.path, p.text]));
   return withFreeText(draft.model, (path, value) => {
     const clean = plain.get(path);
-    return clean !== undefined && paraphraseAddsNothing(clean, value, said) ? clean.trim() : value;
+    if (clean === undefined || !paraphraseAddsNothing(clean, value, said)) return value;
+    // A title is a short name: a clean version that reads as a sentence never replaces it (MOM-167 title-check fix).
+    return isTitlePath(path) && isSentenceTitle(clean) ? value : clean.trim();
   });
 }

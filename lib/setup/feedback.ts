@@ -48,6 +48,10 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
   'draft.not_said': `A value in the draft is not in the person's message. ${ASK_DONT_GUESS}`,
   'draft.not_accepted': `A value in the draft was not shown to the person and accepted. ${ASK_DONT_GUESS}`,
   'draft.rule': 'The draft breaks a rule at the paths below; fix only those values, from what the person said.',
+  'draft.unit_extra':
+    'Only a quantity, an amount of something like pages or pounds, has a unit. For a count, a time or a checklist, set "unit" to null and name what is measured in the title.',
+  'draft.unit_missing':
+    "A quantity needs a unit, the person's own word for what it is measured in, so ask for it in this turn. If they only count occurrences, make it a count with no unit.",
   'plain.lead_in':
     'The "say" line only reacts to the person\'s last answer, in one short line, or is "". Never preview the question ("Next, I\'ll...", "Next is..."); the question carries the meaning on its own.',
   'plain.activity':
@@ -82,7 +86,7 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
     'Play back only the parts the note from code names, and keep the parts that are already approved in "approved".',
 };
 
-const DRAFT_CODES = new Set<ViolationCode>(['draft.no_source', 'draft.not_said', 'draft.not_accepted', 'draft.rule']);
+const DRAFT_CODES = new Set<ViolationCode>(['draft.no_source', 'draft.not_said', 'draft.not_accepted', 'draft.rule', 'draft.unit_extra', 'draft.unit_missing']);
 
 // A reply that was not one readable turn at all, when nothing more specific can be said.
 export const SHAPE_FEEDBACK = 'Reply with exactly one JSON object in the shape given, with every key, and nothing else.';
