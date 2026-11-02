@@ -50,7 +50,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { checkTurn, onlyPlainWords, type Violation } from '@/lib/setup/checks';
+import { checkTurn, onlyPlainWords, type Violation, type ViolationCode } from '@/lib/setup/checks';
 import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
 import { normalizeNumberTurn } from '@/lib/setup/numbers';
 import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog, unsaidNumberFields } from '@/lib/setup/feedback';
@@ -294,8 +294,12 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   let rejected = 0;
   // Why the last try was thrown away, in code's own words, sent with the next one (MOM-111 root cause A).
   let feedback: string[] | undefined;
-  // The plain-words checks get one retry; after it, a reply that breaks only them is shown (MOM-111 addition a).
-  let plainRetried = false;
+  // Every rule broken on a thrown-away try of this turn, so each retry hears all of them and fixing one cannot bring another back
+  // (MOM-167 title-check fix). `told` is the codes that a retry has already been told about.
+  const earlier: Violation[] = [];
+  const told = new Set<ViolationCode>();
+  // The plain-words checks get one retry; after it, a reply that breaks only them is shown (MOM-111 addition a): once every code it
+  // breaks was named in an earlier retry, or on the last try.
   let lastSignature: string | null = null;
   let longestCallMs = 0;
   // A date question shown with code's suggestion or code's wording (round 3, finding 2; round 3b, finding 2), and a number
@@ -346,7 +350,7 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
       // Which way the answer could not be read: cut off at the length limit, no text, or not JSON (round 2, A).
       const problem = result.problem ?? 'not_json';
       console.warn('[setup] a reply was thrown away', { category: 'output', problem, attempt, ms });
-      feedback = [OUTPUT_FEEDBACK[problem]];
+      feedback = [OUTPUT_FEEDBACK[problem], ...retryFeedback(earlier)];
       lastSignature = null;
       continue;
     }
@@ -355,7 +359,7 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
       rejected += 1;
       // Paths and zod's issue codes only, never a value (round 2, A). The retry hears each path and what goes there.
       console.warn('[setup] a reply was thrown away', { category: 'schema', issues: shapeIssuesForLog(turn.error.issues), attempt, ms });
-      feedback = shapeFeedback(turn.error.issues);
+      feedback = [...shapeFeedback(turn.error.issues), ...retryFeedback(earlier)];
       const signature = `schema|${shapeIssuesForLog(turn.error.issues).map((i) => `${i.code}@${i.path}`).join()}`;
       if (signature === lastSignature) break;
       lastSignature = signature;
@@ -368,7 +372,7 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
     const plainOnly = onlyPlainWords(violations);
     // Names only: rule names and the codes in lib/setup/checks.ts, both fixed lists, never text.
     const codes = [...new Set(violations.map((x) => x.code))].sort();
-    if (plainOnly && (plainRetried || attempt === MAX_REPLY_RETRIES)) {
+    if (plainOnly && (attempt === MAX_REPLY_RETRIES || violations.every((x) => told.has(x.code)))) {
       console.warn('[setup] a reply was shown after its plain-words retry', { category: 'plain_words', rules, codes });
       return { kind: 'turn', turn: shown(turn.data), spentTokens, rejected };
     }
@@ -388,11 +392,10 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
       attempt,
       ms,
     });
-    feedback = retryFeedback(violations);
-    if (plainOnly) {
-      plainRetried = true;
-      continue;
-    }
+    earlier.push(...violations);
+    feedback = retryFeedback(earlier);
+    for (const x of earlier) told.add(x.code);
+    if (plainOnly) continue;
     // The same rules failed at the same paths twice, feedback and all: a third try would be the same call again, so stop and
     // spend nothing more.
     const signature = `${codes.join()}|${failingPaths(violations).join()}`;

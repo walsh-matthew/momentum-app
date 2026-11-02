@@ -88,6 +88,8 @@ export const VIOLATION_CODES = [
   'draft.not_said',
   'draft.not_accepted',
   'draft.rule',
+  'draft.unit_extra',
+  'draft.unit_missing',
   'plain.lead_in',
   'plain.activity',
   'plain.question_long',
@@ -690,7 +692,10 @@ export function checkTurn(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   for (const check of PLAIN_WORDS_CHECKS) out.push(...check(turn, ctx));
   out.push(...checkReturning(turn, ctx));
   const draft = validateDraft(turn.draft, ctx.transcript, 'progress', { sayings: ctx.returning?.goalTitle ? [ctx.returning.goalTitle] : [] });
-  for (const issue of draft.issues) out.push(v('draft', DRAFT_CODES[issue.code] ?? 'draft.rule', `${issue.path}: ${issue.message}`, issue.path));
+  for (const issue of draft.issues) {
+    const code = issue.hint ? (`draft.${issue.hint}` as const) : (DRAFT_CODES[issue.code] ?? 'draft.rule');
+    out.push(v('draft', code, `${issue.path}: ${issue.message}`, issue.path));
+  }
   return out;
 }
 
