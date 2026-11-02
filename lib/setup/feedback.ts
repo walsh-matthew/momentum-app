@@ -69,6 +69,8 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
     'Never write "fewest", "floor", "aspiration" or "baseline" (unless the person said the word): say what the number is for in everyday words ("In a hard week, how many pages would still count?").',
   'plain.unquoted_source':
     'Never point at an earlier answer by name ("where you are now", "your baseline", "from what you said"). Quote the fact in the person\'s own words ("You said you read about 50 pages a week now."), or leave it out; the "detail" of starting ideas is that quote or null.',
+  'plain.title':
+    "A title must be a short name, not a sentence. Write the titles at the paths below as a few words, with no 'I', 'you' or 'want'.",
   'plain.options_say':
     'On an ideas or interpretations turn, "say" is "" or one short line of a few words; the screen leads with its own line saying what the options are about.',
   'returning.topic': 'That topic is already saved for this person: do not ask it. Ask only what the note from code says is still yours to ask.',
@@ -154,7 +156,7 @@ export function retryFeedback(violations: readonly Violation[]): string[] {
   const byCode = new Map<ViolationCode, Set<string>>();
   for (const x of violations) {
     const paths = byCode.get(x.code) ?? new Set<string>();
-    if (x.path && (DRAFT_CODES.has(x.code) || x.code === 'plain.activity' || x.code === 'assume_nothing.changed')) paths.add(x.path);
+    if (x.path && (DRAFT_CODES.has(x.code) || x.code === 'plain.activity' || x.code === 'plain.title' || x.code === 'assume_nothing.changed')) paths.add(x.path);
     byCode.set(x.code, paths);
   }
   return [...byCode.entries()]

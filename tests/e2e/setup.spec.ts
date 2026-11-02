@@ -269,8 +269,18 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(page.getByRole('heading', { name: 'Your setup is saved' })).toBeVisible();
       expect(await storedCopies(page), "the tab's copy is cleared on save").toBe(0);
 
+      // MOM-167 part 14: a saved setup offers Home first, with logging as the second choice (a tap, not a redirect).
+      await expect(page.getByRole('link', { name: 'Go to Home' })).toHaveAttribute('data-tone', 'main');
+      await expect(page.getByRole('link', { name: 'Log an entry' })).toHaveAttribute('data-tone', 'second');
+      await page.getByRole('link', { name: 'Go to Home' }).click();
+      await expect(page).toHaveURL(/\/$/);
+      // Home for a person with goals: "Log an entry" is its one main button, with "Add to your goals" under it.
+      const homeActions = page.getByRole('navigation', { name: 'Home actions' });
+      await expect(homeActions.getByRole('link', { name: 'Log an entry' })).toHaveAttribute('data-tone', 'main');
+      await expect(homeActions.getByRole('link', { name: 'Add to your goals' })).toHaveAttribute('data-tone', 'second');
+
       // The targets are there to log against.
-      await page.getByRole('link', { name: 'Log an entry' }).click();
+      await homeActions.getByRole('link', { name: 'Log an entry' }).click();
       await expect(page).toHaveURL(/\/log$/);
       for (const title of targetTitles) await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
 
@@ -354,6 +364,68 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         await fakeControl('/__fake/unusable?count=0');
         // The request cut off by the reload is still running on the server; let it, and any retry, finish here, so no call of
         // this test reaches the fake while the next one counts its own.
+        await fakeSettled();
+      }
+    });
+
+    // MOM-167 part 3: switching apps in iOS Safari during a long turn cancels the request in flight; on return it fails and used to show
+    // "Couldn't connect ... Try again". The page is hidden and the first request is cut off the way Safari cuts it off; the screen sends
+    // the same conversation again once, on its own, and shows the next card with no "Try again". The cut-off request never reached
+    // the model, so Claude is asked once, and the person's answer is in the conversation once. What only a phone shows (how Safari ends
+    // the request, and when) is in the pending live checks.
+    test('setup: a request cut off by an app switch is sent again on its own, once, and the answer is not doubled', async ({ page }) => {
+      test.setTimeout(120_000);
+      const scripted = e2eCase();
+      await signUpAndConfirm(page, `setup-app-switch-${width}`);
+      await page.goto('/setup');
+      await page.getByRole('button', { name: 'Start' }).click();
+      const first = scripted.script[0].question ?? '';
+      await expect(page.getByRole('heading', { name: first })).toBeVisible();
+
+      let cutOff = 0;
+      let release!: () => void;
+      const away = new Promise<void>((resolve) => (release = resolve));
+      await page.route('**/setup', async (route) => {
+        const isTurn = route.request().method() === 'POST' && route.request().headers()['next-action'] !== undefined;
+        if (isTurn && cutOff === 0) {
+          cutOff += 1;
+          await away;
+          await route.abort('failed');
+        } else {
+          await route.continue();
+        }
+      });
+      try {
+        await page.waitForTimeout(1200);
+        const before = (await fakeLast()).setupRequests;
+        await page.getByLabel('Your answer').fill(scripted.person[0].say);
+        await page.getByRole('button', { name: 'Send' }).click();
+        await expect(page.getByRole('status')).toHaveText('Thinking…');
+        // Away in another app, then back; the request fails the way Safari fails it.
+        await page.evaluate(() => {
+          Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+          document.dispatchEvent(new Event('visibilitychange'));
+          Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        release();
+
+        // The next card arrives with no error card on the way.
+        await expect(page.getByRole('heading', { name: scripted.script[1].question ?? '' })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+        await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
+        expect(cutOff, 'the first request was cut off').toBe(1);
+        await fakeSettled();
+        expect((await fakeLast()).setupRequests - before, 'Claude was asked once for this answer').toBe(1);
+        // The answer is in the tab's copy of the conversation once.
+        const stored = await page.evaluate((prefix) => {
+          const key = Object.keys(window.sessionStorage).find((k) => k.startsWith(prefix));
+          return key ? (JSON.parse(window.sessionStorage.getItem(key) ?? '{}') as { transcript: { role: string; text?: string }[] }) : null;
+        }, SETUP_STORAGE_PREFIX);
+        expect(stored?.transcript.filter((m) => m.role === 'person' && m.text === scripted.person[0].say)).toHaveLength(1);
+      } finally {
+        release();
+        await page.unroute('**/setup');
         await fakeSettled();
       }
     });

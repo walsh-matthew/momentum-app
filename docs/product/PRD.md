@@ -1,4 +1,4 @@
-Template: one-page PRD · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104, plus MOM-165, MOM-163 and MOM-120, which merge before this file's pull request; day-end step D) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 11, listed at the end
+Template: one-page PRD · Last updated: 2026-11-02 (`main` at 52d65a5, after pull requests #82 to #110, plus MOM-166, which merges first, and MOM-167, this file's pull request; second day-end step D of the day) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 11, listed at the end
 
 # Momentum: product requirements
 
@@ -79,7 +79,7 @@ Criterion 6 has no measure defined for "still using it" beyond the pass bar (Gap
 | Phone navigation | Every signed-in page has a way home and Sign out at 390px (MOM-148) | none (layout) | all |
 | Principles | Never assume anything about a person's life; the person's word beats any source | §4.2 | all |
 
-On `main` today, Settings holds Account and Appearance only: the theme choice (light, dark or match the device; MOM-30, PR #72), with the rest of "How Momentum talks to me" still to build (MOM-114, planned as defaults only for the trial). Home offers guided setup to a person with no saved setup, in place of the old "No goals yet" card (MOM-143, PR #78), and an "Add to your goals" link to a person with one (MOM-132). The old model's controls on home are hidden for the trial (MOM-115, PR #88).
+On `main` today, Settings holds Account and Appearance only: the theme choice (light, dark or match the device; MOM-30, PR #72), with the rest of "How Momentum talks to me" still to build (MOM-114, planned as defaults only for the trial). Home offers guided setup to a person with no saved setup, in place of the old "No goals yet" card (MOM-143, PR #78), and, to a person with one, "Log an entry" as the main button with "Add to your goals" under it (MOM-132; MOM-167 part 14, pending merge). The old model's controls on home are hidden for the trial (MOM-115, PR #88).
 
 ## 6. Release plan
 
@@ -99,13 +99,13 @@ The current plan (`docs/plans/NEXT_BUILD_PLAN.md`, "The trial", the owner's cale
 
 ## 7. Risks and open questions
 
-*Sources: `CLAUDE.md` (RAID and failure logs rule); Jira (the query below, run 2026-11-02); the deck's "Needs a decision" list; design record §5 (criterion 7, cost per user, raised for discussion) and §6.2.*
+*Sources: `CLAUDE.md` (RAID and failure logs rule); Jira (the query below, run 2026-11-02, and counted again at the second day-end that day); the deck's "Needs a decision" list; design record §5 (criterion 7, cost per user, raised for discussion) and §6.2.*
 
 **Risks** are Jira tickets with the `risk` label, not rows in `docs/RAID_LOG.md` (frozen since MOM-133). The query, run at the first day-end of each week:
 
 `project = MOM AND labels = risk AND status NOT IN (Done, Closed) ORDER BY priority DESC, updated DESC`
 
-On 2026-11-02 it returned 16 open tickets, all at Medium priority (also 16 on 2026-10-30). They include adding a goal after setup (MOM-132), the weekly review (MOM-113), guided setup (MOM-111), manual entry (MOM-110) and retiring the old model (MOM-115); the auth email (MOM-122) is Done and no longer listed. Cost per user is raised as criterion 7 in the design record, not as a risk row here.
+On 2026-11-02 it returned 16 open tickets, all at Medium priority (also 16 on 2026-10-30). They include adding a goal after setup (MOM-132), the weekly review (MOM-113), guided setup (MOM-111), manual entry (MOM-110) and retiring the old model (MOM-115); the auth email (MOM-122) is Done and no longer listed. Counted again at the second day-end of 2026-11-02: 17, the new one being MOM-169 (on an iPhone, a setup request left hanging after an app switch is never recovered; trial-facing, decided by the owner's phone check). Cost per user is raised as criterion 7 in the design record, not as a risk row here.
 
 **Open questions**
 
@@ -119,7 +119,7 @@ On 2026-11-02 it returned 16 open tickets, all at Medium priority (also 16 on 20
 
 ## 8. Change log
 
-*Sources: this first fill (MOM-144); the MOM-164 catch-up (pull requests #82 to #104); day-end step D of 2026-11-02 (MOM-163, MOM-165, MOM-120, MOM-166).*
+*Sources: this first fill (MOM-144); the MOM-164 catch-up (pull requests #82 to #104); day-end step D of 2026-11-02 (MOM-163, MOM-165, MOM-120, MOM-166); the second day-end step D of 2026-11-02 (MOM-166, MOM-167, MOM-168, MOM-169).*
 
 | Date | Change | Ticket |
 | --- | --- | --- |
@@ -127,6 +127,7 @@ On 2026-11-02 it returned 16 open tickets, all at Medium priority (also 16 on 20
 | 2026-10-30 | Brought up to date with build day 6's merges: light and dark theme (PR #72), setup round 3d (PR #73), the token reset link (PR #74), the 390px header (PR #80), review layers 2 and 3 and the finished review (PR #79), the setup link on home (PR #78); the email sender is live (MOM-122 comment); new gaps MOM-145 to MOM-149. | MOM-144 |
 | 2026-11-02 | Day-end step D: the sign-in words and the any-browser confirm link (MOM-163); a per-person allowance shared by setup and the review, and cache tokens in the usage log (MOM-165, migration 022); the review specs' settled marker changes no section (MOM-120); a deadline goal cannot finish setup on production (MOM-166, Gap 16). Gap 14 closed. Risk query re-run: 16 open. | MOM-164 |
 | 2026-11-02 | Brought up to date with pull requests #82 to #104: cost per user as criterion 7, a link to the design record only (PR #82); the quick path that finishes on the card (PR #87); the old model hidden on home (PR #88); a way home and Sign out on every page (PR #89); warmer auth emails (PR #90); the review edits a target's numbers (PR #91) and asks "Still right for you?" (PR #92); adding after setup (PRs #94, #96, #99); the sign-up screen (PR #100); editing a kind of day's time and a deadline task (PR #101). Risk query re-run: 16 open. Tooling-only and test-only merges (#84, #93, #97, #98, #102 to #104) change no section. Sources lines checked by `tests/pm-docs-sources.test.ts`. | MOM-164 |
+| 2026-11-02 | Second day-end step D: no pull request merged in its window; MOM-166 and MOM-167 updated their own sections on their branches. Risk query counted again: 17 open (MOM-169 is new). New journey gaps in `USER_JOURNEYS.md` (32 to 36: the rest of MOM-167, MOM-169) touch no PRD section. | MOM-164 |
 
 ## Open gaps
 

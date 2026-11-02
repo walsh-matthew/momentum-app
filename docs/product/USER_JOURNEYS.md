@@ -1,4 +1,4 @@
-Template: Google critical user journeys · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104, plus MOM-165, MOM-163 and MOM-120, which merge before this file's pull request; day-end step D) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 26, listed at the end
+Template: Google critical user journeys · Last updated: 2026-11-02 (`main` at 52d65a5, after pull requests #82 to #110, plus MOM-166, which merges first, and MOM-167, this file's pull request; second day-end step D of the day) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 31, listed at the end
 
 # Momentum user journeys
 
@@ -47,12 +47,12 @@ This file is non-binding and every section names its sources on a `Sources:` lin
      - **A reload or a dropped phone tab** while a reply is in flight: the question stays on screen with the answer waiting and a way to send it again or change it (MOM-111 finding 10).
      - **A deadline goal, after its date is accepted** (found on production 2026-11-02): every reply is thrown away, so the person sees "Sorry, I didn't follow that" whatever they answer, the **Yes** button included, and cannot get past the date. Fixed on branch `feature/MOM-166-deadline-past-date` (the can-move check now runs only at the final save); not live until merged and deployed, then checked on production (MOM-166, Gap 31).
 3. **Approve each part as it finishes.** After steps 3, 7, 10 and 11 of §2.2 the person sees a playback of that part, restated in the second person, as real bullets with a goal's targets nested under it (PR #73).
-   - *Answers:* **Yes, that is right**, or **Change something**, which opens "What would you like to change?" with **Send the change** and **Keep it as it is**.
+   - *Answers:* **Yes, that is right**, or **Change something**, which opens "What would you like to change?" with **Send the change** and **Keep it as it is**. When the change is applied the part comes back closed, with **Yes, that is right** as its main answer again (MOM-167 part 2, pending merge). Goal, target and work-item titles are short names ("Getting back into running", "Runs"), so a line reads "Your goal: at least 2 runs a week." (MOM-167 part 1, pending merge).
    - *Success:* the part is approved and setup moves on.
    - *Failure exit:* the same error cards as step 2.
 4. **Confirm the whole.** "Ready to save?" with a few lines and "Nothing is saved until you tap Save."
    - *Answers:* **Save my setup**, or **Change something** (then **Send the change** or **Keep it as it is**, which only closes the box).
-   - *Success:* "Your setup is saved", with the count of goals and things to count, and two buttons: **Log an entry** and **Back to home**.
+   - *Success:* "Your setup is saved", with the count of goals and things to count, and, since MOM-167 part 14 (branch `feature/MOM-167-setup-words`, not yet merged), two buttons: **Go to Home** (main) and **Log an entry** (second choice), because most people have not done anything yet on a goal they have just set up. It is a tap, not a redirect. Its words: "2 goals and 3 things to count are ready. Already done something on a goal? You can log it now."
    - *Failure exit:* a save that does not go through shows an alert headline ("Couldn't connect. Nothing was saved yet. Check your connection, then try again.") and the person can tap Save again.
 5. **Start again.** A small "Start again" link on every card asks first: "Start again? What you have said so far will be cleared." with **Yes, start again** and **Keep going**.
 6. **The quick path (Claude stops, the person finishes).** When the per-setup budget is spent, the shared limit is reached, or the limits cannot be checked, setup stops using Claude and shows one card (reworked in MOM-111, PR #87). It lists each part of what the person said, written by code in plain words, and a missing item sits in place as an amber "Needs your answer" callout with a plain question and its own control. On a phone it is one step at a time ("1 of n", **Back**, the step before as one small line above); wide, every step is in one list. The reason it stopped shows once, only while questions are left.
@@ -61,7 +61,7 @@ This file is non-binding and every section names its sources on a `Sources:` lin
    - *Success:* what the person said is saved once the card has everything the setup needs. No default is applied (§2.3, change-log row 2026-10-30), and every answer given on the card can be changed before saving.
    - *Failure exit:* a save error shows an alert on the card.
    - *Closed gap:* a person who ran out of budget before giving a needed item no longer has to start again (old Gap 5, closed by PR #87).
-7. **Add to my goals after setup (MOM-132, PRs #94, #96 and #99).** A person whose setup is saved sees **Add to your goals** on home. It opens `/setup`, which asks "What would you like to add?" with the note "Nothing you've already set up changes. Nothing is saved until you check it."
+7. **Add to my goals after setup (MOM-132, PRs #94, #96 and #99).** A person whose setup is saved sees **Add to your goals** on home, as a secondary button under **Log an entry**, at the top of the page (MOM-167 part 14; it was a bare link at the bottom). It opens `/setup`, which asks "What would you like to add?" with the note "Nothing you've already set up changes. Nothing is saved until you check it."
    - *Answers:* **A new goal**, or **A target for a goal I already have** (then "Which goal is it for?" with one button per active goal, "Pick one. You can add to another goal after."). With no active goal, the second button is replaced by "You have no active goal to add a target to."
    - *The conversation:* a card says "Let's add to your goals" (or `Let's add to "<goal>"` when targets are added to one goal), then the same one-question-at-a-time conversation as step 2, held to what is not saved yet. What is already saved is skipped with one line that names the topics and never the values, so nothing saved is sent to Claude (only a saved goal's title, when targets are added to it; `docs/DOMAIN_MODEL.md` §2.1 rule 5). A target added to a goal that has already started is asked "When should this target start counting?", and it is never graded for weeks before it existed; a first week that starts partway through is shown and never counted as a miss (§1.3, Start row). The part holding the new work items is titled "How you'll track it".
    - *Success:* the playback and final cards work as in steps 3 and 4, and the addition is saved through its own save (migration 021), not by loosening the first setup's save.
@@ -92,12 +92,13 @@ This file is non-binding and every section names its sources on a `Sources:` lin
 
 ### 5. Known gaps
 
-*Sources: Jira (MOM-111 comments, MOM-132, MOM-139, MOM-140, MOM-145, MOM-150, MOM-151, MOM-159, MOM-163, MOM-166); `BACKLOG.md`; `docs/DOMAIN_MODEL.md` §1.3 and §2.1 change-log rows 2026-11-01 and 2026-11-02.*
+*Sources: Jira (MOM-111 comments, MOM-132, MOM-139, MOM-140, MOM-145, MOM-150, MOM-151, MOM-159, MOM-163, MOM-166, MOM-167, MOM-168, MOM-169); `BACKLOG.md`; `docs/DOMAIN_MODEL.md` §1.3 and §2.1 change-log rows 2026-11-01 and 2026-11-02.*
 
 | Step | Gap |
 | --- | --- |
-| 0 Create an account | none open (Gap 30 closed by MOM-163; the production template paste and the different-browser re-walk are pending live checks) |
-| 2 Answer | Gap 6 (phone-only checks); Gap 7 (newest wording has had no live call); Gap 8 (MOM-139); Gap 9 (MOM-140); Gap 31 (MOM-166: a deadline goal cannot get past its date) |
+| 0 Create an account | Gap 33 (MOM-167 part 15: the "Check your email" card's only action is "Start again"). Gap 30 closed by MOM-163; the production template paste and the different-browser re-walk passed on 2026-11-02 (owner) |
+| 2 Answer | Gap 6 (phone-only checks); Gap 7 (newest wording has had no live call); Gap 8 (MOM-139); Gap 9 (MOM-140); Gap 31 (MOM-166: a deadline goal cannot get past its date); Gap 32 (MOM-167 parts 4 to 13: setup's words); Gap 36 (MOM-169: a request that hangs after an iPhone app switch) |
+| 4 Confirm the whole | Gap 34 (the saved card's two ways home, spelled two ways) |
 | 7 Add to my goals | Gap 26 (MOM-159: no week start for a person with only due-date goals); Gap 28 (MOM-132 follow-ups) |
 | All | Gap 1 (satisfaction question); Gap 3 (MOM-145: the phone check of the themes) |
 
@@ -115,7 +116,7 @@ This file is non-binding and every section names its sources on a `Sources:` lin
 
 *Sources: `app/log/page.tsx`; `components/entries/` (TapControl, NumberControl, TimerControl, MinutesControl, ChecklistControl, DayPicker, EntryList, EntryFeedback); `components/layout/PageBackRow.tsx`; `tests/e2e/manual-entry.spec.ts`; MOM-110 comments 2026-10-27 to 2026-10-29; MOM-148 (PR #89).*
 
-1. **Open the log.** The page is `/log`. It is a minimal try-it page: signed in only, and not in the navigation. The only link to it on `main` is **Log an entry** on the "Your setup is saved" card (Gap 11). Since MOM-148 (PR #89) the page has a top row with **Back to home** and **Sign out**, so a person on a phone can leave it.
+1. **Open the log.** The page is `/log`. It is a minimal try-it page: signed in only, and not in the navigation. On `main` the only link to it is **Log an entry** on the "Your setup is saved" card (Gap 11); with MOM-167 part 14 (not yet merged) it is also **Log an entry**, the one main button at the top of home for a person with an active goal. Since MOM-148 (PR #89) the page has a top row with **Back to home** and **Sign out**, so a person on a phone can leave it.
 2. **Log one of four kinds,** according to what the person's target counts:
    - a **tap** for a count;
    - **one number** for a quantity (only this opens the number pad);
@@ -152,7 +153,7 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 | Step | Gap |
 | --- | --- |
 | All | Gap 10 (the real-iPhone check, MOM-110) |
-| 1 Open the log | Gap 11 (no navigation link; MOM-112 was to put the controls on home) |
+| 1 Open the log | Gap 11 (no navigation link on `main`; MOM-167 part 14 adds **Log an entry** to home, pending merge; MOM-112 was to put the controls on home) |
 | 2 Timer | Gap 12 (a running timer lives in one browser; typed minutes cover the unrecorded time) |
 | 3 Say which day | Gap 13 (no day end means no other day and no start-date judgement) |
 | 4 Remove or restore | Gap 14 (own manual entries only; synced entries wait for MOM-112) |
@@ -278,7 +279,7 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 
 *Sources: `app/page.tsx`; `components/home/` (WeekHero, GoalScoreboardCard, TargetRow, MilestoneRow, YourPlanCard, SetupLinkCard, AddGoalsLink, ScoreboardLoadFailed, wording.ts); `components/plan/PlanScreen.tsx`; `app/plan/kinds/page.tsx`; `app/task/[id]/page.tsx`; `components/forecast/` (KindTimesScreen, TaskEditScreen, wording.ts); `tests/e2e/home.spec.ts`, `tests/e2e/plan.spec.ts`, `tests/e2e/setup-link.spec.ts`, `tests/e2e/forecast-edits.spec.ts`, `tests/e2e/old-controls-shots.spec.ts`; MOM-115 and MOM-138 comments; PRs #88 and #101.*
 
-1. **Open home.** The person sees the week hero and each goal with its scoreboard. Weekly targets show against their levels, with "From <day>: …" under a target whose numbers will change (MOM-146); a deadline task shows a forecast in words. Since MOM-115 (PR #88) the old model's controls (the goal wizard and weekly pace buttons, the goal channel list and cards, the rebalance nudge and the AI Assistant tab) are hidden: the older feed shows only when the old model has tasks, a finished list or the signed-out card. A scoreboard that could not be read says so with one **Reload** button. A person with a saved setup also sees **Add to your goals** (J1 step 7).
+1. **Open home.** The person sees the week hero and each goal with its scoreboard. Weekly targets show against their levels, with "From <day>: …" under a target whose numbers will change (MOM-146); a deadline task shows a forecast in words. Since MOM-115 (PR #88) the old model's controls (the goal wizard and weekly pace buttons, the goal channel list and cards, the rebalance nudge and the AI Assistant tab) are hidden: the older feed shows only when the old model has tasks, a finished list or the signed-out card. A scoreboard that could not be read says so with one **Reload** button. A person with a saved setup also sees, at the top of home, **Log an entry** as the one main button and **Add to your goals** as a secondary button under it (J1 step 7, MOM-167 part 14, not yet merged); a person whose goals are all set aside has nothing to log, so **Add to your goals** is their one main button.
 2. **Read the forecast.** For a deadline task home says whether the days set aside look enough, close, short, not enough to say, or past due, and offers ways forward. "Move the date" appears only when setup recorded that the date can move (§1.4).
 3. **Plan the week** at `/plan`: pick items onto dates, say what kind of day a date is (with a reason), copy last week's kinds with one tap ("Same as last week"), step to next week and back. A day that has passed is read-only.
 4. **Change what the forecast rests on** (MOM-138, PR #101). Two edit screens sit behind home's forecast lines. `/plan/kinds`, headed "How much time each kind of day gives", sets how much time a kind of day usually gives, in hours or in sessions; a kind with none says "No usual time yet", and a link to it ("Change how much time each kind gives") is on the week plan. `/task/<id>` sets a deadline task's rough size in hours ("How big is this?"), lets the person add, rename, remove or tick its steps, and moves its due date ("Move the date to") only when setup recorded that the date can move ("Due Fri, Nov 20. You said this date can move."). Saving says "Saved." with "See it on home." No internal word (capacity, day type, slot, target, milestone, forecast) is on screen; a test fails if one is.
@@ -306,16 +307,17 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 
 ### 5. Known gaps
 
-*Sources: Jira MOM-112, MOM-115, MOM-138; `BACKLOG.md`; `tests/e2e/home.spec.ts`; `docs/DOMAIN_MODEL.md` header.*
+*Sources: Jira MOM-112, MOM-115, MOM-138, MOM-167; `BACKLOG.md`; `tests/e2e/home.spec.ts`; `docs/DOMAIN_MODEL.md` header.*
 
 | Step | Gap |
 | --- | --- |
 | All | Gap 23 (no phone-run evidence) |
+| 1 Open home | Gap 35 (MOM-167 part 16: a goal's card does not open the goal) |
 | 4 Change what the forecast rests on | Gap 29 (MOM-138 follow-ups) |
 
 ## Open gaps
 
-*Sources: the sections above; `BACKLOG.md`; Jira MOM-110, MOM-111, MOM-114, MOM-132, MOM-138, MOM-146, MOM-151, MOM-159, MOM-160, MOM-161, MOM-162, MOM-163, MOM-166.*
+*Sources: the sections above; `BACKLOG.md`; Jira MOM-110, MOM-111, MOM-114, MOM-132, MOM-138, MOM-146, MOM-151, MOM-159, MOM-160, MOM-161, MOM-162, MOM-163, MOM-166, MOM-167, MOM-168, MOM-169.*
 
 Gap numbers stay as first assigned, so a number that is missing below was closed (listed under the gaps).
 
@@ -327,7 +329,7 @@ Gap numbers stay as first assigned, so a number that is missing below was closed
 8. J1 step 2: where a settings choice and a priority came from at setup is not recorded (MOM-139).
 9. J1 step 2: fields the draft has no place for, the app-request vote and tap-to-answer example chips (MOM-140).
 10. J2, all steps: no phone-run evidence; the real-iPhone check (log one of each kind, remove and restore, a tap on yesterday, typed minutes, a tick on a chosen day) is not done (MOM-110).
-11. J2 step 1: `/log` is a try-it page with no navigation link; MOM-112 was to put the entry controls on home, and home has none on `main` (MOM-110 comment 2026-10-27, MOM-112).
+11. J2 step 1: `/log` is a try-it page with no navigation link on `main`; MOM-112 was to put the entry controls on home, and home has none on `main`. MOM-167 part 14 adds a **Log an entry** button to home (branch `feature/MOM-167-setup-words`, pending merge); the entry controls themselves stay on `/log` (MOM-110 comment 2026-10-27, MOM-112).
 12. J2 step 2: a running timer is kept in the browser that started it (RAID R-20; MOM-110 comment 2026-10-27). Typed minutes cover time that was not timed.
 13. J2 step 3: with no day end set, no other day is offered and a log cannot be judged against its goal's start (MOM-110 comment 2026-10-28). Setup collects the day end first (MOM-111).
 14. J2 step 4: remove and restore cover the person's own manual entries only; removing synced entries waits for MOM-112 (MOM-110 comment 2026-10-27).
@@ -344,6 +346,11 @@ Gap numbers stay as first assigned, so a number that is missing below was closed
 27. J1 step 7 and J4 step 4: the scoreboard and review cards still say "Floor 2 a week · aspiration 4" and "Under the floor 3 weeks running", while the questions say "in a hard week" and "hoping for" (MOM-151).
 28. J1 steps 6 and 7: follow-ups from adding after setup (MOM-132; MOM-160): the quick-path card's reason line and "Everything you said is kept" lines still read as first setup in an addition; the live run of the adding conversation took about 21 turns, with the model asking for a starting point and an aspiration the script had no line for; four new words await the owner's review; starting-point marks for an added target's start are not built (`BACKLOG.md`, "Setup, adding to goals").
 29. J5 step 4: follow-ups from the forecast edits (MOM-138; MOM-161 and MOM-162): a person with no kinds of day cannot add one after setup; moving a task's due date leaves its target's own deadline as it was; the "you count your time in sessions" line has no link to `/plan/kinds`; two database guards (a due date that cannot move, a step with entries) are not built (`BACKLOG.md`, "Forecast edits").
-31. J1 step 2: a deadline goal cannot get past its date on production: once the date is accepted, every reply is thrown away because a check meant for the final save runs on every draft, so the "can the date move?" question is never reached. Fixed on branch `feature/MOM-166-deadline-past-date` (replay test, new eval case `run-m-deadline-item-at-date`); open until it is merged, deployed and checked on production before the Nov 5 freeze. The same run also lost replies to `skip.unanswered` (a false positive, fixed in the same branch) and `math.number` (not classed: the log held no text; it now names the field that held the number) (MOM-166, High).
+31. J1 step 2: a deadline goal cannot get past its date on production: once the date is accepted, every reply is thrown away because a check meant for the final save runs on every draft, so the "can the date move?" question is never reached. Fixed on branch `feature/MOM-166-deadline-past-date` (replay test, new eval case `run-m-deadline-item-at-date`); open until it is merged, deployed and checked on production before the Nov 5 freeze. The same run also lost replies to `skip.unanswered` (a false positive, fixed in the same branch) and `math.number` (not classed: the log held no text; it now names the field that held the number) (MOM-166, High). A date lead-in that trips `math.number` after an accepted proposal is MOM-168 (a).
+32. J1 steps 2 and 3: setup's words, the rest of MOM-167 (after Nov 6): the aim question does not name its level and a generated question slipped in grammar (part 4); "when life gets in the way" reads as a repeat of the floor (5); capitals mid-sentence in lists, and priorities and quiet times that can still be sentence-shaped (6); the time zone asked as a bare question, not offered as the device's zone (7); the "Your days and weeks" playback shows the raw time zone id, "1 hours" and a confusing midnight day-end line (8 to 10); the tone question says "gentle to blunt" where `docs/DOMAIN_MODEL.md` §4.1 says gentle to direct (11); the reminders and check-in questions are asked before anything delivers them (12, 13; MOM-112).
+33. J1 step 0: the "Check your email" card's only action is "Start again", so a person who comes back later lands on create-account; "Go to sign in" should be its main button (MOM-167 part 15).
+34. J1 step 4: the saved card shows the page's "Back to home" row above its own **Go to Home** button: two ways home, spelled two ways (owner, 2026-11-02; MOM-167).
+35. J5 step 1: tapping a goal's card on home does not open the goal; it should offer "log for this goal" first and "add a target to this goal" second (MOM-167 part 16).
+36. J1 step 2: on an iPhone, a setup request that iOS Safari leaves hanging after an app switch (no answer, no error) shows "Thinking…" with no end; MOM-167 part 3 covers only a request that fails. The owner's iPhone check decides (MOM-169, `risk`).
 
 **Closed since the first fill.** Gap 2's header and Sign out (MOM-148, PR #89); Gap 4, adding a goal or target after setup (MOM-132, PRs #94 and #99); Gap 5, the quick path that made a person start again (MOM-111, PR #87); Gap 24, the older feed below the scoreboard (MOM-115, PR #88); Gap 25, updates beside "Saving…" (MOM-147, PR #93); Gap 30, the sign-in and sign-up words (MOM-163; the production resend window is 60 seconds, so "Wait a minute" stays).

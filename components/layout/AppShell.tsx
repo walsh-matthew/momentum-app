@@ -5,13 +5,13 @@ import { ConnectedStackPanel } from './ConnectedStackPanel';
 import { MainFeed, showsOldFeed } from './MainFeed';
 import { MobileHeader } from './MobileHeader';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
-import { AddGoalsLink } from '@/components/home/AddGoalsLink';
+import { HomeActions } from '@/components/home/HomeActions';
 import { HomeScoreboardSection } from '@/components/home/HomeScoreboardSection';
 import { ReviewNotice } from '@/components/home/ReviewNotice';
 import { SetupLinkCard } from '@/components/home/SetupLinkCard';
 import { CHANNEL_PARAM } from '@/lib/utils/channelParam';
 import { resolveChannel } from '@/lib/utils/channelViews';
-import { setupIsOffered, setupIsSaved } from '@/lib/utils/setupOffer';
+import { canLogEntry, setupIsOffered, setupIsSaved } from '@/lib/utils/setupOffer';
 import { ALL_CHANNELS, type ChannelViews } from '@/types/channelViews';
 import type { ConnectedAppPublic } from '@/types/database.types';
 import type { HomeScoreboard } from '@/types/home';
@@ -58,9 +58,9 @@ export function AppShell({ views, connectedApps, moveChains, userEmail = null, h
     <>
       {reviewPrompt !== undefined && <ReviewNotice prompt={reviewPrompt} />}
       {setupOffered && <SetupLinkCard />}
+      {/* Once the first setup is saved: "Log an entry" as the main button and "Add to your goals" under it (MOM-167 part 14, MOM-132 part 2), at the top. */}
+      {setupIsSaved(home) && <HomeActions canLog={canLogEntry(home)} />}
       {home !== undefined && <HomeScoreboardSection home={home} plan={plan} />}
-      {/* Once the first setup is saved, the way to add a goal or a target (MOM-132 part 2). */}
-      {setupIsSaved(home) && <AddGoalsLink />}
     </>
   );
 

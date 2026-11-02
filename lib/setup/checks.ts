@@ -30,9 +30,11 @@ import { DATE_TOPICS, hasDate } from './codeTurns';
 import { NUMBER_OPTION_LEADS, NUMBER_TOPICS, countedTarget } from './numbers';
 import { optionsLead } from './optionsLead';
 import { ideasDetailQuotes, jargonIn, vagueSource } from './plainCard';
+import { shownModel } from './paraphrase';
 import { returningDraft, settledChunks, skippedTopics, type ReturningContext } from './returning';
 import { ASKED_ONCE_TOPICS, DAY_END_SAY, SINGLE_VALUE_FACTS, SUGGESTION_TOPICS, UNRECORDED_TOPICS } from './steps';
 import { acceptsText, asksForIdeas, asksMeaning, datesIn, dayTimeWords, declinesChange, numbersIn, sentencesOf, wantsIdeas, withoutDateWeekdays } from './text';
+import { newSentenceTitlePaths } from './titles';
 import { validateDraft } from './validate';
 
 export interface TurnContext {
@@ -99,6 +101,7 @@ export const VIOLATION_CODES = [
   'plain.options_say',
   'plain.jargon',
   'plain.unquoted_source',
+  'plain.title',
   'returning.topic',
   'returning.person',
   'returning.goal',
@@ -615,6 +618,17 @@ export function checkEverydayWords(turn: AssistantTurn, ctx: TurnContext): Viola
   return out;
 }
 
+// A goal's, target's or work item's title (and a kind of day's name) that is new this turn reads as a name, not a sentence
+// (MOM-167 part 1): the playback writes it into its own sentences and home prints it as a heading. It is read as the person is
+// shown it, the clean version where one passed. A plain-words check, so it gets one retry and is then shown, never "Try again".
+export function checkTitles(turn: AssistantTurn, ctx: TurnContext): Violation[] {
+  const now = shownModel(turn.draft, ctx.transcript);
+  const before = shownModel(ctx.prevDraft, ctx.transcript);
+  return newSentenceTitlePaths(now, before).map((path) =>
+    v('plain_words', 'plain.title', 'A title reads as a sentence; it should be a short name.', path),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // A person adding to a finished setup (MOM-132 part 2, docs/DOMAIN_MODEL.md §2.1 rule 5)
 // ---------------------------------------------------------------------------
@@ -651,7 +665,7 @@ export function checkReturning(turn: AssistantTurn, ctx: TurnContext): Violation
   return out;
 }
 
-export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn, checkOptionList, checkEverydayWords] as const;
+export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn, checkOptionList, checkEverydayWords, checkTitles] as const;
 
 // ---------------------------------------------------------------------------
 // All of it

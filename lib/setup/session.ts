@@ -40,6 +40,15 @@ export const TRY_AGAIN = 'Try again';
 // After a reload, the answer is still waiting to be sent: nothing went wrong.
 export const SEND_AGAIN = 'Send it again';
 
+// An app switch (MOM-167 part 3): iOS Safari cancels a request that is in flight when the person leaves for another app, so on their
+// return it fails with a network error. The screen then sends the same conversation again, once, on its own, after this long. The
+// server refuses a second call from the same person less than SETUP_LIMITS.minIntervalSeconds (1) after the last one began
+// (lib/services/llm.ts), and the first call may still have been running, so the pause is past that second with a margin. This file is
+// read by the browser, so the number is here and tests/setup-app-switch.test.ts holds it above the server's limit. If the server
+// still says "too soon", the resend waits the seconds it names plus RESEND_MARGIN_MS and goes once more: a refused call is no call.
+export const RESEND_AFTER_MS = 1_300;
+export const RESEND_MARGIN_MS = 300;
+
 // Why no reply came, for the error card (MOM-111 round 2, findings 12 and 14; round 3, finding 6; round 3b, findings 5 to 7):
 // - 'stuck': every reply to the answer was thrown away, so the answer could not be followed. The fix is saying it another way.
 // - 'network': the request never reached the server. 'busy': the model was rate limited. 'wait': two requests landed within

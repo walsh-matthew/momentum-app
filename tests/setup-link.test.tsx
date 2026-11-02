@@ -151,13 +151,21 @@ describe('home with and without a saved setup', () => {
 });
 
 describe('the way to add to a saved setup', () => {
-  it('is one quiet link in the owner’s words, to /setup, with no card and no heading of its own', () => {
-    render(<AddGoalsLink />);
-    const nav = screen.getByRole('navigation', { name: 'Add to your goals' });
-    const links = within(nav).getAllByRole('link');
+  it('is one secondary button in the owner’s words, to /setup, with no card and no heading of its own', () => {
+    const { container } = render(<AddGoalsLink />);
+    const links = screen.getAllByRole('link');
     expect(links).toHaveLength(1);
     expect(links[0].textContent).toBe('Add to your goals');
     expect(links[0].getAttribute('href')).toBe('/setup');
-    expect(within(nav).queryAllByRole('heading')).toHaveLength(0);
+    // A button to tap with a full-contrast border (MOM-167 part 14), not the bare green link it was.
+    expect(links[0].getAttribute('data-tone')).toBe('second');
+    expect(links[0].className).toContain('min-h-12');
+    expect(links[0].className).not.toContain('underline');
+    expect(within(container).queryAllByRole('heading')).toHaveLength(0);
+  });
+
+  it('is the one main button when there is nothing to log', () => {
+    render(<AddGoalsLink main />);
+    expect(screen.getByRole('link', { name: 'Add to your goals' }).getAttribute('data-tone')).toBe('main');
   });
 });
