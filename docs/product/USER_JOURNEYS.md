@@ -1,4 +1,4 @@
-Template: Google critical user journeys · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104, plus MOM-165, MOM-163 and MOM-120, which merge before this file's pull request; day-end step D) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 26, listed at the end
+Template: Google critical user journeys · Last updated: 2026-11-02 (`main` at 52d65a5, after pull requests #82 to #110, plus MOM-166, which merges first, and MOM-167, this file's pull request; second day-end step D of the day) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 31, listed at the end
 
 # Momentum user journeys
 
@@ -92,12 +92,13 @@ This file is non-binding and every section names its sources on a `Sources:` lin
 
 ### 5. Known gaps
 
-*Sources: Jira (MOM-111 comments, MOM-132, MOM-139, MOM-140, MOM-145, MOM-150, MOM-151, MOM-159, MOM-163, MOM-166); `BACKLOG.md`; `docs/DOMAIN_MODEL.md` §1.3 and §2.1 change-log rows 2026-11-01 and 2026-11-02.*
+*Sources: Jira (MOM-111 comments, MOM-132, MOM-139, MOM-140, MOM-145, MOM-150, MOM-151, MOM-159, MOM-163, MOM-166, MOM-167, MOM-168, MOM-169); `BACKLOG.md`; `docs/DOMAIN_MODEL.md` §1.3 and §2.1 change-log rows 2026-11-01 and 2026-11-02.*
 
 | Step | Gap |
 | --- | --- |
-| 0 Create an account | none open (Gap 30 closed by MOM-163; the production template paste and the different-browser re-walk are pending live checks) |
-| 2 Answer | Gap 6 (phone-only checks); Gap 7 (newest wording has had no live call); Gap 8 (MOM-139); Gap 9 (MOM-140); Gap 31 (MOM-166: a deadline goal cannot get past its date) |
+| 0 Create an account | Gap 33 (MOM-167 part 15: the "Check your email" card's only action is "Start again"). Gap 30 closed by MOM-163; the production template paste and the different-browser re-walk passed on 2026-11-02 (owner) |
+| 2 Answer | Gap 6 (phone-only checks); Gap 7 (newest wording has had no live call); Gap 8 (MOM-139); Gap 9 (MOM-140); Gap 31 (MOM-166: a deadline goal cannot get past its date); Gap 32 (MOM-167 parts 4 to 13: setup's words); Gap 36 (MOM-169: a request that hangs after an iPhone app switch) |
+| 4 Confirm the whole | Gap 34 (the saved card's two ways home, spelled two ways) |
 | 7 Add to my goals | Gap 26 (MOM-159: no week start for a person with only due-date goals); Gap 28 (MOM-132 follow-ups) |
 | All | Gap 1 (satisfaction question); Gap 3 (MOM-145: the phone check of the themes) |
 
@@ -306,16 +307,17 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 
 ### 5. Known gaps
 
-*Sources: Jira MOM-112, MOM-115, MOM-138; `BACKLOG.md`; `tests/e2e/home.spec.ts`; `docs/DOMAIN_MODEL.md` header.*
+*Sources: Jira MOM-112, MOM-115, MOM-138, MOM-167; `BACKLOG.md`; `tests/e2e/home.spec.ts`; `docs/DOMAIN_MODEL.md` header.*
 
 | Step | Gap |
 | --- | --- |
 | All | Gap 23 (no phone-run evidence) |
+| 1 Open home | Gap 35 (MOM-167 part 16: a goal's card does not open the goal) |
 | 4 Change what the forecast rests on | Gap 29 (MOM-138 follow-ups) |
 
 ## Open gaps
 
-*Sources: the sections above; `BACKLOG.md`; Jira MOM-110, MOM-111, MOM-114, MOM-132, MOM-138, MOM-146, MOM-151, MOM-159, MOM-160, MOM-161, MOM-162, MOM-163, MOM-166.*
+*Sources: the sections above; `BACKLOG.md`; Jira MOM-110, MOM-111, MOM-114, MOM-132, MOM-138, MOM-146, MOM-151, MOM-159, MOM-160, MOM-161, MOM-162, MOM-163, MOM-166, MOM-167, MOM-168, MOM-169.*
 
 Gap numbers stay as first assigned, so a number that is missing below was closed (listed under the gaps).
 
@@ -344,6 +346,11 @@ Gap numbers stay as first assigned, so a number that is missing below was closed
 27. J1 step 7 and J4 step 4: the scoreboard and review cards still say "Floor 2 a week · aspiration 4" and "Under the floor 3 weeks running", while the questions say "in a hard week" and "hoping for" (MOM-151).
 28. J1 steps 6 and 7: follow-ups from adding after setup (MOM-132; MOM-160): the quick-path card's reason line and "Everything you said is kept" lines still read as first setup in an addition; the live run of the adding conversation took about 21 turns, with the model asking for a starting point and an aspiration the script had no line for; four new words await the owner's review; starting-point marks for an added target's start are not built (`BACKLOG.md`, "Setup, adding to goals").
 29. J5 step 4: follow-ups from the forecast edits (MOM-138; MOM-161 and MOM-162): a person with no kinds of day cannot add one after setup; moving a task's due date leaves its target's own deadline as it was; the "you count your time in sessions" line has no link to `/plan/kinds`; two database guards (a due date that cannot move, a step with entries) are not built (`BACKLOG.md`, "Forecast edits").
-31. J1 step 2: a deadline goal cannot get past its date on production: once the date is accepted, every reply is thrown away because a check meant for the final save runs on every draft, so the "can the date move?" question is never reached. Fixed on branch `feature/MOM-166-deadline-past-date` (replay test, new eval case `run-m-deadline-item-at-date`); open until it is merged, deployed and checked on production before the Nov 5 freeze. The same run also lost replies to `skip.unanswered` (a false positive, fixed in the same branch) and `math.number` (not classed: the log held no text; it now names the field that held the number) (MOM-166, High).
+31. J1 step 2: a deadline goal cannot get past its date on production: once the date is accepted, every reply is thrown away because a check meant for the final save runs on every draft, so the "can the date move?" question is never reached. Fixed on branch `feature/MOM-166-deadline-past-date` (replay test, new eval case `run-m-deadline-item-at-date`); open until it is merged, deployed and checked on production before the Nov 5 freeze. The same run also lost replies to `skip.unanswered` (a false positive, fixed in the same branch) and `math.number` (not classed: the log held no text; it now names the field that held the number) (MOM-166, High). A date lead-in that trips `math.number` after an accepted proposal is MOM-168 (a).
+32. J1 steps 2 and 3: setup's words, the rest of MOM-167 (after Nov 6): the aim question does not name its level and a generated question slipped in grammar (part 4); "when life gets in the way" reads as a repeat of the floor (5); capitals mid-sentence in lists, and priorities and quiet times that can still be sentence-shaped (6); the time zone asked as a bare question, not offered as the device's zone (7); the "Your days and weeks" playback shows the raw time zone id, "1 hours" and a confusing midnight day-end line (8 to 10); the tone question says "gentle to blunt" where `docs/DOMAIN_MODEL.md` §4.1 says gentle to direct (11); the reminders and check-in questions are asked before anything delivers them (12, 13; MOM-112).
+33. J1 step 0: the "Check your email" card's only action is "Start again", so a person who comes back later lands on create-account; "Go to sign in" should be its main button (MOM-167 part 15).
+34. J1 step 4: the saved card shows the page's "Back to home" row above its own **Go to Home** button: two ways home, spelled two ways (owner, 2026-11-02; MOM-167).
+35. J5 step 1: tapping a goal's card on home does not open the goal; it should offer "log for this goal" first and "add a target to this goal" second (MOM-167 part 16).
+36. J1 step 2: on an iPhone, a setup request that iOS Safari leaves hanging after an app switch (no answer, no error) shows "Thinking…" with no end; MOM-167 part 3 covers only a request that fails. The owner's iPhone check decides (MOM-169, `risk`).
 
 **Closed since the first fill.** Gap 2's header and Sign out (MOM-148, PR #89); Gap 4, adding a goal or target after setup (MOM-132, PRs #94 and #99); Gap 5, the quick path that made a person start again (MOM-111, PR #87); Gap 24, the older feed below the scoreboard (MOM-115, PR #88); Gap 25, updates beside "Saving…" (MOM-147, PR #93); Gap 30, the sign-in and sign-up words (MOM-163; the production resend window is 60 seconds, so "Wait a minute" stays).
