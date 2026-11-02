@@ -334,7 +334,10 @@ describe('the login page', () => {
   it('keeps the confirmation-link message on the sign-in card', async () => {
     await loginPage({ error: 'confirmation' });
     expect(screen.getByRole('heading', { name: 'Sign in to Momentum' })).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toMatch(/confirmation link/);
+    expect(screen.getByRole('alert').textContent).toBe(
+      "This link has already been used or has expired. If you've confirmed your account, sign in. If not, create the account again with the same address and we'll send a new link.",
+    );
+    expect(screen.getByRole('alert').textContent).not.toMatch(/invalid/i);
   });
 
   it('puts the CAPTCHA on every card when a site key is set', async () => {

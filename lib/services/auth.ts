@@ -23,6 +23,11 @@ const SignInSchema = z.object({ email: EmailSchema, password: z.string().min(1, 
 // Fixed messages: none of them depends on whether an account exists, and none repeats what the provider said.
 const CAPTCHA_REQUIRED = 'Complete the CAPTCHA check, then try again.';
 const CAPTCHA_FAILED = 'The CAPTCHA check did not pass. Try again.';
+// A wrong password and an address with no account get the same line, so sign-in cannot be used to find out who is registered (MOM-163).
+// Supabase answers email_not_confirmed only after the password is right, so that line leaks nothing either.
+const WRONG_CREDENTIALS = "That email and password don't match. Check them and try again, or tap Forgot password?";
+const NOT_CONFIRMED = "Your account isn't confirmed yet. Open the link we emailed you, or create the account again with the same address and we'll send a new one.";
+const SIGN_IN_FAILED = "We couldn't sign you in. Try again in a little while.";
 const SIGNUP_TOO_SOON = 'We just sent you a link. Wait a minute, then try again.';
 const RESET_EMAIL_FAILED = 'We could not send the reset email. Try again in a little while.';
 const PASSWORD_UPDATE_FAILED = 'We could not set your new password. Request a new reset link and try again.';
@@ -74,7 +79,9 @@ export async function signInWithPassword(rawInput: unknown, captchaToken?: unkno
     options: { captchaToken: captcha.captchaToken },
   });
   if (error && isCaptchaError(error)) return { ok: false, error: CAPTCHA_FAILED };
-  if (error || !data.user) return { ok: false, error: error?.message ?? 'Could not sign in.' };
+  if (error?.code === 'invalid_credentials') return { ok: false, error: WRONG_CREDENTIALS };
+  if (error?.code === 'email_not_confirmed') return { ok: false, error: NOT_CONFIRMED };
+  if (error || !data.user) return { ok: false, error: SIGN_IN_FAILED };
   return { ok: true, data: { id: data.user.id, email: data.user.email ?? null } };
 }
 
@@ -164,11 +171,26 @@ export async function updatePassword(rawPassword: unknown): Promise<ServiceResul
   return { ok: true, data: null };
 }
 
-// Completes the emailed confirmation link: trades the one-time code for a session cookie.
+// Completes an older emailed confirmation link (a code link, sent before MOM-163): trades the one-time code for a session cookie.
+// It works only in the browser that signed up.
 export async function exchangeAuthCode(code: string): Promise<ServiceResult<null>> {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) return { ok: false, error: error.message };
+  return { ok: true, data: null };
+}
+
+// Completes the emailed sign-up confirmation link (a token link, MOM-163): verifies the one-time token hash and starts the
+// session. Like the reset link it needs nothing kept in the browser that signed up, so it signs the person in in whichever
+// browser or device opens it. Accepts the two types Supabase uses for a sign-up confirmation (`signup` and `email`); anything
+// else, an empty token, or a used or expired one comes back as an error.
+export async function verifyConfirmationToken(tokenHash: string, type: string): Promise<ServiceResult<null>> {
+  if (tokenHash.trim() === '') return { ok: false, error: 'The confirmation link has no token.' };
+  if (type !== 'signup' && type !== 'email') return { ok: false, error: 'The confirmation link has an unknown type.' };
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+  if (error) return { ok: false, error: error.message };
+  if (!data.user) return { ok: false, error: 'The confirmation link did not start a session.' };
   return { ok: true, data: null };
 }
 

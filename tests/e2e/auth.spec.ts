@@ -110,7 +110,7 @@ test.describe('the account lifecycle', () => {
     await expect(page).toHaveURL(/\/login$/);
 
     await submitCredentials(page, email, 'not-the-password-1', 'Sign in');
-    await expect(page.locator('form [role="alert"]')).toHaveText(/invalid login credentials/i);
+    await expect(page.locator('form [role="alert"]')).toHaveText("That email and password don't match. Check them and try again, or tap Forgot password?");
     await expect(page).toHaveURL(/\/login$/);
   });
 });
@@ -196,4 +196,62 @@ test.describe('what the check-your-email words promise (MOM-150)', () => {
     await expect(page).toHaveURL(/\/settings$/);
     await expect(page.getByRole('main').getByText(`Signed in as ${email}`)).toBeVisible();
   });
+});
+
+// The confirm link is a token link (MOM-163): it signs the person in in whichever browser opens it, not only the one that signed up.
+test.describe('the confirm link in a different browser (MOM-163)', () => {
+  const USED_OR_EXPIRED =
+    "This link has already been used or has expired. If you've confirmed your account, sign in. If not, create the account again with the same address and we'll send a new link.";
+
+  test('opened in a fresh browser context with no cookies, the link lands signed in; opened again it says used or expired, never invalid', async ({
+    page,
+    browser,
+  }) => {
+    const email = uniqueEmail('otherbrowser');
+    await page.goto('/login');
+    await submitCredentials(page, email, PASSWORD, 'Create account');
+    await expectCheckYourEmail(page, email);
+    const link = await confirmationLinkFor(email);
+    expect(link).toContain('token_hash=');
+
+    const fresh = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    try {
+      const other = await fresh.newPage();
+      expect(await fresh.cookies()).toEqual([]);
+      await other.goto(link);
+      await expect(other).toHaveURL(/\/$/);
+      await expectHomeLoaded(other);
+      await other.goto('/settings');
+      await expect(other.getByRole('main').getByText(`Signed in as ${email}`)).toBeVisible();
+    } finally {
+      await fresh.close();
+    }
+
+    // The link works once. A second browser with no session gets the plain used-or-expired words, which do not call the link invalid.
+    const again = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    try {
+      const second = await again.newPage();
+      await second.goto(link);
+      await expect(second).toHaveURL(/\/login\?error=confirmation$/);
+      await expect(second.locator('form [role="alert"]')).toHaveText(USED_OR_EXPIRED);
+      await expect(second.locator('form [role="alert"]')).not.toContainText(/invalid/i);
+    } finally {
+      await again.close();
+    }
+  });
+
+  test('a made-up or unfinished link shows the used-or-expired words and signs nobody in', async ({ page }) => {
+    for (const path of [
+      '/auth/callback',
+      '/auth/callback?token_hash=not-a-real-token&type=email',
+      '/auth/callback?token_hash=not-a-real-token&type=signup',
+      '/auth/callback?token_hash=not-a-real-token&type=recovery',
+      '/auth/callback?code=not-a-real-code',
+    ]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/login\?error=confirmation$/);
+      await expect(page.locator('form [role="alert"]')).toHaveText(USED_OR_EXPIRED);
+    }
+  });
+
 });

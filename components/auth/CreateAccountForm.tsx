@@ -52,7 +52,9 @@ export function CreateAccountForm({ captcha = null }: CreateAccountFormProps) {
           Check your email
         </h1>
         <p className="text-base">
-          We sent a link to <strong className="break-all font-semibold">{sent}</strong>.
+          We sent a link to{' '}
+          <br />
+          <strong className="break-words font-semibold">{sent}</strong>.
         </p>
         <p className="text-sm">Open the email and tap the link. It confirms your account and signs you in.</p>
         <p className="text-sm text-muted">
