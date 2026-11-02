@@ -205,6 +205,26 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain('how often');
   });
 
+  // MOM-166: a reply thrown away for a number the person never said logs which parts of the reply held it, by field name, so the
+  // next one can be classed. Never the number or any of the text.
+  it('logs the field names that held an unsaid number, and nothing of the reply', async () => {
+    const full = await fullCase();
+    const good = full.script[2];
+    const unsaid: AssistantTurn = { ...good, say: 'That is 8 a month.', detail: 'About 8 in all.' };
+    const stub = stubTurn([{ raw: unsaid }, { raw: good }]);
+    await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    expect(warn.mock.calls).toHaveLength(1);
+    const fields = warn.mock.calls[0][1] as Record<string, unknown>;
+    expect(fields.codes).toContain('math.number');
+    expect(fields.numberFields).toEqual(['detail', 'say']);
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/a month|in all/);
+    // A reply thrown away for another reason carries no such field.
+    const other = stubTurn([{ raw: badQuestion(good) }, { raw: good }]);
+    warn.mockClear();
+    await takeSetupTurn(sessionBefore(full, 2), { runTurn: other.run });
+    expect(warn.mock.calls[0][1]).not.toHaveProperty('numberFields');
+  });
+
   it('after three unusable replies in a row says to try again, and keeps what was said', async () => {
     const full = await fullCase();
     const stub = stubTurn([{ raw: {} }, { raw: [] }, { raw: badQuestion(full.script[2]) }]);

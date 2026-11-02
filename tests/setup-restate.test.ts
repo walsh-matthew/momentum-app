@@ -41,6 +41,32 @@ describe('restating the person\'s words', () => {
     expect(restate('Family time', 'item')).toBe('Family time');
   });
 
+  // MOM-166: the owner's phone run read "because Reading at night helps you wind down". After "because" the first word is
+  // lowercased when it is a common word (an -ing word or an everyday opener), and kept when it may be a name.
+  it.each([
+    ['Reading at night helps me wind down', 'reading at night helps you wind down'],
+    ['Staying healthy for my family', 'staying healthy for your family'],
+    ['Health comes first for me', 'health comes first for you'],
+    ['Money is tight for us', 'money is tight for you'],
+    ['Feeling better about my day', 'feeling better about your day'],
+    ["Don't want to feel stuck", "don't want to feel stuck"],
+    ['I want more energy', 'you want more energy'],
+    ["Emma's recitals take my evenings", "Emma's recitals take your evenings"],
+    ['Mark needs me on weekends', 'Mark needs you on weekends'],
+    ['Grace is moving in with us', 'Grace is moving in with you'],
+    ["Sterling's lessons take my evenings", "Sterling's lessons take your evenings"],
+    ["Reading's the only quiet I get", "Reading's the only quiet you get"],
+    ['Sterling needs my help', 'Sterling needs your help'],
+    ['ASAP, my kids are growing up', 'ASAP, your kids are growing up'],
+  ])('"%s" reads "%s" after "because"', (said, restated) => {
+    expect(restate(said, 'clause')).toBe(restated);
+  });
+
+  it('lowercases only after "because": a list item or a title keeps its capital', () => {
+    expect(restate('Reading at night', 'item')).toBe('Reading at night');
+    expect(restate('Reading at night', 'title')).toBe('Reading at night');
+  });
+
   it('never doubles a full stop or a "because"', () => {
     expect(restate('my health...', 'clause')).toBe('your health');
     expect(restate('Because because', 'clause')).toBe('because');

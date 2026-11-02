@@ -113,6 +113,9 @@ export interface Violation {
   message: string;
   // The draft path a draft violation is about. Paths are keys and field names, never values.
   path?: string;
+  // Which parts of Claude's reply held the offending number (math.number only; MOM-166), by field name from AUTHORED_FIELDS and
+  // never text, so a thrown-away reply can be classed from the log.
+  fields?: AuthoredField[];
 }
 
 const ASKING_KINDS: readonly TurnKind[] = ['question', 'offer_ideas', 'ideas', 'interpretations', 'proposal'];
@@ -120,8 +123,20 @@ const ASKING_KINDS: readonly TurnKind[] = ['question', 'offer_ideas', 'ideas', '
 // In the day-end question, and only there, Claude may say the two boundaries of the early-day-end rule (MOM-125).
 const DAY_END_BOUNDARY_WORDS = /\b(midnight|6 in the morning|six in the morning)\b/gi;
 
+// The parts of a reply Claude writes words in. Names only: these are what the thrown-away log says held an unsaid number.
+export const AUTHORED_FIELDS = ['say', 'question', 'detail', 'skipped', 'options'] as const;
+export type AuthoredField = (typeof AUTHORED_FIELDS)[number];
+
+const authoredFields = (turn: AssistantTurn): Array<[AuthoredField, string]> => [
+  ['say', turn.say],
+  ['question', turn.question ?? ''],
+  ['detail', turn.detail ?? ''],
+  ['skipped', turn.skipped?.line ?? ''],
+  ...turn.options.map((o): [AuthoredField, string] => ['options', o]),
+];
+
 // Everything Claude wrote in a turn, the detail line included (MOM-111 round 2, finding 1): every check reads it.
-const authored = (turn: AssistantTurn): string[] => [turn.say, turn.question ?? '', turn.detail ?? '', turn.skipped?.line ?? '', ...turn.options];
+const authored = (turn: AssistantTurn): string[] => authoredFields(turn).map(([, text]) => text);
 
 // Claude's words as the day/time and number checks should read them: boundary words removed for the day-end question, and a
 // weekday that belongs to a written date ("Tuesday, Oct 27") left out, since it is the date's, not the person's week.
@@ -272,11 +287,14 @@ export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violat
   const answered = answeredTopics(ctx.prevDraft.model);
   // A person who has finished setup has answered what is saved, so a notice that skips it is true (MOM-132 part 2).
   if (ctx.returning) for (const topic of skippedTopics(ctx.returning.mode)) answered.add(topic);
-  // A topic asked and replied to is answered, whether or not it reached the draft.
+  // A topic asked and replied to is answered, whether or not it reached the draft. So is a topic whose date or value was shown as
+  // a proposal the person accepted ("Done by Fri, Nov 20?" and a yes): the accepted value is theirs, and a later "you gave me
+  // the date, so I'll skip that" is true (MOM-166). A proposal that was declined or not answered is not an answer.
   ctx.transcript.forEach((m, i) => {
-    if (m.role === 'assistant' && m.turn.topic && m.turn.kind === 'question' && ctx.transcript[i + 1]?.role === 'person') {
-      answered.add(m.turn.topic);
-    }
+    if (m.role !== 'assistant' || !m.turn.topic) return;
+    const reply = ctx.transcript[i + 1];
+    if (reply?.role !== 'person') return;
+    if (m.turn.kind === 'question' || (m.turn.kind === 'proposal' && acceptsText(reply.text))) answered.add(m.turn.topic);
   });
   const prev = lastAssistant(ctx);
   const t = ctx.transcript;
@@ -404,10 +422,14 @@ export function checkNoMath(turn: AssistantTurn, ctx: TurnContext): Violation[] 
   // Starting ideas, candidate readings of an unclear answer and a visible proposal may carry numbers of their own, shown
   // as suggestions the person can take or leave; nothing else may.
   const exempt = turn.kind === 'proposal' ? authored(turn) : turn.kind === 'ideas' || turn.kind === 'interpretations' ? turn.options : [];
-  const scanned = authored(turn).filter((t) => !exempt.includes(t));
+  const scanned = authoredFields(turn).filter(([, t]) => !exempt.includes(t));
   const said = new Set(wordsOf(ctx).flatMap((t) => numbersIn(t)));
-  const unsaid = new Set(numbersIn(textForScan(turn, scanned), { skipOne: true }).filter((n) => !said.has(n)));
-  for (const n of unsaid) out.push(v('no_math', 'math.number', `Claude wrote the number ${n}, which the person has not said.`));
+  const unsaid = new Set(numbersIn(textForScan(turn, scanned.map(([, t]) => t)), { skipOne: true }).filter((n) => !said.has(n)));
+  for (const n of unsaid) {
+    // Which parts of the reply held this number, by name (MOM-166).
+    const fields = AUTHORED_FIELDS.filter((f) => scanned.some(([name, t]) => name === f && numbersIn(textForScan(turn, [t]), { skipOne: true }).includes(n)));
+    out.push({ ...v('no_math', 'math.number', `Claude wrote the number ${n}, which the person has not said.`), fields });
+  }
   return out;
 }
 

@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  AUTHORED_FIELDS,
   checkAssumeNothing,
   checkChoiceBeforeExamples,
   checkChunkedPlayback,
@@ -360,6 +361,24 @@ describe('rule 5: skip what is already answered', () => {
     expect(checkSkipAnswered(turn({ topic: 'day_end', skipped: { topic: 'time_zone', line: 'You told me. So I will skip that.' } }), c)).toHaveLength(1);
     expect(checkSkipAnswered(turn({ topic: 'day_end', skipped: { topic: 'tone', line: 'Skipping that.' } }), c)).toHaveLength(1);
   });
+
+  // MOM-166: the 2026-11-02 production run lost replies to skip.unanswered. A date shown as a proposal and accepted is answered,
+  // but only a question-kind turn counted, so "you gave me the date, I'll skip that" was refused.
+  describe('a topic shown as a proposal and accepted (MOM-166)', () => {
+    const skipping = (topic: 'deadline_date' | 'start_date') =>
+      turn({ topic: 'date_can_move', question: 'Could that date move?', skipped: { topic, line: 'You gave me the date, so I will skip that.' } });
+    const proposal = (topic: 'deadline_date' | 'start_date'): Transcript[number] => asked({ kind: 'proposal', topic, question: 'Done by Fri, Nov 20?' });
+
+    it.each(['deadline_date', 'start_date'] as const)('lets "%s" be skipped after its proposal was accepted', (topic) => {
+      const history: Transcript = [said('It has a deadline next Friday.'), proposal(topic), said('Yes')];
+      expect(checkSkipAnswered(skipping(topic), ctx(history))).toEqual([]);
+    });
+
+    it.each(['deadline_date', 'start_date'] as const)('still refuses a skip of "%s" when its proposal was declined or never answered', (topic) => {
+      expect(rules(checkSkipAnswered(skipping(topic), ctx([said('Next Friday.'), proposal(topic), said('No, a different day')])))).toEqual(['skip_answered']);
+      expect(rules(checkSkipAnswered(skipping(topic), ctx([said('Next Friday.'), proposal(topic)])))).toEqual(['skip_answered']);
+    });
+  });
 });
 
 describe('rule 6: numbered interpretations', () => {
@@ -501,6 +520,18 @@ describe('rule 8: no math, no score', () => {
 
   it('does not count the word "one" as a number', () => {
     expect(checkNoMath(turn({ question: 'Do you want to take them together, or one first?' }), ctx())).toEqual([]);
+  });
+
+  // MOM-166: the 2026-11-02 production run lost replies to math.number with nothing in the log to class them. The violation now
+  // names the parts of the reply that held the number: field names from a fixed list, never the number or any text.
+  it('names the parts of the reply that held a number the person did not say', () => {
+    const found = checkNoMath(turn({ say: 'That is 8 a month.', detail: 'Maybe 8 or 9.', options: [] }), c);
+    expect(found.map((x) => [x.code, x.fields])).toEqual([
+      ['math.number', ['say', 'detail']],
+      ['math.number', ['detail']],
+    ]);
+    expect(checkNoMath(turn({ kind: 'question', skipped: { topic: 'why', line: 'Skipping, you said 7.' } }), c).map((x) => x.fields)).toEqual([['skipped']]);
+    for (const field of found.flatMap((x) => x.fields ?? [])) expect(AUTHORED_FIELDS).toContain(field);
   });
 
   it('lets starting ideas, candidate readings and a visible proposal carry numbers, and nothing else', () => {

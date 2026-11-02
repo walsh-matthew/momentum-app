@@ -1,7 +1,8 @@
 // The person's words, restated in the second person by code for the playback (docs/DOMAIN_MODEL.md §2.1 plain language,
 // MOM-111): "To stay healthy for my family." plays back as "you want to stay healthy for your family", never pasted back as
-// typed. Only the voice changes ("my" to "your", "I" to "you"); no word is added or reworded beyond that, so the person
-// still approves exactly what is saved. Words these rules cannot restate safely give null, and the playback shows them as
+// typed. Only the voice changes ("my" to "your", "I" to "you", and the first letter of a "because" clause to lower case when
+// the word is a common one, MOM-166); no word is added or reworded beyond that, so the person still approves exactly what is
+// saved. Words these rules cannot restate safely give null, and the playback shows them as
 // said, in quotes. Pure.
 
 // Where the words sit in the line the playback writes around them.
@@ -16,6 +17,32 @@ const NEVER_NAMES = new Set([
   'it', 'its', "it's", 'that', "that's", 'this', 'these', 'those', 'the', 'a', 'an', 'there', "there's", 'so', 'for', 'just',
   'being', 'to',
 ]);
+
+// The first word of a "because" clause is lowercased when it is a common word, not a name (MOM-166): "because reading at night
+// helps you wind down", not "because Reading at night ...". A word counts as common when it is on this short list of everyday
+// openers, or is an -ing word (reading, staying) other than a name that ends in -ing or a possessive ("Sterling's"). Any
+// other first word keeps its capital, because it may be a name ("Emma's recitals", "Mark needs me"): lowercasing a name is
+// worse than a stray capital. None of the names a person is likely to open with are on the list ("Hope", "Grace", "Will").
+const COMMON_STARTERS = new Set([
+  'health', 'family', 'money', 'time', 'work', 'energy', 'life', 'sleep', 'stress', 'peace', 'freedom', 'balance', 'control',
+  'confidence', 'strength', 'happiness', 'security', 'focus', 'progress', 'success', 'career', 'school', 'kids', 'children',
+  'friends', 'people', 'everyone', 'someone', 'nobody', 'nothing', 'everything', 'anything', 'when', 'if', 'since', 'as', 'after',
+  'before', 'once', 'while', 'without', 'with', 'also', 'maybe', 'mostly', 'mainly', 'honestly', 'basically', 'really', 'then',
+  'now', 'soon', 'every', 'each', 'all', 'some', 'many', 'most', 'more', 'less', 'not', 'no', 'good', 'great', 'better', 'what',
+  'why', 'how', 'who', 'where', 'which', "don't", "can't", "won't", "isn't", "wasn't", "doesn't", "didn't",
+]);
+// Names that end in -ing: not common words.
+const NAMES_ENDING_ING = new Set(['sterling', 'stirling', 'irving', 'harding', 'fleming', 'browning', 'manning', 'channing', 'sebring']);
+
+function isCommonStarter(word: string): boolean {
+  const lower = word.toLowerCase();
+  // All capitals ("ASAP", "NYC") is shouted or an abbreviation, never lowercased here.
+  if (word.length > 1 && word === word.toUpperCase()) return false;
+  if (COMMON_STARTERS.has(lower)) return true;
+  // Any other word with an apostrophe is a possessive or a contraction: "Sterling's", "Emma's". It may be a name.
+  if (lower.includes("'")) return false;
+  return lower.length >= 5 && lower.endsWith('ing') && !NAMES_ENDING_ING.has(lower);
+}
 
 const SWAPS: Record<string, string> = {
   i: 'you',
@@ -93,10 +120,11 @@ export function restate(words: string, place: RestatePlace): string | null {
   text = swapWords(text);
   if (!text || YOU_TWICE.test(text)) return null;
 
-  const first = (text.match(/^[A-Za-z]+(?:'[A-Za-z]+)?/)?.[0] ?? '').toLowerCase();
+  const firstWord = text.match(/^[A-Za-z]+(?:'[A-Za-z]+)?/)?.[0] ?? '';
+  const first = firstWord.toLowerCase();
   if (place === 'title') {
     if (SWAPPED.has(first)) text = capitalize(text);
-  } else if (SWAPPED.has(first) || NEVER_NAMES.has(first)) {
+  } else if (SWAPPED.has(first) || NEVER_NAMES.has(first) || (place === 'clause' && isCommonStarter(firstWord))) {
     text = lowerFirst(text);
   }
   return wants ? `you want ${text}` : text;

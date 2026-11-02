@@ -6,7 +6,9 @@
 //   no steps;
 // - principle 1 and rule 8: every number, date, clock time, weekday and yes/no answer in the draft points at something
 //   the person said or accepted, and no free text carries a day or time word nobody said;
-// - the deadline rule: a deadline task says whether its date can move, in both modes;
+// - the deadline rule (MOM-166): a deadline task needs its date and the person's can-move answer, checked only at the final
+//   save. The answer is asked in its own turn after the date, so a draft that holds the task before it is asked must pass
+//   'progress'. The "only a deadline task has ..." checks hold in both modes;
 // - the rules the save needs (MOM-111): a synced source is an app Momentum can connect, and a work item with steps feeds a
 //   checklist target (manual entry ticks a step through the item's target);
 // - the ordering rule (MOM-107, MOM-125): a saved target needs the time zone and the day end, and the week start when a
@@ -240,8 +242,10 @@ function goalIssues(goal: GoalDraft, mode: DraftMode, existing = false): DraftIs
       if (i.steps.length > 0) iat('steps', 'A habit has no steps.');
     }
     if (i.kind === 'deadline_task') {
-      if (i.dueDate === null) iat('dueDate', 'A deadline task needs its exact date.');
-      if (i.dateCanMove === null) iat('dateCanMove', 'Can the date move? Ask the person in a separate question; there is no default.');
+      // Only at the final save (MOM-166): the can-move question is asked in its own turn after the date, so the task is in the
+      // draft, without the answer, for the turn that asks it. Nothing is saved without the answer.
+      if (final && i.dueDate === null) iat('dueDate', 'A deadline task needs its exact date.');
+      if (final && i.dateCanMove === null) iat('dateCanMove', 'Can the date move? Ask the person in a separate question; there is no default.');
     } else {
       if (i.dueDate !== null) iat('dueDate', 'Only a deadline task has a due date.');
       if (i.dateCanMove !== null) iat('dateCanMove', 'Only a deadline task says whether its date can move.');

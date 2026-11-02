@@ -53,7 +53,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, onlyPlainWords, type Violation } from '@/lib/setup/checks';
 import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
 import { normalizeNumberTurn } from '@/lib/setup/numbers';
-import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog } from '@/lib/setup/feedback';
+import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog, unsaidNumberFields } from '@/lib/setup/feedback';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { normalizePlainTurn } from '@/lib/setup/plainCard';
 import { spokenTimes } from '@/lib/setup/playback';
@@ -374,12 +374,15 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
     }
     rejected += 1;
     // The turn's topic and the topic it skipped are names from SETUP_TOPICS (the schema allows nothing else), never text.
-    // Paths are the draft's keys and field names, never values (lib/setup/feedback.ts).
+    // Paths are the draft's keys and field names, never values (lib/setup/feedback.ts). For a number Claude wrote that the person
+    // never said, the parts of the reply that held it, by field name (MOM-166); left out when no number was the reason.
+    const numberFields = unsaidNumberFields(violations);
     console.warn('[setup] a reply was thrown away', {
       category: 'rules',
       rules,
       codes,
       paths: failingPaths(violations),
+      ...(numberFields.length > 0 ? { numberFields } : {}),
       topic: turn.data.topic,
       skippedTopic: turn.data.skipped?.topic ?? null,
       attempt,
