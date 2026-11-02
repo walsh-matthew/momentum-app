@@ -305,6 +305,30 @@ describe('nothing is saved until the person taps Save', () => {
     expect(window.sessionStorage.getItem(KEY)).toBeNull();
   });
 
+  // MOM-167 part 14 (owner, 2026-11-02): a saved setup offers Home first, with logging as the second choice, because most people have
+  // not done anything yet on a goal they have just set up. A tap, not a redirect: the save is confirmed on screen.
+  it('after a saved setup, "Go to Home" is the one main button and "Log an entry" is the second choice', async () => {
+    await toFinal();
+    actions.save.mockResolvedValue({ ok: true, data: { goals: 2, targets: 3 } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save my setup' }));
+    await screen.findByRole('heading', { name: 'Your setup is saved' });
+
+    expect(screen.getByText('2 goals and 3 things to count are ready. Already done something on a goal? You can log it now.')).toBeTruthy();
+    const home = screen.getByRole('link', { name: 'Go to Home' });
+    const log = screen.getByRole('link', { name: 'Log an entry' });
+    expect(home.getAttribute('href')).toBe('/');
+    expect(log.getAttribute('href')).toBe('/log');
+    expect(home.getAttribute('data-tone')).toBe('main');
+    expect(log.getAttribute('data-tone')).toBe('second');
+    // Home first, in reading order; exactly one main button on the card; neither switched off or faded.
+    expect(home.compareDocumentPosition(log) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelectorAll('[data-tone="main"]')).toHaveLength(1);
+    expect(home.className).not.toMatch(/(^|\s)opacity-/);
+    expect(log.className).not.toMatch(/(^|\s)opacity-/);
+    // The old words are gone.
+    expect(screen.queryByText(/You can log your progress now/)).toBeNull();
+  });
+
   it('a save that fails says so, keeps the confirmation and the conversation, and can be tried again', async () => {
     await toFinal();
     actions.save.mockResolvedValueOnce(refused('Could not save your setup. Nothing was saved.')).mockResolvedValueOnce({ ok: true, data: { goals: 1, targets: 1 } });

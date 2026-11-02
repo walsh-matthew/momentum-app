@@ -16,6 +16,9 @@
 // - POST /__fake/slow?ms=N holds each setup answer back N milliseconds, and POST /__fake/unusable?count=N answers the next N
 //   setup requests with a reply that is not a turn, so a spec can watch the screen while Claude is slow or a reply is thrown
 //   away (MOM-111 finding 10). Both reset with ms=0 and count=0.
+// - POST /__fake/repeat?count=N answers the next N setup requests with the turn the request before them was answered with, instead of the
+//   next one in the script, so a spec can see a playback come back after a change (MOM-167 part 2). The script is then one turn behind;
+//   a spec that uses it ends there. It resets with count=0.
 // - POST /__fake/fail?status=S&count=N answers the next N setup requests with the API's own error for status S: 429 (rate
 //   limited: the busy card), 500 (a failed call: the no-answer card) or 401 (a rejected key: the not-configured card), so a
 //   spec can see every error card (MOM-111 round 3, finding 6; round 3b). It resets with count=0.
@@ -68,6 +71,7 @@ function firstAnswer(body: MessagesBody): string | null {
 export function startFakeAnthropic(port: number, scripts: readonly FakeScript[]): Promise<FakeAnthropic> {
   let setupRequests = 0;
   let lastSetupUserText = '';
+  let repeatLeft = 0;
   let slowMs = 0;
   let unusableLeft = 0;
   let failLeft = 0;
@@ -89,6 +93,7 @@ export function startFakeAnthropic(port: number, scripts: readonly FakeScript[])
     if (req.method === 'POST' && req.url?.startsWith('/__fake/')) {
       const url = new URL(req.url, 'http://127.0.0.1');
       if (url.pathname === '/__fake/review') reviewMode = url.searchParams.get('mode') === 'bad' ? 'bad' : 'good';
+      if (url.pathname === '/__fake/repeat') repeatLeft = Math.max(0, Number(url.searchParams.get('count')) || 0);
       if (url.pathname === '/__fake/slow') slowMs = Math.max(0, Number(url.searchParams.get('ms')) || 0);
       if (url.pathname === '/__fake/unusable') unusableLeft = Math.max(0, Number(url.searchParams.get('count')) || 0);
       if (url.pathname === '/__fake/fail') {
@@ -149,7 +154,9 @@ export function startFakeAnthropic(port: number, scripts: readonly FakeScript[])
         send(failStatus, { type: 'error', error: { type, message: type } });
         return;
       }
-      const turnIndex = (body.messages ?? []).filter((m) => m.role === 'assistant').length;
+      const repeating = repeatLeft > 0;
+      if (repeating) repeatLeft -= 1;
+      const turnIndex = (body.messages ?? []).filter((m) => m.role === 'assistant').length - (repeating ? 1 : 0);
       const said = firstAnswer(body);
       const note = lastUserText(body);
       const mode = note.includes('adds new goals only') ? 'add_goal' : note.includes('adding targets to one goal') ? 'add_target' : undefined;

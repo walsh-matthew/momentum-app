@@ -79,7 +79,7 @@ Criterion 6 has no measure defined for "still using it" beyond the pass bar (Gap
 | Phone navigation | Every signed-in page has a way home and Sign out at 390px (MOM-148) | none (layout) | all |
 | Principles | Never assume anything about a person's life; the person's word beats any source | §4.2 | all |
 
-On `main` today, Settings holds Account and Appearance only: the theme choice (light, dark or match the device; MOM-30, PR #72), with the rest of "How Momentum talks to me" still to build (MOM-114, planned as defaults only for the trial). Home offers guided setup to a person with no saved setup, in place of the old "No goals yet" card (MOM-143, PR #78), and an "Add to your goals" link to a person with one (MOM-132). The old model's controls on home are hidden for the trial (MOM-115, PR #88).
+On `main` today, Settings holds Account and Appearance only: the theme choice (light, dark or match the device; MOM-30, PR #72), with the rest of "How Momentum talks to me" still to build (MOM-114, planned as defaults only for the trial). Home offers guided setup to a person with no saved setup, in place of the old "No goals yet" card (MOM-143, PR #78), and, to a person with one, "Log an entry" as the main button with "Add to your goals" under it (MOM-132; MOM-167 part 14, pending merge). The old model's controls on home are hidden for the trial (MOM-115, PR #88).
 
 ## 6. Release plan
 

@@ -11,7 +11,17 @@ import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
 import { RETURNING_FIRST_LINE, SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
-import { ERROR_COPY, awaitsClaude, newSession, withAssistantTurn, withPersonMessage, withoutLastAnswer, type RetryCause } from '@/lib/setup/session';
+import {
+  ERROR_COPY,
+  RESEND_AFTER_MS,
+  RESEND_MARGIN_MS,
+  awaitsClaude,
+  newSession,
+  withAssistantTurn,
+  withPersonMessage,
+  withoutLastAnswer,
+  type RetryCause,
+} from '@/lib/setup/session';
 import type { AssistantTurn, SetupSession } from '@/types/setup';
 import type { AddGoalOption, FillInItem, QuickPathState, SetupAdded, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { FIRST_SETUP_WORDS, FinalCard, type FinalCardWords } from './FinalCard';
@@ -25,6 +35,7 @@ import { SetupAlert } from './SetupAlert';
 import { SetupButton, setupButtonClasses } from './SetupButton';
 import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
 import { CARD_TEXT, CardLead } from './cardText';
+import { pauseBeforeResend } from './resendPause';
 import { clearStoredSession, loadStoredSession, storeSession } from './setupStorage';
 
 // A save that never reached the server (MOM-111 round 2, finding 12), in the error card's words (round 3b, finding 6).
@@ -146,27 +157,70 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
     }
   }, [storageId]);
 
-  const ask = async (next: SetupSession) => {
+  // An app switch (MOM-167 part 3). iOS Safari cancels the request that is in flight when the person goes to another app, and on
+  // their return it fails with a network error, which used to show "Couldn't connect ... Try again" although nothing was wrong. The
+  // screen notes that the page left the screen while a reply was awaited; if the request then fails, it sends the same conversation
+  // again, once, on its own, after a pause past the server's gap between calls. The person's answer is in the conversation once and
+  // the resend carries that same conversation, so it is never added twice. `requestId` makes the screen take only the newest request's
+  // answer, so a late reply to the cut-off one cannot be applied as well.
+  const requestId = useRef(0);
+  const waitingOnReply = useRef(false);
+  const leftWhileWaiting = useRef(false);
+  useEffect(() => {
+    const noteLeaving = () => {
+      if (waitingOnReply.current) leftWhileWaiting.current = true;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') noteLeaving();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', noteLeaving);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', noteLeaving);
+      // The screen is gone: nothing that is still in flight, or waiting to be sent again, is applied or sent.
+      requestId.current += 1;
+    };
+  }, []);
+
+  // `sends` counts the automatic sends of this answer: 0 is the person's own tap, 1 the resend after a cut-off, 2 the one more after the
+  // server said "too soon" to it (a refused call is no call).
+  const ask = async (next: SetupSession, sends = 0): Promise<void> => {
+    const id = ++requestId.current;
+    if (sends === 0) leftWhileWaiting.current = false;
+    waitingOnReply.current = true;
     setBusy(true);
     setFailure(null);
     setView(null);
+    let pauseMs: number | null = null;
     try {
       const request = { ...next, today: localDate(), locale: browserLocale() };
       const result = addition ? await askAddTurn({ ...request, addition }) : await askSetupTurn(request);
+      if (id !== requestId.current) return;
       if (!result.ok) {
         setFailure({ cause: 'no_answer', headline: result.error });
       } else if (result.data.kind === 'turn') {
         const updated = withAssistantTurn(next, result.data.turn, result.data.spentTokens);
         setSession(updated);
         storeSession(storageId, updated);
+      } else if (result.data.kind === 'wait' && sends === 1) {
+        pauseMs = result.data.retryAfterSeconds * 1000 + RESEND_MARGIN_MS;
       } else {
         setView(result.data);
       }
     } catch {
-      setFailure({ cause: 'network' });
-    } finally {
-      setBusy(false);
+      if (id !== requestId.current) return;
+      if (sends === 0 && leftWhileWaiting.current) pauseMs = RESEND_AFTER_MS;
+      else setFailure({ cause: 'network' });
     }
+    if (pauseMs !== null) {
+      // Still "Thinking…" on screen: the person sees nothing go wrong.
+      await pauseBeforeResend(pauseMs);
+      if (id === requestId.current) await ask(next, sends + 1);
+      return;
+    }
+    waitingOnReply.current = false;
+    setBusy(false);
   };
 
   const start = () => {
@@ -326,10 +380,15 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
         <CardLead id="setup-saved">Your setup is saved</CardLead>
         <p className={CARD_TEXT.body}>
           {saved.goals} {saved.goals === 1 ? 'goal' : 'goals'} and {saved.targets} {saved.targets === 1 ? 'thing' : 'things'} to
-          count are ready. You can log your progress now.
+          count are ready. Already done something on a goal? You can log it now.
         </p>
+        {/* Home first (MOM-167 part 14, owner 2026-11-02): most people have not done anything yet on a goal they have just set up.
+            A tap, not a redirect, so the save is confirmed on screen. */}
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Link href="/log" className={setupButtonClasses('main')}>
+          <Link href="/" className={setupButtonClasses('main')} data-tone="main">
+            Go to Home
+          </Link>
+          <Link href="/log" className={setupButtonClasses('second')} data-tone="second">
             Log an entry
           </Link>
         </div>
@@ -384,6 +443,8 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
   }
 
   const turn = lastAssistantTurn(session);
+  // How many times Claude has spoken: the key of a card that must open afresh whenever Claude's next turn replaces it.
+  const spoken = session.transcript.filter((m) => m.role === 'assistant').length;
   const waiting = awaitsClaude(session);
   const retry = () => void ask(session);
   // Which error card: the server's reason for a failed turn, 'wait' for the spacing limit, the network or the server's
@@ -447,6 +508,9 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
       {firstLine && <p className="text-sm leading-snug text-muted">{RETURNING_FIRST_LINE}</p>}
       {turn.kind === 'playback' && turn.chunk !== null ? (
         <PlaybackCard
+          // Keyed by Claude's turn, so the playback that comes back after a change starts closed, with "Yes, that is right" as its
+          // main answer, not in the change box of the one it replaced (MOM-167 part 2).
+          key={`playback:${spoken}`}
           chunk={turn.chunk}
           title={adding && turn.chunk === 'planning' ? ADD_WORDS.planningTitle : undefined}
           lines={renderPlayback(shownModel(turn.draft, session.transcript), turn.chunk, playbackOptions)}
@@ -463,6 +527,7 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
         />
       ) : turn.kind === 'final' ? (
         <FinalCard
+          key={`final:${spoken}`}
           lines={renderFinal(shownModel(turn.draft, session.transcript), playbackOptions)}
           saving={saving || busy || waiting}
           error={adding && !waiting ? error : null}

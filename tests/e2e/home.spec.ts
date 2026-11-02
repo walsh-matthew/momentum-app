@@ -79,6 +79,50 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       expect(serverErrors()).toEqual([]);
     });
 
+    // MOM-167 part 14 (owner, 2026-11-02): a person with goals gets "Log an entry" as the one main button and "Add to your goals" as a
+    // secondary button under it, at the top of home. The page was found with "Add to your goals" half under Safari's bottom bar on an
+    // iPhone at 390px, so the check reaches the end of the page with a bar of 85px on top of the viewport and asks that neither is under it.
+    test('offers "Log an entry" as the main button and "Add to your goals" under it, and Log an entry opens /log', async ({ page }) => {
+      const serverErrors = watchForServerErrors(page);
+      const email = await signUpAndConfirm(page, `home-actions-${width}`);
+      await seedHome(email, { timeZone: 'America/Los_Angeles', weekStart: 1, weekly: true });
+
+      await page.goto('/');
+      const actions = page.getByRole('navigation', { name: 'Home actions' });
+      await expect(actions).toBeVisible();
+      const log = actions.getByRole('link', { name: 'Log an entry' });
+      const add = actions.getByRole('link', { name: 'Add to your goals' });
+      await expect(log).toHaveAttribute('data-tone', 'main');
+      await expect(add).toHaveAttribute('data-tone', 'second');
+      // The main button comes first, and both sit above the week.
+      const [logBox, addBox, weekBox] = await Promise.all([log.boundingBox(), add.boundingBox(), page.getByRole('region', { name: 'This week' }).boundingBox()]);
+      expect(logBox && addBox && weekBox).toBeTruthy();
+      if (width === WIDTHS.phone) {
+        // Stacked, full width.
+        expect(addBox!.y).toBeGreaterThan(logBox!.y + logBox!.height - 1);
+        expect(logBox!.width).toBeGreaterThan(width - 40);
+        expect(addBox!.width).toBeGreaterThan(width - 40);
+      } else {
+        // Side by side from 640px.
+        expect(addBox!.x).toBeGreaterThan(logBox!.x + logBox!.width - 1);
+      }
+      expect(weekBox!.y).toBeGreaterThan(Math.max(logBox!.y + logBox!.height, addBox!.y + addBox!.height) - 1);
+
+      // Neither is under the browser's bottom bar when the page is scrolled to its end.
+      const BAR = 85;
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      for (const button of [log, add]) {
+        const box = await button.boundingBox();
+        expect(box!.y + box!.height, 'the button clears a bottom bar of 85px').toBeLessThanOrEqual((page.viewportSize()?.height ?? 0) - BAR);
+      }
+
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await log.click();
+      await expect(page).toHaveURL(/\/log$/);
+      await expect(page.getByRole('heading', { level: 1, name: 'Log an entry' })).toBeVisible();
+      expect(serverErrors()).toEqual([]);
+    });
+
     test('says a deadline task looks short for the days set aside, with the ways forward', async ({ page }) => {
       const serverErrors = watchForServerErrors(page);
       const email = await signUpAndConfirm(page, `forecast-${width}`);
