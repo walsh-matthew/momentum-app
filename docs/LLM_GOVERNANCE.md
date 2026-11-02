@@ -1,6 +1,6 @@
 # Claude calls: limits, caps, usage log, SDK and fallback decision
 
-MOM-73. Covers the places the app calls Claude: the rebalance proposal ("Ask Claude to review", `lib/ai/rebalance.ts`), the goal wizard's week 1 plan (`lib/ai/taskPlan.ts`), since MOM-128 a turn of guided setup (`lib/ai/setup.ts`), which has limits of its own: see [Guided setup](#guided-setup-mom-128), and since MOM-113 the weekly review's one line (`lib/ai/review.ts`), also with its own: see [The weekly review's one line](#the-weekly-reviews-one-line-mom-113). Code: `lib/services/llm.ts`. Database: migration `011_llm_usage_logs.sql` (and `014_setup_budget.sql`, which adds the `setup` feature), checked by `supabase/verify/011_llm_usage_logs.sql` and `014_setup_budget.sql`.
+MOM-73. Covers the places the app calls Claude: the rebalance proposal ("Ask Claude to review", `lib/ai/rebalance.ts`), the goal wizard's week 1 plan (`lib/ai/taskPlan.ts`), since MOM-128 a turn of guided setup (`lib/ai/setup.ts`), which has limits of its own: see [Guided setup](#guided-setup-mom-128), and since MOM-113 the weekly review's one line (`lib/ai/review.ts`), also with its own: see [The weekly review's one line](#the-weekly-reviews-one-line-mom-113). Code: `lib/services/llm.ts`. Database: migration `011_llm_usage_logs.sql` (and `014_setup_budget.sql`, which adds the `setup` feature, and `022_cache_tokens.sql`, which adds the cache-token columns), checked by `supabase/verify/011_llm_usage_logs.sql`, `014_setup_budget.sql` and `022_cache_tokens.sql`.
 
 The rest of this page, up to "Guided setup", describes the rebalance and week 1 plan and is unchanged by MOM-128.
 
@@ -23,16 +23,17 @@ If the usage table cannot be reached, or answers in a shape we do not recognise,
 | Limit | Value | Reported as |
 |---|---|---|
 | Spacing between one user's calls | 20 seconds | `too_soon` |
-| Calls per user | 20 in any 24 hours | `user_daily` |
-| Calls by everyone together | 200 in any 24 hours | `overall_daily` |
+| Calls per user (rebalance and week 1 plan) | 20 in any 24 hours | `user_daily` |
+| Calls by everyone together, every feature | 450 in any 24 hours (200 before the family trial, MOM-165) | `overall_daily` |
 
+- **Setup and the weekly review have a different per-person number:** one shared allowance of 100 in any 24 hours (`SETUP_PERSON_DAILY_CAP`), see [Guided setup](#guided-setup-mom-128). Rebalance and the week 1 plan keep 20.
 - **Order of checks:** your own cap, then the shared cap, then spacing, so the most useful reason is the one reported.
 - **Rolling 24 hours**, not a calendar day: no midnight reset spike, and no dependence on a time zone.
 - **What counts:** every row, finished or pending, whatever its outcome. A failed call is still a call. A row left `pending` by a crash still counts, which is the safe way round for a cap.
 - **What does not count:** a refused attempt writes nothing, so asking again cannot extend your own wait. A bad channel id, bad wizard input or a signed-out request is refused before anything is reserved, so it uses up nothing.
 - **Calls, not tokens, are counted.** A count can be enforced before the call is made. The tokens are logged so the cost can be worked out and the caps tuned from it.
 
-**Reading the caps as money.** From the Claude API reference's price table (cached 2026-10-06; check it is current), `claude-opus-5-5` costs $4 per million input tokens and $20 per million output tokens. The output limit per call is 16,000 tokens, so output alone is at most $0.32 a call. That puts the ceilings, before input cost, at about **$6.40 per user per rolling 24 hours** and about **$64 overall**. Those are upper bounds that assume every call uses its whole output limit. Real cost is expected to be well below that but has not been measured (one real call has ever been made). Once the log has data, `llm_usage_daily` (below) gives the real figure, and the numbers can be set from it.
+**Reading the caps as money.** From the Claude API reference's price table (cached 2026-10-06; check it is current), `claude-opus-5-5` costs $4 per million input tokens and $20 per million output tokens. The output limit per call is 16,000 tokens, so output alone is at most $0.32 a call. That puts the ceilings, before input cost, at about **$6.40 per user per rolling 24 hours** (the old model's 20 calls) and about **$144 overall** (450 calls, raised from 200 for the family trial, MOM-165; it was $64). Those are upper bounds that assume every call uses its whole output limit. Real cost is expected to be well below that but has not been measured (one real call has ever been made). Once the log has data, `llm_usage_daily` (below) gives the real figure, and the numbers can be set from it.
 
 ## What the user is told
 
@@ -52,7 +53,7 @@ The text is composed on the server and shown as it is: the wizard prints the mes
 
 ## What is recorded, and who can see it
 
-Table `llm_usage_logs`, one row per call: `user_id`, `feature` (`rebalance`, `week_one_plan`, `setup` or `weekly_review`), `model` (a model id, at most 100 characters), `input_tokens`, `output_tokens`, `latency_ms`, `outcome` (`pending`, `ok`, `refused`, `provider_rate_limited`, `unavailable`, `bad_output`, `not_configured`), `created_at`.
+Table `llm_usage_logs`, one row per call: `user_id`, `feature` (`rebalance`, `week_one_plan`, `setup` or `weekly_review`), `model` (a model id, at most 100 characters), `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens` (migration 022: tokens the API read from and wrote to its prompt cache; null when the response did not report them, never guessed as 0), `latency_ms`, `outcome` (`pending`, `ok`, `refused`, `provider_rate_limited`, `unavailable`, `bad_output`, `not_configured`), `created_at`.
 
 **No prompt and no answer, anywhere.** The table has no column that could carry either (no json, bytea, array or long-text column), the service passes only the fields above, and the tests read both the rows and the source to check it. The only text columns hold a fixed word or a model id.
 
@@ -107,8 +108,8 @@ Why setup has its own limits: a real setup is one conversation of about 20 to 25
 
 | Rule | What it does | Where |
 |---|---|---|
-| **Per-person limits: log-only** | The person's daily count and the spacing between calls are set so high (and so low) that the database never refuses on them. Every call is still recorded as `setup`, so the log shows where production limits belong. | `SETUP_LIMITS` |
-| **One hard shared cap** | Everyone's calls together, across every feature, still stop at the shared cap (200 in any 24 hours today). It is the spend backstop if sign-up is abused. | `SETUP_LIMITS.overallDailyCap` is `LLM_LIMITS.overallDailyCap` |
+| **A real per-person limit** (MOM-165) | At most 100 Claude calls per person in any 24 hours, shared with the weekly review's line: **setup and the review share one 100-a-day allowance** (one named constant). The database counts every Claude call a person makes, whatever its feature, so the allowance covers all of them. Past it the call is not made and the person is told in plain words (below). Spacing stays at the database's 1 second minimum. Every call is recorded as `setup`. | `SETUP_PERSON_DAILY_CAP`, `SETUP_LIMITS` |
+| **One hard shared cap** | Everyone's calls together, across every feature, still stop at the shared cap (450 in any 24 hours today: room for 3 or more adults to onboard on the same day; 3 adults each using their whole 100 is 300). It is the spend backstop if sign-up is abused. | `SETUP_LIMITS.overallDailyCap` is `LLM_LIMITS.overallDailyCap` |
 | **A per-setup budget** | One setup (first turn to save or abandon) may use at most 40 Claude turns and 1,000,000 tokens (input plus output). When a setup has used it, the next call is not made and nothing is reserved. | `SETUP_BUDGET` |
 | **Fall back to the quick path** | When the budget is used up, the shared cap is reached or the limits cannot be checked, setup stops using Claude and offers the quick path: it plays back what the person has said so far (written by code from the validated draft), offers sensible defaults they can see and change, and saves nothing until they approve. | `SETUP_QUICK_PATH_MESSAGES` |
 
@@ -122,11 +123,15 @@ Why setup has its own limits: a real setup is one conversation of about 20 to 25
 
 **What is sent each turn** (cost, and the privacy notice): the fixed setup prompt (which includes the exact shape of a reply and of the draft, written from the zod schemas in `types/setup.ts` by `lib/setup/schemaText.ts`, so it cannot drift from the validator; about 5,000 tokens in all), the person's messages, Claude's earlier turns *without their drafts* (each is replaced by a short note) and the current draft once, at the end of the newest message. Before MOM-128 every earlier turn carried its whole draft, so the request grew with the square of the number of turns. Nothing else is sent: no other goals, tasks, ids or email.
 
-**The shared cap and the old features.** Every row counts toward a person's daily count whatever its feature, so a person who has done a 25-turn setup has also used up that day's 20 rebalance and week 1 plan calls. Left as it is on purpose: those two features are retired by MOM-115. Noted in `BACKLOG.md`.
+**The shared cap and the old features.** Every row counts toward a person's daily count whatever its feature, so a person who has done a 25-turn setup has also used up that day's 20 rebalance and week 1 plan calls. Left as it is on purpose: those two features are retired by MOM-115. Noted in `BACKLOG.md`. The weekly review is the exception since MOM-165: it shares setup's 100-a-day allowance, so a finished setup does not stop it.
 
-### Reading the log-only limits
+**What a person is told at the per-person limit** (`runSetupTurn()`; the card around it is `components/setup/QuickPathCard.tsx`): "You've used all 100 of your Claude requests for the last 24 hours, so it can't ask any more. You can ask again in about 3 hours." The wait is exact for the person's own allowance and rounded up. The 100 counts all of a person's Claude calls, not only setup's.
 
-Setup rows are ordinary rows in `llm_usage_logs` with `feature = 'setup'`. This shows, for each person, how many setup calls fell past the old daily cap and how many came closer together than the old spacing. Run it in the SQL editor:
+**Cache tokens and the per-setup budget.** Anthropic counts cache reads and cache writes separately from `input_tokens`, so they sit **outside** the 1,000,000-token per-setup budget (input plus output). Caching is off today, so nothing changes. Whoever turns it on decides whether `spentTokens` should include them.
+
+### Reading the per-person count
+
+Setup rows are ordinary rows in `llm_usage_logs` with `feature = 'setup'`. Since MOM-165 the person's limit is real (100 in any 24 hours, across every feature), so this is for tuning it: it shows, for each person, how many setup calls fell past the old 20-a-day cap (the old model's) and how many came closer together than the old spacing. Run it in the SQL editor:
 
 ```sql
 with calls as (
@@ -145,7 +150,7 @@ from calls
 group by user_id;
 ```
 
-The log has no setup id, so it cannot tell two setups by the same person apart; the per-setup budget is measured in the live eval runs, not here. Cost per day and model: `select * from public.llm_usage_daily where feature = 'setup' order by day desc;`.
+The log has no setup id, so it cannot tell two setups by the same person apart; the per-setup budget is measured in the live eval runs, not here. Cost per day and model, cache tokens included: `select * from public.llm_usage_daily where feature = 'setup' order by day desc;` (the view carries `cache_read_tokens` and `cache_write_tokens` since migration 022).
 
 ### Prices used for the estimates
 
@@ -163,7 +168,7 @@ Layer 2 of the weekly review (`docs/DOMAIN_MODEL.md` §3.1) is one plain sentenc
 |---|---|---|
 | **Only on a tap** | A line is asked for when the person taps for it. Opening `/review` makes no call. | the screen (block 3.3 part B) |
 | **Its own budget** | At most 4 `weekly_review` calls per person in any 24 hours, read from `llm_usage_logs` before each call, so it holds across page loads and instances. One ask is at most 2 calls: the first, and one retry. | `REVIEW_BUDGET` |
-| **The usual limits underneath** | The database's own checks stay atomic: 1 second between a person's calls (the database's minimum, so a retry is not blocked), the person's 20 calls across every feature, and the one hard shared cap of 200. | `REVIEW_LIMITS` |
+| **The usual limits underneath** | The database's own checks stay atomic: 1 second between a person's calls (the database's minimum, so a retry is not blocked), the person's 100 calls across every feature (the same allowance as setup, MOM-165, so a finished setup does not stop the review), and the one hard shared cap of 450. | `REVIEW_LIMITS` |
 | **Fails to "no line"** | A limit, an unreachable counter, a refusal, an outage or a missing key leaves the review going on without a line, with a plain sentence saying so. A reply that fails its checks twice is replaced by a line written by code, labelled as Momentum's. | `REVIEW_LINE_MESSAGES`, `REFLECTION_FALLBACK_LINES` |
 | **Nothing stored** | The line is not saved. A finished review stores the recap (migration 018), not Claude's words. | |
 | **Tone** (block 3.4) | The prompt asks for warmth: a kind friend who has been following along, a target "tracked, not judged" said kindly without the words "judged", "verdict" or "graded", and tones of soft and warm, calm and friendly, or brief and still kind. The rules, the checks, the fallback lines and the fields sent did not change. | `REVIEW_SYSTEM_PROMPT`, `tests/review-line-prompt.test.ts` |
@@ -176,7 +181,7 @@ Layer 2 of the weekly review (`docs/DOMAIN_MODEL.md` §3.1) is one plain sentenc
 
 ## Changing a limit
 
-Edit `LLM_LIMITS` in `lib/services/llm.ts` (rebalance and week 1 plan), `SETUP_LIMITS` and `SETUP_BUDGET` (guided setup), or `REVIEW_LIMITS` and `REVIEW_BUDGET` (the weekly review's line). Nothing in the database holds the numbers; the function takes them as arguments. The 24 hour window is fixed in the SQL function (a new migration is needed to change it). The user-facing wording reads the numbers, so the cap in the message follows the constant.
+Edit `LLM_LIMITS` in `lib/services/llm.ts` (rebalance and week 1 plan), `SETUP_LIMITS` and `SETUP_BUDGET` (guided setup), or `REVIEW_LIMITS` and `REVIEW_BUDGET` (the weekly review's line). `SETUP_PERSON_DAILY_CAP` is the one per-person number for setup and the review, and `LLM_LIMITS.overallDailyCap` the one shared number for every feature. Nothing in the database holds the numbers; the function takes them as arguments. The 24 hour window is fixed in the SQL function (a new migration is needed to change it). The user-facing wording reads the numbers, so the cap in the message follows the constant.
 
 ## Known gaps (also in BACKLOG.md)
 
@@ -192,6 +197,7 @@ Edit `LLM_LIMITS` in `lib/services/llm.ts` (rebalance and week 1 plan), `SETUP_L
 - A one-off run with eight genuinely parallel database sessions: eight calls from one user gave exactly one reservation; eight users racing a cap of "current plus three" gave exactly three.
 - `tests/llm-governance.test.ts`: the limit across simulated instances and cold starts (including five instances asking at once), each limit at both call sites with the exact message, fail-closed, content-free rows, and source-level guards (no way to write `status` or `completed_at`, no unmetered call to either model function).
 - `tests/migrations.test.ts`: the SQL still says what the fake and the service assume.
+- `supabase/verify/022_cache_tokens.sql` (MOM-165): the two cache columns, the check that keeps them with the other token counts (checked by dropping it and seeing the script fail), a finishing update with all four counts, and that access did not move.
 - `supabase/verify/014_setup_budget.sql` (MOM-128): `setup` is accepted and logged, anything else is still refused, and the goals checks that migration 014 changed (checked by removing each and seeing the script fail).
-- `tests/setup-budget.test.ts` (MOM-128): a scripted 25-turn setup is not cut off by the per-person limits (and the same 25 turns are cut off by the old ones), the shared cap still stops calls, going over the budget falls back to the quick path, setup calls are logged as `setup`, and the old features keep their limits.
+- `tests/setup-budget.test.ts` (MOM-128, MOM-165): a scripted 25-turn setup is not cut off by the per-person limit of 100 (and the same 25 turns are cut off by the old ones); past 100 calls a person is refused in plain words with the wait; a setup turn's row carries all four token counts; the 40-turn cap is unchanged; `tests/review-line-budget.test.ts` has a person with 30 setup calls still running a review. Also: the shared cap still stops calls, going over the budget falls back to the quick path, setup calls are logged as `setup`, and the old features keep their limits.
 - `tests/setup-live.test.ts` (MOM-128): a live eval run refuses unless its Supabase address is local, whatever `.env.local` says.

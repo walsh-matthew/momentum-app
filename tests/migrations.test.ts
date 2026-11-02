@@ -1357,3 +1357,58 @@ describe('migration 021 lets a person add a goal or a target after first setup, 
     }
   });
 });
+
+describe('migration 022 logs the prompt-cache tokens of every Claude call (MOM-165)', () => {
+  const sql = sqlOf('022');
+  const flat = sql.replace(/\s+/g, ' ');
+  const verify = readFileSync(join(process.cwd(), 'supabase', 'verify', '022_cache_tokens.sql'), 'utf8');
+
+  it('adds two nullable integer columns, with no default: "not reported" is never guessed as 0', () => {
+    expect(flat).toMatch(/alter table public\.llm_usage_logs add column cache_read_tokens integer, add column cache_write_tokens integer;/);
+    expect(sql).not.toMatch(/\bdefault\b\s+[^\n]*cache_/i);
+    expect(sql).not.toMatch(/cache_[a-z_]+\s+integer[^,;]*\bnot null/i);
+  });
+
+  it('keeps the two together, never negative, and only with input and output tokens, as the fake enforces', () => {
+    expect(flat).toMatch(/add constraint llm_usage_logs_cache_tokens_check check \( \(cache_read_tokens is null\) = \(cache_write_tokens is null\)/);
+    expect(flat).toMatch(/cache_read_tokens >= 0 and cache_write_tokens >= 0 and input_tokens is not null/);
+    // The fake enforces the same rule under the same constraint name.
+    expect(readFileSync(join(process.cwd(), 'tests', 'helpers', 'fakeLlmUsage.ts'), 'utf8')).toContain('llm_usage_logs_cache_tokens_check');
+  });
+
+  it('leaves 011 as it was, and changes no grant, policy, function or trigger', () => {
+    expect(sqlOf('011')).not.toMatch(/cache_/);
+    expect(sql).not.toMatch(/\b(grant|revoke|create policy|create function|create trigger|drop)\b/i);
+    expect(sql).not.toMatch(/\b(insert|update|delete)\b/i);
+    // The only objects touched are the table's two columns and check, and the owner's view.
+    expect([...flat.matchAll(/\b(alter table|create or replace view) ([a-z_.]+)/g)].map((m) => `${m[1]} ${m[2]}`)).toEqual([
+      'alter table public.llm_usage_logs',
+      'alter table public.llm_usage_logs',
+      'create or replace view public.llm_usage_daily',
+    ]);
+  });
+
+  it('puts the two sums at the end of the owner\'s view, which keeps security_invoker', () => {
+    expect(flat).toMatch(/create or replace view public\.llm_usage_daily with \(security_invoker = true\) as/);
+    expect(flat).toMatch(/round\(avg\(latency_ms\)\)::integer as avg_latency_ms, coalesce\(sum\(cache_read_tokens\), 0\)::bigint as cache_read_tokens, coalesce\(sum\(cache_write_tokens\), 0\)::bigint as cache_write_tokens from/);
+  });
+
+  it('is in step with the grants allow-list, which did not change', () => {
+    const allow = readFileSync(join(process.cwd(), 'supabase', 'verify', '900_table_grants.sql'), 'utf8');
+    expect(allow).toMatch(/\('llm_usage_logs',\s+'authenticated',\s+'SELECT'\)/);
+    expect(allow).toMatch(/\('llm_usage_logs',\s+'service_role',\s+'SELECT,INSERT,UPDATE'\)/);
+    expect(allow).toMatch(/\('llm_usage_daily',\s+'service_role',\s+'SELECT'\)/);
+  });
+
+  it('is checked by a verify script with checks that fail without the cache check', () => {
+    expect(verify).toMatch(/A setup call is reserved and finished with all four token counts/);
+    expect(verify).toMatch(/A cache-read count without a cache-write count is rejected/);
+    expect(verify).toMatch(/A cache-write count without a cache-read count is rejected/);
+    expect(verify).toMatch(/A negative cache count is rejected/);
+    expect(verify).toMatch(/Cache counts without input and output tokens are rejected/);
+    expect(verify).toMatch(/A pending row cannot carry cache tokens/);
+    expect(verify).toMatch(/A finished row still cannot change/);
+    expect(verify).toMatch(/A signed-in person cannot write usage, cache counts included/);
+    expect(verify).toMatch(/The daily view sums the cache tokens/);
+  });
+});

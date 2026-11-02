@@ -39,8 +39,9 @@ begin
 
   select string_agg(column_name, ',' order by ordinal_position) into s
   from information_schema.columns where table_schema = 'public' and table_name = 'llm_usage_logs';
+  -- Migration 022 (MOM-165) appended the two cache-token columns; no column that could hold content was added.
   res := res || jsonb_build_object('c', 'The table has exactly the approved columns', 'p',
-    s = 'id,user_id,feature,model,input_tokens,output_tokens,latency_ms,outcome,created_at', 'd', s);
+    s = 'id,user_id,feature,model,input_tokens,output_tokens,latency_ms,outcome,created_at,cache_read_tokens,cache_write_tokens', 'd', s);
 
   select string_agg(column_name, ',' order by column_name) into s
   from information_schema.columns

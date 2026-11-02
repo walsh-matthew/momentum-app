@@ -60,7 +60,7 @@ beforeEach(() => {
 afterEach(() => errorLog.mockRestore());
 
 // What the test reply reports as used (see reply() above): read off the response and handed back, even on a refusal.
-const USAGE = { inputTokens: 10, outputTokens: 10 };
+const USAGE = { inputTokens: 10, outputTokens: 10, cacheReadTokens: null, cacheWriteTokens: null };
 
 describe('what it sends', () => {
   it('asks the default model, with effort set and the answer constrained by a JSON schema', async () => {

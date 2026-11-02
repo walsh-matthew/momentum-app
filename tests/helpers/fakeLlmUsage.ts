@@ -1,5 +1,5 @@
 // In-memory stand-in for the llm_usage_logs table and reserve_llm_call() from supabase/migrations/011_llm_usage_logs.sql
-// (MOM-73). Tests swap it in for the service-role client with vi.mock('@/lib/supabase/admin', ...), and the signed-in
+// (MOM-73) and, since MOM-165, the cache-token columns and check of 022_cache_tokens.sql. Tests swap it in for the service-role client with vi.mock('@/lib/supabase/admin', ...), and the signed-in
 // client reads the table through usageQuery().
 //
 // It mirrors the database rules the service relies on, rule for rule, so a call Postgres would refuse is refused here:
@@ -23,6 +23,8 @@ export interface UsageRow {
   model: string;
   input_tokens: number | null;
   output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
   latency_ms: number | null;
   outcome: string;
   created_at: string;
@@ -90,6 +92,8 @@ export function seedUsage(userId: string, agoMs: number, over: Partial<UsageRow>
     model: 'claude-opus-5-5',
     input_tokens: 1000,
     output_tokens: 200,
+    cache_read_tokens: null,
+    cache_write_tokens: null,
     latency_ms: 5000,
     outcome: 'ok',
     created_at: new Date(usage.nowMs - agoMs).toISOString(),
@@ -164,6 +168,8 @@ function reserve(args: Record<string, unknown>): { data: unknown; error: DbError
     model,
     input_tokens: null,
     output_tokens: null,
+    cache_read_tokens: null,
+    cache_write_tokens: null,
     latency_ms: null,
     outcome: 'pending',
     created_at: new Date(now).toISOString(),
@@ -176,7 +182,7 @@ function reserve(args: Record<string, unknown>): { data: unknown; error: DbError
 // The table
 // ---------------------------------------------------------------------------
 
-const FINISH_KEYS = new Set(['outcome', 'input_tokens', 'output_tokens', 'latency_ms']);
+const FINISH_KEYS = new Set(['outcome', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens', 'latency_ms']);
 
 // What a finishing update must satisfy: the guard trigger and the CHECK constraints.
 function finishViolation(row: UsageRow, patch: Record<string, unknown>): DbError | null {
@@ -189,6 +195,11 @@ function finishViolation(row: UsageRow, patch: Record<string, unknown>): DbError
   if ((next.input_tokens === null) !== (next.output_tokens === null)) return guard('new row violates check constraint "llm_usage_logs_tokens_check"');
   if (next.input_tokens !== null && (next.input_tokens < 0 || (next.output_tokens ?? 0) < 0)) {
     return guard('new row violates check constraint "llm_usage_logs_tokens_check"');
+  }
+  // 022: the cache counts come together, are never negative, and only with input and output tokens.
+  if ((next.cache_read_tokens === null) !== (next.cache_write_tokens === null)) return guard('new row violates check constraint "llm_usage_logs_cache_tokens_check"');
+  if (next.cache_read_tokens !== null && (next.cache_read_tokens < 0 || (next.cache_write_tokens ?? 0) < 0 || next.input_tokens === null)) {
+    return guard('new row violates check constraint "llm_usage_logs_cache_tokens_check"');
   }
   if (next.latency_ms === null || next.latency_ms < 0) return guard('new row violates check constraint "llm_usage_logs_finished_check"');
   return null;

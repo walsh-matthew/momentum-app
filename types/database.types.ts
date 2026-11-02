@@ -821,6 +821,8 @@ export type Database = {
           model: string;
           input_tokens: number | null;
           output_tokens: number | null;
+          cache_read_tokens: number | null;
+          cache_write_tokens: number | null;
           latency_ms: number | null;
           outcome: LlmOutcome;
           created_at: string;
@@ -831,6 +833,8 @@ export type Database = {
         Update: {
           input_tokens?: number | null;
           output_tokens?: number | null;
+          cache_read_tokens?: number | null;
+          cache_write_tokens?: number | null;
           latency_ms?: number | null;
           outcome?: LlmOutcome;
         };

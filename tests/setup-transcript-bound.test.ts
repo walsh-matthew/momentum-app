@@ -75,10 +75,10 @@ describe('the longest conversation a setup may hold', () => {
 });
 
 describe('every limit on Claude calls is as it was', () => {
-  it('the budget, the tokens, the spacing and the shared cap are the numbers they were', () => {
+  it('the budget, the tokens and the spacing are the numbers they were; the per-person and shared caps are the approved ones (MOM-165)', () => {
     expect(SETUP_BUDGET).toEqual({ maxTurns: 40, maxTokens: 1_000_000 });
-    expect(SETUP_LIMITS).toEqual({ minIntervalSeconds: 1, userDailyCap: 1_000_000, overallDailyCap: LLM_LIMITS.overallDailyCap });
-    expect(LLM_LIMITS).toEqual({ minIntervalSeconds: 20, userDailyCap: 20, overallDailyCap: 200 });
+    expect(SETUP_LIMITS).toEqual({ minIntervalSeconds: 1, userDailyCap: 100, overallDailyCap: LLM_LIMITS.overallDailyCap });
+    expect(LLM_LIMITS).toEqual({ minIntervalSeconds: 20, userDailyCap: 20, overallDailyCap: 450 });
   });
 
   it('room is left only while fewer than 40 of Claude\'s turns are in the conversation, however long the bound lets it be', () => {
