@@ -1,4 +1,4 @@
-Template: Google critical user journeys · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 26, listed at the end
+Template: Google critical user journeys · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104, plus MOM-165, MOM-163 and MOM-120, which merge before this file's pull request; day-end step D) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 26, listed at the end
 
 # Momentum user journeys
 
@@ -28,10 +28,10 @@ This file is non-binding and every section names its sources on a `Sources:` lin
 
 ### 2. Tasks
 
-*Sources: `components/setup/SetupConversation.tsx`, `QuestionCard.tsx`, `PlaybackCard.tsx`, `PlaybackLines.tsx`, `FinalCard.tsx`, `QuickPathCard.tsx`, `QuickPathFillIn.tsx`, `NeedsAnswer.tsx`, `AddChoices.tsx`, `AddToGoals.tsx`, `RetryNotice.tsx`; `components/home/SetupLinkCard.tsx`, `AddGoalsLink.tsx`; `components/auth/CreateAccountForm.tsx`; `lib/setup/session.ts` (error wording); `lib/setup/addWords.ts`; `lib/setup/quickPath.ts`; `supabase/templates/confirmation.html`; `docs/DOMAIN_MODEL.md` §1.3, §2.1 to §2.3; `tests/e2e/setup.spec.ts`, `tests/e2e/setup-link.spec.ts`, `tests/e2e/setup-add.spec.ts`, `tests/e2e/sign-up-shots.spec.ts`; MOM-111 comments 2026-10-29 to 2026-11-01; MOM-132 and MOM-150 comments; `docs/LLM_GOVERNANCE.md` (budget and quick path); PRs #73, #78, #87, #94, #99 and #100.*
+*Sources: `components/setup/SetupConversation.tsx`, `QuestionCard.tsx`, `PlaybackCard.tsx`, `PlaybackLines.tsx`, `FinalCard.tsx`, `QuickPathCard.tsx`, `QuickPathFillIn.tsx`, `NeedsAnswer.tsx`, `AddChoices.tsx`, `AddToGoals.tsx`, `RetryNotice.tsx`; `components/home/SetupLinkCard.tsx`, `AddGoalsLink.tsx`; `components/auth/CreateAccountForm.tsx`; `lib/setup/session.ts` (error wording); `lib/setup/addWords.ts`; `lib/setup/quickPath.ts`; `supabase/templates/confirmation.html`; `docs/DOMAIN_MODEL.md` §1.3, §2.1 to §2.3; `tests/e2e/setup.spec.ts`, `tests/e2e/setup-link.spec.ts`, `tests/e2e/setup-add.spec.ts`, `tests/e2e/sign-up-shots.spec.ts`; MOM-111 comments 2026-10-29 to 2026-11-01; MOM-132, MOM-150 and MOM-163 comments; MOM-166; `lib/services/auth.ts`; `app/auth/callback/route.ts`; `docs/LLM_GOVERNANCE.md` (budget and quick path); PRs #73, #78, #87, #94, #99 and #100.*
 
-0. **Create an account.** A new person opens the sign-in page and chooses to create an account. The screen is headed "Create your account" and says "Enter your email and choose a password. We'll email you a link to confirm your account." After they send it, a "check your email" state says "We sent a link to <their address>." and "Open the email and tap the link. It confirms your account and signs you in." (MOM-150, PR #100). The email is warmer and clearer since MOM-149 (PR #90).
-   - *Failure exits:* a message under the field in red; the person can go back to sign in. Some words here are still raw or rough (Gap 30).
+0. **Create an account.** A new person opens the sign-in page and chooses to create an account. The screen is headed "Create your account" and says "Enter your email and choose a password. We'll email you a link to confirm your account." After they send it, a "check your email" state says "We sent a link to <their address>." and "Open the email and tap the link. It confirms your account and signs you in." (MOM-150, PR #100). The email is warmer and clearer since MOM-149 (PR #90). Since MOM-163 the emailed link is a token link that signs the person in from whichever browser opens it, and a long address sits on its own line and wraps at the card's edge.
+   - *Failure exits:* a message under the field in red; the person can go back to sign in. A wrong password says "That email and password don't match. Check them and try again, or tap Forgot password?" and never says whether the address has an account; a link that was already used or has expired says "This link has already been used or has expired. If you've confirmed your account, sign in. If not, create the account again with the same address and we'll send a new link." (MOM-163). Production sends the new link only once its "Confirm sign up" template is pasted in the dashboard (a pending live check, before the Nov 5 freeze).
 1. **Start.** A person with no saved setup finds it on home: a "Set up your goals" card that says "You haven't saved a setup yet." with a **Go to setup** link, shown in place of the old "No goals yet" card (MOM-143, PR #78). A person whose setup is saved is not offered a second first setup: home shows an **Add to your goals** link instead (step 7). The link opens `/setup`, which shows the heading "Set up your goals", a short explanation (a conversation with Claude, one question at a time, nothing saved until they approve, what they type is sent to Claude, link to the privacy notice) and a **Start** button.
    - *Answers:* tap Go to setup, then Start, or follow the privacy link.
    - *Success:* the first question appears.
@@ -45,6 +45,7 @@ This file is non-binding and every section names its sources on a `Sources:` lin
      - **A date it can't read** ("sometime next month"): the question comes back with a date picker; a relative day ("Monday") becomes a proposal such as "Start Monday, Nov 2?" that counts only when the person accepts it (§2.2 step 6).
      - **An app that can't be read yet** (for example a watch app): setup says so in one line and records that the person logs it themselves (MOM-111 comment 2026-10-29, round 2 live run).
      - **A reload or a dropped phone tab** while a reply is in flight: the question stays on screen with the answer waiting and a way to send it again or change it (MOM-111 finding 10).
+     - **A deadline goal, after its date is accepted** (found on production 2026-11-02): every reply is thrown away, so the person sees "Sorry, I didn't follow that" whatever they answer, the **Yes** button included, and cannot get past the date (MOM-166, Gap 31).
 3. **Approve each part as it finishes.** After steps 3, 7, 10 and 11 of §2.2 the person sees a playback of that part, restated in the second person, as real bullets with a goal's targets nested under it (PR #73).
    - *Answers:* **Yes, that is right**, or **Change something**, which opens "What would you like to change?" with **Send the change** and **Keep it as it is**.
    - *Success:* the part is approved and setup moves on.
@@ -76,7 +77,7 @@ This file is non-binding and every section names its sources on a `Sources:` lin
 
 ### 4. Health
 
-*Sources: the deck's setup slide; MOM-111 comments 2026-10-29 and 2026-10-30 (clarity fix, fix round, round 2, round 3, round 3b, round 3c, round 3d); `docs/FAILURE_LOG.md` F-064 to F-066; PRs #65, #67 and #73; `tests/e2e/setup.spec.ts`, `tests/e2e/setup-cards.spec.ts`, `tests/e2e/setup-link.spec.ts`.*
+*Sources: the deck's setup slide; MOM-111 comments 2026-10-29 and 2026-10-30 (clarity fix, fix round, round 2, round 3, round 3b, round 3c, round 3d); MOM-166 (production runtime log, 2026-11-02); `docs/FAILURE_LOG.md` F-064 to F-066; PRs #65, #67 and #73; `tests/e2e/setup.spec.ts`, `tests/e2e/setup-cards.spec.ts`, `tests/e2e/setup-link.spec.ts`.*
 
 **Amber.** Setup works end to end, but it has needed repeated review rounds from the owner's phone runs (runs 1 to 3, then rounds 3b, 3c and 3d).
 
@@ -86,16 +87,17 @@ This file is non-binding and every section names its sources on a `Sources:` lin
 - **Round 3d (merged in PR #73, 2026-10-30):** the weekly floor question now reads "In a hard week, how many <thing> would still count?", number questions and idea buttons use everyday words, and the quick-path card says what to do next and promises no default (step 6).
 - **Earlier production findings the same day:** F-064 (a follow-up question on the same topic was thrown away), F-065 (no way back from "Change something") and F-066 (questions in the model's own words, a pasted-back playback).
 - **Since 2026-10-30:** the quick path became a card the person can finish (PR #87), and a person can add a goal or a target after setup (PRs #94 and #99). A live run of the adding conversation is recorded on MOM-132 and in `BACKLOG.md` (Gap 28). No phone run of either is recorded.
+- **2026-11-02, production, the standing smoke-test account's setup:** a deadline goal could not get past its date: every reply after the date was accepted was thrown away (`draft.rule` on the deadline task's can-move answer). Earlier in the same run, replies were thrown away as `math.number` and `skip.unanswered` and recovered on retry. MOM-166 (High) fixes it before the Nov 5 freeze; until it ships, a trial setup with a deadline goal cannot finish (Gap 31).
 - Evidence so far: `setup.spec.ts`, `setup-cards.spec.ts` and `setup-add.spec.ts` (browser tests, not phone runs).
 
 ### 5. Known gaps
 
-*Sources: Jira (MOM-111 comments, MOM-132, MOM-139, MOM-140, MOM-145, MOM-150, MOM-151, MOM-159, MOM-163); `BACKLOG.md`; `docs/DOMAIN_MODEL.md` §1.3 and §2.1 change-log rows 2026-11-01 and 2026-11-02.*
+*Sources: Jira (MOM-111 comments, MOM-132, MOM-139, MOM-140, MOM-145, MOM-150, MOM-151, MOM-159, MOM-163, MOM-166); `BACKLOG.md`; `docs/DOMAIN_MODEL.md` §1.3 and §2.1 change-log rows 2026-11-01 and 2026-11-02.*
 
 | Step | Gap |
 | --- | --- |
-| 0 Create an account | Gap 30 (sign-in and sign-up words, MOM-163: planned, not built) |
-| 2 Answer | Gap 6 (phone-only checks); Gap 7 (newest wording has had no live call); Gap 8 (MOM-139); Gap 9 (MOM-140) |
+| 0 Create an account | none open (Gap 30 closed by MOM-163; the production template paste and the different-browser re-walk are pending live checks) |
+| 2 Answer | Gap 6 (phone-only checks); Gap 7 (newest wording has had no live call); Gap 8 (MOM-139); Gap 9 (MOM-140); Gap 31 (MOM-166: a deadline goal cannot get past its date) |
 | 7 Add to my goals | Gap 26 (MOM-159: no week start for a person with only due-date goals); Gap 28 (MOM-132 follow-ups) |
 | All | Gap 1 (satisfaction question); Gap 3 (MOM-145: the phone check of the themes) |
 
@@ -313,7 +315,7 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 
 ## Open gaps
 
-*Sources: the sections above; `BACKLOG.md`; Jira MOM-110, MOM-111, MOM-114, MOM-132, MOM-138, MOM-146, MOM-151, MOM-159, MOM-160, MOM-161, MOM-162, MOM-163.*
+*Sources: the sections above; `BACKLOG.md`; Jira MOM-110, MOM-111, MOM-114, MOM-132, MOM-138, MOM-146, MOM-151, MOM-159, MOM-160, MOM-161, MOM-162, MOM-163, MOM-166.*
 
 Gap numbers stay as first assigned, so a number that is missing below was closed (listed under the gaps).
 
@@ -342,6 +344,6 @@ Gap numbers stay as first assigned, so a number that is missing below was closed
 27. J1 step 7 and J4 step 4: the scoreboard and review cards still say "Floor 2 a week · aspiration 4" and "Under the floor 3 weeks running", while the questions say "in a hard week" and "hoping for" (MOM-151).
 28. J1 steps 6 and 7: follow-ups from adding after setup (MOM-132; MOM-160): the quick-path card's reason line and "Everything you said is kept" lines still read as first setup in an addition; the live run of the adding conversation took about 21 turns, with the model asking for a starting point and an aspiration the script had no line for; four new words await the owner's review; starting-point marks for an added target's start are not built (`BACKLOG.md`, "Setup, adding to goals").
 29. J5 step 4: follow-ups from the forecast edits (MOM-138; MOM-161 and MOM-162): a person with no kinds of day cannot add one after setup; moving a task's due date leaves its target's own deadline as it was; the "you count your time in sessions" line has no link to `/plan/kinds`; two database guards (a due date that cannot move, a step with entries) are not built (`BACKLOG.md`, "Forecast edits").
-30. J1 step 0: the sign-in and sign-up words: a wrong password shows the provider's raw "Invalid login credentials"; the resend-window line says "Wait a minute" whatever production's window is; long addresses break mid-word in the check-your-email card (MOM-163, planned, not built).
+31. J1 step 2: a deadline goal cannot get past its date on production: once the date is accepted, every reply is thrown away because a check meant for the final save runs on every draft, so the "can the date move?" question is never reached. The same run also lost replies to `math.number` and `skip.unanswered`, not yet explained (MOM-166, High, before the Nov 5 freeze).
 
-**Closed since the first fill.** Gap 2's header and Sign out (MOM-148, PR #89); Gap 4, adding a goal or target after setup (MOM-132, PRs #94 and #99); Gap 5, the quick path that made a person start again (MOM-111, PR #87); Gap 24, the older feed below the scoreboard (MOM-115, PR #88); Gap 25, updates beside "Saving…" (MOM-147, PR #93).
+**Closed since the first fill.** Gap 2's header and Sign out (MOM-148, PR #89); Gap 4, adding a goal or target after setup (MOM-132, PRs #94 and #99); Gap 5, the quick path that made a person start again (MOM-111, PR #87); Gap 24, the older feed below the scoreboard (MOM-115, PR #88); Gap 25, updates beside "Saving…" (MOM-147, PR #93); Gap 30, the sign-in and sign-up words (MOM-163; the production resend window is 60 seconds, so "Wait a minute" stays).

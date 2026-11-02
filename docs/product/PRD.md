@@ -1,4 +1,4 @@
-Template: one-page PRD · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 11, listed at the end
+Template: one-page PRD · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104, plus MOM-165, MOM-163 and MOM-120, which merge before this file's pull request; day-end step D) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 11, listed at the end
 
 # Momentum: product requirements
 
@@ -62,14 +62,14 @@ Criterion 6 has no measure defined for "still using it" beyond the pass bar (Gap
 
 ## 5. Requirements
 
-*Sources: `docs/DOMAIN_MODEL.md` §1 to §4; `docs/LLM_GOVERNANCE.md`; design record §6; `lib/setup/addWords.ts`; `components/forecast/wording.ts`; `components/review/StillRightCard.tsx`; Jira MOM-111, MOM-113, MOM-132, MOM-138, MOM-146, MOM-148, MOM-149, MOM-150.*
+*Sources: `docs/DOMAIN_MODEL.md` §1 to §4; `docs/LLM_GOVERNANCE.md`; design record §6; `lib/setup/addWords.ts`; `components/forecast/wording.ts`; `components/review/StillRightCard.tsx`; Jira MOM-111, MOM-113, MOM-132, MOM-138, MOM-146, MOM-148, MOM-149, MOM-150, MOM-163, MOM-165.*
 
 | Area | Requirement | Rules | Journey |
 | --- | --- | --- | --- |
-| Create an account | Its own screen, then a plain "check your email" state; the confirmation and reset emails say who they are from, why, and what happens if ignored (MOM-149, MOM-150) | none yet (auth is not in `DOMAIN_MODEL.md`) | J1 |
+| Create an account | Its own screen, then a plain "check your email" state; the confirmation and reset emails say who they are from, why, and what happens if ignored (MOM-149, MOM-150); a wrong password gets plain words that never say whether the address has an account, and the confirm link signs the person in from any browser (MOM-163) | none yet (auth is not in `DOMAIN_MODEL.md`) | J1 |
 | Guided setup | One question at a time, plain words, nothing saved until approved, each part approved as it finishes | `DOMAIN_MODEL.md` §2 | J1 |
 | Adding after setup | A person can add a goal, or a target for a goal they have, through its own save; saved facts are skipped by name and never sent to Claude; a target added later starts counting on the day the person gives (MOM-132) | §1.3, §2.1 rule 5 | J1 |
-| Claude cost control | A per-setup budget in turns and tokens that fails closed to a quick path the person can finish on the card (MOM-111), one hard shared cap; the numbers are in `docs/LLM_GOVERNANCE.md`, not here | §2.3; design record §6.2; `docs/LLM_GOVERNANCE.md` | J1 |
+| Claude cost control | A per-setup budget in turns and tokens that fails closed to a quick path the person can finish on the card (MOM-111), one hard shared cap, and a real per-person daily allowance that setup and the weekly review share, refused in plain words; every Claude call logs its cache-read and cache-write tokens beside input and output (MOM-165, migration 022); the numbers are in `docs/LLM_GOVERNANCE.md`, not here | §2.3; design record §6.2; `docs/LLM_GOVERNANCE.md` | J1 |
 | Manual entry | Tap, number, timer, checklist tick; corrections survive a resync | §1.5, §1.6 | J2 |
 | Sources | Synced sources confirm their own records; the person binds each source to a target | §1.5 | J3 |
 | Scoreboard | Computed per target from entries and the target in force; Claude never scores | §1.3, §1.7 | J5 |
@@ -83,7 +83,7 @@ On `main` today, Settings holds Account and Appearance only: the theme choice (l
 
 ## 6. Release plan
 
-*Sources: design record §5, §5.3 and §6.1; `docs/plans/archive/2026-10-30.md` and `docs/plans/NEXT_BUILD_PLAN.md` ("The trial" and "The thin slice: N = 6"); `supabase/templates/confirmation.html`; `supabase/templates/recovery.html`; `components/auth/CreateAccountForm.tsx`; the deck's "Next" slide; Jira MOM-122, MOM-123, MOM-126, MOM-149, MOM-150.*
+*Sources: design record §5, §5.3 and §6.1; `docs/plans/archive/2026-10-30.md` and `docs/plans/NEXT_BUILD_PLAN.md` ("The trial" and "The thin slice: N = 6"); `supabase/templates/confirmation.html`; `supabase/templates/recovery.html`; `components/auth/CreateAccountForm.tsx`; the deck's "Next" slide; Jira MOM-122, MOM-123, MOM-126, MOM-149, MOM-150, MOM-163, MOM-166.*
 
 | Stage | What | Go/no-go criteria |
 | --- | --- | --- |
@@ -93,7 +93,9 @@ On `main` today, Settings holds Account and Appearance only: the theme choice (l
 
 The current plan (`docs/plans/NEXT_BUILD_PLAN.md`, "The trial", the owner's calendar of 2026-11-01) says the family trial starts Sat 2026-11-07, with a production freeze from Thu Nov 5 until after 10:30 am PT on Fri Nov 6; `BACKLOG.md` repeats the date. The deck's question to the owner has no other recorded answer (Gap 2).
 
-**Auth email and sign-up.** The trial's email sender is live (owner, MOM-122 comment 2026-10-30): domain `ownaccordlabs.com`, Resend over SMTP, sender "Momentum" at `hello@ownaccordlabs.com`, with SPF, DKIM and DMARC passing. The password-reset link is a token link that opens in any browser, guarded by a 15-minute signed cookie (MOM-122, PR #74). Since MOM-149 (PR #90) the confirmation and reset emails say who they are from, why the person got them, give one button and the plain link, and say what happens if ignored; `/privacy` names the email provider. Since MOM-150 (PR #100) creating an account has its own screen and a clear "check your email" state. The hourly email limit is an open question below.
+**Auth email and sign-up.** The trial's email sender is live (owner, MOM-122 comment 2026-10-30): domain `ownaccordlabs.com`, Resend over SMTP, sender "Momentum" at `hello@ownaccordlabs.com`, with SPF, DKIM and DMARC passing. The password-reset link is a token link that opens in any browser, guarded by a 15-minute signed cookie (MOM-122, PR #74). Since MOM-149 (PR #90) the confirmation and reset emails say who they are from, why the person got them, give one button and the plain link, and say what happens if ignored; `/privacy` names the email provider. Since MOM-150 (PR #100) creating an account has its own screen and a clear "check your email" state. Since MOM-163 the confirmation link is a token link that opens in any browser, like the reset link; production sends it once its "Confirm sign up" template is pasted in the dashboard, before the Nov 5 freeze. The hourly email limit is an open question below.
+
+**Before the trial.** A deadline goal cannot finish setup on production (MOM-166, High, found 2026-11-02); the plan puts it first on the next build day so it is merged and live before the Nov 5 freeze (Gap 16).
 
 ## 7. Risks and open questions
 
@@ -117,17 +119,18 @@ On 2026-11-02 it returned 16 open tickets, all at Medium priority (also 16 on 20
 
 ## 8. Change log
 
-*Sources: this first fill (MOM-144); the MOM-164 catch-up (pull requests #82 to #104).*
+*Sources: this first fill (MOM-144); the MOM-164 catch-up (pull requests #82 to #104); day-end step D of 2026-11-02 (MOM-163, MOM-165, MOM-120, MOM-166).*
 
 | Date | Change | Ticket |
 | --- | --- | --- |
 | 2026-10-30 | First fill from the repo, the design record, Jira and the first product review deck. | MOM-144 |
 | 2026-10-30 | Brought up to date with build day 6's merges: light and dark theme (PR #72), setup round 3d (PR #73), the token reset link (PR #74), the 390px header (PR #80), review layers 2 and 3 and the finished review (PR #79), the setup link on home (PR #78); the email sender is live (MOM-122 comment); new gaps MOM-145 to MOM-149. | MOM-144 |
+| 2026-11-02 | Day-end step D: the sign-in words and the any-browser confirm link (MOM-163); a per-person allowance shared by setup and the review, and cache tokens in the usage log (MOM-165, migration 022); the review specs' settled marker changes no section (MOM-120); a deadline goal cannot finish setup on production (MOM-166, Gap 16). Gap 14 closed. Risk query re-run: 16 open. | MOM-164 |
 | 2026-11-02 | Brought up to date with pull requests #82 to #104: cost per user as criterion 7, a link to the design record only (PR #82); the quick path that finishes on the card (PR #87); the old model hidden on home (PR #88); a way home and Sign out on every page (PR #89); warmer auth emails (PR #90); the review edits a target's numbers (PR #91) and asks "Still right for you?" (PR #92); adding after setup (PRs #94, #96, #99); the sign-up screen (PR #100); editing a kind of day's time and a deadline task (PR #101). Risk query re-run: 16 open. Tooling-only and test-only merges (#84, #93, #97, #98, #102 to #104) change no section. Sources lines checked by `tests/pm-docs-sources.test.ts`. | MOM-164 |
 
 ## Open gaps
 
-*Sources: the sections above; `docs/product/USER_JOURNEYS.md` (Open gaps); `BACKLOG.md`.*
+*Sources: the sections above; `docs/product/USER_JOURNEYS.md` (Open gaps); `BACKLOG.md`; Jira MOM-163, MOM-166.*
 
 Gap numbers stay as first assigned, so a number that is missing below was closed.
 
@@ -140,7 +143,7 @@ Gap numbers stay as first assigned, so a number that is missing below was closed
 7. The status of criteria 1 to 4 is "on paper" or "partial": no tester has run setup, logging or a review yet, so no pass bar has a measured result.
 8. The weekly review's "Yes, I want to change it" edits a target's numbers from the next period, but changes nothing for a deadline forecast, a goal's priority or its clash handling. Criterion 4 asks each person to make at least one real change across their reviews, and a target's numbers are the one kind of change it can make (MOM-146, PR #91; `USER_JOURNEYS.md` Gap 21).
 13. Criterion 5 is "inside N" with N = 6, but pull requests #82 to #104 merged after build day 6 closed and the deck's row says "day 5 of 6". How criterion 5 is judged with the later days is not recorded (found by the first update; owner to decide).
-14. Sign-in and sign-up words are rough: a wrong password shows the provider's own message, and the resend line and long addresses need work (`USER_JOURNEYS.md` Gap 30; MOM-163, planned, not built).
 15. A person who set up with only due-date goals cannot set a week start, so cannot add a weekly or day-slot target after setup (`USER_JOURNEYS.md` Gap 26; MOM-159).
+16. A deadline goal cannot finish setup on production, so criterion 1 cannot be tested with one until the fix is live (`USER_JOURNEYS.md` Gap 31; MOM-166, High, before the Nov 5 freeze).
 
-**Closed since the first fill.** Gap 9, the dark theme's flatness (MOM-145, PR #83; the phone check is `USER_JOURNEYS.md` Gap 3); Gap 10, phone navigation (MOM-148, PR #89); Gap 11, warmer auth emails and the sender in `/privacy` (MOM-149, PR #90); Gap 12, the post-wait updates at ten controls (MOM-147, PR #93).
+**Closed since the first fill.** Gap 9, the dark theme's flatness (MOM-145, PR #83; the phone check is `USER_JOURNEYS.md` Gap 3); Gap 10, phone navigation (MOM-148, PR #89); Gap 11, warmer auth emails and the sender in `/privacy` (MOM-149, PR #90); Gap 12, the post-wait updates at ten controls (MOM-147, PR #93); Gap 14, the sign-in and sign-up words (MOM-163).

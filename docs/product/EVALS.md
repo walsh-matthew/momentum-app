@@ -1,4 +1,4 @@
-Template: AI eval plan with error-analysis loop · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 8, listed at the end
+Template: AI eval plan with error-analysis loop · Last updated: 2026-11-02 (`main` at dd25ba0, after pull requests #82 to #104, plus MOM-165, MOM-163 and MOM-120, which merge before this file's pull request; day-end step D) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 9, listed at the end
 
 # Momentum evals
 
@@ -47,7 +47,9 @@ The bar is the eight hard rules ([`DOMAIN_MODEL.md` §2.1](../DOMAIN_MODEL.md)),
 
 ## 3. The eval set
 
-*Sources: `tests/setup-evals/cases.ts` (counted by loading `SETUP_CASES` and `RETURNING_CASES`, 2026-11-02); `tests/setup-evals/smokeCases.ts`; `tests/live/*.live.ts`; `tests/pm-docs-sources.test.ts` (guards this file's own sources); `tests/review-line-*.test.ts`; `tests/review-prompt-fields.test.ts`; `tests/e2e/review.spec.ts`; `docs/LLM_GOVERNANCE.md`; `BACKLOG.md` (setup live-run items); MOM-111 comments.*
+*Sources: `tests/setup-evals/cases.ts` (counted by loading `SETUP_CASES` and `RETURNING_CASES`, 2026-11-02); `tests/setup-evals/smokeCases.ts`; `tests/live/*.live.ts`; `tests/pm-docs-sources.test.ts` (guards this file's own sources); `tests/review-line-*.test.ts`; `tests/review-prompt-fields.test.ts`; `tests/e2e/review.spec.ts`; `docs/LLM_GOVERNANCE.md`; `BACKLOG.md` (setup live-run items); MOM-111 comments; MOM-166.*
+
+Stale: MOM-166 (2026-11-02) says no setup eval covers a deadline goal, while `run-a` below is listed as a deadline-only goal; whether `run-a` reaches the turn after a deadline task's date was not checked in this update (MOM-166 item 3 settles it).
 
 Scripted cases pair a scripted person with a scripted fake model, so `npm test` makes no network call. Every name, date and number in them is invented.
 
@@ -68,7 +70,7 @@ Cases from the owner's phone smoke tests of 2026-10-29 sit apart in `tests/setup
 
 ## 4. Error analysis log
 
-*Sources: `docs/FAILURE_LOG.md` F-064 to F-066 (in-product; F-067 to F-090 are all `build tool`, checked 2026-11-02); `BACKLOG.md` (weekly review and adding-after-setup follow-ups); `docs/LLM_GOVERNANCE.md`; MOM-111 comments 2026-10-29 and 2026-10-30; PRs #65 and #67 (named on the deck); `docs/DOMAIN_MODEL.md` change log.*
+*Sources: `docs/FAILURE_LOG.md` F-064 to F-066 (in-product; F-067 to F-090 are all `build tool`, checked 2026-11-02); Jira MOM-166 (production runtime log, 2026-11-02); `BACKLOG.md` (weekly review and adding-after-setup follow-ups); `docs/LLM_GOVERNANCE.md`; MOM-111 comments 2026-10-29 and 2026-10-30; PRs #65 and #67 (named on the deck); `docs/DOMAIN_MODEL.md` change log.*
 
 Only rows with a source. A row says what went wrong, its category, and what it became.
 
@@ -85,16 +87,17 @@ Only rows with a source. A row says what went wrong, its category, and what it b
 | 2026-10-30 | Round 3d: "How many X make a week count, even a hard one?" read as ambiguous; the quick-path card promised "sensible defaults" that no code applies | Wording; a promise the code did not keep | Code fix (eb24625, d8b66d4, f6d6421; merged in PR #73): the question is now "In a hard week, how many <thing> would still count?", written once in `lib/setup/numbers.ts`; `DOMAIN_MODEL.md` §2.3 says what the quick path does. A test fails if "sensible default" returns. Live run: 21 calls, 5 replies thrown away. |
 | 2026-10-30 | The review line for a target that is tracked and not judged read as correct but robotic ("…so it carries no verdict") (MOM-113 follow-up a) | Tone; a line the checks pass but the owner does not want | Prompt change only (MOM-113 block 3.4, PR #92): the prompt asks for warmth; the rules, checks, fallback lines and fields sent did not change (`docs/LLM_GOVERNANCE.md`, Tone row). No scripted case; a live run of the new tone is not recorded (Gap 6). |
 | 2026-11-01 | The live run of adding a target took about 21 turns, with the model asking for a starting point and an aspiration that the script had no line for (MOM-132 follow-up d) | Script and live model out of step; no check broke | Backlog follow-up (`BACKLOG.md`, "Setup, adding to goals"; `USER_JOURNEYS.md` Gap 28). No code fix yet. |
+| 2026-11-02 | Production, the standing smoke-test account's setup: after a deadline goal's date was accepted, every reply was thrown away, a code-written **Yes** included (five lines in the runtime log); earlier topics lost replies to `math.number` and `skip.unanswered` and recovered on retry (MOM-166) | `draft.rule` (a check meant for the final save, a deadline task's can-move answer, runs on every draft, before the question that answers it can be asked); `math.number` and `skip.unanswered` not yet explained | Ticket MOM-166 (High, the next plan's first block): enforce the check only at the final save, a replay test, a deadline goal in the evals, and an explanation (and fix with tests) for the other two codes. |
 | 2026-11-02 | Sending the saved facts to Claude only so it could quote them in a skip line would have sent more than the conversation needs (principle 4) (MOM-132 part 2) | A prompt that carried more than it needed | Rule: `DOMAIN_MODEL.md` §2.1 rule 5 (change log 2026-11-02): a saved topic is skipped in code's words naming the topics, never the values; the `returning.*` checks hold it. |
 
 ## 5. Latest results
 
-*Sources: `npm test` run on `main` plus the MOM-164 branch on 2026-11-02; `BACKLOG.md` (setup live-run item and adding-to-goals follow-ups); `tests/live/setup-add.live.ts`; MOM-111 and MOM-132 comments 2026-10-29 to 2026-11-02.*
+*Sources: `npm test` run on `main` plus the MOM-164 branch on 2026-11-02, and on the day-end's stack (the remote main with MOM-165, MOM-163, MOM-120 and MOM-164 merged in that order); `BACKLOG.md` (setup live-run item and adding-to-goals follow-ups); `tests/live/setup-add.live.ts`; MOM-111 and MOM-132 comments 2026-10-29 to 2026-11-02.*
 
-- **Unit and component tests, my own run** (`main` at dd25ba0 with the MOM-164 branch): `npm test` passed, 158 test files and 5,252 tests, no network call. The first fill's run was 113 files and 4,152 tests, on `main` at 7d30531; the 2026-10-30 update's was 130 files and 4,555 tests.
+- **Unit and component tests, my own run** (`main` at dd25ba0 with the MOM-164 branch): `npm test` passed, 158 test files and 5,252 tests, no network call. The 2026-11-02 day-end's stacked run (with MOM-165, MOM-163 and MOM-120): 160 files and 5,284 tests passed. The first fill's run was 113 files and 4,152 tests, on `main` at 7d30531; the 2026-10-30 update's was 130 files and 4,555 tests.
 - **Last live runs the repo records** (`BACKLOG.md`, setup live-run item): round 2 (20 turns, 24 calls), round 3 (19 turns, 20 calls) and round 3b (16 turns, 15 calls, stopped by its cap before the source answer). In each, every turn produced a usable reply; thrown-away replies were retried (7, 4 and 2).
 - **Newest live runs, on Jira only** (MOM-111 comment 2026-10-30): 19 turns and 21 calls; it reached both number cards and both ideas cards, and five replies were thrown away. The floor ideas card was shown after its plain-words retry still held `plain.unquoted_source`. MOM-132's live run of adding a target is on its Jira comments and summarised in `BACKLOG.md` (about 21 turns).
-- **Budget:** the per-setup budget is still a placeholder (`docs/LLM_GOVERNANCE.md`); this file keeps no cost figures.
+- **Budget:** the per-setup budget is still a placeholder (`docs/LLM_GOVERNANCE.md`); this file keeps no cost figures. Since MOM-165 every Claude call's usage row carries cache-read and cache-write tokens beside input and output (empty when the response does not report them), so a later run can count them; caching itself is not turned on.
 
 ## 6. Gaps
 
@@ -104,7 +107,7 @@ See the list below. The main ones: no simulated person and no three-model run ye
 
 ## Open gaps
 
-*Sources: the sections above.*
+*Sources: the sections above; Jira MOM-166.*
 
 1. There is no simulated person: the scripted stand-in answers by position, and a live run answers from the case's replies with a neutral filler when the case has none (`BACKLOG.md`, setup live-run item (a) and (c)).
 2. The 8 full cases have not been run on the setup model and on the two smaller models, and the smaller-model trial has not been run (`BACKLOG.md`, setup live-run item (a); design record §6.2 step 3).
@@ -114,3 +117,4 @@ See the list below. The main ones: no simulated person and no three-model run ye
 6. The weekly review's layer 2 line has checks and unit tests (MOM-113 block 3.3, PR #79) but no scripted eval cases and no recorded live run, so nothing shows whether the prompt keeps Claude inside the checks (`tests/live/review-line.live.ts` is the runner).
 7. The checks are heuristics, and no measured pass rate per rule exists from live runs: only a live run shows whether the prompt keeps Claude inside them (`lib/setup/checks.ts` header).
 8. The adding conversations (MOM-132) have scripted cases and a live runner, but no recorded pass rate: the live run took about 21 turns and the model asked for items the script had no line for, so the scripted cases do not yet predict a live run (`BACKLOG.md`, "Setup, adding to goals"; `USER_JOURNEYS.md` Gap 28).
+9. No scripted case replays a deadline goal through the turn after its date, which is where production broke on 2026-11-02; the `math.number` and `skip.unanswered` rejections from the same run are not yet classed as false positives or prompt gaps (MOM-166; `USER_JOURNEYS.md` Gap 31).
