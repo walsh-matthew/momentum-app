@@ -626,6 +626,27 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner's rollout question.
 - **Led to:** The PM docs upkeep block in tomorrow's plan (MOM-164), and a rule: whoever hands off a block checks the written plan against the handoff.
 
+### F-091 · 2026-11-02 · build tool
+- **Asked:** Day-end step A: run the auth browser spec on the day's branches stacked in merge order.
+- **What went wrong:** The auth spec failed 5 of 12 with "no confirmation email". The emails did arrive, but in the old template: the local stack had loaded its email template when it last started, before the branch that changed the template was on the stack, so the test helper found no link of the new shape.
+- **Why:** A change to the local auth config or an email template takes effect only when the stack restarts, and step A had no rule for it. The block that changed the template had met the same trap and restarted its stack, but recorded it only in its Jira comment.
+- **Caught by:** The auth spec, then reading one test email's link in the local mail inbox.
+- **Led to:** A fix in this session (the local stack restarted with the owner's OK; auth 12 of 12, password reset 5 of 5), and a rule: when a branch changes the local auth config or an email template, restart the local stack before that branch's browser specs, in day-end step A and in a block's own runs.
+
+### F-093 · 2026-11-02 · build tool
+- **Asked:** Build MOM-150's sign-up with a browser test that the emailed link signs the person in.
+- **What went wrong:** The test opened the link in the same browser that signed up, which holds the one-time key the old link needed; on the owner's phone the link opened in the default browser and failed with "invalid or has expired".
+- **Why:** The test followed the build's path, not a real person's (email apps open links in another browser).
+- **Caught by:** The owner's phone check.
+- **Led to:** A fix this session (MOM-163: token_hash link, e2e opens it in a fresh browser context) and a rule: an emailed-link test opens the link in a fresh browser with no cookies.
+
+### F-094 · 2026-11-02 · build tool (project thread)
+- **Asked:** Confirm the phone-push rule from MOM-124 works.
+- **What went wrong:** After two missed pushes the advising thread concluded the command-file rule did not work and proposed a new fix, before checking whether the pushes had been sent; they had been, and the phone skipped them because the terminal window had focus.
+- **Why:** Diagnosed from the symptom without reading the tool's own result or the documented focus rule.
+- **Caught by:** The CLI's "mobile push requested" output, then the owner minimising the window.
+- **Led to:** A fix this session (minimise the CLI at stops) and a rule: before blaming an instruction, check whether the action happened.
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
@@ -650,3 +671,10 @@ The plan generator and rebalance have passed their live smoke tests. Their failu
 - **Why:** The build turned the two setup tabletops' judgment into hard rules and terse step summaries, and the rules forbade what made the tabletops clear: short examples inside a question, a few words on why it asks, a same-topic clarification, and a playback restated in the second person. The step summaries used the model's own words (protected, floor, block), which Claude repeated to the person.
 - **Caught by:** The owner's phone test and the production logs.
 - **Led to:** A fix in this session (MOM-111, branch feature/MOM-111-setup-clarity), and a new standing rule: the plain-language principle in `docs/DOMAIN_MODEL.md` §2.1 (everyday words with a reason and examples, playback restated not parroted, a way out of every change, "what do you mean?" always answered), enforced by tests on every step summary, example question and card.
+
+### F-092 · 2026-11-02 · in-product
+- **Asked:** Guided setup on production, the standing smoke-test account's demo setup with a goal that has a deadline.
+- **What went wrong:** Once the deadline date was accepted, every reply was thrown away, so the person saw "Sorry, I didn't follow that" whatever they answered, the code-written Yes button included, and setup could not go on. Earlier in the same run, replies were also thrown away as a number in Claude's words and as a skipped topic, and recovered on retry. Each thrown-away reply is a paid call.
+- **Why:** A check meant for the final save (a deadline task needs its date and whether the date can move) runs on every draft, while the prompt asks "can the date move?" in the turn after the date, so no reply could pass. No setup eval or replay test ever ran a deadline goal past its date, so the check's timing was never exercised. The other two rejections are not yet explained.
+- **Caught by:** The owner's production setup and the runtime log.
+- **Led to:** MOM-166 (High), the next build day's first block, merged and live before the Nov 5 freeze.
