@@ -1,4 +1,5 @@
 import { casualDateLabel, dateInZone } from '@/lib/dates/casual';
+import { unitCount } from '@/lib/utils/units';
 import type { LoggedEntry } from '@/types/entries';
 
 // An instant as the person's own wall clock, in their own time zone ("Today, 8:15 AM PDT", "Tue, Oct 27, 8:15 AM PDT"). The
@@ -27,7 +28,7 @@ export function describeEntry(entry: LoggedEntry): string {
     case 'count':
       return entry.value === 1 ? '+1' : `+${entry.value}`;
     case 'quantity':
-      return `${entry.value}${entry.unit ? ` ${entry.unit}` : ''}`;
+      return unitCount(entry.value, entry.unit);
     case 'time':
       return `${entry.value} min`;
     case 'checklist':

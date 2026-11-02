@@ -210,6 +210,60 @@ describe('CreateAccountForm (MOM-150)', () => {
     expect(screen.getByRole('heading', { name: 'Create your account' })).toBeTruthy();
     expect((screen.getByLabelText('Email') as HTMLInputElement).value).toBe('');
   });
+
+  // MOM-167 part 15: the card was a dead end (its only action sent the person back to create-account). "Go to sign in" is its main
+  // button, a solid link to /login; "Start again" stays as the smaller way back to an empty form.
+  it('the "Check your email" card has "Go to sign in" as its main button, to /login, and "Start again" as the smaller link', async () => {
+    mocks.authenticate.mockResolvedValue({ error: null, notice: null, sentTo: 'new.person@example.com' });
+    render(<CreateAccountForm />);
+    type('new.person@example.com', 'longenough');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    const heading = await screen.findByRole('heading', { name: 'Check your email' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    const main = screen.getByRole('link', { name: 'Go to sign in' });
+    expect(main.getAttribute('href')).toBe('/login');
+    // A solid main button: the accent fill, full width, never disabled or faded.
+    expect(main.className).toMatch(/bg-primary/);
+    expect(main.className).toMatch(/\bw-full\b/);
+    expect(main.getAttribute('aria-disabled')).toBeNull();
+    expect(main.className).not.toMatch(/(^|\s)(opacity-|pointer-events-none)/);
+    // "Start again" is the smaller link below it, still a button.
+    const again = screen.getByRole('button', { name: 'Start again' });
+    expect(main.compareDocumentPosition(again) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(again.className).not.toMatch(/bg-primary/);
+    // Nothing moves on its own: the card is still there, and no redirect was asked for.
+    expect(screen.getByRole('heading', { name: 'Check your email' })).toBeTruthy();
+  });
+
+  it('an address that already has an account shows exactly the same card, and nothing says whether it does', async () => {
+    const sent = async (address: string) => {
+      cleanup();
+      mocks.authenticate.mockResolvedValue({ error: null, notice: null, sentTo: address });
+      const { container } = render(<CreateAccountForm />);
+      type(address, 'longenough');
+      fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+      await screen.findByRole('heading', { name: 'Check your email' });
+      return container.textContent ?? '';
+    };
+    const fresh = await sent('new.person@example.com');
+    const existing = await sent('existing.person@example.com');
+    expect(existing.replace('existing.person@example.com', 'ADDRESS')).toBe(fresh.replace('new.person@example.com', 'ADDRESS'));
+    expect(existing).not.toMatch(/already|exists|have an account|registered|taken/i);
+    expect(screen.getByRole('link', { name: 'Go to sign in' }).getAttribute('href')).toBe('/login');
+  });
+
+  it('"Start again" still returns to an empty form after the new button was added', async () => {
+    mocks.authenticate.mockResolvedValue({ error: null, notice: null, sentTo: 'new.person@example.com' });
+    render(<CreateAccountForm />);
+    type('new.person@example.com', 'longenough');
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    const heading = await screen.findByRole('heading', { name: 'Check your email' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
+    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Go to sign in' })).toBeNull();
+    expect((screen.getByLabelText('Email') as HTMLInputElement).value).toBe('');
+  });
 });
 
 describe('ForgotPasswordForm', () => {

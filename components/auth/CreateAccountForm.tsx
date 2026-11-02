@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useActionState, useEffect, useRef, useState, type FormEvent } from 'react';
 import { authenticate } from '@/app/actions/auth';
+import { buttonVariants } from '@/components/ui/button';
 import { MainButton } from '@/components/ui/MainButton';
 import { MissingCallout } from '@/components/ui/MissingCallout';
 import { checkForm, type RequiredField } from '@/lib/forms/missing';
@@ -61,6 +62,11 @@ export function CreateAccountForm({ captcha = null }: CreateAccountFormProps) {
           Nothing after a few minutes? Check your junk or spam folder. If it&apos;s not there, tap Start again and use the same address,
           and we&apos;ll send a new link.
         </p>
+        {/* The way on for a person who comes back later, or who already had an account (MOM-167 part 15): a solid link, never faded.
+            The card stays until they tap; "Start again" is the smaller way back to an empty form. */}
+        <Link href="/login" className={`${buttonVariants()} w-full`}>
+          Go to sign in
+        </Link>
         <button type="button" onClick={() => setDismissed(state)} className={`${LINK_CLASS} self-start`}>
           Start again
         </button>
