@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
+import { finishReviewAndSettle } from './support/review';
 import { seedReview } from './support/reviewSeed';
 
 const SHOTS = process.env.REVIEW_SCREENSHOT_DIR;
@@ -51,8 +52,7 @@ test.describe(`${THEME} theme, the weekly review's sitting at 390px`, () => {
       await expect(page.getByText('Okay. It stays as it is.')).toBeVisible();
       await shot(page, '02', 'line-and-choice');
 
-      await page.getByRole('button', { name: 'Finish review' }).click();
-      await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+      await finishReviewAndSettle(page, 'You finished this review today. It stays as it was said.');
       await shot(page, '06', 'finished-plan-next');
 
       // A week that ended at the floor: nothing for layer 3. 03 before asking; with Claude's reply failing code's checks, 04 shows
@@ -85,8 +85,7 @@ test.describe(`${THEME} theme, the weekly review's sitting at 390px`, () => {
       await seedReview(third, { closesEarly: false, planning: 'today', timeZone: LA, finished: false, reviewPlanning: 'separate' });
       await page.goto('/review');
       await page.waitForLoadState('networkidle');
-      await page.getByRole('button', { name: 'Finish review' }).click();
-      await expect(page.getByText("You chose to plan your week separately, so it's there when you want it.")).toBeVisible();
+      await finishReviewAndSettle(page, "You chose to plan your week separately, so it's there when you want it.");
       await shot(page, '07', 'finished-planning-separate');
     } finally {
       await fakeReviewMode('good');

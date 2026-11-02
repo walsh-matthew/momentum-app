@@ -9,6 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
+import { finishReviewAndSettle } from './support/review';
 import { seedReview } from './support/reviewSeed';
 
 const SHOTS = process.env.REVIEW_SCREENSHOT_DIR;
@@ -57,8 +58,7 @@ test.describe(`${THEME} theme, the review's change edit at 390px`, () => {
     await expect(page.getByRole('button', { name: 'Finish review' })).toBeVisible();
     await shot(page, 'review-change-saved');
 
-    await page.getByRole('button', { name: 'Finish review' }).click();
-    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+    await finishReviewAndSettle(page, 'You finished this review today. It stays as it was said.');
     await page.goto('/');
     // The change started today, so home shows the new numbers in force, and the slipping note no longer points at the finished review.
     await expect(page.getByText('Floor 3 a week · aspiration 5')).toBeVisible();

@@ -7,6 +7,7 @@ import { busyProps } from '@/lib/forms/mainButton';
 import type { ReviewAdjustmentOutcome, StartingPointOutcome } from '@/types/database.types';
 import type { ReviewLineResult, SavedTargetChange, StillRightItem, TargetEdit } from '@/types/review';
 import { CHOICE_ORDER, NO_ADJUSTMENT, type AdjustmentView } from './adjustmentWording';
+import { useSharedFinish } from './ReviewSettleRegion';
 import {
   ASKING_CLAUDE,
   FINISH_BUTTON,
@@ -62,7 +63,11 @@ export function ReviewSitting({ offerLine, adjustment, edit = null, stillRight: 
   const [formFor, setFormFor] = useState<string | null>(null);
   const [savedByTarget, setSavedByTarget] = useState<Record<string, SavedTargetChange>>({});
   const [finishError, setFinishError] = useState<string | null>(null);
-  const [finishing, startFinish] = useTransition();
+  // The finishing transition belongs to the region above the sitting when there is one (it outlives this component, which unmounts
+  // when the finished review renders: MOM-120); otherwise the sitting keeps its own.
+  const ownFinish = useTransition();
+  const sharedFinish = useSharedFinish();
+  const [finishing, startFinish] = sharedFinish ? [sharedFinish.finishing, sharedFinish.startFinish] : ownFinish;
   const savedNote = useRef<HTMLParagraphElement>(null);
 
   async function ask() {

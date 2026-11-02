@@ -19,6 +19,7 @@
 import type { Page } from '@playwright/test';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
+import { finishReviewAndSettle } from './support/review';
 import { REVIEW_TITLES, laToday, readFinishedReviews, readStartingPoints, readTargetChanges, seedReview, shiftDay } from './support/reviewSeed';
 
 // What the fake model has been asked (tests/e2e/support/fakeAnthropic.ts): how many weekly-review lines, and the facts of the newest.
@@ -175,8 +176,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       if (width === WIDTHS.phone) expect(await overflowOfReview(page)).toBe(0);
 
       // Finish once. The page reads back as a finished review, and planning follows in the same sitting as a link.
-      await page.getByRole('button', { name: 'Finish review' }).click();
-      await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+      await finishReviewAndSettle(page, 'You finished this review today. It stays as it was said.');
       const next = page.getByRole('region', { name: 'Plan your week' });
       await expect(next.getByText("Your review is done. Next, choose what you'll do on which days.")).toBeVisible();
       await expect(next.getByRole('link', { name: 'Plan your week' })).toHaveAttribute('href', '/plan');
@@ -223,8 +223,7 @@ test.describe('the sitting in the situations a person can be in (390px)', () => 
 
     await question.getByRole('radio', { name: 'Ask me again next week' }).click();
     await expect(question.getByText("Okay. I'll ask again next week.")).toBeVisible();
-    await page.getByRole('button', { name: 'Finish review' }).click();
-    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+    await finishReviewAndSettle(page, 'You finished this review today. It stays as it was said.');
     expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: 'slipping_check_in', adjustment_outcome: 'skipped' }]);
     expect(await readTargetChanges(email)).toEqual([]);
     expect(serverErrors()).toEqual([]);
@@ -252,8 +251,7 @@ test.describe('the sitting in the situations a person can be in (390px)', () => 
     await expect(page.getByRole('button', { name: 'Finish review' })).toHaveCount(0);
     await card.getByRole('radiogroup', { name: 'Workouts: Hoping for 4 workouts a week' }).getByRole('radio', { name: 'Yes, it fits' }).click();
     await expect(card.getByRole('radio', { checked: true })).toHaveCount(2);
-    await page.getByRole('button', { name: 'Finish review' }).click();
-    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+    await finishReviewAndSettle(page, 'You finished this review today. It stays as it was said.');
 
     expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: 'still_right', adjustment_outcome: 'declined' }]);
     expect(await readStartingPoints(email)).toEqual([
@@ -283,8 +281,7 @@ test.describe('the sitting in the situations a person can be in (390px)', () => 
     // The target is settled: both rows are the person's change and neither can say the opposite.
     await expect(card.getByRole('radio', { checked: true })).toHaveCount(2);
     for (const radio of await card.getByRole('radio').all()) await expect(radio).toBeDisabled();
-    await page.getByRole('button', { name: 'Finish review' }).click();
-    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+    await finishReviewAndSettle(page, 'You finished this review today. It stays as it was said.');
 
     expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: 'still_right', adjustment_outcome: 'changed' }]);
     expect(await readStartingPoints(email)).toEqual([
@@ -315,8 +312,7 @@ test.describe('the sitting in the situations a person can be in (390px)', () => 
 
       // Nothing was raised for layer 3, so the review finishes with no choice, and stores none.
       await expect(page.getByText('Nothing to adjust this week.')).toBeVisible();
-      await page.getByRole('button', { name: 'Finish review' }).click();
-      await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+      await finishReviewAndSettle(page, 'You finished this review today. It stays as it was said.');
       expect(await readFinishedReviews(email)).toEqual([{ week_start: seed.window.start, adjustment_kind: null, adjustment_outcome: null }]);
     } finally {
       await fakeReviewMode('good');
@@ -334,9 +330,7 @@ test.describe('the sitting in the situations a person can be in (390px)', () => 
     await page.waitForLoadState('networkidle');
     await expect(page.getByRole('region', { name: 'A one-line look back' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Get a one-line look back from Claude' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Finish review' }).click();
-
-    await expect(page.getByText('You finished this review today. It stays as it was said.')).toBeVisible();
+    await finishReviewAndSettle(page, 'You finished this review today. It stays as it was said.');
     const next = page.getByRole('region', { name: 'Plan your week' });
     await expect(next.getByText("You chose to plan your week separately, so it's there when you want it.")).toBeVisible();
     await expect(next.getByRole('link', { name: 'Open your week plan' })).toHaveAttribute('href', '/plan');

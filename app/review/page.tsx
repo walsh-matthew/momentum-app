@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { PageBackRow } from '@/components/layout/PageBackRow';
 import { ReviewScreen } from '@/components/review/ReviewScreen';
+import { ReviewSettleRegion } from '@/components/review/ReviewSettleRegion';
 import { getCurrentUser } from '@/lib/services/auth';
 import { getWeeklyReviewFacts } from '@/lib/services/review';
 
@@ -27,7 +28,9 @@ export default async function ReviewPage() {
               {facts === null ? 'Could not load your weekly review.' : facts.error}
             </p>
           ) : (
-            <ReviewScreen facts={facts.data} />
+            <ReviewSettleRegion>
+              <ReviewScreen facts={facts.data} />
+            </ReviewSettleRegion>
           )}
         </div>
       </main>
