@@ -175,7 +175,9 @@ describe('CreateAccountForm (MOM-150)', () => {
     type('new.person@example.com', 'longenough');
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
     const heading = await screen.findByRole('heading', { name: 'Check your email' });
-    expect(document.activeElement).toBe(heading);
+    // Focus moves in an effect that runs after the heading appears, so wait for it (MOM-96 rule: a heavy full run can
+    // delay that effect past findByRole's own wait).
+    await waitFor(() => expect(document.activeElement).toBe(heading));
     expect(screen.getByText('new.person@example.com').tagName).toBe('STRONG');
     expect(screen.getByText(/We sent a link to/).textContent).toBe('We sent a link to new.person@example.com.');
     expect(screen.getByText('Open the email and tap the link. It confirms your account and signs you in.')).toBeTruthy();

@@ -95,7 +95,7 @@ The current plan (`docs/plans/NEXT_BUILD_PLAN.md`, "The trial", the owner's cale
 
 **Auth email and sign-up.** The trial's email sender is live (owner, MOM-122 comment 2026-10-30): domain `ownaccordlabs.com`, Resend over SMTP, sender "Momentum" at `hello@ownaccordlabs.com`, with SPF, DKIM and DMARC passing. The password-reset link is a token link that opens in any browser, guarded by a 15-minute signed cookie (MOM-122, PR #74). Since MOM-149 (PR #90) the confirmation and reset emails say who they are from, why the person got them, give one button and the plain link, and say what happens if ignored; `/privacy` names the email provider. Since MOM-150 (PR #100) creating an account has its own screen and a clear "check your email" state. Since MOM-163 the confirmation link is a token link that opens in any browser, like the reset link; production sends it once its "Confirm sign up" template is pasted in the dashboard, before the Nov 5 freeze. The hourly email limit is an open question below.
 
-**Before the trial.** A deadline goal cannot finish setup on production (MOM-166, High, found 2026-11-02); the plan puts it first on the next build day so it is merged and live before the Nov 5 freeze (Gap 16).
+**Before the trial.** A deadline goal cannot finish setup on production (MOM-166, High, found 2026-11-02); the plan puts it first on the next build day so it is merged and live before the Nov 5 freeze (Gap 16). The fix is built on branch `feature/MOM-166-deadline-past-date`; it is not live until merged and deployed.
 
 ## 7. Risks and open questions
 
@@ -144,6 +144,6 @@ Gap numbers stay as first assigned, so a number that is missing below was closed
 8. The weekly review's "Yes, I want to change it" edits a target's numbers from the next period, but changes nothing for a deadline forecast, a goal's priority or its clash handling. Criterion 4 asks each person to make at least one real change across their reviews, and a target's numbers are the one kind of change it can make (MOM-146, PR #91; `USER_JOURNEYS.md` Gap 21).
 13. Criterion 5 is "inside N" with N = 6, but pull requests #82 to #104 merged after build day 6 closed and the deck's row says "day 5 of 6". How criterion 5 is judged with the later days is not recorded (found by the first update; owner to decide).
 15. A person who set up with only due-date goals cannot set a week start, so cannot add a weekly or day-slot target after setup (`USER_JOURNEYS.md` Gap 26; MOM-159).
-16. A deadline goal cannot finish setup on production, so criterion 1 cannot be tested with one until the fix is live (`USER_JOURNEYS.md` Gap 31; MOM-166, High, before the Nov 5 freeze).
+16. A deadline goal cannot finish setup on production, so criterion 1 cannot be tested with one until the fix is live (`USER_JOURNEYS.md` Gap 31; MOM-166, High, before the Nov 5 freeze). Built on branch `feature/MOM-166-deadline-past-date`, not yet merged; close this gap after the live check on production.
 
 **Closed since the first fill.** Gap 9, the dark theme's flatness (MOM-145, PR #83; the phone check is `USER_JOURNEYS.md` Gap 3); Gap 10, phone navigation (MOM-148, PR #89); Gap 11, warmer auth emails and the sender in `/privacy` (MOM-149, PR #90); Gap 12, the post-wait updates at ten controls (MOM-147, PR #93); Gap 14, the sign-in and sign-up words (MOM-163).

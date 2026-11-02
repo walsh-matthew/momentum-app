@@ -31,9 +31,9 @@ const byId = (id: string): ScriptedCase => {
 };
 
 describe('the eval set', () => {
-  it('has twenty-one cases: thirteen full conversations (round 3b adds a reading goal) and one fixture per hard rule', () => {
-    expect(SETUP_CASES).toHaveLength(21);
-    expect(SETUP_CASES.filter((c) => c.expect === 'clean')).toHaveLength(13);
+  it('has twenty-two cases: fourteen full conversations (MOM-166 adds a deadline task recorded before its answer) and one fixture per hard rule', () => {
+    expect(SETUP_CASES).toHaveLength(22);
+    expect(SETUP_CASES.filter((c) => c.expect === 'clean')).toHaveLength(14);
     expect(SETUP_CASES.filter((c) => c.expect !== 'clean').map((c) => c.rules[0]).sort()).toEqual([...HARD_RULE_IDS].sort());
   });
 
@@ -44,6 +44,19 @@ describe('the eval set', () => {
     expect(ids).toContain('run-c-answered-already');
     expect(ids).toContain('run-g-relative-deadline');
     expect(ids).toContain('run-h-two-activities');
+    expect(ids).toContain('run-m-deadline-item-at-date');
+  });
+
+  // MOM-166: run-a records the task whole, after the answer, so it never held a task with a date and no answer. This case does,
+  // as real Claude does, and the turn that asks "can the date move?" must pass.
+  it('runs a deadline task through the turn that asks whether its date can move, clean to the final save', async () => {
+    const c = byId('run-m-deadline-item-at-date');
+    const asked = c.script.findIndex((t) => t.topic === 'date_can_move');
+    expect(c.script[asked].draft.model.goals[0].items[0]).toMatchObject({ dueDate: '2027-06-14', dateCanMove: null });
+    const report = await run(c);
+    expect(described(report)).toEqual([]);
+    expect(report.finished).toBe(true);
+    expect(report.finalIssues).toEqual([]);
   });
 
   it('exercises every hard rule in at least one case', () => {
@@ -153,8 +166,10 @@ describe('what the eval set would catch if the model did it', () => {
       t.draft.said = t.draft.said.filter((s) => !s.path.endsWith('dateCanMove'));
     }
     const report = await runSetupEval(c, scriptedModel(script));
-    expect(report.turns[7].violations.map((v) => v.message).join(' ')).toMatch(/Can the date move/);
+    // MOM-166: not a per-turn violation any more (the question is asked in its own turn); the final save still refuses it.
+    expect(report.turns[7].violations.map((v) => v.message).join(' ')).not.toMatch(/Can the date move/);
     expect(report.finalIssues?.map((i) => i.path)).toContain('goals.g1.items.i1.dateCanMove');
+    expect(report.finalIssues?.find((i) => i.path === 'goals.g1.items.i1.dateCanMove')?.message).toMatch(/Can the date move/);
   });
 
   it('approves parts that were never played back', async () => {
