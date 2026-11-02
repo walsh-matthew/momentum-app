@@ -39,14 +39,14 @@ describe('a finished draft', () => {
 });
 
 describe('a deadline task must say whether its date can move', () => {
-  it('fails without the answer, in both modes', async () => {
+  // MOM-166: the question is asked in its own turn after the date, so the rule holds at the final save and not before.
+  it('passes while the conversation is going without the answer, and is refused at the final save', async () => {
     const { draft, transcript } = await finished('run-a-deadline-only');
     goalOf(draft.model, 'g1').items[0].dateCanMove = null;
-    for (const mode of ['progress', 'final'] as const) {
-      const issues = issuesOf(draft, transcript, mode);
-      expect(issues.map((i) => i.path)).toContain('goals.g1.items.i1.dateCanMove');
-      expect(issues.find((i) => i.path === 'goals.g1.items.i1.dateCanMove')?.message).toMatch(/Can the date move/);
-    }
+    expect(paths(draft, transcript, 'progress')).toEqual([]);
+    const issues = issuesOf(draft, transcript, 'final');
+    expect(issues.map((i) => i.path)).toContain('goals.g1.items.i1.dateCanMove');
+    expect(issues.find((i) => i.path === 'goals.g1.items.i1.dateCanMove')?.message).toMatch(/Can the date move/);
   });
 
   it('fails when the answer was not the person\'s answer to its own question', async () => {
@@ -58,14 +58,21 @@ describe('a deadline task must say whether its date can move', () => {
     expect(paths(draft, transcript)).toContain('goals.g1.items.i1.dateCanMove');
   });
 
-  it('fails when a deadline task has no date, or another kind of item has one', async () => {
+  it('is refused at the final save when a deadline task has no date', async () => {
     const { draft, transcript } = await finished('run-a-deadline-only');
     const item = goalOf(draft.model, 'g1').items[0];
     item.dueDate = null;
-    expect(paths(draft, transcript)).toContain('goals.g1.items.i1.dueDate');
-    item.dueDate = '2027-06-14';
+    expect(paths(draft, transcript, 'final')).toContain('goals.g1.items.i1.dueDate');
+    expect(paths(draft, transcript, 'progress')).not.toContain('goals.g1.items.i1.dueDate');
+  });
+
+  it('still refuses, in both modes, a due date or a can-move answer on another kind of item', async () => {
+    const { draft, transcript } = await finished('run-a-deadline-only');
+    const item = goalOf(draft.model, 'g1').items[0];
     item.kind = 'milestone';
-    expect(paths(draft, transcript)).toEqual(expect.arrayContaining(['goals.g1.items.i1.dueDate', 'goals.g1.items.i1.dateCanMove']));
+    for (const mode of ['progress', 'final'] as const) {
+      expect(paths(draft, transcript, mode)).toEqual(expect.arrayContaining(['goals.g1.items.i1.dueDate', 'goals.g1.items.i1.dateCanMove']));
+    }
   });
 });
 

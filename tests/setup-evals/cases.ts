@@ -1,6 +1,6 @@
 // The setup eval set (MOM-111, design record §5.1): scripted conversations with personal details removed. Every name,
 // date and number here is invented. Each case pairs a scripted person with a scripted fake model, so `npm test` makes no
-// network call. Thirteen cases are full conversations that must come out clean; eight are short conversations with one
+// network call. Fourteen cases are full conversations that must come out clean; eight are short conversations with one
 // deliberately bad turn, to show each hard rule's check catches what it should (and only that). The questions are written
 // the way setup should ask them (MOM-111): everyday words, a reason, and short examples where they help.
 
@@ -362,6 +362,9 @@ interface DeadlineOptions {
   unit: string;
   floor: number;
   floorReply: string;
+  // MOM-166: the task goes into the draft in the turn that asks "can the date move?", with its date and no answer yet, as real
+  // Claude writes it; the answer is recorded one turn later. Unset: the task is recorded whole, after the answer (run-a).
+  itemAtDate?: boolean;
 }
 
 function deadlineCase(o: DeadlineOptions): ScriptedCase {
@@ -386,20 +389,41 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
   });
   const moveAsked = s.next;
   // The date and whether it can move are two questions in two turns.
-  s.add({ topic: 'date_can_move', say: 'If it can, moving it stays one of your options later.', question: 'Can that date move?', reply: o.canMoveReply });
+  s.add({
+    topic: 'date_can_move',
+    say: 'If it can, moving it stays one of your options later.',
+    question: 'Can that date move?',
+    reply: o.canMoveReply,
+    ...(o.itemAtDate
+      ? {
+          edit: (m) => {
+            const g = goalOf(m, 'g1');
+            g.endDate = o.date;
+            g.items.push(item('i1', 'deadline_task', o.itemTitle, { dueDate: o.date, dateCanMove: null }));
+          },
+          said: [`goals.g1.endDate@${dateAsked}`, `goals.g1.items.i1.dueDate@${dateAsked}`],
+        }
+      : {}),
+  });
   s.add({
     kind: 'proposal',
     topic: 'start_date',
     edit: (m) => {
       const g = goalOf(m, 'g1');
+      if (o.itemAtDate) {
+        g.items[0].dateCanMove = o.canMove;
+        return;
+      }
       g.endDate = o.date;
       g.items.push(item('i1', 'deadline_task', o.itemTitle, { dueDate: o.date, dateCanMove: o.canMove }));
     },
-    said: [
-      `goals.g1.endDate@${dateAsked}`,
-      `goals.g1.items.i1.dueDate@${dateAsked}`,
-      `goals.g1.items.i1.dateCanMove@${moveAsked}`,
-    ],
+    said: o.itemAtDate
+      ? [`goals.g1.items.i1.dateCanMove@${moveAsked}`]
+      : [
+          `goals.g1.endDate@${dateAsked}`,
+          `goals.g1.items.i1.dueDate@${dateAsked}`,
+          `goals.g1.items.i1.dateCanMove@${moveAsked}`,
+        ],
     question: `Start today, ${TODAY_WORDS}?`,
     reply: 'Yes, start today.',
   });
@@ -701,6 +725,27 @@ export const SETUP_CASES: ScriptedCase[] = [
     unit: 'blocks',
     floor: 12,
     floorReply: 'Twelve blocks.',
+  }),
+  // MOM-166: run-a records the deadline task whole, after the can-move answer, so its draft never holds a task with a date and
+  // no answer. Real Claude adds the task when the date is accepted and asks the question in the next turn; this case does too.
+  deadlineCase({
+    id: 'run-m-deadline-item-at-date',
+    title: 'a deadline task is in the draft with its date, before the can-move answer that the next turn records',
+    rules: ['one_question', 'assume_nothing'],
+    goalTitle: 'Finish the quilt',
+    idea: "Finish a quilt for my sister's wedding.",
+    shapeReply: 'It has a deadline.',
+    date: '2027-06-14',
+    dateReply: 'June 14, 2027.',
+    canMove: false,
+    canMoveReply: 'No, the wedding date is fixed.',
+    itemTitle: 'Quilt finished',
+    targetReply: 'Quilt blocks sewn.',
+    targetTitle: 'Blocks sewn',
+    unit: 'blocks',
+    floor: 12,
+    floorReply: 'Twelve blocks.',
+    itemAtDate: true,
   }),
   habitCase({
     id: 'run-b-habit-ideas',

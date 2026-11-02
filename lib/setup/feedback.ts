@@ -168,3 +168,8 @@ export function retryFeedback(violations: readonly Violation[]): string[] {
 // its name, which is the person's own words, so the log shows <name> there instead.
 export const failingPaths = (violations: readonly Violation[]): string[] =>
   [...new Set(violations.flatMap((x) => (x.path ? [x.path.replace(/^person\.dayTypes\.[^.]+/, 'person.dayTypes.<name>')] : [])))].sort();
+
+// Which parts of a thrown-away reply (say, question, detail, skipped, options) held a number the person never said, for the log
+// (MOM-166). Field names from a fixed list, never the number or any text, so the next such rejection can be classed.
+export const unsaidNumberFields = (violations: readonly Violation[]): string[] =>
+  [...new Set(violations.filter((x) => x.code === 'math.number').flatMap((x) => x.fields ?? []))].sort();
