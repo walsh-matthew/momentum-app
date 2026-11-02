@@ -82,9 +82,10 @@ const goodPlanAnswer = () => ({
 const fillUserCap = (userId = USER) => {
   for (let h = 23; h >= 4; h--) seedUsage(userId, h * HOUR);
 };
-// Two hundred calls by someone else, the oldest 1005 minutes ago: the shared cap, freeing up in 435 minutes.
+// As many calls by someone else as the shared cap allows, spread so the oldest is 1005 minutes ago: the shared cap, freeing up in 435 minutes.
 const fillSharedCap = () => {
-  for (let i = 0; i < LLM_LIMITS.overallDailyCap; i++) seedUsage(OTHER_USER, (10 + i * 5) * MIN);
+  const cap = LLM_LIMITS.overallDailyCap;
+  for (let i = 0; i < cap; i++) seedUsage(OTHER_USER, Math.round((10 + (i * 995) / (cap - 1)) * MIN));
 };
 
 let consoleError: ReturnType<typeof vi.spyOn>;
@@ -214,7 +215,7 @@ describe('runWithinBudget', () => {
 
   it('sends the limits it was configured with, and the defaults otherwise', async () => {
     await runWithinBudget(args(async () => ok));
-    expect(usage.reserveCalls[0]).toMatchObject({ p_min_interval_seconds: 20, p_user_daily_cap: 20, p_overall_daily_cap: 200 });
+    expect(usage.reserveCalls[0]).toMatchObject({ p_min_interval_seconds: 20, p_user_daily_cap: 20, p_overall_daily_cap: 450 });
     usage.nowMs += HOUR;
     await runWithinBudget(args(async () => ok, { limits: { minIntervalSeconds: 5, userDailyCap: 3, overallDailyCap: 9 } }));
     expect(usage.reserveCalls[1]).toMatchObject({ p_min_interval_seconds: 5, p_user_daily_cap: 3, p_overall_daily_cap: 9 });
@@ -592,8 +593,10 @@ describe('the limit holds across serverless instances and cold starts', () => {
 // Usage rows carry no content
 // ---------------------------------------------------------------------------
 
+const COLUMNS_ALL = ['cache_read_tokens', 'cache_write_tokens', 'created_at', 'feature', 'id', 'input_tokens', 'latency_ms', 'model', 'outcome', 'output_tokens', 'user_id'];
+
 describe('usage rows carry counts and an outcome, and no content', () => {
-  const COLUMNS = ['created_at', 'feature', 'id', 'input_tokens', 'latency_ms', 'model', 'outcome', 'output_tokens', 'user_id'];
+  const COLUMNS = ['cache_read_tokens', 'cache_write_tokens', 'created_at', 'feature', 'id', 'input_tokens', 'latency_ms', 'model', 'outcome', 'output_tokens', 'user_id'];
 
   it('after a rebalance and a plan, every row has exactly the approved columns, all plain values', async () => {
     const secretTitle = 'My secret job application notes';
@@ -627,11 +630,11 @@ describe('usage rows carry counts and an outcome, and no content', () => {
     for (const row of usage.rows) expect(Object.keys(row).sort()).toEqual(COLUMNS);
   });
 
-  it('what is written when a call finishes has only the four result fields', async () => {
+  it('what is written when a call finishes has only the six result fields', async () => {
     model.plan.mockResolvedValueOnce(goodPlanAnswer());
     await generateWeekOnePlan(wizardInput());
     expect(usage.updates).toHaveLength(1);
-    expect(Object.keys(usage.updates[0]).sort()).toEqual(['input_tokens', 'latency_ms', 'outcome', 'output_tokens']);
+    expect(Object.keys(usage.updates[0]).sort()).toEqual(['cache_read_tokens', 'cache_write_tokens', 'input_tokens', 'latency_ms', 'outcome', 'output_tokens']);
   });
 
   it('the reservation is made from the user, the feature and the model id, and the four limits, nothing else', async () => {
@@ -668,7 +671,7 @@ describe('usage can be read', () => {
   it('asks only for the columns it shows: counts, an outcome, a model id, a feature and a time', async () => {
     seedUsage(USER, HOUR);
     const r = await listMyLlmUsage();
-    expect(r.ok && Object.keys(r.data[0]).sort()).toEqual(['created_at', 'feature', 'id', 'input_tokens', 'latency_ms', 'model', 'outcome', 'output_tokens', 'user_id']);
+    expect(r.ok && Object.keys(r.data[0]).sort()).toEqual(COLUMNS_ALL);
   });
 
   it('still returns only their own rows when the fake\'s row level security is off (the user filter is in the query)', async () => {
@@ -724,9 +727,9 @@ describe('the source: no way to complete a task, no unmetered model call, no con
     expect(code).not.toMatch(/micro_tasks|task_rebalance_history|goal_channels/);
   });
 
-  it('the AI modules read only the two token counts off a response, and report them without any text', () => {
+  it('the AI modules read only the four token counts off a response, and report them without any text', () => {
     const usageSource = withoutComments(read('lib', 'ai', 'usage.ts'));
-    expect([...usageSource.matchAll(/\busage\??\.([a-z_]+)/g)].map((m) => m[1]).sort()).toEqual(['input_tokens', 'output_tokens']);
+    expect([...usageSource.matchAll(/\busage\??\.([a-z_]+)/g)].map((m) => m[1]).sort()).toEqual(['cache_creation_input_tokens', 'cache_read_input_tokens', 'input_tokens', 'output_tokens']);
     for (const file of ['rebalance.ts', 'taskPlan.ts']) {
       const code = withoutComments(read('lib', 'ai', file));
       expect(code, file).toContain('readUsage(response)');
@@ -735,7 +738,7 @@ describe('the source: no way to complete a task, no unmetered model call, no con
     }
   });
 
-  it('llm.ts writes one table, with one update, and only the four result fields', () => {
+  it('llm.ts writes one table, with one update, and only the six result fields', () => {
     // The finishing update, the person's own usage read, and (MOM-113) the weekly review's count of a person's calls.
     expect([...llm.matchAll(/\.from\('([a-z_]+)'\)/g)].map((m) => m[1])).toEqual(['llm_usage_logs', 'llm_usage_logs', 'llm_usage_logs']);
     // That count reads the ids of one person's own rows for one feature and nothing else: no content column exists to read.
@@ -746,7 +749,7 @@ describe('the source: no way to complete a task, no unmetered model call, no con
     expect([...llm.matchAll(/\.update\(/g)]).toHaveLength(1);
     expect([...llm.matchAll(/\.(insert|upsert|delete)\(/g)]).toHaveLength(0);
     const patch = /\.update\(\{([\s\S]*?)\}\)/.exec(llm)![1];
-    expect([...patch.matchAll(/^\s*([a-z_]+):/gm)].map((m) => m[1]).sort()).toEqual(['input_tokens', 'latency_ms', 'outcome', 'output_tokens']);
+    expect([...patch.matchAll(/^\s*([a-z_]+):/gm)].map((m) => m[1]).sort()).toEqual(['cache_read_tokens', 'cache_write_tokens', 'input_tokens', 'latency_ms', 'outcome', 'output_tokens']);
   });
 
   it('llm.ts reserves with a fixed set of arguments, none of which can carry a prompt or an answer', () => {

@@ -37,16 +37,22 @@ import type { ServiceResult } from './result';
 
 // The limits. Placeholders to be tuned once real usage has been measured (docs/LLM_GOVERNANCE.md): they are a ceiling
 // against a runaway, not a forecast. The caps count calls, not tokens, because a count can be enforced before the call
-// is made; the tokens are logged so the cost can be worked out and the caps set from it. The 24 hour window is a
-// rolling window fixed in the SQL function, so it is not a setting here.
+// is made; the tokens (input, output, cache read and cache write) are logged so the cost can be worked out and the caps set
+// from it. The 24 hour window is a rolling window fixed in the SQL function, so it is not a setting here.
 export const LLM_LIMITS = {
   // At least this long between one user's calls.
   minIntervalSeconds: 20,
-  // Calls per user in any 24 hours.
+  // Calls per user in any 24 hours, for the old model's features (rebalance, week 1 plan).
   userDailyCap: 20,
-  // Calls by everyone together in any 24 hours.
-  overallDailyCap: 200,
+  // Calls by everyone together in any 24 hours, across every feature (raised from 200 for the family trial, MOM-165: room for
+  // 3 or more adults to onboard on the same day). Setup and the review's line read this number, so they move with it.
+  overallDailyCap: 450,
 } as const;
+
+// One person's allowance for the guided-setup features, in any 24 hours: a setup turn and the weekly review's line (MOM-165).
+// The database counts every Claude call a person makes, whatever its feature, so a person who finishes a 25-turn setup
+// would be stopped by the old 20-call allowance for a day. Setup and the review share this one number instead.
+export const SETUP_PERSON_DAILY_CAP = 100;
 
 export type LlmLimits = { [K in keyof typeof LLM_LIMITS]: number };
 
@@ -168,6 +174,9 @@ async function finish(
       outcome: report.outcome,
       input_tokens: report.usage ? report.usage.inputTokens : null,
       output_tokens: report.usage ? report.usage.outputTokens : null,
+      // Null when the API did not report them (never guessed as 0); migration 022 keeps the pair together.
+      cache_read_tokens: report.usage?.cacheReadTokens ?? null,
+      cache_write_tokens: report.usage?.cacheWriteTokens ?? null,
       latency_ms: Math.max(0, Math.round(elapsedMs)),
     })
     .eq('id', logId)
@@ -184,9 +193,10 @@ async function finish(
 // partway, so setup has its own, and the old model keeps LLM_LIMITS untouched.
 //
 // Three rules, each in one place below:
-// 1. Per-person limits are LOG-ONLY during the family trial. They are set so high that reserve_llm_call() never refuses on
-//    them; every setup call still lands in llm_usage_logs as 'setup', and that table is the log that shows where
-//    production limits belong (docs/LLM_GOVERNANCE.md has the query). The row it writes is the same as any other call's.
+// 1. A real per-person limit (MOM-165): SETUP_PERSON_DAILY_CAP calls in any 24 hours, counted across every feature by
+//    reserve_llm_call(), shared with the weekly review's line. Past it the call is not made and the person is told in plain
+//    words (SETUP_QUICK_PATH_MESSAGES, personCapMessage). Spacing stays at the function's 1 second minimum. Every setup call
+//    still lands in llm_usage_logs as 'setup', with its input, output, cache-read and cache-write tokens.
 // 2. One hard shared cap stays on: everyone's calls together, across all features. It protects spend if sign-up is abused.
 // 3. A per-setup BUDGET in turns and tokens. When a setup has used it, the call is not made and nothing is reserved: setup
 //    falls back to the quick path. These numbers are placeholders until live eval runs set them (90th percentile plus a
@@ -198,10 +208,10 @@ async function finish(
 // shared cap is the backstop that cannot be reset from the client (BACKLOG, MOM-128).
 
 export const SETUP_LIMITS: LlmLimits = {
-  // The function's own minimum. Spacing is log-only; this only stops two requests landing in the same second.
+  // The function's own minimum. Spacing is not limited here; this only stops two requests landing in the same second.
   minIntervalSeconds: 1,
-  // Log-only: far beyond any real setup, still a whole number the database accepts.
-  userDailyCap: 1_000_000,
+  // A real limit, shared with the review's line (MOM-165). It counts all of a person's Claude calls, not setup alone.
+  userDailyCap: SETUP_PERSON_DAILY_CAP,
   // The one hard cap, the same shared number as every other feature.
   overallDailyCap: LLM_LIMITS.overallDailyCap,
 };
@@ -239,8 +249,8 @@ export const SETUP_QUICK_PATH_MESSAGES: Record<SetupQuickPathReason, string> = {
   over_turns: "This setup has used up the questions Claude gets for one setup, so it can't ask any more.",
   over_tokens: "This setup has used up the questions Claude gets for one setup, so it can't ask any more.",
   shared_cap: "Claude is at its shared limit for everyone right now, so it can't ask any more questions.",
-  // Unreachable while per-person limits are log-only, but it must say something true if the sentinel is ever reached.
-  person_cap: "Claude can't take more requests from you right now.",
+  // The words without a wait. runSetupTurn() adds how long until the person can ask again (personCapMessage).
+  person_cap: `You've used all ${SETUP_PERSON_DAILY_CAP} of your Claude requests for the last 24 hours, so it can't ask any more.`,
   unchecked: "Claude's usage limits could not be checked, so setup can't go on with Claude.",
 };
 
@@ -332,7 +342,15 @@ export async function runSetupTurn(args: RunSetupTurnArgs, deps: RunSetupTurnDep
       if (budgeted.limit === 'too_soon') {
         return { kind: 'wait', retryAfterSeconds: budgeted.retryAfterSeconds, message: TOO_SOON_MESSAGE };
       }
-      return quickPath(budgeted.limit === 'overall_daily' ? 'shared_cap' : 'person_cap');
+      if (budgeted.limit === 'user_daily') {
+        // Exact, because nothing else can use the person's own allowance. Rounded up, never early (describeWait).
+        return {
+          kind: 'quick_path',
+          reason: 'person_cap',
+          message: `${SETUP_QUICK_PATH_MESSAGES.person_cap} ${dailyRetrySentence('user_daily', budgeted.retryAfterSeconds)}`,
+        };
+      }
+      return quickPath('shared_cap');
     case 'answered': {
       const usage = budgeted.result.usage ?? null;
       const used = usage ? usage.inputTokens + usage.outputTokens : 0;
@@ -361,7 +379,9 @@ export const REVIEW_LIMITS: LlmLimits = {
   // The smallest the database accepts, as for setup: a retry follows the first call within a second or two, so a longer spacing
   // would block it. A double tap is stopped by the button being off while a request is out, and by the 4-call count below.
   minIntervalSeconds: 1,
-  userDailyCap: LLM_LIMITS.userDailyCap,
+  // The same allowance as setup (MOM-165): the count is across every feature, so a person who has just finished a long setup
+  // can still ask for the review's line.
+  userDailyCap: SETUP_PERSON_DAILY_CAP,
   overallDailyCap: LLM_LIMITS.overallDailyCap,
 };
 
@@ -379,7 +399,7 @@ const REVIEW_CONTINUES = 'Your review goes on without it.';
 export const REVIEW_LINE_MESSAGES: Record<ReviewLineUnavailable, string> = {
   review_budget: `You have already asked Claude for a line today. ${REVIEW_CONTINUES}`,
   shared_cap: `Claude is at its shared limit for everyone right now. ${REVIEW_CONTINUES}`,
-  person_cap: `${dailyLimitClause('user_daily')}. ${REVIEW_CONTINUES}`,
+  person_cap: `${dailyLimitClause('user_daily', REVIEW_LIMITS)}. ${REVIEW_CONTINUES}`,
   too_soon: TOO_SOON_MESSAGE,
   unchecked: `Claude's usage limits could not be checked, so no line was asked for. ${REVIEW_CONTINUES}`,
   model: `Claude could not write a line just now. ${REVIEW_CONTINUES}`,
@@ -515,7 +535,7 @@ export async function listMyLlmUsage(options: { limit?: number } = {}): Promise<
   const limit = Number.isInteger(requested) ? Math.min(MAX_USAGE_ROWS, Math.max(1, requested)) : DEFAULT_USAGE_ROWS;
   const { data, error } = await supabase
     .from('llm_usage_logs')
-    .select('id, user_id, feature, model, input_tokens, output_tokens, latency_ms, outcome, created_at')
+    .select('id, user_id, feature, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, latency_ms, outcome, created_at')
     .eq('user_id', auth.user.id)
     .order('created_at', { ascending: false })
     .limit(limit);

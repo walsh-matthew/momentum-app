@@ -70,7 +70,7 @@ type Request = {
   output_config: { effort: string; format?: unknown };
 };
 const requestOf = (create: ReturnType<typeof clientReturning>['create']) => (create.mock.calls[0] as unknown as [Request])[0];
-const USAGE = { inputTokens: 10, outputTokens: 10 };
+const USAGE = { inputTokens: 10, outputTokens: 10, cacheReadTokens: null, cacheWriteTokens: null };
 const input = { transcript, draft: emptyDraft() };
 
 describe('what it sends', () => {

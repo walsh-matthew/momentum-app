@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { REVIEW_MODEL } from '@/lib/ai/review';
 import { REFLECTION_FALLBACK_LINES, REFLECTION_RETRY_NOTES, type ReflectionFacts } from '@/lib/review/reflection';
-import { LLM_LIMITS, REVIEW_BUDGET, REVIEW_LIMITS, REVIEW_LINE_MESSAGES, TOO_SOON_MESSAGE, runReviewLine } from '@/lib/services/llm';
+import { LLM_LIMITS, REVIEW_BUDGET, SETUP_LIMITS, SETUP_PERSON_DAILY_CAP, REVIEW_LIMITS, REVIEW_LINE_MESSAGES, TOO_SOON_MESSAGE, runReviewLine } from '@/lib/services/llm';
 import { resetUsage, rowsFor, seedUsage, usage } from './helpers/fakeLlmUsage';
 import { OTHER_USER, USER } from './helpers/fakeSupabase';
 
@@ -84,8 +84,11 @@ const reviewRows = (userId = USER) => rowsFor(userId).filter((r) => r.feature ==
 describe('the numbers', () => {
   it('are the approved budget: 4 review calls a day, 2 to an ask, the standard daily cap and the one shared cap', () => {
     expect(REVIEW_BUDGET).toEqual({ maxCallsPer24h: 4, maxCallsPerAsk: 2 });
-    expect(REVIEW_LIMITS).toEqual({ minIntervalSeconds: 1, userDailyCap: 20, overallDailyCap: 200 });
-    expect(REVIEW_LIMITS.userDailyCap).toBe(LLM_LIMITS.userDailyCap);
+    expect(REVIEW_LIMITS).toEqual({ minIntervalSeconds: 1, userDailyCap: 100, overallDailyCap: 450 });
+    // Setup and the review share one named allowance; the old model keeps its own 20 (MOM-165).
+    expect(REVIEW_LIMITS.userDailyCap).toBe(SETUP_PERSON_DAILY_CAP);
+    expect(REVIEW_LIMITS.userDailyCap).toBe(SETUP_LIMITS.userDailyCap);
+    expect(LLM_LIMITS.userDailyCap).toBe(20);
     expect(REVIEW_LIMITS.overallDailyCap).toBe(LLM_LIMITS.overallDailyCap);
   });
 });
@@ -102,7 +105,7 @@ describe('a good reply', () => {
     expect(reviewRows()[0]).toMatchObject({ feature: 'weekly_review', model: REVIEW_MODEL, outcome: 'ok', input_tokens: 900, output_tokens: 40 });
     // Only counts, a model id and an outcome: no prompt, no answer, no title.
     expect(Object.keys(reviewRows()[0]).sort()).toEqual(
-      ['created_at', 'feature', 'id', 'input_tokens', 'latency_ms', 'model', 'outcome', 'output_tokens', 'user_id'].sort(),
+      ['cache_read_tokens', 'cache_write_tokens', 'created_at', 'feature', 'id', 'input_tokens', 'latency_ms', 'model', 'outcome', 'output_tokens', 'user_id'].sort(),
     );
     expect(JSON.stringify(usage.rows)).not.toContain('Lift weights');
     expect(JSON.stringify(usage.rows)).not.toContain(GOOD);
@@ -117,8 +120,8 @@ describe('a good reply', () => {
       p_feature: 'weekly_review',
       p_model: REVIEW_MODEL,
       p_min_interval_seconds: 1,
-      p_user_daily_cap: 20,
-      p_overall_daily_cap: 200,
+      p_user_daily_cap: 100,
+      p_overall_daily_cap: 450,
     });
   });
 
@@ -263,12 +266,22 @@ describe("the limits that stop a call (the review goes on without a line)", () =
   });
 
   it("the person's daily cap across every feature", async () => {
-    for (let i = 0; i < LLM_LIMITS.userDailyCap; i++) seedUsage(USER, 2 * HOUR + i, { feature: 'rebalance' });
+    for (let i = 0; i < REVIEW_LIMITS.userDailyCap; i++) seedUsage(USER, 2 * HOUR + i, { feature: 'rebalance' });
     const model = script(reply(GOOD));
     const result = await ask(model);
     expect(result).toMatchObject({ kind: 'unavailable', reason: 'person_cap' });
-    expect(result.kind === 'unavailable' && result.message).toContain('all 20 of your Claude requests');
+    expect(result.kind === 'unavailable' && result.message).toContain('all 100 of your Claude requests');
     expect(model).not.toHaveBeenCalled();
+  });
+
+  it('a person who has just done a long setup can still run a review: 30 setup calls in the last 24 hours do not stop it (MOM-165)', async () => {
+    // The count is across every feature, so under the old 20-a-day allowance these 30 calls would have refused the review.
+    for (let i = 0; i < 30; i++) seedUsage(USER, 2 * HOUR + i * 60_000, { feature: 'setup' });
+    const model = script(reply(GOOD));
+    const result = await ask(model);
+    expect(result).toEqual({ kind: 'line', line: GOOD, source: 'claude', calls: 1 });
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(reviewRows()).toHaveLength(1);
   });
 
   it('the spacing, with the plain wait message', async () => {

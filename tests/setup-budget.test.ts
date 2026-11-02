@@ -19,6 +19,7 @@ import {
   LLM_LIMITS,
   SETUP_BUDGET,
   SETUP_LIMITS,
+  SETUP_PERSON_DAILY_CAP,
   SETUP_QUICK_PATH_MESSAGES,
   TOO_SOON_MESSAGE,
   reportModelResult,
@@ -55,7 +56,9 @@ const turn: AssistantTurn = {
   options: [],
   draft: emptyDraft(),
 };
-const answer = (usageOver: { inputTokens: number; outputTokens: number } | null = USAGE) => ({
+const answer = (
+  usageOver: { inputTokens: number; outputTokens: number; cacheReadTokens?: number | null; cacheWriteTokens?: number | null } | null = USAGE,
+) => ({
   ok: true as const,
   raw: turn,
   model: 'claude-opus-5-5',
@@ -106,14 +109,18 @@ async function runSetup(count: number, over: { limits?: typeof LLM_LIMITS; userI
 describe('the numbers', () => {
   it('are the starting budget until live runs set it, and the old limits are untouched', () => {
     expect(SETUP_BUDGET).toEqual({ maxTurns: 40, maxTokens: 1_000_000 });
-    expect(LLM_LIMITS).toEqual({ minIntervalSeconds: 20, userDailyCap: 20, overallDailyCap: 200 });
+    expect(LLM_LIMITS).toEqual({ minIntervalSeconds: 20, userDailyCap: 20, overallDailyCap: 450 });
   });
 
-  it('keep per-person limits out of the way and share the one hard cap', () => {
-    expect(SETUP_LIMITS.userDailyCap).toBeGreaterThan(SETUP_BUDGET.maxTurns * 1000);
-    expect(SETUP_LIMITS.userDailyCap).toBeLessThanOrEqual(2_147_483_647);
+  it('set a real per-person limit of 100 a day, leave room for two full setups, and share the one hard cap of 450 (MOM-165)', () => {
+    expect(SETUP_LIMITS.userDailyCap).toBe(100);
+    expect(SETUP_LIMITS.userDailyCap).toBe(SETUP_PERSON_DAILY_CAP);
+    expect(SETUP_LIMITS.userDailyCap).toBeGreaterThanOrEqual(SETUP_BUDGET.maxTurns * 2);
     expect(SETUP_LIMITS.minIntervalSeconds).toBe(1);
-    expect(SETUP_LIMITS.overallDailyCap).toBe(LLM_LIMITS.overallDailyCap);
+    // The overall limit is the approved number, and it is room for 3 adults each using their whole allowance, with spare.
+    expect(LLM_LIMITS.overallDailyCap).toBe(450);
+    expect(SETUP_LIMITS.overallDailyCap).toBe(450);
+    expect(3 * SETUP_LIMITS.userDailyCap).toBeLessThan(SETUP_LIMITS.overallDailyCap);
   });
 });
 
@@ -196,6 +203,60 @@ describe('the one hard shared cap', () => {
   });
 });
 
+describe('the per-person limit (MOM-165)', () => {
+  // A person's count is across every feature, oldest 5 hours ago, so room opens in 19 hours.
+  const useUp = (userId: string, count: number) => {
+    for (let i = 0; i < count; i++) seedUsage(userId, 5 * HOUR - i * 1000, { feature: i % 2 ? 'rebalance' : 'setup' });
+  };
+
+  it('refuses past 100 calls in plain words, with the wait, and makes no call and writes nothing', async () => {
+    useUp(USER, SETUP_PERSON_DAILY_CAP);
+    const requestTurn = stubModel();
+    const result = await runSetupTurn({ userId: USER, transcript: transcriptOf(3), draft, spentTokens: 0 }, { requestTurn });
+    expect(result).toEqual({
+      kind: 'quick_path',
+      reason: 'person_cap',
+      message: "You've used all 100 of your Claude requests for the last 24 hours, so it can't ask any more. You can ask again in about 19 hours.",
+    });
+    expect(requestTurn).not.toHaveBeenCalled();
+    expect(rowsFor(USER)).toHaveLength(SETUP_PERSON_DAILY_CAP);
+  });
+
+  it('lets the 100th call through, and refuses the 101st', async () => {
+    useUp(USER, SETUP_PERSON_DAILY_CAP - 1);
+    const requestTurn = stubModel();
+    expect((await runSetupTurn({ userId: USER, transcript: transcriptOf(3), draft, spentTokens: 0 }, { requestTurn })).kind).toBe('answered');
+    usage.nowMs += TURN_MS;
+    expect(await runSetupTurn({ userId: USER, transcript: transcriptOf(4), draft, spentTokens: 0 }, { requestTurn })).toMatchObject({
+      kind: 'quick_path',
+      reason: 'person_cap',
+    });
+    expect(requestTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts only the person's own calls: someone else being at their limit changes nothing for this person", async () => {
+    useUp(OTHER_USER, SETUP_PERSON_DAILY_CAP);
+    const requestTurn = stubModel();
+    expect((await runSetupTurn({ userId: USER, transcript: [], draft, spentTokens: 0 }, { requestTurn })).kind).toBe('answered');
+  });
+
+  it('is not the shared cap: the shared cap is reported in its own words', async () => {
+    for (let i = 0; i < LLM_LIMITS.overallDailyCap; i++) seedUsage(OTHER_USER, HOUR + i * 1000);
+    const result = await runSetupTurn({ userId: USER, transcript: [], draft, spentTokens: 0 }, { requestTurn: stubModel() });
+    expect(result).toMatchObject({ kind: 'quick_path', reason: 'shared_cap', message: SETUP_QUICK_PATH_MESSAGES.shared_cap });
+  });
+
+  it('keeps the 40-turn cap exactly as it was', async () => {
+    expect(SETUP_BUDGET.maxTurns).toBe(40);
+    const requestTurn = stubModel();
+    expect((await runSetupTurn({ userId: USER, transcript: transcriptOf(39), draft, spentTokens: 0 }, { requestTurn })).kind).toBe('answered');
+    expect(await runSetupTurn({ userId: USER, transcript: transcriptOf(40), draft, spentTokens: 0 }, { requestTurn })).toMatchObject({
+      kind: 'quick_path',
+      reason: 'over_turns',
+    });
+  });
+});
+
 describe('going over the per-setup budget', () => {
   it('falls back to the quick path after the last allowed turn, without a reservation or a call', async () => {
     const requestTurn = stubModel();
@@ -262,7 +323,7 @@ describe('going over the per-setup budget', () => {
     expect(SETUP_QUICK_PATH_MESSAGES.over_turns).toBe("This setup has used up the questions Claude gets for one setup, so it can't ask any more.");
     expect(SETUP_QUICK_PATH_MESSAGES.over_tokens).toBe(SETUP_QUICK_PATH_MESSAGES.over_turns);
     expect(SETUP_QUICK_PATH_MESSAGES.shared_cap).toBe("Claude is at its shared limit for everyone right now, so it can't ask any more questions.");
-    expect(SETUP_QUICK_PATH_MESSAGES.person_cap).toBe("Claude can't take more requests from you right now.");
+    expect(SETUP_QUICK_PATH_MESSAGES.person_cap).toBe("You've used all 100 of your Claude requests for the last 24 hours, so it can't ask any more.");
     expect(SETUP_QUICK_PATH_MESSAGES.unchecked).toBe("Claude's usage limits could not be checked, so setup can't go on with Claude.");
   });
 });
@@ -298,11 +359,43 @@ describe('every setup call is logged as setup', () => {
     expect(rows).toHaveLength(2);
     for (const row of rows) {
       expect(row).toMatchObject({ feature: 'setup', model: SETUP_MODEL, input_tokens: 2000, output_tokens: 300, outcome: 'ok' });
-      expect(Object.keys(row).sort()).toEqual(
-        ['created_at', 'feature', 'id', 'input_tokens', 'latency_ms', 'model', 'outcome', 'output_tokens', 'user_id'],
-      );
+      expect(Object.keys(row).sort()).toEqual([
+        'cache_read_tokens',
+        'cache_write_tokens',
+        'created_at',
+        'feature',
+        'id',
+        'input_tokens',
+        'latency_ms',
+        'model',
+        'outcome',
+        'output_tokens',
+        'user_id',
+      ]);
     }
     expect(usage.reserveCalls.every((c) => c.p_feature === 'setup')).toBe(true);
+  });
+
+  it("carries input, output, cache-read and cache-write tokens on a setup turn's row (MOM-165)", async () => {
+    const full = { inputTokens: 2000, outputTokens: 300, cacheReadTokens: 1500, cacheWriteTokens: 400 };
+    await runSetupTurn({ userId: USER, transcript: [], draft, spentTokens: 0 }, { requestTurn: stubModel(() => answer(full)) });
+    expect(rowsFor(USER)[0]).toMatchObject({
+      feature: 'setup',
+      outcome: 'ok',
+      input_tokens: 2000,
+      output_tokens: 300,
+      cache_read_tokens: 1500,
+      cache_write_tokens: 400,
+    });
+    // Cache tokens sit outside the per-setup token budget (input plus output): see lib/ai/usage.ts.
+    usage.nowMs += TURN_MS;
+    const next = await runSetupTurn({ userId: USER, transcript: transcriptOf(1), draft, spentTokens: 0 }, { requestTurn: stubModel(() => answer(full)) });
+    expect(next).toMatchObject({ kind: 'answered', spentTokens: 2300 });
+  });
+
+  it('logs the cache tokens as null when the response did not report them, never as 0', async () => {
+    await runSetupTurn({ userId: USER, transcript: [], draft, spentTokens: 0 }, { requestTurn: stubModel() });
+    expect(rowsFor(USER)[0]).toMatchObject({ input_tokens: 2000, output_tokens: 300, cache_read_tokens: null, cache_write_tokens: null });
   });
 
   it('reserves with the setup limits, never the per-call ones', async () => {
