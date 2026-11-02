@@ -647,6 +647,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The CLI's "mobile push requested" output, then the owner minimising the window.
 - **Led to:** A fix this session (minimise the CLI at stops) and a rule: before blaming an instruction, check whether the action happened.
 
+### F-095 · 2026-11-02 · build tool
+- **Asked:** Follow the plan's standing rule (MOM-96): a jsdom test that fails a full run and passes alone is a failure to fix, not a flake to rerun.
+- **What went wrong:** A build block saw one jsdom test fail in two of three full runs, ran the suite again until it passed, and committed with the failure left as a note for the day-end.
+- **Why:** The test was outside the block's own change, and "not touched by this change" was read as a reason to note it rather than fix it. The rule does not depend on whose change the test belongs to: the race (a focus check that did not wait for the effect that moves the focus) was on `main` too.
+- **Caught by:** The block's own close-out note, then the owner's day-end instruction to find the cause.
+- **Led to:** A fix this session (the test now waits for the focus, and still fails without the focus call).
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
