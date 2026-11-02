@@ -79,6 +79,7 @@ import {
   signInWithPassword,
   signUpWithPassword,
   updatePassword,
+  verifyConfirmationToken,
   verifyRecoveryToken,
 } from '@/lib/services/auth';
 import { RECOVERY_COOKIE, recoveryMarkerCookie } from '@/lib/services/recoveryMarker';
@@ -150,6 +151,63 @@ describe('sign-in and the password length (MOM-150)', () => {
       ok: false,
       error: 'Password must be at least 8 characters.',
     });
+  });
+});
+
+describe('a sign-in that fails (MOM-163)', () => {
+  const credentials = { email: 'a@example.com', password: 'long-enough-1' };
+  const RAW = 'Invalid login credentials';
+
+  it('says the same plain thing for a wrong password and an unknown address, never the provider text', async () => {
+    fake.error = { code: 'invalid_credentials', message: RAW };
+    const wrong = await signInWithPassword(credentials);
+    expect(wrong).toEqual({ ok: false, error: "That email and password don't match. Check them and try again, or tap Forgot password?" });
+    // Supabase gives one answer whether the address has an account or not, so the service cannot tell them apart either.
+    expect(await signInWithPassword({ ...credentials, email: 'nobody@example.com' })).toEqual(wrong);
+    expect(JSON.stringify(wrong)).not.toMatch(/invalid login credentials|account/i);
+  });
+
+  it('tells an unconfirmed account to open its link or create the account again', async () => {
+    fake.error = { code: 'email_not_confirmed', message: 'Email not confirmed' };
+    expect(await signInWithPassword(credentials)).toEqual({
+      ok: false,
+      error: "Your account isn't confirmed yet. Open the link we emailed you, or create the account again with the same address and we'll send a new one.",
+    });
+  });
+
+  it('shows one plain line for any other error, never the provider text', async () => {
+    for (const error of [
+      { code: 'over_request_rate_limit', message: 'Request rate limit reached' },
+      { message: 'fetch failed' },
+    ]) {
+      fake.error = error;
+      expect(await signInWithPassword(credentials)).toEqual({ ok: false, error: "We couldn't sign you in. Try again in a little while." });
+    }
+  });
+});
+
+describe('verifyConfirmationToken (MOM-163)', () => {
+  it('verifies the token hash with the type the link carries, for both types a sign-up confirmation uses', async () => {
+    for (const type of ['email', 'signup']) {
+      fake.calls = [];
+      expect(await verifyConfirmationToken('hash-1', type)).toEqual({ ok: true, data: null });
+      expect(called('verifyOtp')[0].args).toEqual([{ token_hash: 'hash-1', type }]);
+    }
+  });
+
+  it('refuses an empty token, and any type that is not a confirmation (a recovery token is not one), without calling Supabase', async () => {
+    expect(await verifyConfirmationToken('', 'email')).toMatchObject({ ok: false });
+    expect(await verifyConfirmationToken('   ', 'signup')).toMatchObject({ ok: false });
+    for (const type of ['recovery', 'magiclink', '']) expect(await verifyConfirmationToken('hash-1', type)).toMatchObject({ ok: false });
+    expect(fake.calls).toEqual([]);
+  });
+
+  it('comes back as an error for a used or expired token, and when no user was started', async () => {
+    fake.error = { code: 'otp_expired', message: 'Email link is invalid or has expired' };
+    expect(await verifyConfirmationToken('hash-1', 'email')).toMatchObject({ ok: false });
+    fake.error = null;
+    fake.sub = undefined;
+    expect(await verifyConfirmationToken('hash-1', 'email')).toMatchObject({ ok: true });
   });
 });
 

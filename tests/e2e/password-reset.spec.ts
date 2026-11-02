@@ -62,7 +62,7 @@ test.describe('password reset', () => {
     // Sign in with the new password; the old one no longer works.
     await signOutFromSettings(page);
     await submitCredentials(page, email, PASSWORD, 'Sign in');
-    await expect(page.locator('form [role="alert"]')).toHaveText(/invalid login credentials/i);
+    await expect(page.locator('form [role="alert"]')).toHaveText("That email and password don't match. Check them and try again, or tap Forgot password?");
     await submitCredentials(page, email, NEW_PASSWORD, 'Sign in');
     await expect(page).toHaveURL(/\/$/);
     await expectHomeLoaded(page);

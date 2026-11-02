@@ -20,7 +20,7 @@ const EMAILS = [
     name: 'confirmation',
     file: 'supabase/templates/confirmation.html',
     subject: 'Confirm your email for Momentum',
-    link: '{{ .ConfirmationURL }}',
+    link: '{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email',
     button: 'Confirm my email',
     words: [
       'Thanks for signing up for Momentum.',

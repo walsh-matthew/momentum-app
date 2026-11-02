@@ -8,7 +8,7 @@ interface LoginPageProps {
 }
 
 const ERRORS: Record<string, string> = {
-  confirmation: 'That confirmation link is invalid or has expired. Sign in, or create the account again.',
+  confirmation: "This link has already been used or has expired. If you've confirmed your account, sign in. If not, create the account again with the same address and we'll send a new link.",
   reset: 'That reset link is invalid or has expired. Enter your email and we will send a new one.',
 };
 

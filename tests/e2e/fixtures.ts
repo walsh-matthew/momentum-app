@@ -55,7 +55,8 @@ export async function confirmationLinkFor(email: string): Promise<string> {
         const detail = await fetch(`${base}/api/v1/message/${messages[0].ID}`);
         const body = (await detail.json()) as { Text?: string; HTML?: string };
         const text = `${body.Text ?? ''}\n${body.HTML ?? ''}`.replace(/&amp;/g, '&');
-        const link = /https?:\/\/[^\s"'<>]*\/auth\/v1\/verify[^\s"'<>]*/.exec(text)?.[0];
+        // The token link the confirmation template builds (MOM-163): /auth/callback?token_hash=...&type=email.
+        const link = /https?:\/\/[^\s"'<>]*\/auth\/callback\?[^\s"'<>]*token_hash=[^\s"'<>]*/.exec(text)?.[0];
         if (link) return link;
       }
     }

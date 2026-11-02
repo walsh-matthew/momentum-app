@@ -249,7 +249,8 @@ otp_expiry = 3600
 # sender_name = "Admin"
 
 # Momentum sends two auth emails (MOM-149): sign-up confirmation and password reset. Production uses the same text,
-# pasted into Authentication > Emails > Templates > Confirm sign up / Reset password.
+# pasted into Authentication > Emails > Templates > Confirm sign up / Reset password. Both carry a token link (MOM-122, MOM-163)
+# so they open in any browser, not only the one that asked.
 [auth.email.template.confirmation]
 subject = "Confirm your email for Momentum"
 content_path = "./supabase/templates/confirmation.html"
