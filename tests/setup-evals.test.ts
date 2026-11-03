@@ -31,9 +31,9 @@ const byId = (id: string): ScriptedCase => {
 };
 
 describe('the eval set', () => {
-  it('has twenty-two cases: fourteen full conversations (MOM-166 adds a deadline task recorded before its answer) and one fixture per hard rule', () => {
-    expect(SETUP_CASES).toHaveLength(22);
-    expect(SETUP_CASES.filter((c) => c.expect === 'clean')).toHaveLength(14);
+  it('has twenty-four cases: sixteen full conversations (MOM-166 adds a deadline task recorded before its answer, MOM-168 a compound answer and a first answer that holds the target) and one fixture per hard rule', () => {
+    expect(SETUP_CASES).toHaveLength(24);
+    expect(SETUP_CASES.filter((c) => c.expect === 'clean')).toHaveLength(16);
     expect(SETUP_CASES.filter((c) => c.expect !== 'clean').map((c) => c.rules[0]).sort()).toEqual([...HARD_RULE_IDS].sort());
   });
 
@@ -45,6 +45,45 @@ describe('the eval set', () => {
     expect(ids).toContain('run-g-relative-deadline');
     expect(ids).toContain('run-h-two-activities');
     expect(ids).toContain('run-m-deadline-item-at-date');
+    expect(ids).toContain('run-n-compound-answer');
+    expect(ids).toContain('run-o-first-answer-holds-target');
+  });
+
+  // MOM-168, production 2026-11-02 ~23:20 UTC: "I want to run three days a week" as the first answer. The goal and its target are recorded
+  // in the turn that replies to it, with no number guessed; the count question is skipped in one line and never asked; the question
+  // that follows quotes the number and asks only its level; the floor then rests on the first message.
+  it('records the target from a first answer, skips the count question, and asks which level the number is, once', async () => {
+    const c = byId('run-o-first-answer-holds-target');
+    const report = await run(c);
+    expect(described(report)).toEqual([]);
+    const first = c.script[1];
+    expect(first.draft.model.goals[0].targets).toHaveLength(1);
+    expect(first.draft.model.goals[0].targets[0]).toMatchObject({ title: 'Runs', floor: null, aspiration: null });
+    expect(report.turns.filter((t) => t.turn.topic === 'target')).toEqual([]);
+    expect(report.turns.filter((t) => t.turn.topic === 'floor' || t.turn.topic === 'aspiration')).toEqual([]);
+    const level = report.turns.filter((t) => t.turn.topic === 'number_level');
+    expect(level).toHaveLength(1);
+    expect(level[0].turn.say).toContain('3');
+    expect(level[0].turn.draft.model.goals[0].targets[0].floor).toBeNull();
+    expect(report.draft.model.goals[0].targets[0].floor).toBe(3);
+    expect(report.draft.said.find((s) => s.path === 'goals.g1.targets.t1.floor')).toMatchObject({ turn: 1, how: 'said' });
+    expect(report.finished).toBe(true);
+    expect(report.finalIssues).toEqual([]);
+  });
+
+  // MOM-168: "Runs, at least 3 a week." gives the floor too. The floor is recorded from that answer, its question is skipped in one
+  // line (accepted, not skip.unanswered) and never asked, and the finished draft is valid.
+  it('records the floor from a compound answer, skips its question in one line, and never asks it', async () => {
+    const c = byId('run-n-compound-answer');
+    const report = await run(c);
+    expect(described(report)).toEqual([]);
+    expect(c.person.some((p) => /at least 3 a week/.test(p.say))).toBe(true);
+    const skipped = report.turns.flatMap((t) => (t.turn.skipped ? [t.turn.skipped] : []));
+    expect(skipped.map((x) => x.topic)).toEqual(['floor']);
+    expect(report.turns.filter((t) => t.turn.topic === 'floor')).toEqual([]);
+    expect(report.draft.model.goals[0].targets[0].floor).toBe(3);
+    expect(report.finished).toBe(true);
+    expect(report.finalIssues).toEqual([]);
   });
 
   // MOM-166: run-a records the task whole, after the answer, so it never held a task with a date and no answer. This case does,

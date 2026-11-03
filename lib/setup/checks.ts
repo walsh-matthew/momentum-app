@@ -23,7 +23,7 @@ import {
   type TurnKind,
 } from '@/types/setup';
 import { unsaidActivities } from './activities';
-import { answeredTopics, changedLeafPaths, chunkSlice, freeTextLeaves } from './leaves';
+import { IN_PASSING_TOPICS, answeredTopics, changedLeafPaths, chunkSlice, freeTextLeaves } from './leaves';
 import { FINAL_MAX_LINES, renderFinal } from './playback';
 import { answerWords, latestAnswer, personWords, type PersonAnswer } from './said';
 import { DATE_TOPICS, hasDate } from './codeTurns';
@@ -104,6 +104,8 @@ export const VIOLATION_CODES = [
   'plain.jargon',
   'plain.unquoted_source',
   'plain.title',
+  'plain.asked_again',
+  'plain.level_no_number',
   'returning.topic',
   'returning.person',
   'returning.goal',
@@ -667,7 +669,31 @@ export function checkReturning(turn: AssistantTurn, ctx: TurnContext): Violation
   return out;
 }
 
-export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn, checkOptionList, checkEverydayWords, checkTitles] as const;
+// A question for something the draft already holds that nobody was ever asked for: the person gave it inside another answer ("runs,
+// at least 3 a week", or a first answer that already names what they count), so rule 5 says to use it and skip the question
+// (MOM-168). Soft, so a mislabelled topic costs one retry and never "Try again". Only the topics a person can answer inside another
+// answer (lib/setup/leaves.ts). A topic that was asked earlier in this setup, or skipped with a line, is dealt with, so a follow-up,
+// a clarification, or a second target asked for after the first is not a repeat. Ideas, interpretations and a proposal answer a
+// request or a doubt or hand code's value to accept, and a playback or the final confirmation asks for no topic, so none of them is
+// checked. The topics are read from the goal being set up, so a goal saved earlier holding a topic never excuses a new goal's.
+export function checkAskedAgain(turn: AssistantTurn, ctx: TurnContext): Violation[] {
+  const topic = turn.topic;
+  if ((turn.kind !== 'question' && turn.kind !== 'offer_ideas') || topic === null || !IN_PASSING_TOPICS.has(topic)) return [];
+  if (!answeredTopics(turn.draft.model).has(topic)) return [];
+  const dealtWith = ctx.transcript.some((m) => m.role === 'assistant' && ((m.turn.topic === topic && ASKING_KINDS.includes(m.turn.kind)) || m.turn.skipped?.topic === topic));
+  if (dealtWith) return [];
+  return [v('plain_words', 'plain.asked_again', `"${topic}" was already given by the person and recorded, then asked for.`)];
+}
+
+// The question about which level a number is (topic number_level) quotes the number they gave, so the number is used and never
+// asked for again; a number the person never said is already refused (math.number).
+export function checkLevelQuotesNumber(turn: AssistantTurn): Violation[] {
+  if (turn.topic !== 'number_level' || !ASKING_KINDS.includes(turn.kind)) return [];
+  if (numbersIn(authored(turn).join(' ')).length > 0) return [];
+  return [v('plain_words', 'plain.level_no_number', 'The question about which level a number is does not quote the number the person gave.')];
+}
+
+export const PLAIN_WORDS_CHECKS = [checkLeadIn, checkNoNewActivity, checkQuestionLength, checkDateLeadIn, checkOptionList, checkEverydayWords, checkTitles, checkAskedAgain, checkLevelQuotesNumber] as const;
 
 // ---------------------------------------------------------------------------
 // All of it

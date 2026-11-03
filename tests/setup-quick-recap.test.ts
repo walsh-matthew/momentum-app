@@ -4,7 +4,7 @@
 // - the floor reads "Even in a hard week: at least 3 workouts a week.", never "Your goal";
 // - a thing counted with no number reads "You'll count workouts each week.", never "Counted each week: Workouts";
 // - the day end reads "You check in at 9:00 PM.", or, after midnight, says late entries count toward the day before;
-// - a time zone reads "London time", never "Europe/London";
+// - a time zone reads "United Kingdom Time" (MOM-167), never "Europe/London";
 // - a part with nothing in it is left out, and "Nothing in this part yet." is never shown;
 // - no goal's text is said twice.
 
@@ -69,7 +69,7 @@ describe('what was said, one line each', () => {
 
   it('the time zone reads as the city\'s time, and the week start as a day', () => {
     const lines = textOf(recapSections(model((m) => { m.person.timeZone = 'Europe/London'; m.person.weekStart = 1; }), OPTIONS));
-    expect(lines).toEqual(["You're on London time.", 'Your week starts on Monday.']);
+    expect(lines).toEqual(["You're on United Kingdom Time.", 'Your week starts on Monday.']);
     expect(lines.join('\n')).not.toContain('Europe/London');
   });
 

@@ -1,6 +1,6 @@
 // The setup eval set (MOM-111, design record §5.1): scripted conversations with personal details removed. Every name,
 // date and number here is invented. Each case pairs a scripted person with a scripted fake model, so `npm test` makes no
-// network call. Fourteen cases are full conversations that must come out clean; eight are short conversations with one
+// network call. Sixteen cases are full conversations that must come out clean; eight are short conversations with one
 // deliberately bad turn, to show each hard rule's check catches what it should (and only that). The questions are written
 // the way setup should ask them (MOM-111): everyday words, a reason, and short examples where they help.
 
@@ -50,7 +50,10 @@ interface HabitOptions {
   goals?: 'single' | 'two';
   // Step 4, "what else matters". 'whatDoYouMean': the person asks what the question means and Claude explains it.
   priorities?: 'plain' | 'whatDoYouMean';
-  floor: 'plain' | 'ideas' | 'ambiguous' | 'changeAtApproval';
+  // 'compound': the answer to "what would you like to count" also gives the least that counts (MOM-168), so the floor question is skipped.
+  // 'levelAsked': the first answer already holds the goal, what they count and a number with no "at least" or "aiming for" (MOM-168):
+  // the target is recorded at once, the count question is skipped, and which level the number is gets asked once, quoting it.
+  floor: 'plain' | 'ideas' | 'ambiguous' | 'changeAtApproval' | 'compound' | 'levelAsked';
   // 'whatDoYouMean': the person asks what the day-end question means, and Claude explains it before asking again.
   dayEnd: 'checkin' | 'ambiguousEarly' | 'whatDoYouMean';
   reminders?: boolean;
@@ -121,6 +124,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
       topic: 'why',
       edit: (m) => {
         m.goals.push(goal('g1', title));
+        if (o.floor === 'levelAsked') goalOf(m, 'g1').targets.push(target('t1', counted.title));
         if (early) m.person.weekStart = 1;
       },
       said: early ? ['person.weekStart'] : [],
@@ -208,9 +212,22 @@ function habitCase(o: HabitOptions): ScriptedCase {
     },
     said: o.goals === 'two' ? [] : ['goals.g1.blockWeeks'],
     accepted: o.goals === 'two' ? ['goals.g2.startDate'] : [],
-    say: 'That way Momentum can show you how it is going from what you log.',
-    question: 'What would you like to count to know this is going well?',
-    reply: counted.reply,
+    ...(o.floor === 'levelAsked'
+      ? {
+          // The target is already in the draft from the first answer, so this step skips the count question and asks which level the
+          // number they gave is, quoting it.
+          skipped: { topic: 'target' as const, line: `You told me you'd count ${counted.word}, so I'll use that.` },
+          topic: 'number_level' as const,
+          say: `You said 3 ${counted.word} a week.`,
+          question: "Is that the least that counts, or what you're aiming for?",
+          detail: 'The least that counts is the number for a hard week: a week at it is still a good week.',
+          reply: 'The least that counts.',
+        }
+      : {
+          say: 'That way Momentum can show you how it is going from what you log.',
+          question: 'What would you like to count to know this is going well?',
+          reply: o.floor === 'compound' ? `${counted.title}, at least 3 a week.` : counted.reply,
+        }),
   });
 
   const addTarget = (m: SetupModel) => {
@@ -227,6 +244,25 @@ function habitCase(o: HabitOptions): ScriptedCase {
     case 'changeAtApproval':
       s.add({ topic: 'floor', edit: addTarget, question: floorQ(counted.word), reply: 'Two a week.' });
       s.playback('targets', 'Yes.', { edit: finishTarget(2), said: floorPath });
+      break;
+    case 'compound':
+      // Claude records the target and its floor from the one answer, says in one line that it is using it, and asks the next thing.
+      s.add({
+        topic: 'aspiration',
+        edit: (m) => {
+          addTarget(m);
+          targetOf(m, 'g1', 't1').floor = 3;
+        },
+        said: floorPath,
+        skipped: { topic: 'floor', line: `You said at least 3 ${counted.word} a week, so I'll use that.` },
+        question: `How many ${counted.word} a week are you hoping for?`,
+        reply: 'No, at least that many is enough.',
+      });
+      s.playback('targets', 'Yes.', { edit: (m) => goalOf(m, 'g1').items.push(item('i1', 'habit', counted.habit, { targetKey: 't1' })) });
+      break;
+    case 'levelAsked':
+      // They chose the least that counts, so the number from the first answer is the floor; its provenance is that first message.
+      s.playback('targets', 'Yes.', { edit: finishTarget(3), said: ['goals.g1.targets.t1.floor@0'] });
       break;
     case 'ideas':
       s.add({
@@ -324,7 +360,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
   }
   if (change) s.playback('targets', 'Yes, that is right.');
 
-  s.add({ topic: 'tone', question: 'How direct would you like me to be, from gentle to blunt?', reply: 'Gentle, please.' });
+  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'Gentle, please.' });
   if (o.reminders) {
     s.add({
       topic: 'reminders',
@@ -466,7 +502,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
   });
   // Every goal here is a deadline goal, so no week start is asked (MOM-125).
   s.playback('planning', 'Yes.', { edit: (m) => (m.person.dayEnd = '21:00'), said: ['person.dayEnd'] });
-  s.add({ topic: 'tone', question: 'How direct would you like me to be, from gentle to blunt?', reply: 'Gentle, please.' });
+  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'Gentle, please.' });
   s.playback('talk', 'Yes.', { edit: (m) => (m.settings.tone = 'gentle') });
   s.final();
   return done({ id: o.id, title: o.title, rules: o.rules, expect: 'clean' }, s);
@@ -583,7 +619,7 @@ function phoneCase(): ScriptedCase {
     reply: 'monday',
   });
   s.playback('planning', 'yes', { edit: (m) => (m.person.weekStart = 1), said: ['person.weekStart'] });
-  s.add({ topic: 'tone', question: 'How direct would you like me to be, from gentle to blunt?', reply: 'gentle' });
+  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'gentle' });
   s.add({
     topic: 'reminders',
     edit: (m) => (m.settings.tone = 'gentle'),
@@ -847,6 +883,28 @@ export const SETUP_CASES: ScriptedCase[] = [
     priorities: 'plain',
     floor: 'plain',
     dayEnd: 'checkin',
+  }),
+  // MOM-168: one answer gives the thing counted and the least that counts; setup records both, skips the floor question in one
+  // line, and does not ask for it again.
+  habitCase({
+    id: 'run-n-compound-answer',
+    title: 'an answer that also gives the least that counts: recorded, and the floor question skipped in one line',
+    rules: ['skip_answered', 'assume_nothing'],
+    idea: 'I want to run more.',
+    floor: 'compound',
+    dayEnd: 'checkin',
+    counted: RUNS,
+  }),
+  // MOM-168, production 2026-11-02: the first answer "I want to run three days a week" holds the goal, what they count and how often.
+  // The target is recorded in the same turn as the goal, the count question is skipped, and which level the 3 is gets asked once.
+  habitCase({
+    id: 'run-o-first-answer-holds-target',
+    title: 'a first answer that already holds what they count and how often: recorded at once, the count question skipped, the number quoted and its level asked once',
+    rules: ['skip_answered', 'assume_nothing'],
+    idea: 'I want to run three days a week.',
+    floor: 'levelAsked',
+    dayEnd: 'checkin',
+    counted: RUNS,
   }),
   phoneCase(),
   // A goal that is not exercise (round 3b, finding 4): every option, detail and the final recap count "pages", the person's

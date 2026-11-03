@@ -137,7 +137,7 @@ export const SETUP_STEPS: readonly SetupStep[] = [
     id: 'what_counts',
     title: 'What counts',
     summary:
-      'Ask what they want to count to see it is going well (each thing counted is saved as a target). Something they do and count, like sessions or hours, is saved as an effort target and checked against their numbers; a result they cannot fully control, like interviews, is saved as an outcome target and only shown, never judged. Ask the least that would still count as on track (saved as the floor), and the number they are hoping for only if they want one (saved as the aspiration). Never push them to guess a failure rate. The numbers are theirs; you write down only what they said. Momentum does not keep an upper limit yet (the most they would want to do): if they give one, say in one short line in "say" that it is not kept yet, and write nothing for it.',
+      'Ask what they want to count to see it is going well (each thing counted is saved as a target). Something they do and count, like sessions or hours, is saved as an effort target and checked against their numbers; a result they cannot fully control, like interviews, is saved as an outcome target and only shown, never judged. Ask the least that would still count as on track (saved as the floor), and the number they are hoping for only if they want one (saved as the aspiration). Never push them to guess a failure rate. The numbers are theirs; you write down only what they said. Momentum does not keep an upper limit yet (the most they would want to do): if they give one, say in one short line in "say" that it is not kept yet, and write nothing for it. When an earlier answer already named what they count ("I want to run three days a week"), record it as a target as soon as they say it, and skip "what would you like to count" here in one line. When they gave a number with no "at least" or "aiming for", leave both numbers empty and ask once, tagged number_level, which level it is: put the number they gave in "say" ("You said 3 runs a week."), and ask whether that is the least that counts or what they are aiming for. Never ask for the number again. When they answer, record it as the least that counts or as the number they are hoping for, citing in "said" the message that holds the number. A number they are hoping for needs the least that counts beneath it, so ask that next unless they have given it.',
     reason: 'Momentum shows your progress from what you log.',
     examples: [
       {
@@ -151,8 +151,13 @@ export const SETUP_STEPS: readonly SetupStep[] = [
         detail: 'Like an interview. What you do is checked against your number; a result is only shown, never judged.',
       },
       { topic: 'floor', question: 'In a hard week, how many pages would still count?', detail: 'A week at this number still counts as a good week.' },
+      {
+        topic: 'number_level',
+        question: "Is that the least that counts, or what you're aiming for?",
+        detail: 'The least that counts is the number for a hard week: a week at it is still a good week.',
+      },
     ],
-    topics: ['target', 'role', 'floor', 'aspiration'],
+    topics: ['target', 'role', 'floor', 'aspiration', 'number_level'],
     playbackAfter: 'targets',
   },
   {
@@ -223,7 +228,7 @@ export const SETUP_STEPS: readonly SetupStep[] = [
       'Ask, conversationally and not as a form, how they want Momentum to talk to them: how direct to be (tone), whether they want reminders, whether Momentum should ask how it went for the things they log themselves (check-ins), how big celebrations should be, times it should stay silent (quiet times), whether to point out when one goal is taking time from the rest (balance mentions), how much the weekly look-back covers (review depth), and whether the look-back and planning the next week happen in one sitting or separately. Ask whether they want a reminder; never say there will be one.',
     reason: 'Momentum words things to you that way.',
     examples: [
-      { topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to blunt. Momentum words things to you that way.' },
+      { topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.' },
       { topic: 'reminders', question: 'Would you like reminders on the days you plan something?' },
       {
         topic: 'check_ins',
@@ -282,7 +287,7 @@ export const HARD_RULES: readonly HardRule[] = [
     n: 5,
     id: 'skip_answered',
     title: 'Skip what is already answered',
-    text: 'Skip what is already answered. If an earlier answer or a person fact covers a question, say so in one line ("You told me your week starts Monday, so I\'ll skip that") and move on. A question on the same topic straight after their reply is a follow-up or a clarification, not a repeat; asking a topic again after the conversation has moved on is a repeat.',
+    text: 'Skip what is already answered. If an earlier answer or a person fact covers a question, say so in one line ("You told me your week starts Monday, so I\'ll skip that") and move on. A question on the same topic straight after their reply is a follow-up or a clarification, not a repeat; asking a topic again after the conversation has moved on is a repeat. When one answer holds more than the question asked (a number, how often, a unit, an app, a date), record every part of it in the draft with its "said" entry in the same turn. Never ask for a part you recorded. If your next question would have asked for it, set "skipped" to that topic with one short plain line that names what you are using ("You said at least 3 runs a week, so I\'ll use that.") and ask the next thing. Read "at least N" as the least that counts and "aiming for N" as the number hoped for; for any other number with no such word, ask which it is.',
   },
   {
     n: 6,

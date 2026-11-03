@@ -454,7 +454,7 @@ describe('takeSetupTurn: when Claude is no longer used', () => {
     expect(lines.some((l) => /starts Friday, Oct 30/.test(l)), lines.join(' | ')).toBe(true);
     expect(lines.join('\n')).not.toMatch(/\b(today|tomorrow|yesterday)\b/i);
     // Their own time zone is why it is ahead, and the same recap says so in plain words.
-    expect(lines).toContain("You're on Auckland time.");
+    expect(lines).toContain("You're on New Zealand Time.");
   });
 
   it('can be saved when the draft is complete, because saving there is the approval of every part shown', async () => {

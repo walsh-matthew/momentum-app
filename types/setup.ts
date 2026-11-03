@@ -71,6 +71,7 @@ export const SETUP_TOPICS = [
   'role',
   'floor',
   'aspiration',
+  'number_level',
   'expansion',
   'source',
   'metric',

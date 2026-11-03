@@ -14,6 +14,7 @@ import {
   clock,
   countedWords,
   dateWords,
+  dayKindWords,
   describePeriod,
   describeReturn,
   plural,
@@ -22,7 +23,7 @@ import {
   type PlaybackOptions,
 } from './playback';
 import { asSaid, itemOf, listOf, restate, titleOf } from './restate';
-import { zoneWords } from './timeZones';
+import { zoneLine } from './timeZones';
 import { minutesOfClock } from './text';
 
 export const goalStepId = (g: GoalDraft): string => `goal:${g.key}`;
@@ -96,7 +97,7 @@ function goalWhy(g: GoalDraft): string | null {
 function daysLines(model: SetupModel, options: PlaybackOptions): string[] {
   const p = model.person;
   const lines: string[] = [];
-  if (p.timeZone) lines.push(`You're on ${zoneWords(p.timeZone)}.`);
+  if (p.timeZone) lines.push(zoneLine(p.timeZone));
   if (p.dayEnd) {
     const at = clock(p.dayEnd, 'person.dayEnd', options);
     const m = minutesOfClock(p.dayEnd);
@@ -105,8 +106,7 @@ function daysLines(model: SetupModel, options: PlaybackOptions): string[] {
   }
   if (p.weekStart !== null) lines.push(`Your week starts on ${weekdayName(p.weekStart)}.`);
   if (p.dayTypes.length > 0) {
-    const kinds = p.dayTypes.map((d) => `${itemOf(d.name)}${d.capacityAmount !== null ? ` (${d.capacityAmount} ${d.capacityUnit ?? ''})`.replace(' )', ')') : ''}`);
-    lines.push(`Your kinds of days: ${listOf(kinds)}.`);
+    lines.push(`Your kinds of days: ${listOf(p.dayTypes.map(dayKindWords))}.`);
   }
   if (p.planning.weekday !== null || p.planning.time !== null) {
     const on = p.planning.weekday !== null ? ` on ${weekdayName(p.planning.weekday)}` : '';
