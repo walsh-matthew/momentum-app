@@ -324,7 +324,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
   }
   if (change) s.playback('targets', 'Yes, that is right.');
 
-  s.add({ topic: 'tone', question: 'How direct would you like me to be, from gentle to blunt?', reply: 'Gentle, please.' });
+  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'Gentle, please.' });
   if (o.reminders) {
     s.add({
       topic: 'reminders',
@@ -466,7 +466,7 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
   });
   // Every goal here is a deadline goal, so no week start is asked (MOM-125).
   s.playback('planning', 'Yes.', { edit: (m) => (m.person.dayEnd = '21:00'), said: ['person.dayEnd'] });
-  s.add({ topic: 'tone', question: 'How direct would you like me to be, from gentle to blunt?', reply: 'Gentle, please.' });
+  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'Gentle, please.' });
   s.playback('talk', 'Yes.', { edit: (m) => (m.settings.tone = 'gentle') });
   s.final();
   return done({ id: o.id, title: o.title, rules: o.rules, expect: 'clean' }, s);
@@ -583,7 +583,7 @@ function phoneCase(): ScriptedCase {
     reply: 'monday',
   });
   s.playback('planning', 'yes', { edit: (m) => (m.person.weekStart = 1), said: ['person.weekStart'] });
-  s.add({ topic: 'tone', question: 'How direct would you like me to be, from gentle to blunt?', reply: 'gentle' });
+  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'gentle' });
   s.add({
     topic: 'reminders',
     edit: (m) => (m.settings.tone = 'gentle'),

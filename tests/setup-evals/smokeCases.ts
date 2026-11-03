@@ -139,7 +139,7 @@ function phonePaths(src: PhoneSource): ScriptedCase {
     reply: 'Monday.',
   });
   s.playback('planning', 'Yes.', { edit: (m) => (m.person.weekStart = 1), said: ['person.weekStart'] });
-  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to blunt.', reply: 'Gentle, please.' });
+  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct.', reply: 'Gentle, please.' });
   s.playback('talk', 'Yes.', { edit: (m) => (m.settings.tone = 'gentle') });
   s.final();
   return done({ id: src.id, title: src.title, rules: ['assume_nothing', 'no_math', 'choice_before_examples'], expect: 'clean', today: SMOKE_TODAY }, s);

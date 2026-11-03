@@ -6,6 +6,7 @@
 
 import { formatDay } from '@/components/home/wording';
 import { hoursText } from '@/lib/forecast/edits';
+import { unitFor } from '@/lib/utils/units';
 import type { CapacityUnit } from '@/types/database.types';
 import type { LocalDate } from '@/types/scoreboard';
 
@@ -30,10 +31,7 @@ export const SESSIONS_NOTE = "If you count in sessions, a deadline sized in hour
 // The link from the week plan's own kinds-of-day section.
 export const CHANGE_KIND_TIMES = 'Change how much time each kind gives';
 
-export const unitWord = (unit: CapacityUnit, amount: number): string => {
-  if (unit === 'hours') return amount === 1 ? 'hour' : 'hours';
-  return amount === 1 ? 'session' : 'sessions';
-};
+export const unitWord = (unit: CapacityUnit, amount: number): string => unitFor(amount, unit);
 export const usuallyText = (unit: CapacityUnit | null, amount: number | null): string =>
   unit === null || amount === null ? NO_USUAL_TIME : `Usually ${hoursText(amount)} ${unitWord(unit, amount)}`;
 export const saveKindTime = (name: string): string => `Save time for “${name}”`;

@@ -156,10 +156,44 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await expect(page.getByText(/then sign in/i)).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Check your email' })).toBeFocused();
 
+      // "Go to sign in" is the main button (MOM-167 part 15): a solid link to /login, inside the card, above the smaller "Start again".
+      const goToSignIn = page.getByRole('link', { name: 'Go to sign in' });
+      await expect(goToSignIn).toBeVisible();
+      await expect(goToSignIn).toHaveAttribute('href', '/login');
+      const mainBox = (await goToSignIn.boundingBox())!;
+      const againBox = (await page.getByRole('button', { name: 'Start again' }).boundingBox())!;
+      expect(mainBox.y, 'the main button sits above "Start again"').toBeLessThan(againBox.y);
+      expect(mainBox.x + mainBox.width, 'the main button stays inside the screen').toBeLessThanOrEqual(width);
+      expect(mainBox.height, 'a main button is a full-size target').toBeGreaterThanOrEqual(44);
+      // The card stays until the person taps: nothing redirects while we wait.
+      await page.waitForTimeout(1500);
+      await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+
       // "Start again" is a way back to an empty form.
       await page.getByRole('button', { name: 'Start again' }).click();
       await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
       await expect(page.getByLabel('Email')).toHaveValue('');
+    });
+
+    test('"Go to sign in" on the check-your-email card opens the sign-in screen; an existing address shows the same card', async ({ page }) => {
+      const email = uniqueEmail('goto-signin');
+      await page.goto('/login');
+      await submitCredentials(page, email, PASSWORD, 'Create account');
+      await expectCheckYourEmail(page, email);
+      const first = ((await page.locator('[role="status"]').first().textContent()) ?? '').replace(email, 'ADDRESS');
+
+      // Signing up again with the same address (an account that exists) shows the same card and never says it exists.
+      await page.waitForTimeout(1500);
+      await page.getByRole('button', { name: 'Start again' }).click();
+      await submitCredentials(page, email, PASSWORD, 'Create account');
+      await expectCheckYourEmail(page, email);
+      const again = ((await page.locator('[role="status"]').first().textContent()) ?? '').replace(email, 'ADDRESS');
+      expect(again).toBe(first);
+      expect(again).not.toMatch(/already|exists|have an account|registered|taken/i);
+
+      await page.getByRole('link', { name: 'Go to sign in' }).click();
+      await expect(page).toHaveURL(/\/login$/);
+      await expect(page.getByRole('heading', { name: 'Sign in to Momentum' })).toBeVisible();
     });
   });
 }

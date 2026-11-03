@@ -223,7 +223,7 @@ export const SETUP_STEPS: readonly SetupStep[] = [
       'Ask, conversationally and not as a form, how they want Momentum to talk to them: how direct to be (tone), whether they want reminders, whether Momentum should ask how it went for the things they log themselves (check-ins), how big celebrations should be, times it should stay silent (quiet times), whether to point out when one goal is taking time from the rest (balance mentions), how much the weekly look-back covers (review depth), and whether the look-back and planning the next week happen in one sitting or separately. Ask whether they want a reminder; never say there will be one.',
     reason: 'Momentum words things to you that way.',
     examples: [
-      { topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to blunt. Momentum words things to you that way.' },
+      { topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.' },
       { topic: 'reminders', question: 'Would you like reminders on the days you plan something?' },
       {
         topic: 'check_ins',

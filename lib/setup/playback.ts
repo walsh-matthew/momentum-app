@@ -7,9 +7,11 @@
 import { casualDate } from '@/lib/dates/casual';
 import { EARLY_DAY_END_LIMIT } from '@/lib/engine/constants';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
+import { singularFirstWord, unitCount } from '@/lib/utils/units';
 import type { GoalDraft, SetupChunk, SetupDraft, SetupModel, TargetDraft, Transcript } from '@/types/setup';
 import { asSaid, itemOf, listOf, restate, titleOf, trimmed } from './restate';
 import { minutesOfClock, timePhrasesIn } from './text';
+import { zoneLine } from './timeZones';
 
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 export const weekdayName = (n: number): string => WEEKDAY_NAMES[n - 1] ?? String(n);
@@ -102,7 +104,7 @@ export function amount(t: Pick<TargetDraft, 'measure' | 'unit'>, n: number): str
     case 'count':
       return String(n);
     case 'quantity':
-      return `${n} ${t.unit ? itemOf(t.unit) : ''}`.trim();
+      return unitCount(n, t.unit ? itemOf(t.unit) : '');
     case 'time':
       return plural(n, 'minute', 'minutes');
     case 'checklist':
@@ -110,30 +112,24 @@ export function amount(t: Pick<TargetDraft, 'measure' | 'unit'>, n: number): str
   }
 }
 
-// One of a plural word, for "at least 1 run": "runs" to "run", "classes" to "class". A word that does not end in "s" stays.
-const singular = (word: string): string => (/(ss|sh|ch|x)es$/i.test(word) ? word.slice(0, -2) : /[^s]s$/i.test(word) ? word.slice(0, -1) : word);
-
 // An amount with what is counted, as the person's goal says it (MOM-111 round 3c, finding 3): "3 runs", "100 pages",
 // "90 minutes of practice", "5000 pounds lifted". For one, the counted thing's first plural word is made singular ("1 run").
 export function amountOf(t: Pick<TargetDraft, 'title' | 'measure' | 'unit'>, n: number, options: PlaybackOptions = {}): string {
   const thing = countedWords(t.title, options.said);
   switch (t.measure) {
-    case 'count': {
-      if (n !== 1) return `${n} ${thing}`;
-      const words = thing.split(' ');
-      const at = words.findIndex((w) => singular(w) !== w);
-      return `1 ${at < 0 ? thing : words.map((w, i) => (i === at ? singular(w) : w)).join(' ')}`;
-    }
+    case 'count':
+      return `${n} ${n === 1 ? singularFirstWord(thing) : thing}`;
     case 'quantity': {
-      // "Pounds lifted" counted in pounds reads "5000 pounds lifted"; "Distance" in miles reads "10 miles".
+      // "Pounds lifted" counted in pounds reads "5000 pounds lifted"; "Distance" in miles reads "10 miles". For one, the unit is singular
+      // ("1 pound lifted", "1 mile"; lib/utils/units.ts).
       const unit = t.unit ? itemOf(t.unit) : '';
       const stem = unit.toLowerCase().replace(/s$/, '');
-      return stem && thing.toLowerCase().startsWith(stem) ? `${n} ${thing}` : `${n} ${unit}`.trim();
+      return stem && thing.toLowerCase().startsWith(stem) ? `${n} ${n === 1 ? singularFirstWord(thing) : thing}` : unitCount(n, unit);
     }
     case 'time':
-      return /\bminutes?\b/i.test(thing) ? `${n} ${thing}` : `${plural(n, 'minute', 'minutes')} of ${thing}`;
+      return /\bminutes?\b/i.test(thing) ? `${n} ${n === 1 ? singularFirstWord(thing) : thing}` : `${plural(n, 'minute', 'minutes')} of ${thing}`;
     case 'checklist':
-      return `${n} ${thing}`;
+      return `${n} ${n === 1 ? singularFirstWord(thing) : thing}`;
   }
 }
 
@@ -232,6 +228,10 @@ const REVIEW_PLANNING_LINES = {
   separate: 'You look back on your week and plan the next one separately.',
 } as const;
 
+// One kind of day, with what it gives when that is set: "Workdays (1 hour)", "Busy days (2 sessions)", "Quiet days (3)" (MOM-167 part 9).
+export const dayKindWords = (d: SetupModel['person']['dayTypes'][number]): string =>
+  `${itemOf(d.name)}${d.capacityAmount !== null ? ` (${unitCount(d.capacityAmount, d.capacityUnit)})` : ''}`;
+
 export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: PlaybackOptions = {}): string[] {
   const lines: string[] = [];
   const active = model.goals.filter((x) => x.state === 'active');
@@ -254,7 +254,7 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
       break;
     case 'planning': {
       const p = model.person;
-      if (p.timeZone) lines.push(`You're in the ${p.timeZone} time zone.`);
+      if (p.timeZone) lines.push(zoneLine(p.timeZone));
       if (p.dayEnd) {
         const at = clock(p.dayEnd, 'person.dayEnd', options);
         const m = minutesOfClock(p.dayEnd);
@@ -266,8 +266,7 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
       }
       if (p.weekStart !== null) lines.push(`Your week starts on ${weekdayName(p.weekStart)}.`);
       if (p.dayTypes.length > 0) {
-        const kinds = p.dayTypes.map((d) => `${itemOf(d.name)}${d.capacityAmount !== null ? ` (${d.capacityAmount} ${d.capacityUnit ?? ''})`.replace(' )', ')') : ''}`);
-        lines.push(`Your kinds of days: ${listOf(kinds)}.`);
+        lines.push(`Your kinds of days: ${listOf(p.dayTypes.map(dayKindWords))}.`);
       }
       if (p.planning.weekday !== null || p.planning.time !== null) {
         const on = p.planning.weekday !== null ? ` on ${weekdayName(p.planning.weekday)}` : '';

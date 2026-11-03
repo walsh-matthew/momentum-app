@@ -124,6 +124,37 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       }
     });
 
+    // MOM-167 parts 8, 9 and 11 (Block 1.3): the "Your days and weeks" playback (the time zone as a plain name) and the tone question
+    // (its detail line runs gentle to direct). The scripted person is in America/Denver, so the line reads "You're on Mountain Time.".
+    test('the days and weeks playback and the tone question', async ({ page }) => {
+      test.setTimeout(240_000);
+      mkdirSync(SHOTS!, { recursive: true });
+      const scripted = e2eCase();
+      await signUpAndConfirm(page, `words-shots-days-${THEME}-${width}`);
+      await page.goto('/setup');
+      await page.getByRole('button', { name: 'Start' }).click();
+      let card = await nextCard(page, null);
+      let sawDays = false;
+      let sawTone = false;
+      for (const person of scripted.person) {
+        await expect(page.locator(CARD)).toHaveCount(1);
+        if (card.id === 'setup-playback' && /days and weeks/i.test(card.heading)) {
+          await expect(page.getByText("You're on Mountain Time.")).toBeVisible();
+          await expect(page.getByText(/time zone\.$/)).toHaveCount(0);
+          await shot(page, 7, 'playback-days-and-weeks');
+          sawDays = true;
+        }
+        if (card.id === 'setup-question' && (await page.getByText('Anywhere from gentle to direct. Momentum talks to you that way.').count()) > 0) {
+          await shot(page, 8, 'tone-question');
+          sawTone = true;
+        }
+        if (sawDays && sawTone) return;
+        await answer(page, card, person.say);
+        card = await nextCard(page, card.heading);
+      }
+      expect({ sawDays, sawTone }).toEqual({ sawDays: true, sawTone: true });
+    });
+
     test('the saved card and home', async ({ page }) => {
       test.setTimeout(240_000);
       mkdirSync(SHOTS!, { recursive: true });

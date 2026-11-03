@@ -171,7 +171,7 @@ describe('each part, played back in the second person', () => {
     g.targets.push(target('t1', 'Blocks sewn', { sources: [{ kind: 'manual' }] }));
     m.goals.push(g);
     expect(renderPlayback(m, 'planning', { locale: 'en-US', today: TODAY })).toEqual([
-      "You're in the America/Denver time zone.",
+      "You're on Mountain Time.",
       'Your day ends at 2:00 AM, so anything you log before then counts toward the day before.',
       'Your week starts on Monday.',
       'Your kinds of days: your office days (2 hours).',

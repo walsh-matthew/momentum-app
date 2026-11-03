@@ -3,7 +3,7 @@
 // principles 5 and 9). The person's titles are kept exactly as they wrote them, and a celebration is never put next to a
 // request (principle 8): the recap asks for nothing.
 
-import { formatDay, formatNumber } from '@/components/home/wording';
+import { formatDay, formatNumber, unitAfter } from '@/components/home/wording';
 import { levelWords } from '@/lib/review/levelWords';
 import type { RecapChange, RecapCrossing } from '@/types/review';
 import type { LocalDate } from '@/types/scoreboard';
@@ -40,8 +40,7 @@ export { levelWords };
 // One line under "Since this recap": what the recap said, what the engine reads now for the same week, and why. Both
 // numbers are the engine's; the record itself is not changed.
 export function changeLine(change: RecapChange): string {
-  const unit = change.unit ? ` ${change.unit}` : '';
-  return `${change.title}: it now reads ${formatNumber(change.now.counted)}${unit} (${levelWords(change.now)}). The recap said ${formatNumber(change.said.counted)}${unit} (${levelWords(change.said)}). An entry logged later for a day in that week changed it.`;
+  return `${change.title}: it now reads ${formatNumber(change.now.counted)}${unitAfter(change.now.counted, change.unit)} (${levelWords(change.now)}). The recap said ${formatNumber(change.said.counted)}${unitAfter(change.said.counted, change.unit)} (${levelWords(change.said)}). An entry logged later for a day in that week changed it.`;
 }
 
 export function crossingLine(crossing: RecapCrossing, today: LocalDate | null = null): string {
