@@ -65,8 +65,8 @@ afterEach(() => errorLog.mockRestore());
 type Request = {
   model: string;
   max_tokens: number;
-  system: string;
-  messages: Array<{ role: string; content: string }>;
+  system: Array<{ type: string; text: string; cache_control?: unknown }>;
+  messages: Array<{ role: string; content: unknown }>;
   output_config: { effort: string; format?: unknown };
 };
 const requestOf = (create: ReturnType<typeof clientReturning>['create']) => (create.mock.calls[0] as unknown as [Request])[0];
@@ -80,7 +80,7 @@ describe('what it sends', () => {
     const request = requestOf(create);
     expect(request.model).toBe(SETUP_MODEL);
     expect(SETUP_MODEL).toBe('claude-opus-5-5');
-    expect(request.system).toBe(SETUP_SYSTEM_PROMPT);
+    expect(request.system).toEqual([{ type: 'text', text: SETUP_SYSTEM_PROMPT, cache_control: { type: 'ephemeral', ttl: '5m' } }]);
     expect(request.max_tokens).toBeGreaterThanOrEqual(16000);
   });
 
@@ -98,12 +98,12 @@ describe('what it sends', () => {
   it('starts with the person\'s side, then alternates the conversation so far', () => {
     const messages = buildSetupMessages(transcript, emptyDraft());
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
-    expect(messages[0].content).toBe(SETUP_BEGIN_MESSAGE);
+    expect(messages[0].content).toEqual([{ type: 'text', text: SETUP_BEGIN_MESSAGE }]);
     // The earlier turn is sent whole except for its draft.
     expect(JSON.parse(messages[1].content as string)).toEqual({ ...JSON.parse(JSON.stringify(turn)), draft: SETUP_DRAFT_PLACEHOLDER });
     // The person's own words stay in a block of their own, ahead of the current draft.
     expect(messages[2].content).toEqual([
-      { type: 'text', text: 'Zebra quartz goal.' },
+      { type: 'text', text: 'Zebra quartz goal.', cache_control: { type: 'ephemeral', ttl: '5m' } },
       { type: 'text', text: `Current draft, to start from:\n${JSON.stringify(emptyDraft())}` },
     ]);
     // Before anything has been said there is only the opening message, and the (empty) draft after it.
@@ -111,7 +111,7 @@ describe('what it sends', () => {
       {
         role: 'user',
         content: [
-          { type: 'text', text: SETUP_BEGIN_MESSAGE },
+          { type: 'text', text: SETUP_BEGIN_MESSAGE, cache_control: { type: 'ephemeral', ttl: '5m' } },
           { type: 'text', text: `Current draft, to start from:\n${JSON.stringify(emptyDraft())}` },
         ],
       },

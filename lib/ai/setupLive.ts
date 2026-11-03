@@ -136,17 +136,25 @@ export function topicKeyedReplies(
 // Cost
 // ---------------------------------------------------------------------------
 
-// Dollars per million tokens (input, output), from the Claude API price table cached 2026-10-06. Check them against the
-// current table before reading the cost as more than an estimate.
-export const PRICE_PER_MILLION: Record<string, readonly [number, number]> = {
-  'claude-opus-5-5': [4, 20],
-  'claude-sonnet-5-5': [2, 10],
-  'claude-haiku-5-5': [0.1, 0.5],
+// Dollars per million tokens (input, output, cache read, 5-minute cache write), from the Claude API price table
+// (platform.claude.com/docs/en/about-claude/pricing), read 2026-11-02. Cache reads on Opus 5.5 and Sonnet 5.5 are 0.05x the
+// input price; cache reads on Haiku 5.5 are 0.1x; a 5-minute cache write is 1.25x. Check them against the current table before
+// reading the cost as more than an estimate.
+export const PRICE_PER_MILLION: Record<string, readonly [number, number, number, number]> = {
+  'claude-opus-5-5': [4, 20, 0.2, 5],
+  'claude-sonnet-5-5': [2, 10, 0.1, 2.5],
+  'claude-haiku-5-5': [0.1, 0.5, 0.01, 0.125],
 };
 
 // null for a model with no price here, so a caller cannot read an unknown model as free.
-export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number): number | null {
+export function estimateCostUsd(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens = 0,
+  cacheWriteTokens = 0,
+): number | null {
   const price = PRICE_PER_MILLION[model];
   if (!price) return null;
-  return (inputTokens * price[0] + outputTokens * price[1]) / 1_000_000;
+  return (inputTokens * price[0] + outputTokens * price[1] + cacheReadTokens * price[2] + cacheWriteTokens * price[3]) / 1_000_000;
 }

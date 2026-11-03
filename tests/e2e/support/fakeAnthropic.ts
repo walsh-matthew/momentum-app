@@ -45,6 +45,13 @@ export interface FakeAnthropic {
   close: () => Promise<void>;
 }
 
+// The system prompt as text, whether it was sent as a string (the review line) or as text blocks (guided setup, since MOM-111
+// turned on prompt caching).
+function systemText(body: MessagesBody): string {
+  if (typeof body.system === 'string') return body.system;
+  return Array.isArray(body.system) ? body.system.map((b) => (b as { text?: string }).text ?? '').join('\n') : '';
+}
+
 function lastUserText(body: MessagesBody): string {
   const last = [...(body.messages ?? [])].reverse().find((m) => m.role === 'user');
   if (!last) return '';
@@ -118,7 +125,7 @@ export function startFakeAnthropic(port: number, scripts: readonly FakeScript[])
         send(400, { type: 'error', error: { type: 'invalid_request_error', message: 'bad json' } });
         return;
       }
-      if (typeof body.system === 'string' && body.system.startsWith(REVIEW_PROMPT_START)) {
+      if (systemText(body).startsWith(REVIEW_PROMPT_START)) {
         reviewRequests += 1;
         const text = lastUserText(body);
         const factsLine = text.split('\n').find((_line, i, lines) => lines[i - 1] === REVIEW_FACTS_HEADER) ?? '';
@@ -142,7 +149,7 @@ export function startFakeAnthropic(port: number, scripts: readonly FakeScript[])
         });
         return;
       }
-      if (typeof body.system !== 'string' || !body.system.startsWith(SETUP_PROMPT_START)) {
+      if (!systemText(body).startsWith(SETUP_PROMPT_START)) {
         send(401, { type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } });
         return;
       }

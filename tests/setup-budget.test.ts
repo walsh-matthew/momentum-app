@@ -26,6 +26,7 @@ import {
   runSetupTurn,
   runWithinBudget,
   setupBudgetStatus,
+  setupTokensUsed,
 } from '@/lib/services/llm';
 import { emptyDraft } from '@/lib/setup/draft';
 import type { AssistantTurn, Transcript } from '@/types/setup';
@@ -387,10 +388,10 @@ describe('every setup call is logged as setup', () => {
       cache_read_tokens: 1500,
       cache_write_tokens: 400,
     });
-    // Cache tokens sit outside the per-setup token budget (input plus output): see lib/ai/usage.ts.
+    // Since MOM-111 the cache tokens count toward the per-setup token budget: all four kinds (see lib/ai/usage.ts).
     usage.nowMs += TURN_MS;
     const next = await runSetupTurn({ userId: USER, transcript: transcriptOf(1), draft, spentTokens: 0 }, { requestTurn: stubModel(() => answer(full)) });
-    expect(next).toMatchObject({ kind: 'answered', spentTokens: 2300 });
+    expect(next).toMatchObject({ kind: 'answered', spentTokens: 2000 + 300 + 1500 + 400 });
   });
 
   it('logs the cache tokens as null when the response did not report them, never as 0', async () => {
@@ -459,6 +460,46 @@ describe('the old model keeps its limits', () => {
     const call = vi.fn(async () => ({ ok: true as const }));
     const result = await runWithinBudget({ userId: USER, feature: 'rebalance', model: 'm', call, report: reportModelResult });
     expect(result).toMatchObject({ kind: 'limited', limit: 'user_daily' });
+  });
+});
+
+describe('the per-setup token budget counts all four kinds (MOM-111)', () => {
+  const FULL = { inputTokens: 2000, outputTokens: 300, cacheReadTokens: 1500, cacheWriteTokens: 400 };
+  // The clock moves on between calls, as a real turn takes time, so the 1-second spacing never answers 'wait'.
+  const one = (usageOver: Parameters<typeof answer>[0], spentTokens = 0, budget?: typeof SETUP_BUDGET) => {
+    usage.nowMs += TURN_MS;
+    return runSetupTurn({ userId: USER, transcript: transcriptOf(1), draft, spentTokens, budget }, { requestTurn: stubModel(() => answer(usageOver)) });
+  };
+
+  it('adds input, output, cache read and cache write to the tokens spent', async () => {
+    const r = await one(FULL);
+    expect(r).toMatchObject({ kind: 'answered', spentTokens: 2000 + 300 + 1500 + 400 });
+  });
+
+  it('adds 0 for a cache count the response did not report, and the log row still says null', async () => {
+    const r = await one({ inputTokens: 2000, outputTokens: 300, cacheReadTokens: null, cacheWriteTokens: null });
+    expect(r).toMatchObject({ kind: 'answered', spentTokens: 2300 });
+    expect(rowsFor(USER)[0]).toMatchObject({ cache_read_tokens: null, cache_write_tokens: null });
+    // And with no counts at all (the old shape) the sum is what it always was.
+    expect(await one({ inputTokens: 2000, outputTokens: 300 }, 100)).toMatchObject({ spentTokens: 2400 });
+  });
+
+  it('logs the cache counts as reported, and the same four numbers add up to the budget', async () => {
+    await one(FULL);
+    const row = rowsFor(USER)[0];
+    expect(row).toMatchObject({ input_tokens: 2000, output_tokens: 300, cache_read_tokens: 1500, cache_write_tokens: 400 });
+    expect(setupTokensUsed(FULL)).toBe(row.input_tokens! + row.output_tokens! + row.cache_read_tokens! + row.cache_write_tokens!);
+  });
+
+  it('stops the next call when cache tokens alone push a setup over the budget', async () => {
+    const budget = { maxTurns: 40, maxTokens: 5000 };
+    const first = await one(FULL, 0, budget);
+    expect(first).toMatchObject({ kind: 'answered', spentTokens: 4200 });
+    // 4200 is under 5000, so another call is allowed; one more with the same usage is not.
+    const second = await one(FULL, (first as { spentTokens: number }).spentTokens, budget);
+    expect(second).toMatchObject({ kind: 'answered', spentTokens: 8400 });
+    const third = await one(FULL, (second as { spentTokens: number }).spentTokens, budget);
+    expect(third).toMatchObject({ kind: 'quick_path', reason: 'over_tokens' });
   });
 });
 

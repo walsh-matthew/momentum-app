@@ -5,9 +5,9 @@ export interface ModelUsage {
   inputTokens: number;
   outputTokens: number;
   // Tokens the API read from its prompt cache, and tokens it wrote to it, for this call. Null when the response did not
-  // report them: "not reported" is never guessed as 0. Anthropic counts both OUTSIDE inputTokens, so they are not part of
-  // the per-setup token budget (SETUP_BUDGET.maxTokens, input plus output). Caching is off today; whoever turns it on
-  // decides whether the budget should include them.
+  // report them: "not reported" is never guessed as 0 in the log. Anthropic counts both OUTSIDE inputTokens. Since MOM-111
+  // (caching is on for guided setup) the per-setup token budget counts all four kinds, a null adding 0 to the sum
+  // (setupTokensUsed in lib/services/llm.ts).
   cacheReadTokens?: number | null;
   cacheWriteTokens?: number | null;
 }

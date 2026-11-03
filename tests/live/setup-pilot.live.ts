@@ -37,7 +37,8 @@ import { SETUP_CASES } from '../setup-evals/cases';
 // aside with a season, which is the parked-goal path migration 014 exists for.
 const CASE_ID = process.env.MOM128_PILOT_CASE ?? 'run-h-two-activities';
 // A stop-loss, not a budget: the run ends by itself past this estimated cost.
-const MAX_COST_USD = 6;
+// MOM111_MAX_COST_USD lowers it for a run that shares a smaller total with another (the caching A/B pair).
+const MAX_COST_USD = Number(process.env.MOM111_MAX_COST_USD ?? 6);
 
 describe('live setup pilot', () => {
   it(`runs ${CASE_ID} once against ${SETUP_MODEL}`, async () => {
@@ -72,10 +73,14 @@ describe('live setup pilot', () => {
       schemaValid: boolean | null;
       input: number;
       output: number;
+      cacheRead: number | null;
+      cacheWrite: number | null;
     }> = [];
     let spentTokens = 0;
     let inputTokens = 0;
     let outputTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheWriteTokens = 0;
     let stoppedBy: string | null = null;
     const started = Date.now();
 
@@ -96,6 +101,9 @@ describe('live setup pilot', () => {
         const usage = result.result.usage ?? null;
         inputTokens += usage?.inputTokens ?? 0;
         outputTokens += usage?.outputTokens ?? 0;
+        // A count the response did not report adds 0 to the sum here; the per-call row below keeps it as null.
+        cacheReadTokens += usage?.cacheReadTokens ?? 0;
+        cacheWriteTokens += usage?.cacheWriteTokens ?? 0;
         const parsed = result.result.ok ? AssistantTurnSchema.safeParse(result.result.raw) : null;
         const raw = result.result.ok ? (result.result.raw as { kind?: string; topic?: string | null }) : null;
         perCall.push({
@@ -108,8 +116,10 @@ describe('live setup pilot', () => {
           schemaValid: parsed ? parsed.success : null,
           input: usage?.inputTokens ?? 0,
           output: usage?.outputTokens ?? 0,
+          cacheRead: usage?.cacheReadTokens ?? null,
+          cacheWrite: usage?.cacheWriteTokens ?? null,
         });
-        if ((estimateCostUsd(SETUP_MODEL, inputTokens, outputTokens) ?? Infinity) > MAX_COST_USD) {
+        if ((estimateCostUsd(SETUP_MODEL, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens) ?? Infinity) > MAX_COST_USD) {
           stoppedBy = `stop-loss: estimated cost passed $${MAX_COST_USD}`;
           return { stoppedBy } as unknown as AssistantTurn;
         }
@@ -141,7 +151,7 @@ describe('live setup pilot', () => {
       await admin.auth.admin.deleteUser(userId);
     }
 
-    const cost = estimateCostUsd(SETUP_MODEL, inputTokens, outputTokens);
+    const cost = estimateCostUsd(SETUP_MODEL, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens);
     const summary = {
       case: c.id,
       model: SETUP_MODEL,
@@ -170,7 +180,13 @@ describe('live setup pilot', () => {
           }, new Map<string, { turn: number; rule: string; message: string; turns: number }>())
           .values(),
       ],
-      tokens: { input: inputTokens, output: outputTokens, total: inputTokens + outputTokens },
+      tokens: {
+        input: inputTokens,
+        output: outputTokens,
+        cacheRead: cacheReadTokens,
+        cacheWrite: cacheWriteTokens,
+        total: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
+      },
       estimatedCostUsd: cost === null ? null : Number(cost.toFixed(3)),
       budget: SETUP_BUDGET,
       scriptedRepliesUsed: report.transcript.filter((m) => m.role === 'person').length - person.fallbackCount(),

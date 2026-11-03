@@ -219,12 +219,19 @@ export const SETUP_LIMITS: LlmLimits = {
 export interface SetupBudget {
   // Claude replies in one setup.
   maxTurns: number;
-  // Input plus output tokens, summed over every call in one setup.
+  // Input, output, cache-read and cache-write tokens, summed over every call in one setup (MOM-111: prompt caching moves
+  // tokens from input to the cache counts, so all four are counted and the total is the size of what was processed).
   maxTokens: number;
 }
 
 // STARTING numbers (MOM-128). Replace them with the 90th percentile of the live eval runs plus the approved margin.
 export const SETUP_BUDGET: SetupBudget = { maxTurns: 40, maxTokens: 1_000_000 };
+
+// What one call adds to a setup's spent tokens (MOM-111): all four kinds Anthropic reports. A cache count the response did not
+// report adds 0 here; the usage log still stores it as null, never as a guessed 0.
+export function setupTokensUsed(usage: ModelUsage): number {
+  return usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
+}
 
 export type SetupOverBudget = 'turns' | 'tokens';
 
@@ -268,7 +275,7 @@ export interface RunSetupTurnArgs {
   userId: string;
   transcript: Transcript;
   draft: SetupDraft;
-  // Input plus output tokens used by this setup's earlier calls; 0 for the first.
+  // Input, output, cache-read and cache-write tokens used by this setup's earlier calls; 0 for the first.
   spentTokens: number;
   // The date on the person's device, YYYY-MM-DD, offered to Claude as a suggestion for a start date (MOM-111).
   today?: string;
@@ -353,7 +360,7 @@ export async function runSetupTurn(args: RunSetupTurnArgs, deps: RunSetupTurnDep
       return quickPath('shared_cap');
     case 'answered': {
       const usage = budgeted.result.usage ?? null;
-      const used = usage ? usage.inputTokens + usage.outputTokens : 0;
+      const used = usage ? setupTokensUsed(usage) : 0;
       return { kind: 'answered', result: budgeted.result, turns: turns + 1, spentTokens: args.spentTokens + used };
     }
   }
