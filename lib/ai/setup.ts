@@ -19,6 +19,14 @@
 //
 // Since MOM-128 it is called through runSetupTurn() in lib/services/llm.ts, which counts the call, applies the setup limits
 // and the per-setup budget, and logs it under 'setup'. The default model is still this file's SETUP_MODEL.
+//
+// Prompt caching (MOM-111, 5-minute TTL only): two explicit breakpoints, both fixed words or words that do not change on a
+// later call. 1) The system prompt. 2) The last block of the stable conversation (the person's newest words, or Claude's
+// last turn), BEFORE the draft and code's notes: those are rebuilt on every call, so a breakpoint after them would never be
+// read back. The next call's prefix up to that block is byte-identical, which buildSetupMessages keeps true by sending
+// every person message as a one-block array whether or not it is the newest. Nothing volatile (the device date, the draft,
+// notes, retry feedback) sits ahead of a breakpoint, and effort and thinking do not change between calls of one setup
+// (a change would invalidate the messages cache).
 
 import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
@@ -53,6 +61,9 @@ export interface ModelSetupDeps {
   // The smaller-model trial (design record §6.2 step 3) runs the same eval set on another model. Defaults to SETUP_MODEL.
   model?: string;
 }
+
+// The 5-minute cache breakpoint, spelled out (the API's default is 5 minutes; 1 hour is not used).
+export const SETUP_CACHE_CONTROL = { type: 'ephemeral', ttl: '5m' } as const;
 
 // The first message the API sees is always the person's side; this stands in before they have said anything.
 export const SETUP_BEGIN_MESSAGE = 'Begin setup.';
@@ -126,33 +137,41 @@ export function setupPromptFacts(transcript: Transcript, draft: SetupDraft, extr
 // A date hint and retry feedback, when there are any, follow it as their own text blocks.
 export function buildSetupMessages(transcript: Transcript, draft: SetupDraft, extras: SetupTurnExtras = {}): Anthropic.MessageParam[] {
   const facts = setupPromptFacts(transcript, draft, extras);
-  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: SETUP_BEGIN_MESSAGE }];
+  // A person's message is always a one-block array, never a string: the newest one gets the draft appended as a second block
+  // (below), and on the next call it is an earlier message, which must render the same as it did here.
+  const personBlock = (text: string): Anthropic.TextBlockParam[] => [{ type: 'text', text }];
+  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: personBlock(SETUP_BEGIN_MESSAGE) }];
   let personIndex = 0;
   let assistantIndex = 0;
   for (const m of transcript) {
     messages.push(
       m.role === 'person'
-        ? { role: 'user', content: facts.personMessages[personIndex++] }
+        ? { role: 'user', content: personBlock(facts.personMessages[personIndex++]) }
         : { role: 'assistant', content: JSON.stringify({ ...facts.assistantTurns[assistantIndex++], draft: SETUP_DRAFT_PLACEHOLDER }) },
     );
   }
+  // The cache breakpoint goes on the last block of the conversation so far, ahead of the draft and code's notes.
+  const stableEnd = messages[messages.length - 1];
+  if (typeof stableEnd.content === 'string') {
+    stableEnd.content = [{ type: 'text', text: stableEnd.content, cache_control: SETUP_CACHE_CONTROL }];
+  } else {
+    const blocks = stableEnd.content as Anthropic.TextBlockParam[];
+    blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: SETUP_CACHE_CONTROL };
+  }
   const suggestion = facts.today
-    ? `\nSuggested start date (today's date on the person's device, a suggestion only): ${facts.today}. Say it as "today, ${casualDate(facts.today, facts.today, { relative: false })}", never as ${facts.today}.`
+    ? `
+Suggested start date (today's date on the person's device, a suggestion only): ${facts.today}. Say it as "today, ${casualDate(facts.today, facts.today, { relative: false })}", never as ${facts.today}.`
     : '';
-  const current = `Current draft, to start from:\n${JSON.stringify(facts.draft)}${suggestion}`;
+  const current = `Current draft, to start from:
+${JSON.stringify(facts.draft)}${suggestion}`;
   const extraBlocks: Anthropic.TextBlockParam[] = [];
   if (facts.dateHint) extraBlocks.push({ type: 'text', text: facts.dateHint });
   if (facts.sourceNote) extraBlocks.push({ type: 'text', text: facts.sourceNote });
   if (facts.returningNote) extraBlocks.push({ type: 'text', text: facts.returningNote });
   if (facts.retryFeedback) extraBlocks.push({ type: 'text', text: [RETRY_HEADER, ...facts.retryFeedback.map((line) => `- ${line}`)].join('\n') });
-  const last = messages[messages.length - 1];
-  if (last.role === 'user' && typeof last.content === 'string') {
+  if (stableEnd.role === 'user') {
     // Separate blocks in the one message, so the person's own words stay apart from the draft and from code's notes.
-    last.content = [
-      { type: 'text', text: last.content },
-      { type: 'text', text: current },
-      ...extraBlocks,
-    ];
+    (stableEnd.content as Anthropic.TextBlockParam[]).push({ type: 'text', text: current }, ...extraBlocks);
   } else {
     messages.push({ role: 'user', content: extraBlocks.length > 0 ? [{ type: 'text', text: current }, ...extraBlocks] : current });
   }
@@ -190,7 +209,7 @@ export async function requestSetupTurnFromModel(
         model: deps.model ?? SETUP_MODEL,
         max_tokens: MAX_OUTPUT_TOKENS,
         output_config: { effort: 'medium' },
-        system: SETUP_SYSTEM_PROMPT,
+        system: [{ type: 'text', text: SETUP_SYSTEM_PROMPT, cache_control: SETUP_CACHE_CONTROL }],
         messages: buildSetupMessages(input.transcript, input.draft, {
           today: input.today,
           retryFeedback: input.retryFeedback,

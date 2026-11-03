@@ -244,4 +244,13 @@ describe('the cost estimate', () => {
     expect(estimateCostUsd('claude-haiku-5-5', 1_000_000, 1_000_000)).toBeCloseTo(0.6, 6);
     expect(estimateCostUsd('some-new-model', 1, 1)).toBeNull();
   });
+
+  it('prices cache reads and 5-minute cache writes at the vendor list prices (price page read 2026-11-02)', () => {
+    expect(estimateCostUsd('claude-opus-5-5', 0, 0, 1_000_000, 0)).toBeCloseTo(0.2, 6);
+    expect(estimateCostUsd('claude-opus-5-5', 0, 0, 0, 1_000_000)).toBeCloseTo(5, 6);
+    expect(estimateCostUsd('claude-sonnet-5-5', 0, 0, 1_000_000, 1_000_000)).toBeCloseTo(0.1 + 2.5, 6);
+    expect(estimateCostUsd('claude-haiku-5-5', 0, 0, 1_000_000, 1_000_000)).toBeCloseTo(0.01 + 0.125, 6);
+    // The old three-number call still works: no cache tokens means no cache cost.
+    expect(estimateCostUsd('claude-opus-5-5', 1_000_000, 0)).toBeCloseTo(4, 6);
+  });
 });
