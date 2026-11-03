@@ -654,6 +654,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The block's own close-out note, then the owner's day-end instruction to find the cause.
 - **Led to:** A fix this session (the test now waits for the focus, and still fails without the focus call).
 
+### F-096 · 2026-11-02 · build tool
+- **Asked:** Build MOM-167 part 1 (goal and target titles as short names, with a title check) and prove with tests that setup still gets through.
+- **What went wrong:** On production the title check broke every setup. Each target title's clean "plain" version came back as a full sentence, because the prompt says that version is one sentence; the check read it and threw the reply away. Every test passed.
+- **Why:** The setup tests' fake model was too polite: its plain entries were never sentence-shaped, so it gave the output the rule hoped for, not the worst realistic output real Claude writes for it, and the check never met a sentence.
+- **Caught by:** The owner's production setup on the standing smoke-test account.
+- **Led to:** A fix this session (PR #115: a replay test, `tests/setup-title-replay.test.ts`, whose fake model writes sentence-shaped plain entries; it fails 4 of 8 without the fix) and a rule: a fake model in a test must include the worst realistic output for the rule under test.
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
