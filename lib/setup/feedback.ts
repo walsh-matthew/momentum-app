@@ -75,6 +75,10 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
     'Never point at an earlier answer by name ("where you are now", "your baseline", "from what you said"). Quote the fact in the person\'s own words ("You said you read about 50 pages a week now."), or leave it out; the "detail" of starting ideas is that quote or null.',
   'plain.title':
     "A title must be a short name, not a sentence. Write the titles at the paths below as a few words, with no 'I', 'you' or 'want'.",
+  'plain.asked_again':
+    "The person already gave this and you recorded it, so do not ask for it. Say you are using it in \"skipped\" and ask the next thing.",
+  'plain.level_no_number':
+    'Quote the number they gave in "say" ("You said 3 runs a week.") and ask only which level it is, so the number is used and never asked for again.',
   'plain.options_say':
     'On an ideas or interpretations turn, "say" is "" or one short line of a few words; the screen leads with its own line saying what the options are about.',
   'returning.topic': 'That topic is already saved for this person: do not ask it. Ask only what the note from code says is still yours to ask.',

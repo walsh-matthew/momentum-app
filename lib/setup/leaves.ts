@@ -190,9 +190,59 @@ export function chunkSlice(draft: SetupDraft, chunk: SetupChunk): unknown {
   }
 }
 
+// The topics a person can answer inside another answer ("runs, at least 3 a week" also gives the floor), which the draft shows
+// from the goal's and target's own fields (MOM-168, rule 5). `role` is left out: the schema always sets it, so the draft cannot
+// show whether the person answered it.
+export const IN_PASSING_TOPICS: ReadonlySet<SetupTopic> = new Set<SetupTopic>([
+  'shape',
+  'start_date',
+  'end_date',
+  'block_length',
+  'parked_return',
+  'date_can_move',
+  'target',
+  'floor',
+  'aspiration',
+  'number_level',
+  'slots_or_quota',
+  'deadline_date',
+  'source',
+  'metric',
+]);
+
+// The goal being set up is the last one that is not parked (a parked goal waits for its return), and its target is its last one:
+// a first goal's floor must not excuse skipping the second goal's.
+function inPassingTopics(model: SetupModel): Set<SetupTopic> {
+  const topics = new Set<SetupTopic>();
+  // The newest parked goal is the one whose way back is being set; an earlier parked goal's return does not settle it.
+  const parked = model.goals.filter((g) => g.state === 'parked');
+  if (parked.length > 0 && parked[parked.length - 1].returnWhen !== null) topics.add('parked_return');
+  const active = model.goals.filter((g) => g.state !== 'parked');
+  const g = active[active.length - 1];
+  if (!g) return topics;
+  if (g.shape !== null) topics.add('shape');
+  if (g.startDate !== null) topics.add('start_date');
+  if (g.endDate !== null) topics.add('end_date');
+  if (g.blockWeeks !== null) topics.add('block_length');
+  if (g.items.some((i) => i.dateCanMove !== null)) topics.add('date_can_move');
+  if (g.items.some((i) => i.dueDate !== null)) topics.add('deadline_date');
+  const t = g.targets[g.targets.length - 1];
+  if (!t) return topics;
+  topics.add('target');
+  if (t.floor !== null) topics.add('floor');
+  if (t.aspiration !== null) topics.add('aspiration');
+  // Which level a number the person gave is (the least that counts, or what they are aiming for) is answered once either is set.
+  if (t.floor !== null || t.aspiration !== null) topics.add('number_level');
+  if (t.period.kind === 'day_slots') topics.add('slots_or_quota');
+  if (t.period.kind === 'deadline') topics.add('deadline_date');
+  if (t.sources.length > 0) topics.add('source');
+  if (t.sources.some((s) => s.kind === 'synced' && s.metric !== null)) topics.add('metric');
+  return topics;
+}
+
 // Which topics the draft already answers, so a question about one is a question that should have been skipped (rule 5).
 export function answeredTopics(model: SetupModel): Set<SetupTopic> {
-  const topics = new Set<SetupTopic>();
+  const topics = inPassingTopics(model);
   const { person, settings } = model;
   if (person.timeZone) topics.add('time_zone');
   if (person.dayEnd) topics.add('day_end');
