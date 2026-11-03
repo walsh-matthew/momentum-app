@@ -61,6 +61,14 @@ function reply(title: string, unit: string | null): AssistantTurn {
   return { kind: 'question', chunk: null, skipped: null, say: '', question: 'How many runs would still count in a hard week?', detail: null, topic: 'floor', options: [], draft: next };
 }
 
+// Claude's reply to "runs" as a quantity with no unit: the one unit mistake code does not fix, because only the person can say
+// what it is measured in.
+function quantity(title: string): AssistantTurn {
+  const turn = reply(title, null);
+  turn.draft.model.goals[0].targets[0].measure = 'quantity';
+  return turn;
+}
+
 // A stand-in for the model call: answers with the next raw reply it is given and remembers what it was asked.
 function stubTurns(raws: unknown[]) {
   const calls: RunSetupTurnArgs[] = [];
@@ -124,27 +132,28 @@ describe('the count question is answered with "runs" (MOM-167 title-check fix)',
   });
 
   it('tells each retry every rule broken on the tries before it, so a fixed rule cannot come back', async () => {
-    // Try 0 puts a unit on a count; try 1 fixes it but writes a sentence title; try 2 writes the unit again.
-    const stub = stubTurns([reply('Runs', 'runs'), reply('I need to run', null), reply('I need to run', 'runs')]);
+    // Try 0 makes a quantity with no unit; try 1 fixes it but writes a sentence title; try 2 makes the quantity with no unit again.
+    // (A unit on a count is no longer a rule a retry hears about: code clears it, MOM-176. A missing unit is still the person's to give.)
+    const stub = stubTurns([quantity('Runs'), reply('I need to run', null), quantity('I need to run')]);
     const result = await takeSetupTurn(session(), { runTurn: stub.run });
     expect(stub.calls).toHaveLength(3);
     expect(stub.calls[0].retryFeedback).toBeUndefined();
-    expect(stub.calls[1].retryFeedback).toEqual([RETRY_FEEDBACK['draft.unit_extra'] + ' Paths: goals.running.targets.runs.unit.']);
+    expect(stub.calls[1].retryFeedback).toEqual([RETRY_FEEDBACK['draft.unit_missing'] + ' Paths: goals.running.targets.runs.unit.']);
     const third = (stub.calls[2].retryFeedback ?? []).join('\n');
-    expect(third).toContain(RETRY_FEEDBACK['draft.unit_extra']);
+    expect(third).toContain(RETRY_FEEDBACK['draft.unit_missing']);
     expect(third).toContain(RETRY_FEEDBACK['plain.title']);
     expect(result).toMatchObject({ ok: true, data: { kind: 'failed' } });
-    expect(logged().some((l) => l.codes?.includes('draft.unit_extra'))).toBe(true);
+    expect(logged().some((l) => l.codes?.includes('draft.unit_missing'))).toBe(true);
   });
 
   it('shows a title-only violation after its retry, even when an earlier try broke another rule', async () => {
     // Try 0 breaks the unit rule and the title check; try 1 fixes the unit and leaves the title: it was told, so it is shown.
-    const stub = stubTurns([reply('I need to run', 'runs'), reply('I need to run', null)]);
+    const stub = stubTurns([quantity('I need to run'), reply('I need to run', null)]);
     const result = await takeSetupTurn(session(), { runTurn: stub.run });
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', rejected: 1 } });
     expect(stub.calls).toHaveLength(2);
     const told = (stub.calls[1].retryFeedback ?? []).join('\n');
-    expect(told).toContain(RETRY_FEEDBACK['draft.unit_extra']);
+    expect(told).toContain(RETRY_FEEDBACK['draft.unit_missing']);
     expect(told).toContain(RETRY_FEEDBACK['plain.title']);
   });
 });

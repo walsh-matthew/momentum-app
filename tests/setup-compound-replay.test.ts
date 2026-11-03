@@ -240,7 +240,7 @@ describe('answeredTopics reads the fields a person can give inside another answe
 
 describe('the approved words (MOM-168, Jira comment)', () => {
   const LINE =
-    'When one answer holds more than the question asked (a number, how often, a unit, an app, a date), record every part of it in the draft with its "said" entry in the same turn. Never ask for a part you recorded. If your next question would have asked for it, set "skipped" to that topic with one short plain line that names what you are using ("You said at least 3 runs a week, so I\'ll use that.") and ask the next thing. Read "at least N" as the least that counts and "aiming for N" as the number hoped for; for any other number with no such word, ask which it is.';
+    'When one answer holds more than the question asked (a number, how often, a unit (only for an amount like pages or pounds), an app, a date), record every part of it in the draft with its "said" entry in the same turn. Never ask for a part you recorded. If your next question would have asked for it, set "skipped" to that topic with one short plain line that names what you are using ("You said at least 3 runs a week, so I\'ll use that.") and ask the next thing. Read "at least N" as the least that counts and "aiming for N" as the number hoped for; for any other number with no such word, ask which it is.';
 
   it('tells Claude, in rule 5, to record the extra detail, say it is using it, and not ask again', () => {
     expect(HARD_RULES.find((r) => r.n === 5)?.text).toContain(LINE);

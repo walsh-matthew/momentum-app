@@ -57,6 +57,7 @@ import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssue
 import { shownModel } from '@/lib/setup/paraphrase';
 import { normalizePlainTurn } from '@/lib/setup/plainCard';
 import { spokenTimes } from '@/lib/setup/playback';
+import { clearStrayUnits } from '@/lib/setup/units';
 import { personToday } from '@/lib/setup/relativeDates';
 import { applyFillIn, planFillIn, type FillInPlan } from '@/lib/setup/fillIn';
 import { describeMissing } from '@/lib/setup/quickPath';
@@ -365,8 +366,12 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
       lastSignature = signature;
       continue;
     }
-    const violations = checkTurn(turn.data, context);
-    if (violations.length === 0) return { kind: 'turn', turn: shown(turn.data), spentTokens, rejected };
+    // A unit on a count, a time or a checklist is cleared here, before the check sees it (MOM-176): one right fix, so the turn is
+    // kept and no retry is spent. The log line is a count only, never the unit, a title or a path.
+    const { turn: claudeTurn, cleared } = clearStrayUnits(turn.data);
+    if (cleared > 0) console.warn('[setup] a stray unit was cleared', { cleared, attempt });
+    const violations = checkTurn(claudeTurn, context);
+    if (violations.length === 0) return { kind: 'turn', turn: shown(claudeTurn), spentTokens, rejected };
 
     const rules = ruleNames(violations);
     const plainOnly = onlyPlainWords(violations);
@@ -374,7 +379,7 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
     const codes = [...new Set(violations.map((x) => x.code))].sort();
     if (plainOnly && (attempt === MAX_REPLY_RETRIES || violations.every((x) => told.has(x.code)))) {
       console.warn('[setup] a reply was shown after its plain-words retry', { category: 'plain_words', rules, codes });
-      return { kind: 'turn', turn: shown(turn.data), spentTokens, rejected };
+      return { kind: 'turn', turn: shown(claudeTurn), spentTokens, rejected };
     }
     rejected += 1;
     // The turn's topic and the topic it skipped are names from SETUP_TOPICS (the schema allows nothing else), never text.
@@ -387,8 +392,8 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
       codes,
       paths: failingPaths(violations),
       ...(numberFields.length > 0 ? { numberFields } : {}),
-      topic: turn.data.topic,
-      skippedTopic: turn.data.skipped?.topic ?? null,
+      topic: claudeTurn.topic,
+      skippedTopic: claudeTurn.skipped?.topic ?? null,
       attempt,
       ms,
     });
