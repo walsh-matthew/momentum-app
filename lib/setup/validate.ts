@@ -95,7 +95,12 @@ export function textSaysLeaf(leaf: Leaf, text: string): boolean {
     case 'minutes': {
       const numbers = numbersIn(text);
       const value = leaf.value as number;
-      return numbers.includes(value) || (/\b(hours?|hrs?)\b/i.test(text) && numbers.some((n) => n * 60 === value));
+      const hours = namesHours(text);
+      const times60 = numbers.some((n) => n * 60 === value);
+      // "2 hours" says 120, never 2 (test day 1: it was saved and played back as 2 minutes). A text that names hours and not minutes
+      // lets only the number times 60 through; a text that names minutes too, or neither, keeps the bare number.
+      if (hours && !namesMinutes(text)) return times60;
+      return numbers.includes(value) || (hours && times60);
     }
     case 'hours': {
       // The number itself, or minutes that make it: "45 minutes" says 0.75 hours. Only when the text names minutes.

@@ -10,6 +10,11 @@ export const namesHours = (words: string): boolean => HOURS.test(words);
 export const namesMinutes = (words: string): boolean => MINUTES.test(words);
 export const namesTimeUnit = (words: string): boolean => namesHours(words) || namesMinutes(words);
 
+// Whether a time amount (stored in minutes) is said in hours, one rule for the setup playback and Home (MOM-180 B1): hours when the person's words for
+// what is counted name hours ("hours of reading"), or when the amount is a whole number of hours (120 minutes is "2 hours"); otherwise minutes
+// ("45 minutes"). Words that name minutes and not hours ("minutes of practice") keep minutes.
+export const readsInHours = (words: string, minutes: number): boolean => namesHours(words) || (!namesMinutes(words) && minutes > 0 && minutes % 60 === 0);
+
 // Minutes as hours, to two places ("3", "1.5", "0.25"), for a time target whose words name hours.
 export const minutesAsHours = (minutes: number): number => Math.round((minutes / 60) * 100) / 100;
 

@@ -89,6 +89,9 @@ interface HabitOptions {
   dayEnd: 'checkin' | 'ambiguousEarly' | 'whatDoYouMean';
   // MOM-179: the week questions as cards the person taps (day end, week start, kinds of days, time for each, set days, planning moment).
   weekCards?: boolean;
+  // MOM-180 B1: the goal questions as cards the person taps (starting point, shape, start date, first stretch, and the same for the second goal).
+  // The person's typed words are the words of the tap, so a conversation where Claude asks every one of them is the same conversation.
+  goalCards?: boolean;
   // What the goal is called and why it matters, as the person put it (round 3b, finding 4: a goal that is not exercise).
   goalTitle?: string;
   why?: { reply: string; text: string };
@@ -136,10 +139,11 @@ function habitCase(o: HabitOptions): ScriptedCase {
       topic: 'parked_return',
       edit: (m) => (goalOf(m, 'g2').state = 'parked'),
       question: 'When should cooking come back?',
-      reply: 'In the spring.',
+      // Not a season: with the person's today known, code would take "in the spring" for a vague date and ask the day itself.
+      reply: o.goalCards ? 'Only when I ask.' : 'In the spring.',
     });
     s.playback('goals', 'Yes, that is right.', {
-      edit: (m) => (goalOf(m, 'g2').returnWhen = { kind: 'condition', note: 'in the spring' }),
+      edit: (m) => (goalOf(m, 'g2').returnWhen = o.goalCards ? { kind: 'on_request' } : { kind: 'condition', note: 'in the spring' }),
     });
   } else if (o.longFirst) {
     // The first message already said why, so this turn records it and skips the question in one line.
@@ -188,23 +192,37 @@ function habitCase(o: HabitOptions): ScriptedCase {
     }
   }
 
+  const cardLine = (say: string) => (o.goalCards ? { say, goal: say } : say);
+  const BLOCK = o.goalCards ? 8 : 10;
+  if (o.goalCards) {
+    // Step 5: where they are with it. A card of three buttons; nothing reads or saves the answer.
+    s.add({
+      topic: 'starting_point',
+      edit: (m) => {
+        if (o.priorities) m.person.priorities = ['Family time', 'my sleep'];
+      },
+      question: 'Where are you with this today?',
+      detail: 'Never tried it, dabbled a little, or done it before. Your plan starts from there.',
+      reply: cardLine('Dabbled a little.'),
+    });
+  }
   s.add({
     topic: 'shape',
     edit: (m) => {
-      if (o.priorities) m.person.priorities = ['Family time', 'my sleep'];
+      if (o.priorities && !o.goalCards) m.person.priorities = ['Family time', 'my sleep'];
     },
     // The first message said where they are with running; the draft has no place for it, so it is skipped in one line.
     skipped: o.longFirst ? { topic: 'starting_point', line: "You told me where you are with running, so I'll skip that." } : undefined,
     question: SHAPE_Q,
     detail: SHAPE_DETAIL,
-    reply: 'It keeps going.',
+    reply: cardLine('It keeps going.'),
   });
   s.add({
     kind: 'proposal',
     topic: 'start_date',
     edit: (m) => (goalOf(m, 'g1').shape = 'ongoing'),
     question: `Start today, ${TODAY_WORDS}?`,
-    reply: 'Yes, that works.',
+    reply: cardLine('Yes, that works.'),
   });
   s.add({
     topic: 'block_length',
@@ -213,24 +231,24 @@ function habitCase(o: HabitOptions): ScriptedCase {
     say: 'You can keep going after it.',
     question: BLOCK_Q,
     // Not only a length, so Claude takes the turn: a reply of just "Ten weeks" gets code's own proposal of the stretch (round 2,
-    // finding 7), which the stateless fake model of the browser specs cannot follow.
-    reply: 'Ten weeks, and then I will see.',
+    // finding 7), which the stateless fake model of the browser specs cannot follow. With goal cards the reply is the card's own "8 weeks."
+    reply: o.goalCards ? cardLine('8 weeks.') : 'Ten weeks, and then I will see.',
   });
   if (o.goals === 'two') {
     // The table needs a shape and a start date even for a goal set aside, so setup asks them for it too.
     s.add({
       topic: 'shape',
-      edit: (m) => (goalOf(m, 'g1').blockWeeks = 10),
+      edit: (m) => (goalOf(m, 'g1').blockWeeks = BLOCK),
       said: ['goals.g1.blockWeeks'],
       question: 'Does cooking keep going, run until a set date, or have a deadline?',
-      reply: 'It keeps going.',
+      reply: cardLine('It keeps going.'),
     });
     s.add({
       kind: 'proposal',
       topic: 'start_date',
       edit: (m) => (goalOf(m, 'g2').shape = 'ongoing'),
       question: `Start cooking today, ${TODAY_WORDS}?`,
-      reply: 'Yes, that works.',
+      reply: cardLine('Yes, that works.'),
     });
   }
   s.add({
@@ -239,7 +257,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
       if (o.goals === 'two') {
         goalOf(m, 'g2').startDate = TODAY;
       } else {
-        goalOf(m, 'g1').blockWeeks = 10;
+        goalOf(m, 'g1').blockWeeks = BLOCK;
       }
     },
     said: o.goals === 'two' ? [] : ['goals.g1.blockWeeks'],
@@ -836,6 +854,59 @@ export const WEEK_CARDS_CASE: ScriptedCase = habitCase({
   counted: RUNS,
   weekCards: true,
 });
+
+// The person's today for a case where code writes the start date card (it suggests today): the eval runner needs it, as the app has the device's.
+const withToday = (c: ScriptedCase): ScriptedCase => ({ ...c, today: TODAY });
+
+// MOM-180 B1: a first setup with two goals that reaches every goal step the cards cover (starting point, shape, start date and first stretch for the
+// first goal, shape and start date for the one set aside), then the week questions as cards. Apart from SETUP_CASES, whose count other tests pin;
+// tests/setup-goal-cards.test.ts runs it, and tests/setup-turn-count.test.ts counts the model's calls (the same case runs on main and on part A).
+export const GOAL_CARDS_CASE: ScriptedCase = withToday(habitCase({
+  id: 'run-q-goal-cards',
+  title: 'two goals, every goal step, with the goal questions as cards and the week questions as cards',
+  rules: ['skip_answered', 'assume_nothing', 'chunked_playback'],
+  idea: 'I want to get healthy.',
+  goals: 'two',
+  priorities: 'plain',
+  floor: 'plain',
+  dayEnd: 'checkin',
+  counted: RUNS,
+  weekCards: true,
+  goalCards: true,
+}));
+
+// MOM-180 B1: a goal with a deadline whose first message says how long it has ("in 90 days"). Not a whole conversation: it stops at the deadline question,
+// which code answers with "Done by <date>?" counted from the start date. Only the browser spec (tests/e2e/setup-goal-cards.spec.ts) runs it.
+export const DEADLINE_90_CASE: ScriptedCase = withToday(
+  (() => {
+    const s = new Script();
+    s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to finish a quilt in 90 days.' });
+    s.add({ topic: 'why', edit: (m) => m.goals.push(goal('g1', 'Finish the quilt')), question: 'Why does this matter to you?', reply: 'I promised it to someone.' });
+    s.add({
+      topic: 'breakup',
+      edit: (m) => (goalOf(m, 'g1').why = 'I promised it to someone'),
+      question: 'Is this one goal, or a few separate ones?',
+      reply: 'Just the one goal.',
+    });
+    s.playback('goals');
+    s.add({ topic: 'shape', question: SHAPE_Q, detail: SHAPE_DETAIL, reply: { say: 'It has a deadline.', goal: 'It has a deadline.' } });
+    s.add({
+      kind: 'proposal',
+      topic: 'start_date',
+      edit: (m) => (goalOf(m, 'g1').shape = 'project'),
+      question: `Start today, ${TODAY_WORDS}?`,
+      reply: { say: 'Yes, that works.', goal: 'Yes, that works.' },
+    });
+    s.add({
+      topic: 'deadline_date',
+      edit: (m) => (goalOf(m, 'g1').startDate = TODAY),
+      accepted: ['goals.g1.startDate'],
+      question: 'Which day does it have to be done by?',
+      reply: 'Done.',
+    });
+    return done({ id: 'run-r-deadline-90', title: 'a deadline counted from "90 days" and a deadline on the start date refused', rules: ['assume_nothing', 'no_math'], expect: 'clean' }, s);
+  })(),
+);
 
 export const SETUP_CASES: ScriptedCase[] = [
   ...FIXTURES,

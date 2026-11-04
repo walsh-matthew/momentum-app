@@ -9,7 +9,7 @@ import { weekdayName } from '../../../lib/setup/playback';
 import type { WeekAnswer } from '../../../lib/setup/weekCards';
 import { FAKE_MODEL_PORT } from './localStack';
 
-export type CodeCard = 'zone' | 'settings' | 'week';
+export type CodeCard = 'zone' | 'settings' | 'week' | 'goal';
 
 const setupRequests = async (): Promise<number> => ((await (await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}/__fake/last`)).json()) as { setupRequests: number }).setupRequests;
 
@@ -36,6 +36,8 @@ export interface CardLine {
   settings?: SettingsAnswers;
   // A week card (MOM-179): what the person taps. Without it, `say` is typed in the card's answer box, as "Type your answer" does.
   week?: WeekAnswer;
+  // A goal card (MOM-180): the words of the person's tap ("It keeps going.", "8 weeks."). Without it, `say` is typed in the card's answer box.
+  goal?: string;
 }
 
 // The card on screen, if it is one of the two code writes.
@@ -43,6 +45,7 @@ export async function codeCardOn(page: Page): Promise<CodeCard | null> {
   if ((await page.locator('[data-card="time-zone"]').count()) > 0) return 'zone';
   if ((await page.locator('[data-card="settings"]').count()) > 0) return 'settings';
   if ((await page.locator('[data-card="week"]').count()) > 0) return 'week';
+  if ((await page.locator('[data-card="goal"]').count()) > 0) return 'goal';
   return null;
 }
 
@@ -65,6 +68,10 @@ export async function answerCodeCard(page: Page, card: CodeCard, line: CardLine,
   }
   if (card === 'week') {
     await answerWeekCard(page, line);
+    return;
+  }
+  if (card === 'goal') {
+    await answerGoalButtons(page, line);
     return;
   }
   await tapSettingsChoices(page, line);
@@ -121,6 +128,24 @@ export async function answerWeekCard(page: Page, line: CardLine): Promise<void> 
       await next.click();
       return;
   }
+}
+
+// A goal card of buttons (MOM-180) answered the way the scripted person does: by the tap when the line has one, else typed in the card's answer box.
+export async function answerGoalButtons(page: Page, line: CardLine): Promise<void> {
+  if (line.goal !== undefined && line.say !== MEANING_TEXT) {
+    const labels: Record<string, string> = {
+      'Never tried it.': 'Never tried it',
+      'Dabbled a little.': 'Dabbled a little',
+      'Done it before.': 'Done it before',
+      'It keeps going.': 'It keeps going',
+      'It ends on a date.': 'It ends on a date',
+      'It has a deadline.': 'It has a deadline',
+    };
+    const label = labels[line.goal] ?? line.goal.replace(/.$/, '');
+    await page.getByRole('button', { name: label, exact: true }).click();
+    return;
+  }
+  await answerWeekCard(page, { ...line, week: undefined });
 }
 
 // Taps the choices the scripted person makes on the settings card (and not Next), so a spec can look at the card with them chosen.

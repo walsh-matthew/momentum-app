@@ -10,6 +10,7 @@ import { startsMidWeek } from '@/lib/setup/addStart';
 import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfTurn, type SettingsAnswers } from '@/lib/setup/cards';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { answerWeekCard, anyDayTargets, isWeekCard, weekCardDetail, type WeekAnswer } from '@/lib/setup/weekCards';
+import { answerGoalCard, goalCardDetail, isGoalCard } from '@/lib/setup/goalCards';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
 import { RETURNING_FIRST_LINE, SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
@@ -34,6 +35,7 @@ import { QuestionCard } from './QuestionCard';
 import { SettingsCard } from './SettingsCard';
 import { TimeZoneCard } from './TimeZoneCard';
 import { WeekCard } from './WeekCard';
+import { GoalCard, choicesFor } from './GoalCard';
 import { allTimeZones } from './TimeZonePicker';
 import { QuickPathCard } from './QuickPathCard';
 import type { FillHow } from './QuickPathFillIn';
@@ -272,6 +274,20 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
   const answerWeek = (answer: WeekAnswer) => {
     const next = answerWeekCard(session, answer);
     if (!next) return;
+    setDraftAnswer(undefined);
+    setSession(next);
+    storeSession(storageId, next);
+    if (awaitsClaude(next)) void ask(next);
+  };
+
+  // A goal card's answer (MOM-180): a tap is the person's own message and the draft's value, and code writes what follows (the next card) at once.
+  // Words that are not a tap on the card (a day typed in words, a typed answer) go to Claude as any answer does.
+  const answerGoal = (text: string) => {
+    const next = answerGoalCard(session, text, localDate());
+    if (!next) {
+      answer(text);
+      return;
+    }
     setDraftAnswer(undefined);
     setSession(next);
     storeSession(storageId, next);
@@ -583,14 +599,24 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
         <TimeZoneCard key={`zone:${spoken}`} question={turn.question ?? ''} deviceZone={zoneOfTurn(turn)} busy={saving} onPick={answerZone} />
       ) : isWeekCard(turn) && !waiting ? (
         <WeekCard key={`week:${spoken}`} turn={turn} said={playbackOptions.said} busy={saving} onAnswer={answerWeek} onType={answer} />
+      ) : isGoalCard(turn) && !waiting && choicesFor(turn) !== null ? (
+        <GoalCard key={`goal:${spoken}`} turn={turn} busy={saving} onAnswer={answerGoal} onType={answer} />
       ) : (
         // Keyed so "Change my answer" opens the card afresh, with the old answer in the box.
         <QuestionCard
           key={`${session.transcript.length}:${draftAnswer === undefined ? '' : 'edit'}`}
           // A card code wrote carries a mark in its detail line for the screen, not for the person.
-          turn={isWeekCard(turn) ? { ...turn, detail: weekCardDetail(turn.topic) } : isTimeZoneCard(turn) || isSettingsCard(turn) ? { ...turn, detail: null } : turn}
+          turn={
+            isWeekCard(turn)
+              ? { ...turn, detail: weekCardDetail(turn.topic) }
+              : isGoalCard(turn)
+                ? { ...turn, detail: goalCardDetail(turn) }
+                : isTimeZoneCard(turn) || isSettingsCard(turn)
+                  ? { ...turn, detail: null }
+                  : turn
+          }
           busy={busy}
-          onAnswer={answer}
+          onAnswer={isGoalCard(turn) ? answerGoal : answer}
           today={today}
           pending={pending}
           notice={notice}

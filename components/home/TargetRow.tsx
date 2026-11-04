@@ -3,7 +3,7 @@ import type { Tone } from '@/types/database.types';
 import type { TargetCardView } from '@/types/home';
 import type { LocalDate } from '@/types/scoreboard';
 import { homeChangeLine } from '@/components/review/targetChangeWording';
-import { formatNumber, levelChip, levelsText, patternLine, slotDaysText, toAspirationLine, toSettledAspirationLine, trendText } from './wording';
+import { amountText, formatNumber, levelChip, levelsText, patternLine, slotDaysText, toAspirationLine, toSettledAspirationLine, trendText } from './wording';
 
 interface TargetRowProps {
   card: TargetCardView;
@@ -78,8 +78,8 @@ export function TargetRow({ card, tone, settled = false, children, today = null 
         </>
       ) : (
         <p className="home-count">
-          {formatNumber(card.counted)}
-          {unit && <span>{card.unit}</span>}
+          {card.measure === 'time' && !card.unit ? amountText(card, card.counted) : formatNumber(card.counted)}
+          {!(card.measure === 'time' && !card.unit) && unit && <span>{card.unit}</span>}
           <span>{settled ? 'that week' : card.role === 'outcome' && card.period === 'weekly' ? 'this week' : 'so far'}</span>
         </p>
       )}

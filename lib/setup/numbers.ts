@@ -91,12 +91,12 @@ export function numberHelp(draft: SetupDraft, topic: SetupTopic | null, today: s
   const due = dueWords(t, today);
   if (due) {
     return (
-      `The first number is how many ${thing} by ${due} would still count as on track. ` +
+      `The first number is the least ${thing} by ${due} that still counts. ` +
       `The second is how many you're hoping for, if you want one. You can set both, or only the first.`
     );
   }
   return (
-    `The first number is how many ${thing} would still count in a hard week: a week at that number is still a good week. ` +
+    `The first number is the least ${thing} that still counts. ` +
     `The second is how many you're hoping for, if you want one. You can set both, or only the first.`
   );
 }
@@ -109,8 +109,8 @@ export function numberLevelHelp(draft: SetupDraft, today: string | null): string
   const thing = countedThing(t);
   const due = dueWords(t, today);
   return due
-    ? `The least that counts is how many ${thing} by ${due} would still count as on track. What you are aiming for is how many you are hoping for, if you want one.`
-    : `The least that counts is how many ${thing} would still count in a hard week: a week at it is still a good week. What you are aiming for is how many you are hoping for, if you want one.`;
+    ? `The number of ${thing} you could settle for by ${due} is one answer. The number you are aiming for is the other.`
+    : `The number of ${thing} you could settle for in a hard week is one answer. The number you are aiming for is the other.`;
 }
 
 // An idea button for a number names the counted thing (MOM-111 round 3d): "At least 2 a week" becomes "At least 2 workouts a

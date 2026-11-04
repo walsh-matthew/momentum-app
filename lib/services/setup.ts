@@ -52,6 +52,7 @@ import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, onlyPlainWords, type Violation, type ViolationCode } from '@/lib/setup/checks';
 import { cardStep, cardViolations, weekCardInPlaceOf } from '@/lib/setup/cardTurns';
+import { goalCardInPlaceOf } from '@/lib/setup/goalCards';
 import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
 import { convertHourAnswers, normalizeNumberTurn } from '@/lib/setup/numbers';
 import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog, unsaidNumberFields } from '@/lib/setup/feedback';
@@ -319,9 +320,10 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   // breaks was named in an earlier retry, or on the last try.
   let lastSignature: string | null = null;
   let longestCallMs = 0;
-  // A question of Claude's on a week topic goes out as the card for it (MOM-179), when that card passes the same draft checks as any other.
+  // A question of Claude's on a week topic goes out as the card for it (MOM-179), and one on a goal topic (the starting point, the shape, the start
+  // date, the first stretch, the end date) as the goal card for it (MOM-180), when that card passes the same draft checks as any other.
   const delivered = (turn: AssistantTurn): AssistantTurn => {
-    const card = addition === undefined ? weekCardInPlaceOf(turn, session.transcript) : null;
+    const card = addition === undefined ? (weekCardInPlaceOf(turn, session.transcript) ?? goalCardInPlaceOf(turn, session.transcript, personDay)) : null;
     return card !== null && cardViolations(card, context).length === 0 ? card : turn;
   };
   // A date question shown with code's suggestion or code's wording (round 3, finding 2; round 3b, finding 2), and a number

@@ -8,6 +8,7 @@ import { checkTurn, type Violation } from './checks';
 import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfTurn, type SettingsAnswers } from './cards';
 import { cardStep, cardViolations, weekCardInPlaceOf } from './cardTurns';
 import { answerWeekCard, isWeekCard, type WeekAnswer } from './weekCards';
+import { answerGoalCard, goalCardInPlaceOf, isGoalCard } from './goalCards';
 import { dateStep } from './codeTurns';
 import { emptyDraft } from './draft';
 import { SAVED_GOAL_KEY, returningDraft, type ReturningContext } from './returning';
@@ -25,6 +26,9 @@ export interface PersonLine {
   // A week card, which code writes (lib/setup/weekCards.ts): what the person taps on it. Without it, `say` is typed in the card's answer box and goes
   // to the model, as the card's "Type your answer" does.
   week?: WeekAnswer;
+  // A goal card, which code writes (lib/setup/goalCards.ts): the words of the person's tap ("It keeps going.", "4 weeks.", "Yes, that works.", a picked day).
+  // Without it, `say` is typed in the card's answer box and goes to the model.
+  goal?: string;
 }
 
 export interface SetupEvalCase {
@@ -123,7 +127,8 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
     // still the one held to the rules.
     const ctx = { transcript: [...transcript], prevDraft: draft, personFits, returning };
     const own = (cardOk ? cardViolations : checkTurn)(parsed.data, ctx);
-    const weekCard = !byCode && !returning ? weekCardInPlaceOf(parsed.data, transcript) : null;
+    const today = options.today ?? c.today ?? null;
+    const weekCard = !byCode && !returning ? (weekCardInPlaceOf(parsed.data, transcript) ?? goalCardInPlaceOf(parsed.data, transcript, today)) : null;
     const swapped = weekCard !== null && cardViolations(weekCard, ctx).length === 0;
     const turn: AssistantTurn = swapped && weekCard ? weekCard : parsed.data;
     turns.push({ index, turn, violations: own, byCode: byCode || swapped });
@@ -182,10 +187,11 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
     // no model, as the screen does it. When the next thing is the model's, its turn comes on the next pass.
     let shownTurn: AssistantTurn = turn;
     let modelNext = false;
-    while (line && line.week && isWeekCard(shownTurn)) {
-      const next = answerWeekCard({ transcript: [...transcript], draft, spentTokens: 0 }, line.week);
+    while (line && ((line.week && isWeekCard(shownTurn)) || (line.goal !== undefined && isGoalCard(shownTurn)))) {
+      const session = { transcript: [...transcript], draft, spentTokens: 0 };
+      const next = line.week && isWeekCard(shownTurn) ? answerWeekCard(session, line.week) : answerGoalCard(session, line.goal ?? '', today);
       if (!next) {
-        report.malformed = 'a week card could not be answered';
+        report.malformed = 'a card could not be answered';
         return report;
       }
       const [said, follow] = next.transcript.slice(transcript.length);
@@ -200,7 +206,7 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
       }
       index += 1;
       const ctxNext = { transcript: [...transcript], prevDraft: draft, personFits, returning };
-      turns.push({ index, turn: follow.turn, violations: isWeekCard(follow.turn) ? cardViolations(follow.turn, ctxNext) : checkTurn(follow.turn, ctxNext), byCode: true });
+      turns.push({ index, turn: follow.turn, violations: isWeekCard(follow.turn) || isGoalCard(follow.turn) ? cardViolations(follow.turn, ctxNext) : checkTurn(follow.turn, ctxNext), byCode: true });
       transcript.push(follow);
       shownTurn = follow.turn;
       line = options.reply ? options.reply(follow.turn, index) : c.person[personAt++];
