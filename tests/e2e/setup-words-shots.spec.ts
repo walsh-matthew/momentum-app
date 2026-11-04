@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { CHANGE_PROMPT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
+import { answerCodeCard, codeCardOn, type CardLine } from './support/codeCards';
 import { FAKE_MODEL_PORT } from './support/localStack';
 import { e2eCase } from './support/setupConversation';
 
@@ -45,7 +46,13 @@ async function nextCard(page: Page, previous: string | null): Promise<{ id: stri
 }
 
 // Answers the card on screen the way the scripted person does.
-async function answer(page: Page, card: { id: string }, line: string): Promise<void> {
+async function answer(page: Page, card: { id: string }, line: string, person?: CardLine): Promise<void> {
+  // The two cards code writes (MOM-178) are answered by taps.
+  const code = await codeCardOn(page);
+  if (code !== null && person) {
+    await answerCodeCard(page, code, person, 'America/Denver');
+    return;
+  }
   if (card.id === 'setup-playback') {
     await page.getByRole('button', { name: 'Yes, that is right' }).click();
     return;
@@ -65,7 +72,7 @@ async function answer(page: Page, card: { id: string }, line: string): Promise<v
 for (const [label, width] of Object.entries(WIDTHS)) {
   test.describe(`${THEME} theme at ${width}px (${label})`, () => {
     test.skip(!SHOTS, 'screenshots are taken only when MOM167_SHOT_DIR is set');
-    test.use({ viewport: { width, height: 900 } });
+    test.use({ viewport: { width, height: 900 }, timezoneId: 'America/Denver' });
 
     const shot = async (page: Page, n: number, name: string) => {
       await page.waitForLoadState('networkidle');
@@ -86,7 +93,7 @@ for (const [label, width] of Object.entries(WIDTHS)) {
           await onTargets(page);
           return;
         }
-        await answer(page, card, person.say);
+        await answer(page, card, person.say, person);
         card = await nextCard(page, card.heading);
       }
       expect(card.id).toBe('setup-final');
@@ -124,9 +131,9 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       }
     });
 
-    // MOM-167 parts 8, 9 and 11 (Block 1.3): the "Your days and weeks" playback (the time zone as a plain name) and the tone question
-    // (its detail line runs gentle to direct). The scripted person is in America/Denver, so the line reads "You're on Mountain Time.".
-    test('the days and weeks playback and the tone question', async ({ page }) => {
+    // MOM-167 parts 8 and 9 (Block 1.3): the "Your days and weeks" playback (the time zone as a plain name), and since MOM-178 the settings card,
+    // whose tone row runs gentle to direct. The scripted person is in America/Denver, so the line reads "You're on Mountain Time.".
+    test('the days and weeks playback and the settings card', async ({ page }) => {
       test.setTimeout(240_000);
       mkdirSync(SHOTS!, { recursive: true });
       const scripted = e2eCase();
@@ -144,12 +151,13 @@ for (const [label, width] of Object.entries(WIDTHS)) {
           await shot(page, 7, 'playback-days-and-weeks');
           sawDays = true;
         }
-        if (card.id === 'setup-question' && (await page.getByText('Anywhere from gentle to direct. Momentum talks to you that way.').count()) > 0) {
-          await shot(page, 8, 'tone-question');
+        if ((await codeCardOn(page)) === 'settings') {
+          await expect(page.getByText('Your progress and weekly look-back are worded that way.')).toBeVisible();
+          await shot(page, 8, 'settings-card');
           sawTone = true;
         }
         if (sawDays && sawTone) return;
-        await answer(page, card, person.say);
+        await answer(page, card, person.say, person);
         card = await nextCard(page, card.heading);
       }
       expect({ sawDays, sawTone }).toEqual({ sawDays: true, sawTone: true });

@@ -31,11 +31,12 @@ import { READING_CASE_ID, SETUP_CASES, type ScriptedCase } from '../setup-evals/
 import { goal, scriptedModel, target } from '../helpers/setupScript';
 import { expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
+import { answerCodeCard, codeCardOn, tapSettingsChoices } from './support/codeCards';
 import { CARD, cardOf, cardTypes, elementsOffScreen, headingOf, sectionOf } from './support/setupCards';
 import { dateQuestionCase, e2eCase } from './support/setupConversation';
 
 const SHOTS = process.env.SETUP_SCREENSHOT_DIR;
-type CardKind = 'question' | 'question-with-options' | 'date-question' | 'date-confirmation' | 'ideas' | 'playback' | 'final';
+type CardKind = 'question' | 'question-with-options' | 'date-question' | 'date-confirmation' | 'ideas' | 'playback' | 'final' | 'time-zone-card' | 'settings-card';
 
 const fakeControl = async (path: string): Promise<void> => {
   await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}${path}`, { method: 'POST' });
@@ -155,8 +156,39 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
   // The idea buttons as shown (round 3d, finding c): each names the counted thing.
   let ideasOptions: string[] = [];
 
-  for (const { say: line } of scripted.person) {
+  for (const person of scripted.person) {
+    const line = person.say;
     await expect(page.locator(CARD)).toHaveCount(1);
+    // The two cards code writes (MOM-178): one bold line, nothing past the edge, everyday words; answered by taps, which is not typing.
+    const code = await codeCardOn(page);
+    if (code !== null) {
+      const cardKind: CardKind = code === 'zone' ? 'time-zone-card' : 'settings-card';
+      await fits(page, cardKind);
+      // The pointer is left where the last tap put it, which on this card is over a choice and gives it the hover fill; park it in the corner
+      // so a picture shows the card as it is, with nothing chosen.
+      await page.mouse.move(0, 0);
+      // The choices fade between their looks (transition-colors), so a picture taken at once can catch the hover fill on its way out.
+      await page.waitForTimeout(600);
+      const shoot = opts.everyCard || !seen.has(cardKind);
+      if (shoot) await shot(page, cardKind);
+      seen.add(cardKind);
+      if (code === 'settings') {
+        // Nothing is chosen until a tap; then the chosen choices show their own look.
+        await expect(page.locator('[data-slot="answer-choice"][data-selected="true"]'), 'nothing is chosen before a tap').toHaveCount(0);
+        // ...and nothing looks chosen: every choice on the card has the same fill.
+        const fills = await page.locator('fieldset [data-slot="answer-choice"]').evaluateAll((els) => [...new Set(els.map((el) => getComputedStyle(el).backgroundColor))]);
+        expect(fills, 'every unchosen choice has one and the same fill').toHaveLength(1);
+        await tapSettingsChoices(page, person);
+        await page.mouse.move(0, 0);
+        await page.waitForTimeout(600);
+        if (shoot) await shot(page, 'settings-card-chosen');
+        await page.getByRole('button', { name: 'Next', exact: true }).click();
+      } else {
+        await answerCodeCard(page, code, person, 'America/Denver');
+      }
+      heading = await nextCard(page, heading);
+      continue;
+    }
     const kind = await kindOf(page);
     await fits(page, kind);
     if (kind === 'ideas') {
@@ -253,14 +285,15 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
 const SHOT_WIDTH = Number(process.env.SETUP_SHOT_WIDTH) || 390;
 
 test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
-  test.use({ viewport: { width: SHOT_WIDTH, height: SHOT_WIDTH === 390 ? 844 : 900 } });
+  // The phone is in the scripted person's time zone, so the time zone card's yes is the zone they are in (MOM-178).
+  test.use({ viewport: { width: SHOT_WIDTH, height: SHOT_WIDTH === 390 ? 844 : 900 }, timezoneId: 'America/Denver' });
 
   test('every kind of setup card, and every error card in place, fits the screen and is saved as a screenshot', async ({ page }) => {
     test.setTimeout(420_000);
     await signUpAndConfirm(page, 'setup-cards');
     try {
       const { seen, errorsShown, ideasLead, ideasDetail, ideasOptions } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
-      expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options'].sort());
+      expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options', 'settings-card', 'time-zone-card'].sort());
       expect(errorsShown).toBe(true);
       expect(ideasLead).toBe('In a hard week, how many runs would still count?');
       expect(ideasDetail).toBe('You said you run about 2 times a week now.');

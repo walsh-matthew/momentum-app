@@ -15,6 +15,7 @@ import {
   checkTurn,
   type TurnContext,
 } from '@/lib/setup/checks';
+import { SETTINGS_CARD_MARK, TIME_ZONE_CARD_MARK } from '@/lib/setup/cards';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval, violationsOf } from '@/lib/setup/evals';
 import { RETRY_FEEDBACK, failingPaths, retryFeedback } from '@/lib/setup/feedback';
@@ -68,9 +69,13 @@ describe('the owner\'s phone paths (run-m-phone-paths)', () => {
 
   it('has code, not the model, answer "next week", "Monday" and "two months from now", with exactly the turns the script expects', async () => {
     const report = await runSetupEval(phone, scriptedModel(phone.script));
-    const byCode = report.turns.filter((t) => t.byCode);
+    // The date turns (and, since MOM-178, the two cards code writes, which are not in this list: their words are in lib/setup/cards.ts).
+    const byCode = report.turns.filter((t) => t.byCode && t.turn.detail !== TIME_ZONE_CARD_MARK && t.turn.detail !== SETTINGS_CARD_MARK && t.turn.kind !== 'playback');
     expect(byCode.map((t) => t.turn.question)).toEqual([PHONE_CODE_TURNS.askDay, PHONE_CODE_TURNS.start, PHONE_CODE_TURNS.stretch]);
     for (const t of byCode) expect(t.turn).toEqual(phone.script[t.index]);
+    // The two cards are code's too: the time zone card the moment what counts is approved, the settings card the moment the planning is.
+    expect(report.turns.filter((t) => t.byCode && t.turn.detail === TIME_ZONE_CARD_MARK)).toHaveLength(1);
+    expect(report.turns.filter((t) => t.byCode && t.turn.detail === SETTINGS_CARD_MARK)).toHaveLength(1);
     expect(report.draft.model.goals[0].startDate).toBe('2026-11-02');
     // The start date counts as accepted: the person said yes to the proposal code showed.
     expect(report.draft.said.find((s) => s.path === 'goals.g1.startDate')?.how).toBe('accepted');
@@ -103,7 +108,8 @@ describe('the owner\'s phone paths (run-m-phone-paths)', () => {
 
   it('without the person\'s today, every turn is the model\'s', async () => {
     const report = await runSetupEval({ ...phone, today: undefined }, scriptedModel(phone.script));
-    expect(report.turns.some((t) => t.byCode)).toBe(false);
+    // Only the cards, which need no date: no date turn is code's.
+    expect(report.turns.filter((t) => t.byCode && t.turn.detail !== TIME_ZONE_CARD_MARK && t.turn.detail !== SETTINGS_CARD_MARK && t.turn.kind !== 'playback')).toEqual([]);
   });
 });
 

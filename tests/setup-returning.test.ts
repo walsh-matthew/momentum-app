@@ -175,7 +175,7 @@ describe('the final lines of an addition', () => {
   it('a first setup keeps the line it has always had', async () => {
     const c = SETUP_CASES.find((x) => x.id === 'run-b-habit-ideas')!;
     const report = await runSetupEval(c, scriptedModel(c.script));
-    expect(renderFinal(report.draft.model).at(-1)).toBe('Everything can be changed on your settings page.');
+    expect(renderFinal(report.draft.model).at(-1)).toBe("You can't change your choices after setup yet. That's coming soon.");
   });
 
   it('the playback of the saved goal’s targets writes no line about its shape or start', async () => {

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { HARD_RULE_IDS, SETUP_TOPICS, TURN_KINDS, SETUP_CHUNKS } from '@/types/setup';
 import * as db from '@/types/database.types';
+import { UNUSED_SETTING_TOPICS } from '@/lib/setup/cards';
 import { HARD_RULES, SETUP_STEPS } from '@/lib/setup/steps';
 
 const root = process.cwd();
@@ -72,7 +73,9 @@ describe('the contract matches the rest of the app', () => {
   it('gives every topic and turn kind a home', () => {
     const stepTopics = new Set(SETUP_STEPS.flatMap((s) => s.topics));
     // 'starting_point' and the like are in steps; every topic a step lists must exist, and every topic must be in a step.
-    for (const topic of SETUP_TOPICS) expect(stepTopics.has(topic), topic).toBe(true);
+    // Not the four nothing reads yet (MOM-178): setup asks none of them, so no step lists them.
+    for (const topic of SETUP_TOPICS.filter((t) => !UNUSED_SETTING_TOPICS.has(t))) expect(stepTopics.has(topic), topic).toBe(true);
+    for (const topic of UNUSED_SETTING_TOPICS) expect(stepTopics.has(topic), topic).toBe(false);
     expect(TURN_KINDS).toContain('playback');
   });
 });

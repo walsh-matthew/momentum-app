@@ -23,6 +23,7 @@ import {
   type TurnKind,
 } from '@/types/setup';
 import { unsaidActivities } from './activities';
+import { SETTINGS_CARD_MARK, SETTINGS_ROWS, UNUSED_SETTING_TOPICS } from './cards';
 import { IN_PASSING_TOPICS, answeredTopics, changedLeafPaths, chunkSlice, freeTextLeaves } from './leaves';
 import { FINAL_MAX_LINES, renderFinal } from './playback';
 import { answerWords, latestAnswer, personWords, type PersonAnswer } from './said';
@@ -70,6 +71,7 @@ export const VIOLATION_CODES = [
   'skip.repeat',
   'skip.unanswered',
   'skip.long',
+  'skip.not_asked',
   'interpretations.count',
   'interpretations.guessed',
   'interpretations.changed',
@@ -289,8 +291,14 @@ export function checkChoiceBeforeExamples(turn: AssistantTurn, ctx: TurnContext)
 // Rule 5: skip what is already answered, in one line
 // ---------------------------------------------------------------------------
 
+// The settings the screen asks with its own card, and the ones nothing uses yet and so nothing asks (MOM-178): Claude asks none of them.
+const NOT_CLAUDES_TO_ASK: ReadonlySet<string> = new Set<string>([...SETTINGS_ROWS.map((r) => r.topic), ...UNUSED_SETTING_TOPICS]);
+
 export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violation[] {
   const out: Violation[] = [];
+  if (ASKING_KINDS.includes(turn.kind) && turn.topic !== null && NOT_CLAUDES_TO_ASK.has(turn.topic) && turn.detail !== SETTINGS_CARD_MARK) {
+    out.push(v('skip_answered', 'skip.not_asked', `"${turn.topic}" is asked by the screen with its own card, or not at all; do not ask it.`));
+  }
   const answered = answeredTopics(ctx.prevDraft.model);
   // A person who has finished setup has answered what is saved, so a notice that skips it is true (MOM-132 part 2).
   if (ctx.returning) for (const topic of skippedTopics(ctx.returning.mode)) answered.add(topic);
@@ -357,7 +365,7 @@ export function checkNumberedInterpretations(turn: AssistantTurn, ctx: TurnConte
 // A part may become approved only if the person saw its playback and agreed. The newest playback must be that part's, a yes
 // (or "no change") must follow it, and anything between (a "nothing", Claude asking what they meant) must leave the model
 // as the playback showed it and the person's words as "no change". A real change in between breaks the chain.
-function approvalFollowsPlayback(ctx: TurnContext, chunk: SetupChunk): boolean {
+export function approvalFollowsPlayback(ctx: Pick<TurnContext, 'transcript'>, chunk: SetupChunk): boolean {
   const t = ctx.transcript;
   let at = -1;
   for (let i = t.length - 1; i >= 0; i--) {

@@ -200,7 +200,7 @@ export const SETUP_STEPS: readonly SetupStep[] = [
     id: 'planning_and_capacity',
     title: 'Planning and capacity',
     summary:
-      'Ask their time zone and their day end, once, on the first goal only, never assumed. Make the day-end question clear: a day that ends after midnight and before 6 in the morning is an early day end, so their day runs from that time to the same time the next day; any other day end is just the time they check in, and the day still runs midnight to midnight. In that question you may say "midnight" and "6 in the morning" and no other clock time. Ask their week start only when a weekly or day-slot target (something counted each week or on set days) needs it; a person whose goals are all deadline goals is never asked. Then ask the kinds of days they have (saved as day types) and how much time each kind of day usually has room for (saved as capacity), whether they would rather do it on set days or any time in the week as long as the number is met (saved as fixed slots or a flexible quota), and when they want to plan their week.',
+      'Ask their day end, once, on the first goal only, never assumed. Their time zone is asked by the screen, with a card, as soon as they approve what they count (the person taps the zone their phone reports or picks another), so it is normally known by now: ask it yourself only when it is still not in the draft. Make the day-end question clear: a day that ends after midnight and before 6 in the morning is an early day end, so their day runs from that time to the same time the next day; any other day end is just the time they check in, and the day still runs midnight to midnight. In that question you may say "midnight" and "6 in the morning" and no other clock time. Ask their week start only when a weekly or day-slot target (something counted each week or on set days) needs it; a person whose goals are all deadline goals is never asked. Then ask the kinds of days they have (saved as day types) and how much time each kind of day usually has room for (saved as capacity), whether they would rather do it on set days or any time in the week as long as the number is met (saved as fixed slots or a flexible quota), and when they want to plan their week.',
     reason: 'Your days are counted the way you live them.',
     examples: [
       { topic: 'time_zone', question: 'Which time zone are you in?', detail: 'Your days start and end where you are.' },
@@ -225,18 +225,10 @@ export const SETUP_STEPS: readonly SetupStep[] = [
     id: 'how_momentum_talks',
     title: 'How Momentum talks to me',
     summary:
-      'Ask, conversationally and not as a form, how they want Momentum to talk to them: how direct to be (tone), whether they want reminders, whether Momentum should ask how it went for the things they log themselves (check-ins), how big celebrations should be, times it should stay silent (quiet times), whether to point out when one goal is taking time from the rest (balance mentions), how much the weekly look-back covers (review depth), and whether the look-back and planning the next week happen in one sitting or separately. Ask whether they want a reminder; never say there will be one.',
-    reason: 'Momentum words things to you that way.',
-    examples: [
-      { topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.' },
-      { topic: 'reminders', question: 'Would you like reminders on the days you plan something?' },
-      {
-        topic: 'check_ins',
-        question: 'Should Momentum ask how it went for things you log yourself?',
-        detail: 'At the end of your day, at the end of your week, or never.',
-      },
-    ],
-    topics: ['tone', 'reminders', 'check_ins', 'celebrations', 'quiet_times', 'balance_mentions', 'review_depth', 'review_planning'],
+      'The screen asks this itself, with one card of choices written by code, as soon as the person approves the planning part: how direct Momentum is (tone), how big celebrations are, how much the weekly look-back covers (review depth), and whether the look-back and planning the next week happen in one sitting or separately. Never write a question for any of them, and never ask about any other setting: nothing else is asked or saved yet. When the person has answered the card, the screen plays the part back itself. If they say something about one of these settings earlier, record it as they said it.',
+    reason: null,
+    examples: [],
+    topics: ['tone', 'celebrations', 'review_depth', 'review_planning'],
     playbackAfter: 'talk',
   },
   {

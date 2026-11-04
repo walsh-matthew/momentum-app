@@ -30,6 +30,7 @@ export const RETRY_FEEDBACK: Record<ViolationCode, string> = {
   'skip.repeat': 'That topic is already answered: skip it in one line and ask the next thing.',
   'skip.unanswered': 'Skip only a topic the person has already answered.',
   'skip.long': 'Make the skip line one short sentence.',
+  'skip.not_asked': "The screen asks that setting itself, with its own card, or it is not asked at all yet: do not write a question about it.",
   'interpretations.count': 'Offer two to four interpretations.',
   'interpretations.guessed': 'The answer did not fit the question: offer two to four interpretations instead of guessing.',
   'interpretations.changed': 'Change nothing in the draft until the person picks an interpretation.',

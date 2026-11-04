@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runSetupEval, violationsOf, type EvalReport, type SetupEvalCase } from '@/lib/setup/evals';
 import { renderPlayback } from '@/lib/setup/playback';
 import { unexplainedTerms } from '@/lib/setup/plainWords';
-import { MEANING_TEXT } from '@/lib/setup/session';
+import { MEANING_TEXT, PROPOSAL_YES_TEXT } from '@/lib/setup/session';
 import { HARD_RULES } from '@/lib/setup/steps';
 import { HARD_RULE_IDS, type AssistantTurn } from '@/types/setup';
 import { scriptedModel } from './helpers/setupScript';
@@ -163,7 +163,7 @@ describe('setup clarity (MOM-111): the cases from the owner\'s live setup', () =
   it('one-word answers (on a phone): follow-ups on the same topic carry it on, and setup finishes', async () => {
     const c = byId('run-l-one-word-answers');
     const report = await run(c);
-    for (const line of c.person) expect(line.say.split(' ').length, line.say).toBeLessThanOrEqual(2);
+    for (const line of c.person.filter((l) => l.say !== PROPOSAL_YES_TEXT)) expect(line.say.split(' ').length, line.say).toBeLessThanOrEqual(2);
     expect(c.person.map((p) => p.say)).toEqual(expect.arrayContaining(['family', '2 goals', 'no']));
     // A question straight after the reply on the same topic, more than once: "2 goals" then "What are the goals?", and so on.
     const followUps = report.turns.filter((t, i) => i > 0 && t.turn.topic !== null && t.turn.topic === report.turns[i - 1].turn.topic);

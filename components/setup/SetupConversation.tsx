@@ -7,6 +7,7 @@ import { addGoalsAction, addTargetsAction, askAddTurn, askSetupTurn, fillQuickPa
 import { casualDate } from '@/lib/dates/casual';
 import { ADD_WORDS } from '@/lib/setup/addWords';
 import { startsMidWeek } from '@/lib/setup/addStart';
+import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfTurn, type SettingsAnswers } from '@/lib/setup/cards';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
@@ -29,6 +30,9 @@ import { FIRST_SETUP_WORDS, FinalCard, type FinalCardWords } from './FinalCard';
 import { StartQuestion } from './StartQuestion';
 import { PlaybackCard } from './PlaybackCard';
 import { QuestionCard } from './QuestionCard';
+import { SettingsCard } from './SettingsCard';
+import { TimeZoneCard } from './TimeZoneCard';
+import { allTimeZones } from './TimeZonePicker';
 import { QuickPathCard } from './QuickPathCard';
 import type { FillHow } from './QuickPathFillIn';
 import { RetryNotice } from './RetryNotice';
@@ -195,7 +199,9 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
     setView(null);
     let pauseMs: number | null = null;
     try {
-      const request = { ...next, today: localDate(), locale: browserLocale() };
+      // The phone's zone goes only with a first setup, where the time zone card suggests it; a person adding to a setup has one saved.
+      const zone = adding ? null : deviceTimeZone();
+      const request = { ...next, today: localDate(), locale: browserLocale(), ...(zone ? { timeZone: zone } : {}) };
       const result = addition ? await askAddTurn({ ...request, addition }) : await askSetupTurn(request);
       if (id !== requestId.current) return;
       if (!result.ok) {
@@ -237,6 +243,26 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
     setSession(next);
     storeSession(storageId, next);
     void ask(next);
+  };
+
+  // The time zone card's answer (MOM-178): a tap, recorded in the draft as theirs, and then Claude's next question. No call is made for the
+  // card itself; the one that follows is Claude's, as after any answer.
+  const answerZone = (zone: string, how: 'said' | 'accepted') => {
+    const next = answerTimeZone(session, zone, how);
+    if (!next) return;
+    setDraftAnswer(undefined);
+    setSession(next);
+    storeSession(storageId, next);
+    void ask(next);
+  };
+
+  // The settings card's answer: the choices become the person's own message and the draft's settings, and the part is played back by
+  // code at once. No Claude call at all.
+  const answerCard = (answers: SettingsAnswers) => {
+    const next = answerSettings(session, answers);
+    if (!next) return;
+    setSession(next);
+    storeSession(storageId, next);
   };
 
   // "Change my answer": the last answer goes back in the box, selected, and the question is asked as it was. The change is
@@ -537,11 +563,16 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
           onSave={() => void (adding ? add(false, chosenDate) : save(false))}
           onChange={answer}
         />
+      ) : isSettingsCard(turn) && !waiting ? (
+        <SettingsCard key={`settings:${spoken}`} settings={turn.draft.model.settings} busy={saving} onDone={answerCard} />
+      ) : isTimeZoneCard(turn) && !waiting && (turn.kind === 'proposal' || allTimeZones().length > 0) ? (
+        <TimeZoneCard key={`zone:${spoken}`} question={turn.question ?? ''} deviceZone={zoneOfTurn(turn)} busy={saving} onPick={answerZone} />
       ) : (
         // Keyed so "Change my answer" opens the card afresh, with the old answer in the box.
         <QuestionCard
           key={`${session.transcript.length}:${draftAnswer === undefined ? '' : 'edit'}`}
-          turn={turn}
+          // A card code wrote carries a mark in its detail line for the screen, not for the person.
+          turn={isTimeZoneCard(turn) || isSettingsCard(turn) ? { ...turn, detail: null } : turn}
           busy={busy}
           onAnswer={answer}
           today={today}
