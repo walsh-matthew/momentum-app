@@ -5,8 +5,7 @@
 // day type, slot, target, milestone, forecast) is ever on screen; tests/forecast-edit-words.test.tsx fails if one is.
 
 import { formatDay } from '@/components/home/wording';
-import { hoursText } from '@/lib/forecast/edits';
-import { unitFor } from '@/lib/utils/units';
+import { capacityWords, unitFor } from '@/lib/utils/units';
 import type { CapacityUnit } from '@/types/database.types';
 import type { LocalDate } from '@/types/scoreboard';
 
@@ -33,7 +32,7 @@ export const CHANGE_KIND_TIMES = 'Change how much time each kind gives';
 
 export const unitWord = (unit: CapacityUnit, amount: number): string => unitFor(amount, unit);
 export const usuallyText = (unit: CapacityUnit | null, amount: number | null): string =>
-  unit === null || amount === null ? NO_USUAL_TIME : `Usually ${hoursText(amount)} ${unitWord(unit, amount)}`;
+  unit === null || amount === null ? NO_USUAL_TIME : `Usually ${capacityWords(amount, unit)}`;
 export const saveKindTime = (name: string): string => `Save time for “${name}”`;
 
 // ---- A deadline task (/task/<id>) -----------------------------------------------------------------------------------------

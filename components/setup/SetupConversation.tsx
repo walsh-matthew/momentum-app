@@ -9,6 +9,7 @@ import { ADD_WORDS } from '@/lib/setup/addWords';
 import { startsMidWeek } from '@/lib/setup/addStart';
 import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfTurn, type SettingsAnswers } from '@/lib/setup/cards';
 import { shownModel } from '@/lib/setup/paraphrase';
+import { answerWeekCard, isWeekCard, weekCardDetail, type WeekAnswer } from '@/lib/setup/weekCards';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
 import { RETURNING_FIRST_LINE, SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
@@ -32,6 +33,7 @@ import { PlaybackCard } from './PlaybackCard';
 import { QuestionCard } from './QuestionCard';
 import { SettingsCard } from './SettingsCard';
 import { TimeZoneCard } from './TimeZoneCard';
+import { WeekCard } from './WeekCard';
 import { allTimeZones } from './TimeZonePicker';
 import { QuickPathCard } from './QuickPathCard';
 import type { FillHow } from './QuickPathFillIn';
@@ -263,6 +265,17 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
     if (!next) return;
     setSession(next);
     storeSession(storageId, next);
+  };
+
+  // A week card's answer (MOM-179): the tap becomes the person's own message and the draft's value, and code writes what follows (the next card,
+  // or the playback of the planning part) at once. Claude is asked only when the next thing is the kinds of days.
+  const answerWeek = (answer: WeekAnswer) => {
+    const next = answerWeekCard(session, answer);
+    if (!next) return;
+    setDraftAnswer(undefined);
+    setSession(next);
+    storeSession(storageId, next);
+    if (awaitsClaude(next)) void ask(next);
   };
 
   // "Change my answer": the last answer goes back in the box, selected, and the question is asked as it was. The change is
@@ -567,12 +580,14 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
         <SettingsCard key={`settings:${spoken}`} settings={turn.draft.model.settings} busy={saving} onDone={answerCard} />
       ) : isTimeZoneCard(turn) && !waiting && (turn.kind === 'proposal' || allTimeZones().length > 0) ? (
         <TimeZoneCard key={`zone:${spoken}`} question={turn.question ?? ''} deviceZone={zoneOfTurn(turn)} busy={saving} onPick={answerZone} />
+      ) : isWeekCard(turn) && !waiting ? (
+        <WeekCard key={`week:${spoken}`} turn={turn} said={playbackOptions.said} busy={saving} onAnswer={answerWeek} onType={answer} />
       ) : (
         // Keyed so "Change my answer" opens the card afresh, with the old answer in the box.
         <QuestionCard
           key={`${session.transcript.length}:${draftAnswer === undefined ? '' : 'edit'}`}
           // A card code wrote carries a mark in its detail line for the screen, not for the person.
-          turn={isTimeZoneCard(turn) || isSettingsCard(turn) ? { ...turn, detail: null } : turn}
+          turn={isWeekCard(turn) ? { ...turn, detail: weekCardDetail(turn.topic) } : isTimeZoneCard(turn) || isSettingsCard(turn) ? { ...turn, detail: null } : turn}
           busy={busy}
           onAnswer={answer}
           today={today}

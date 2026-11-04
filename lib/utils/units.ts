@@ -23,3 +23,13 @@ export const unitCount = (amount: number, unit: string | null | undefined): stri
   const word = unit ? unitFor(amount, unit) : '';
   return word === '' ? String(amount) : `${amount} ${word}`;
 };
+
+// A kind of day's usual time as a person reads it (MOM-179): under 1 hour in whole minutes ("45 minutes", "20 minutes"), 1 hour or more in
+// hours ("2 hours", "1.5 hours"). Hours are stored with full precision (20 minutes is a third of an hour), so a stored amount is rounded
+// only here, for display. Sessions are not time and read as a count ("3 sessions"). One rule for every place a capacity is shown back.
+export function capacityWords(amount: number, unit: string | null | undefined): string {
+  if (unit !== 'hours') return unitCount(amount, unit);
+  const minutes = Math.round(amount * 60);
+  if (amount < 1 && minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  return unitCount(Math.round(amount * 100) / 100, 'hours');
+}

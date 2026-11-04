@@ -9,6 +9,7 @@ import { SETTINGS_CARD_MARK, SETTINGS_HEADING, TIME_ZONE_CARD_MARK, timeZoneQues
 import { MEANING_TEXT, PROPOSAL_YES_TEXT } from '@/lib/setup/session';
 import { SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
 import { DAY_END_SAY } from '@/lib/setup/steps';
+import { WEEK_CARD_MARK, WEEK_WORDS, slotsQuestion } from '@/lib/setup/weekCards';
 import type { SavedFacts } from '@/lib/setup/validate';
 import type { AssistantTurn, HardRuleId, SetupModel } from '@/types/setup';
 import { Script, goal, goalOf, item, target, targetOf } from '../helpers/setupScript';
@@ -86,6 +87,8 @@ interface HabitOptions {
   floor: 'plain' | 'ideas' | 'ambiguous' | 'changeAtApproval' | 'compound' | 'levelAsked';
   // 'whatDoYouMean': the person asks what the day-end question means, and Claude explains it before asking again.
   dayEnd: 'checkin' | 'ambiguousEarly' | 'whatDoYouMean';
+  // MOM-179: the week questions as cards the person taps (day end, week start, kinds of days, time for each, set days, planning moment).
+  weekCards?: boolean;
   // What the goal is called and why it matters, as the person put it (round 3b, finding 4: a goal that is not exercise).
   goalTitle?: string;
   why?: { reply: string; text: string };
@@ -339,6 +342,83 @@ function habitCase(o: HabitOptions): ScriptedCase {
     question: 'Where do you track this now, if anywhere?',
     reply: change ? 'No, I will log it myself. Actually, make it three a week, not two.' : 'No, I will log it myself.',
   });
+
+  if (o.weekCards) {
+    // MOM-179: the week questions as cards written by code. Claude asks the day end (its question goes out as the card), and the person taps;
+    // code writes the week start card, then Claude asks the kinds of days (the one question left to it) and the person types them; Claude
+    // then asks how much time each has (swapped for the card), and code writes the rest: time for each kind of day, set days or any day, when
+    // to plan, and the playback of the planning part. The placeholders hold the cards' places, so the positions of the model's own turns line up.
+    const kinds = ['Busy days', 'Usual days', 'Easy days'];
+    s.add({
+      topic: 'day_end',
+      edit: (m) => {
+        targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }];
+      },
+      say: DAY_END_SAY,
+      question: 'When does your day end?',
+      reply: { say: 'I check in around 9 at night', week: { topic: 'day_end', time: '21:00' } },
+    });
+    s.add({
+      topic: 'week_start',
+      edit: (m) => (m.person.dayEnd = '21:00'),
+      said: ['person.dayEnd'],
+      question: WEEK_WORDS.weekStartQuestion,
+      detail: WEEK_CARD_MARK,
+      reply: { say: 'My week starts on Monday', week: { topic: 'week_start', weekday: 1 } },
+    });
+    s.add({
+      topic: 'day_types',
+      edit: (m) => (m.person.weekStart = 1),
+      said: ['person.weekStart'],
+      question: 'Do some days have more room for this than others?',
+      detail: 'Like busy days and easier ones. Your plan puts more on the days with more room.',
+      reply: 'Yes: busy days, usual days and easy days.',
+    });
+    s.add({
+      topic: 'capacity',
+      edit: (m) => (m.person.dayTypes = kinds.map((name) => ({ name, capacityUnit: null, capacityAmount: null }))),
+      question: 'About how much time does each kind of day have?',
+      reply: {
+        say: 'twenty minutes, 45 minutes, 2 hours',
+        week: {
+          topic: 'capacity',
+          rows: {
+            'busy days': { amount: '20', unit: 'minutes' },
+            'usual days': { amount: '45', unit: 'minutes' },
+            'easy days': { amount: '2', unit: 'hours' },
+          },
+        },
+      },
+    });
+    s.add({
+      topic: 'slots_or_quota',
+      edit: (m) => {
+        const amounts = [20 / 60, 45 / 60, 2];
+        m.person.dayTypes.forEach((d, i) => Object.assign(d, { capacityUnit: 'hours', capacityAmount: amounts[i] }));
+      },
+      said: kinds.map((name) => `person.dayTypes.${name.toLowerCase()}.capacityAmount`),
+      question: slotsQuestion(counted.word),
+      detail: WEEK_CARD_MARK,
+      reply: { say: 'Mondays, Wednesdays and Fridays', week: { topic: 'slots_or_quota', answer: { kind: 'days', weekdays: [1, 3, 5] } } },
+    });
+    s.add({
+      topic: 'planning_moment',
+      edit: (m) => (targetOf(m, 'g1', 't1').period = { kind: 'day_slots', weekdays: [1, 3, 5] }),
+      said: ['goals.g1.targets.t1.slotWeekdays'],
+      question: WEEK_WORDS.planningQuestion,
+      detail: WEEK_CARD_MARK,
+      reply: { say: 'Sunday at 6 pm', week: { topic: 'planning_moment', weekday: 7, time: '18:00' } },
+    });
+    s.playback('planning', 'Yes.', {
+      edit: (m) => {
+        m.person.planning = { weekday: 7, time: '18:00' };
+      },
+      said: ['person.planning.weekday', 'person.planning.time'],
+    });
+    settingsCard(s, { tone: 'gentle' }, { tone: 'gentle' });
+    s.final();
+    return done({ id: o.id, title: o.title, rules: o.rules, expect: 'clean' }, s);
+  }
 
   const dayEnd = o.dayEnd === 'ambiguousEarly' ? '02:00' : '21:00';
   s.add({
@@ -742,6 +822,20 @@ const FIXTURES: ScriptedCase[] = [
 // ---------------------------------------------------------------------------
 // The set
 // ---------------------------------------------------------------------------
+
+// MOM-179: a whole first setup that reaches every question of step 10, with the week questions as cards. Apart from SETUP_CASES, whose count
+// other tests pin; tests/setup-week-cards.test.ts runs it, and counts the model's calls against the same person's typed answers.
+export const WEEK_CARDS_CASE: ScriptedCase = habitCase({
+  id: 'run-p-week-cards',
+  title: 'the week questions as cards: day end, week start, kinds of days, time for each, set days, and when to plan',
+  rules: ['skip_answered', 'assume_nothing', 'chunked_playback'],
+  idea: 'I want to run more, and plan my week around it.',
+  priorities: 'plain',
+  floor: 'plain',
+  dayEnd: 'checkin',
+  counted: RUNS,
+  weekCards: true,
+});
 
 export const SETUP_CASES: ScriptedCase[] = [
   ...FIXTURES,

@@ -4,6 +4,9 @@
 import type { SetupChunk, SetupDraft, Transcript, AssistantTurn } from '@/types/setup';
 import { approvalFollowsPlayback, checkTurn, type Violation } from './checks';
 import { SETTINGS_CARD_MARK, SETTINGS_HEADING, TIME_ZONE_ASK, TIME_ZONE_CARD_MARK, codeTurn, isSettingsCard, settingsRowsLeft, timeZoneQuestion } from './cards';
+import { personWords } from './said';
+import { asksMeaning } from './text';
+import { WEEK_CARD_TOPICS, weekCardFrom, type WeekCardTopic } from './weekCards';
 import { isTimeZone } from './validate';
 
 // The turn code writes in place of Claude's next one, or null when Claude takes it. Called with a transcript that ends with the
@@ -42,6 +45,25 @@ export function cardStep(transcript: Transcript, draft: SetupDraft, deviceZone: 
     return codeTurn(approved, { kind: 'question', chunk: null, topic: rows[0].topic, question: SETTINGS_HEADING, detail: SETTINGS_CARD_MARK });
   }
   return null;
+}
+
+// The week card code writes in place of a question of Claude's (MOM-179): when Claude's checked turn is a plain question on one of the topics
+// code now asks (day end, week start, time for each kind of day, set days or any day, when to plan), the card for that topic, or for the first
+// one after it that has something to ask, goes out instead, carrying Claude's draft. No further call is made for it, and the cards after it
+// follow in the browser. Null, so Claude's own turn stands, when:
+// - the turn is not a question on one of those topics (the kinds of days are Claude's, and so is an interpretation or an offer of ideas);
+// - the person's last message asked what the question means: that turn is the explanation they asked for;
+// - the turn asks again the topic of the turn before it: a clarification of a typed answer, which needs Claude's words;
+// - no card has anything left to ask (every value is already in the draft). A typed answer that held two values leaves both cards out.
+export function weekCardInPlaceOf(turn: AssistantTurn, transcript: Transcript): AssistantTurn | null {
+  const topic = turn.topic;
+  if (turn.kind !== 'question' || topic === null || !(WEEK_CARD_TOPICS as readonly string[]).includes(topic)) return null;
+  const last = transcript[transcript.length - 1];
+  if (last?.role !== 'person' || asksMeaning(last.text)) return null;
+  const before = [...transcript].reverse().find((m) => m.role === 'assistant');
+  if (before?.role === 'assistant' && before.turn.topic === topic) return null;
+  const next = weekCardFrom(turn.draft, topic as WeekCardTopic, personWords(transcript));
+  return next.kind === 'card' ? next.turn : null;
 }
 
 // What stops a card going out. The wording of a card is the owner's and written by code, so the plain-words checks that hold Claude's

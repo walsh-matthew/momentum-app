@@ -7,7 +7,7 @@
 import { casualDate } from '@/lib/dates/casual';
 import { EARLY_DAY_END_LIMIT } from '@/lib/engine/constants';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
-import { singularFirstWord, unitCount } from '@/lib/utils/units';
+import { capacityWords, singularFirstWord, unitCount } from '@/lib/utils/units';
 import { hoursText, minutesAsHours, namesHours, namesMinutes } from './timeUnits';
 import type { GoalDraft, SetupChunk, SetupDraft, SetupModel, TargetDraft, Transcript } from '@/types/setup';
 import { asSaid, itemOf, listOf, restate, titleOf, trimmed } from './restate';
@@ -238,7 +238,7 @@ const REVIEW_PLANNING_LINES = {
 
 // One kind of day, with what it gives when that is set: "Workdays (1 hour)", "Busy days (2 sessions)", "Quiet days (3)" (MOM-167 part 9).
 export const dayKindWords = (d: SetupModel['person']['dayTypes'][number]): string =>
-  `${itemOf(d.name)}${d.capacityAmount !== null ? ` (${unitCount(d.capacityAmount, d.capacityUnit)})` : ''}`;
+  `${itemOf(d.name)}${d.capacityAmount !== null ? ` (${capacityWords(d.capacityAmount, d.capacityUnit)})` : ''}`;
 
 export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: PlaybackOptions = {}): string[] {
   const lines: string[] = [];

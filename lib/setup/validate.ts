@@ -97,6 +97,12 @@ export function textSaysLeaf(leaf: Leaf, text: string): boolean {
       const value = leaf.value as number;
       return numbers.includes(value) || (/\b(hours?|hrs?)\b/i.test(text) && numbers.some((n) => n * 60 === value));
     }
+    case 'hours': {
+      // The number itself, or minutes that make it: "45 minutes" says 0.75 hours. Only when the text names minutes.
+      const numbers = numbersIn(text);
+      const value = leaf.value as number;
+      return numbers.includes(value) || (/\b(minutes?|mins?)\b/i.test(text) && numbers.some((n) => Math.abs(n / 60 - value) < 1e-9));
+    }
     case 'date':
       return dateIsIn(leaf.value as string, datesIn(text));
     case 'time':

@@ -42,7 +42,7 @@ import { isTimeZone, validateDraft, type DraftIssue } from './validate';
 // what it is.
 export const FILL_IN_MARK = 'Set on the quick path.';
 
-const WEEKDAYS: FillInChoice[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((label, i) => ({
+export const WEEKDAYS: FillInChoice[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((label, i) => ({
   value: String(i + 1),
   label,
 }));

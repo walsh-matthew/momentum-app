@@ -4,9 +4,10 @@
 
 import type { Provenance, SetupChunk, SetupDraft, SetupModel, SetupTopic } from '@/types/setup';
 
-// number: a plain amount. minutes: an amount the person may have said in hours or minutes. date, time, weekday: as named.
+// number: a plain amount. minutes: an amount the person may have said in hours or minutes. hours: an amount saved in hours that the person may
+// have said in minutes (a kind of day's usual time: "45 minutes" is 0.75, MOM-179). date, time, weekday: as named.
 // flag: a yes/no the person answered (whether a deadline date can move).
-export type LeafKind = 'number' | 'minutes' | 'date' | 'time' | 'weekday' | 'weekdays' | 'flag';
+export type LeafKind = 'number' | 'minutes' | 'hours' | 'date' | 'time' | 'weekday' | 'weekdays' | 'flag';
 
 export interface Leaf {
   path: string;
@@ -51,7 +52,7 @@ export function provenanceLeaves(model: SetupModel): Leaf[] {
   add('person.weekStart', 'weekday', person.weekStart);
   add('person.planning.weekday', 'weekday', person.planning.weekday);
   add('person.planning.time', 'time', person.planning.time);
-  for (const d of person.dayTypes) add(`person.dayTypes.${d.name.toLowerCase()}.capacityAmount`, 'number', d.capacityAmount);
+  for (const d of person.dayTypes) add(`person.dayTypes.${d.name.toLowerCase()}.capacityAmount`, d.capacityUnit === 'hours' ? 'hours' : 'number', d.capacityAmount);
 
   for (const g of model.goals) {
     const base = `goals.${g.key}`;
