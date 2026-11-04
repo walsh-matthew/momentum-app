@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { casualDate } from '@/lib/dates/casual';
 import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
-import type { FillInItem } from '@/types/setupScreen';
+import type { FillInChoice, FillInItem } from '@/types/setupScreen';
 import { AnswerChoice, ChoiceMark, choiceClasses } from './AnswerChoice';
 import { SetupButton } from './SetupButton';
 import { TimeZonePicker } from './TimeZonePicker';
@@ -23,10 +23,10 @@ interface QuickPathFillInProps {
   onFill: (item: FillInItem, value: string, how: FillHow) => void;
 }
 
-const FIELD =
+export const FIELD =
   'block min-h-12 w-full min-w-0 rounded-2xl border ctl-30 field-input px-4 text-base text-foreground placeholder:text-muted focus-visible:border-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60';
 
-interface FieldProps {
+export interface FieldProps {
   label: string;
   type: 'text' | 'time' | 'date';
   inputMode?: 'decimal';
@@ -38,7 +38,7 @@ interface FieldProps {
 
 // One box and its button, for a time, a date, a number or a few words. The button is there only when there is something new to
 // set: a box with nothing in it, or the answer it already holds, has no button at all (never a dimmed one).
-function Field({ label, type, inputMode, initial, disabled, button, onSet }: FieldProps) {
+export function Field({ label, type, inputMode, initial, disabled, button, onSet }: FieldProps) {
   const [value, setValue] = useState(initial ?? '');
   const ready = value.trim().length > 0 && value.trim() !== (initial ?? '');
   const submit = (event: FormEvent) => {
@@ -57,12 +57,13 @@ function Field({ label, type, inputMode, initial, disabled, button, onSet }: Fie
   );
 }
 
-// Seven weekday buttons in a compact grid (four, then three), each its short name on screen and its full name to a screen reader.
-function WeekdayGrid({ item, disabled, onPick }: { item: FillInItem; disabled: boolean; onPick: (value: string) => void }) {
+// Seven weekday buttons in a compact grid (four, then three), each its short name on screen and its full name to a screen reader. Also the week's
+// day on the setup cards written by code (MOM-179).
+export function WeekdayGrid({ choices, answer, disabled, onPick }: { choices: FillInChoice[]; answer: string | null; disabled: boolean; onPick: (value: string) => void }) {
   return (
     <div className="grid grid-cols-4 gap-2">
-      {item.choices.map((choice) => {
-        const selected = item.answer === choice.value;
+      {choices.map((choice) => {
+        const selected = answer === choice.value;
         return (
           <button
             key={choice.value}
@@ -110,7 +111,7 @@ export function QuickPathFillIn({ item, disabled, deviceZone, today, boxButton, 
     case 'text':
       return <Field label={item.line} type="text" initial={item.answer} disabled={disabled} button={boxButton} onSet={said} />;
     case 'weekday':
-      return <WeekdayGrid item={item} disabled={disabled} onPick={said} />;
+      return <WeekdayGrid choices={item.choices} answer={item.answer} disabled={disabled} onPick={said} />;
     case 'choice':
     case 'yesNo':
       return (

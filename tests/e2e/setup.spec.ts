@@ -187,7 +187,12 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         const line = lines[k].say;
         const codeCard = await codeCardOn(page);
         const requestsNow = (await fakeLast()).setupRequests;
-        if (codeCard !== null) {
+        if (codeCard === 'week') {
+          // MOM-179: a week card comes in place of a question of Claude's, or straight after another card, so the count of requests may or may not
+          // have moved. It is answered the way the scripted person does: typed in its answer box, which goes to Claude as always.
+          expect(card.id).toBe('setup-question');
+          await answerCodeCard(page, codeCard, lines[k], PERSON_ZONE);
+        } else if (codeCard !== null) {
           // MOM-178: the time zone card and the settings card are written by code the moment the part before them is approved, so the
           // approval before each reached no model: the count of requests did not move.
           expect(requestsNow, `the ${codeCard} card is not the answer to a Claude call`).toBe(requestsSeen);

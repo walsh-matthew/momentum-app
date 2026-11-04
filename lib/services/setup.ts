@@ -51,7 +51,7 @@ import 'server-only';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, onlyPlainWords, type Violation, type ViolationCode } from '@/lib/setup/checks';
-import { cardStep, cardViolations } from '@/lib/setup/cardTurns';
+import { cardStep, cardViolations, weekCardInPlaceOf } from '@/lib/setup/cardTurns';
 import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
 import { convertHourAnswers, normalizeNumberTurn } from '@/lib/setup/numbers';
 import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog, unsaidNumberFields } from '@/lib/setup/feedback';
@@ -319,6 +319,11 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   // breaks was named in an earlier retry, or on the last try.
   let lastSignature: string | null = null;
   let longestCallMs = 0;
+  // A question of Claude's on a week topic goes out as the card for it (MOM-179), when that card passes the same draft checks as any other.
+  const delivered = (turn: AssistantTurn): AssistantTurn => {
+    const card = addition === undefined ? weekCardInPlaceOf(turn, session.transcript) : null;
+    return card !== null && cardViolations(card, context).length === 0 ? card : turn;
+  };
   // A date question shown with code's suggestion or code's wording (round 3, finding 2; round 3b, finding 2), and a number
   // question that names what is counted and which number it asks for (round 3b, finding 1), and a turn with any line in
   // jargon or pointing at an earlier answer by name left out (round 3c, lib/setup/plainCard.ts), kept only when it breaks no
@@ -326,7 +331,7 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   const shown = (claude: AssistantTurn): AssistantTurn => {
     const dated = normalizeDateTurn(claude, session.transcript, session.draft, personDay);
     const rewritten = normalizePlainTurn(normalizeNumberTurn(dated, personDay ?? null, personWords(session.transcript)), session.transcript);
-    return rewritten !== claude && checkTurn(rewritten, context).every((x) => x.rule === 'plain_words') ? rewritten : claude;
+    return delivered(rewritten !== claude && checkTurn(rewritten, context).every((x) => x.rule === 'plain_words') ? rewritten : claude);
   };
   for (let attempt = 0; attempt <= MAX_REPLY_RETRIES; attempt++) {
     const remaining = deadlineMs - nowMs();

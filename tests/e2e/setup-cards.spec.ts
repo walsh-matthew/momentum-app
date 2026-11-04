@@ -36,7 +36,7 @@ import { CARD, cardOf, cardTypes, elementsOffScreen, headingOf, sectionOf } from
 import { dateQuestionCase, e2eCase } from './support/setupConversation';
 
 const SHOTS = process.env.SETUP_SCREENSHOT_DIR;
-type CardKind = 'question' | 'question-with-options' | 'date-question' | 'date-confirmation' | 'ideas' | 'playback' | 'final' | 'time-zone-card' | 'settings-card';
+type CardKind = 'question' | 'question-with-options' | 'date-question' | 'date-confirmation' | 'ideas' | 'playback' | 'final' | 'time-zone-card' | 'settings-card' | 'week-card';
 
 const fakeControl = async (path: string): Promise<void> => {
   await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}${path}`, { method: 'POST' });
@@ -162,7 +162,7 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
     // The two cards code writes (MOM-178): one bold line, nothing past the edge, everyday words; answered by taps, which is not typing.
     const code = await codeCardOn(page);
     if (code !== null) {
-      const cardKind: CardKind = code === 'zone' ? 'time-zone-card' : 'settings-card';
+      const cardKind: CardKind = code === 'zone' ? 'time-zone-card' : code === 'week' ? 'week-card' : 'settings-card';
       await fits(page, cardKind);
       // The pointer is left where the last tap put it, which on this card is over a choice and gives it the hover fill; park it in the corner
       // so a picture shows the card as it is, with nothing chosen.
@@ -293,7 +293,7 @@ test.describe(`at ${SHOT_WIDTH}px (phone)`, () => {
     await signUpAndConfirm(page, 'setup-cards');
     try {
       const { seen, errorsShown, ideasLead, ideasDetail, ideasOptions } = await walk(page, e2eCase(), shooter('main'), { everyCard: false, errors: true });
-      expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options', 'settings-card', 'time-zone-card'].sort());
+      expect([...seen].sort()).toEqual(['date-confirmation', 'final', 'ideas', 'playback', 'question', 'question-with-options', 'settings-card', 'time-zone-card', 'week-card'].sort());
       expect(errorsShown).toBe(true);
       expect(ideasLead).toBe('In a hard week, how many runs would still count?');
       expect(ideasDetail).toBe('You said you run about 2 times a week now.');

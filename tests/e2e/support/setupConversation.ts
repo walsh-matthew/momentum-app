@@ -3,7 +3,7 @@
 // app applies. The fake model replays Claude's side (fakeAnthropic.ts); the spec types the person's side. Every name, date
 // and number in it is invented.
 
-import { READING_CASE_ID, RETURNING_CASES, SETUP_CASES, addTargetCase, type ScriptedCase } from '../../setup-evals/cases';
+import { READING_CASE_ID, RETURNING_CASES, SETUP_CASES, WEEK_CARDS_CASE, addTargetCase, type ScriptedCase } from '../../setup-evals/cases';
 import type { FakeScript } from './fakeAnthropic';
 
 export const E2E_CASE_ID = 'run-i-what-do-you-mean-protected';
@@ -43,7 +43,7 @@ export const addTargetFor = (goalTitle: string): ScriptedCase =>
 // The scripts the fake model serves, picked by the person's first answer; the first is the default.
 export function fakeScripts(goalTitleForTarget: string = SEEDED_GOAL_TITLE): FakeScript[] {
   // The reading case (MOM-111 round 3b, finding 4): a goal that is not exercise, photographed as its own set.
-  const first = [e2eCase(), dateQuestionCase(), caseById(READING_CASE_ID)].map((c) => ({ firstAnswer: c.person[0].say, turns: c.script }));
+  const first = [e2eCase(), dateQuestionCase(), caseById(READING_CASE_ID), WEEK_CARDS_CASE].map((c) => ({ firstAnswer: c.person[0].say, turns: c.script }));
   const adding: FakeScript[] = [
     { mode: 'add_goal', firstAnswer: addGoalCase().person[0].say, turns: addGoalCase().script },
     { mode: 'add_target', firstAnswer: addTargetFor(goalTitleForTarget).person[0].say, turns: addTargetFor(goalTitleForTarget).script },
