@@ -7,6 +7,16 @@ import type { AssistantTurn, SetupChunk } from './setup';
 // Why setup stopped using Claude (the same words as lib/services/llm.ts SetupQuickPathReason).
 export type QuickPathReason = 'over_turns' | 'over_tokens' | 'shared_cap' | 'person_cap' | 'unchecked';
 
+// When Claude is back for a person who used up their allowance (lib/setup/resume.ts).
+export interface ResumeInfo {
+  // When the allowance frees up, in milliseconds since 1970.
+  atMs: number;
+  // The sentence with a clock time, written on the server in the person's saved time zone; null when none is saved.
+  sentence: string | null;
+  // The sentence in hours, for when no clock time can be written.
+  fallback: string;
+}
+
 // One part of the draft, played back by code from the validated draft.
 export interface PlaybackSection {
   chunk: SetupChunk;
@@ -88,7 +98,8 @@ export type SetupTurnView =
   | { kind: 'turn'; turn: AssistantTurn; spentTokens: number; rejected: number }
   // Claude is no longer used for this setup: what was collected so far (all written by code), what is still missing, and
   // whether it can be saved as it is. Nothing is saved until the person taps.
-  | ({ kind: 'quick_path'; reason: QuickPathReason; message: string } & QuickPathState)
+  // `resume` is set for the person's own limit: when Claude is back (lib/setup/resume.ts).
+  | ({ kind: 'quick_path'; reason: QuickPathReason; message: string; resume?: ResumeInfo | null } & QuickPathState)
   // Two requests landed within a second of each other: ask again.
   | { kind: 'wait'; message: string; retryAfterSeconds: number }
   // Claude could not give a usable reply. What the person said is kept. `reason` picks the error card's words and its one

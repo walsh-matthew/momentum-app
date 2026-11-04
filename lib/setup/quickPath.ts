@@ -127,6 +127,14 @@ export const QUICK_PATH_WORDS = {
   // Why setup stopped, once, at the top of a card that still has questions.
   reasonLimit: 'Claude has hit its question limit for this setup. Everything you said is kept, and these last answers finish it.',
   reasonWait: "Claude can't take more questions right now. Everything you said is kept, and these last answers finish it.",
+  // The same two when nothing on the card can be answered (only a callout that says so is left): no "these last answers finish it".
+  // A limit that lifts keeps what was said in this tab; a setup's own limit makes no promise (starting again is the way forward).
+  reasonLimitNothing: 'Claude has hit its question limit for this setup.',
+  reasonWaitNothing: "Claude can't take more questions right now. Everything you said is kept in this tab.",
+  // The way forward for a limit that lifts on its own (test day 1): come back to this tab after the time the card shows, reload, and
+  // tap Send it again. "Start again" stays a small link that asks first.
+  stuckHelpWait: (hasTime: boolean): string =>
+    `Only Claude can ask for this, and it can't right now. Come back to this tab ${hasTime ? 'after the time above' : 'in a little while'}, reload the page, and tap Send it again. What you said is kept in this tab.`,
   needsAnswer: 'Needs your answer',
   yourAnswer: 'Your answer',
   cantAnswerHere: "Can't be answered here",
@@ -152,5 +160,16 @@ export function quickPathCanWait(reason: QuickPathReason): boolean {
   return reason === 'shared_cap' || reason === 'person_cap' || reason === 'unchecked';
 }
 
-// The one line that says why setup stopped using Claude.
-export const quickPathReason = (reason: QuickPathReason): string => (quickPathCanWait(reason) ? QUICK_PATH_WORDS.reasonWait : QUICK_PATH_WORDS.reasonLimit);
+// The one line that says why setup stopped using Claude. `answerable` is whether the card still has a question the person can answer:
+// when it has none, "these last answers finish it" would be false, so that line is left off.
+export function quickPathReason(reason: QuickPathReason, answerable = true): string {
+  if (quickPathCanWait(reason)) return answerable ? QUICK_PATH_WORDS.reasonWait : QUICK_PATH_WORDS.reasonWaitNothing;
+  return answerable ? QUICK_PATH_WORDS.reasonLimit : QUICK_PATH_WORDS.reasonLimitNothing;
+}
+
+// What the "Can't be answered here" callout says to do (test day 1). A limit that lifts on its own says to come back to this tab, where
+// the answers are kept, after the time the card shows (docs/DOMAIN_MODEL.md §2.3); a setup's own limit never lifts, so it says to
+// start again.
+export function quickPathStuckHelp(reason: QuickPathReason, hasTime: boolean): string {
+  return quickPathCanWait(reason) ? QUICK_PATH_WORDS.stuckHelpWait(hasTime) : QUICK_PATH_WORDS.stuckHelp;
+}

@@ -6,8 +6,11 @@
 // it explains both numbers with that same thing. Pure.
 
 import { casualDate } from '@/lib/dates/casual';
-import type { AssistantTurn, SetupDraft, SetupTopic, TargetDraft } from '@/types/setup';
+import type { AssistantTurn, SetupDraft, SetupTopic, TargetDraft, Transcript } from '@/types/setup';
+import { latestProvenance } from './leaves';
 import { countedWords } from './playback';
+import { namesHours, namesMinutes, namesTimeUnit, hoursToMinutes } from './timeUnits';
+import { numbersIn } from './text';
 
 export const NUMBER_TOPICS: ReadonlySet<SetupTopic> = new Set<SetupTopic>(['floor', 'aspiration']);
 export type NumberTopic = 'floor' | 'aspiration';
@@ -29,7 +32,8 @@ export function countedTarget(draft: SetupDraft, topic: SetupTopic): TargetDraft
 // What is counted, in the person's words, as the number question says it: "workouts", "minutes of practice".
 export function countedThing(t: TargetDraft, said: readonly string[] = []): string {
   const words = countedWords(t.title, said);
-  return t.measure === 'time' && !/\bminutes?\b/i.test(words) ? `minutes of ${words}` : words;
+  // Words that already name a time unit ("hours", "minutes of practice") take no prefix: "minutes of hours" read as nonsense.
+  return t.measure === 'time' && !namesTimeUnit(words) ? `minutes of ${words}` : words;
 }
 
 // Whether a counted thing takes "make" or "makes" (MOM-111 round 3d). No question uses it since the weekly floor question became
@@ -135,4 +139,36 @@ export function normalizeNumberTurn(turn: AssistantTurn, today: string | null, s
   }
   const question = numberQuestion(topic, t, today, said);
   return question === turn.question ? turn : { ...turn, question };
+}
+
+// A bare number given to a question that asked in hours is hours, stored as minutes (test day 1). A time target whose counted words
+// name hours ("hours of reading") is asked in hours ("how many hours would still count?"), but its levels are stored in minutes, so
+// "3" must be saved as 180. Claude records what the person said ("3"); this turns a floor or aim set from the person's newest
+// message into minutes, in code, before anything checks or stores it. It converts only a value that is new this turn, said in that
+// message, equal to a number in it, when the message does not itself name minutes. Anything else (Claude already wrote 180 from
+// "3 hours", a number set earlier, a target that does not count hours) is left as it is.
+export function convertHourAnswers(turn: AssistantTurn, transcript: Transcript, prevDraft: SetupDraft, said: readonly string[] = []): AssistantTurn {
+  const last = transcript.length - 1;
+  const message = transcript[last];
+  if (message?.role !== 'person' || namesMinutes(message.text)) return turn;
+  const spoken = numbersIn(message.text);
+  if (spoken.length === 0) return turn;
+
+  let model: SetupDraft['model'] | null = null;
+  for (const goal of turn.draft.model.goals) {
+    for (const t of goal.targets) {
+      if (t.measure !== 'time' || !namesHours(countedWords(t.title, said))) continue;
+      const before = prevDraft.model.goals.find((g) => g.key === goal.key)?.targets.find((x) => x.key === t.key);
+      for (const field of ['floor', 'aspiration'] as const) {
+        const value = t[field];
+        if (value === null || before?.[field] === value || !spoken.includes(value)) continue;
+        const entry = latestProvenance(turn.draft.said, `goals.${goal.key}.targets.${t.key}.${field}`);
+        if (entry?.turn !== last || entry.how !== 'said') continue;
+        model ??= structuredClone(turn.draft.model);
+        const target = model.goals.find((g) => g.key === goal.key)?.targets.find((x) => x.key === t.key);
+        if (target) target[field] = hoursToMinutes(value);
+      }
+    }
+  }
+  return model === null ? turn : { ...turn, draft: { ...turn.draft, model } };
 }

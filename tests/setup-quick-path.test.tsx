@@ -395,7 +395,7 @@ describe('what only Claude could ask for', () => {
     expect(callout.textContent).toContain(QUICK_PATH_WORDS.cantAnswerHere);
     expect(callout.textContent).toContain('Start again');
     expect(screen.queryByRole('button', { name: QUICK_PATH_WORDS.save })).toBeNull();
-    expect(screen.getAllByText(QUICK_PATH_WORDS.reasonLimit)).toHaveLength(1);
+    expect(screen.getAllByText(QUICK_PATH_WORDS.reasonLimitNothing)).toHaveLength(1);
   });
 
   it('keeps Save away from a card whose questions are all answered but that still has such a line', () => {

@@ -15,6 +15,7 @@ import {
   ERROR_COPY,
   RESEND_AFTER_MS,
   RESEND_MARGIN_MS,
+  askedWhatItMeans,
   awaitsClaude,
   newSession,
   withAssistantTurn,
@@ -425,6 +426,7 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
     return (
       <QuickPathCard
         reason={view.reason}
+        resume={view.resume}
         sections={view.sections}
         steps={view.steps}
         stuck={view.stuck}
@@ -547,6 +549,7 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
           notice={notice}
           initialText={draftAnswer}
           said={playbackOptions.said}
+          explaining={askedWhatItMeans(session.transcript)}
         />
       )}
       {/* A question card shows these itself, under the answer it is waiting on. */}

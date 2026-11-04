@@ -237,7 +237,7 @@ describe('finding 3: "Pick a date" opens the phone\'s own date picker; nothing o
     [`${topic}, suggested`, turn({ kind: 'proposal', topic, question: 'On Monday, Nov 2?' }), PICK_OTHER_DATE, 'answer'] as const,
   ]);
 
-  it.each(layouts)('%s: the button is the one date field, and choosing a date answers', (_name, t, label, tone) => {
+  it.each(layouts)('%s: the button is the one date field, and choosing a date only shows it', (_name, t, label, tone) => {
     const onAnswer = vi.fn();
     const { container } = render(<QuestionCard turn={t} busy={false} onAnswer={onAnswer} today={TODAY} />);
     const fields = container.querySelectorAll('input[type="date"]');
@@ -256,7 +256,11 @@ describe('finding 3: "Pick a date" opens the phone\'s own date picker; nothing o
     fireEvent.click(field);
     expect(container.querySelectorAll('*').length).toBe(before);
     expect(container.querySelectorAll('input[type="date"]')).toHaveLength(1);
+    // Choosing a date only shows it on the button ("Thu, Nov 12"); "Use this date" sends it (test day 1).
     fireEvent.change(field, { target: { value: '2026-11-12' } });
+    expect(onAnswer).not.toHaveBeenCalled();
+    expect(trigger?.textContent).toBe('Thu, Nov 12');
+    fireEvent.click(screen.getByRole('button', { name: 'Use this date' }));
     expect(onAnswer).toHaveBeenCalledWith('Thursday, November 12, 2026');
   });
 

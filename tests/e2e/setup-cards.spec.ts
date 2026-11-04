@@ -576,6 +576,11 @@ test.describe('date cards on an iPhone profile', () => {
     const other = card.locator('button[data-slot="answer-choice"]').first();
     if ((await other.count()) > 0) expect((await trigger.boundingBox())?.width).toBe((await other.boundingBox())?.width);
     await fits(page, kind);
+    // M2: "Type it instead" and "What does this mean?" sit on one baseline (same top and height, so the same text line).
+    const typeLink = await card.getByRole('button', { name: TYPE_INSTEAD }).boundingBox();
+    const helpLink = await card.getByRole('button', { name: MEANING_LINK }).boundingBox();
+    expect(Math.abs((typeLink?.y ?? 0) - (helpLink?.y ?? 99)), `${kind}: the two links share a line`).toBeLessThanOrEqual(1);
+    expect(Math.abs((typeLink?.height ?? 0) - (helpLink?.height ?? 99)), `${kind}: the two links are the same height`).toBeLessThanOrEqual(1);
     await shot(page, kind);
     const before = await card.locator('*').count();
     await field.tap();
@@ -611,7 +616,15 @@ test.describe('date cards on an iPhone profile', () => {
       await pickerCard(page, kind, shot);
       if (kind === 'date-question') {
         expect(pickedDateText('2027-06-05')).toBe('Saturday, June 5, 2027');
+        // Test day 1: choosing a date only shows it (an iPhone fires change as the picker opens), and "Use this date" answers.
         await page.getByLabel(PICK_DATE, { exact: true }).fill('2027-06-05');
+        await expect(sectionOf(page).locator('[data-picker="date"]')).toHaveText('Sat, Jun 5, 2027');
+        await expect(sectionOf(page).getByText('Saturday, Jun 5, 2027', { exact: true })).toHaveCount(0);
+        // A touch screen has no hover, so the mouse is moved off the button before the picture.
+        await page.mouse.move(0, 0);
+        await page.waitForTimeout(500); // the colour change after a pick takes a moment; the picture is of the settled card
+        await shot(page, 'date-question-picked');
+        await page.getByRole('button', { name: 'Use this date' }).click();
         await expect(sectionOf(page).getByText('Saturday, Jun 5, 2027', { exact: true })).toBeVisible();
       }
     }

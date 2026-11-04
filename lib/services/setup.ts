@@ -52,13 +52,14 @@ import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, onlyPlainWords, type Violation, type ViolationCode } from '@/lib/setup/checks';
 import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
-import { normalizeNumberTurn } from '@/lib/setup/numbers';
+import { convertHourAnswers, normalizeNumberTurn } from '@/lib/setup/numbers';
 import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog, unsaidNumberFields } from '@/lib/setup/feedback';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { normalizePlainTurn } from '@/lib/setup/plainCard';
 import { spokenTimes } from '@/lib/setup/playback';
 import { clearStrayUnits } from '@/lib/setup/units';
 import { personToday } from '@/lib/setup/relativeDates';
+import { resumeInfo } from '@/lib/setup/resume';
 import { applyFillIn, planFillIn, type FillInPlan } from '@/lib/setup/fillIn';
 import { describeMissing } from '@/lib/setup/quickPath';
 import { recapSections } from '@/lib/setup/quickRecap';
@@ -67,7 +68,7 @@ import { errorText } from '@/lib/setup/session';
 import { sourceNote } from '@/lib/setup/sources';
 import { draftToRows, toAddGoalsPayload, toAddTargetsPayload, toSavePayload, type SetupRows } from '@/lib/setup/rows';
 import { RETURNING_MODES, SAVED_GOAL_KEY, returningNote, type ReturningContext } from '@/lib/setup/returning';
-import { validateDraft, type SavedFacts, type ValidateOptions } from '@/lib/setup/validate';
+import { isTimeZone, validateDraft, type SavedFacts, type ValidateOptions } from '@/lib/setup/validate';
 import type { Json } from '@/types/database.types';
 import {
   AssistantTurnSchema,
@@ -79,7 +80,7 @@ import {
   type AssistantTurn,
   type SetupSession,
 } from '@/types/setup';
-import type { AddOptions, QuickPathReason, QuickPathState, SetupAdded, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
+import type { AddOptions, QuickPathReason, QuickPathState, ResumeInfo, SetupAdded, SetupFailedReason, SetupSaved, SetupTurnView } from '@/types/setupScreen';
 import { runSetupTurn } from './llm';
 import type { ServiceResult } from './result';
 
@@ -198,8 +199,9 @@ function quickPathView(
   locale: string | undefined,
   today: string | undefined,
   options: ValidateOptions = {},
+  resume: ResumeInfo | null = null,
 ): SetupTurnView {
-  return { kind: 'quick_path', reason, message, ...quickPathState(session, locale, today, options) };
+  return { kind: 'quick_path', reason, message, ...(resume ? { resume } : {}), ...quickPathState(session, locale, today, options) };
 }
 
 // A person adding to a finished setup (MOM-132 part 2), as the browser names it: the kind of addition and, for a target, the goal. The
@@ -336,7 +338,13 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
     });
     const ms = Math.round(nowMs() - started);
     longestCallMs = Math.max(longestCallMs, ms);
-    if (answer.kind === 'quick_path') return quickPathView(session, answer.reason, answer.message, locale, personDay, addition?.validate);
+    if (answer.kind === 'quick_path') {
+      // The person's own limit says when Claude is back. The clock time is in their saved time zone (one asked in this setup, or the
+      // one saved before); with none, the card writes it in the phone's own zone.
+      const zone = session.draft.model.person.timeZone ?? addition?.savedTimeZone ?? null;
+      const resume = answer.retryAfterSeconds === undefined ? null : resumeInfo(answer.retryAfterSeconds, nowMs(), zone && isTimeZone(zone) ? zone : null);
+      return quickPathView(session, answer.reason, answer.message, locale, personDay, addition?.validate, resume);
+    }
     if (answer.kind === 'wait') return { kind: 'wait', message: answer.message, retryAfterSeconds: answer.retryAfterSeconds };
 
     // The tokens of every call count against the setup budget, a thrown-away reply as much as a kept one.
@@ -368,7 +376,9 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
     }
     // A unit on a count, a time or a checklist is cleared here, before the check sees it (MOM-176): one right fix, so the turn is
     // kept and no retry is spent. The log line is a count only, never the unit, a title or a path.
-    const { turn: claudeTurn, cleared } = clearStrayUnits(turn.data);
+    const { turn: unitFixed, cleared } = clearStrayUnits(turn.data);
+    // A bare number given to a question asked in hours is hours; it is stored in minutes, in code, before any check sees it.
+    const claudeTurn = convertHourAnswers(unitFixed, session.transcript, session.draft, personWords(session.transcript));
     if (cleared > 0) console.warn('[setup] a stray unit was cleared', { cleared, attempt });
     const violations = checkTurn(claudeTurn, context);
     if (violations.length === 0) return { kind: 'turn', turn: shown(claudeTurn), spentTokens, rejected };

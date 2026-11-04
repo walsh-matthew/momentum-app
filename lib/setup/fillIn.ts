@@ -35,6 +35,7 @@ import { describeIssue, type MissingWords } from './quickPath';
 import { DAYS_STEP_ID, goalStepId, itemStepId, targetStepId } from './quickRecap';
 import { titleOf } from './restate';
 import { PROPOSAL_YES_TEXT, pickedDateText } from './session';
+import { hoursToMinutes, minutesAsHours, namesHours } from './timeUnits';
 import { isTimeZone, validateDraft, type DraftIssue } from './validate';
 
 // The detail line of every question code writes on the quick path. Claude, if it ever takes the conversation up again, reads it as
@@ -164,10 +165,14 @@ const KINDS: Record<string, ItemKind> = {
     set: (model, parts, value) => {
       const target = targetAt(model, parts);
       if (!target) return false;
-      target.floor = Number(value);
+      // A time target counted in hours is asked in hours, and stored in minutes (test day 1).
+      target.floor = target.measure === 'time' && namesHours(countedWords(target.title)) ? hoursToMinutes(Number(value)) : Number(value);
       return true;
     },
-    answer: (model, parts) => textOf(targetAt(model, parts)?.floor),
+    answer: (model, parts) => {
+      const t = targetAt(model, parts);
+      return t && t.floor !== null && t.measure === 'time' && namesHours(countedWords(t.title)) ? String(minutesAsHours(t.floor)) : textOf(t?.floor);
+    },
   },
   unit: {
     kind: 'text',

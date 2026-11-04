@@ -137,11 +137,14 @@ describe('a proposal (finding 8)', () => {
     expect(onAnswer.mock.calls).toEqual([[PROPOSAL_YES_TEXT], ['Today, Monday, Nov 2']]);
   });
 
-  it.each(['start_date', 'end_date', 'deadline_date', 'parked_return'] as const)('a %s question: "Pick a date" is the date field, and picking a date answers it', (topic) => {
+  it.each(['start_date', 'end_date', 'deadline_date', 'parked_return'] as const)('a %s question: "Pick a date" is the date field; picking a date only shows it, and "Use this date" answers', (topic) => {
     const onAnswer = vi.fn();
     render(<QuestionCard turn={turn({ topic, question: 'Which day would you like?' })} busy={false} onAnswer={onAnswer} today={TODAY} />);
     expect(screen.queryByRole('button', { name: 'Use this date' })).toBeNull();
     fireEvent.change(screen.getByLabelText(PICK_DATE), { target: { value: '2026-11-12' } });
+    // MOM test day 1: a phone fires change as the picker opens, so a pick alone answers nothing.
+    expect(onAnswer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Use this date' }));
     expect(onAnswer).toHaveBeenCalledWith('Thursday, November 12, 2026');
   });
 

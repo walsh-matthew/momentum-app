@@ -124,6 +124,30 @@ describe('fillQuickPathItem: a typed value', () => {
     const issues = validateDraft({ ...s.draft, approved: [...SETUP_CHUNKS] }, s.transcript, 'final').issues;
     expect(issues.filter((i) => ['no_source', 'not_said'].includes(i.code))).toEqual([]);
   });
+
+  // Test day 1: a time target counted in hours is asked in hours and stored in minutes ("minutes of hours" read as nonsense).
+  it('a time target counted in hours: "3" in the box is saved as 180 minutes, and the box shows 3 again', async () => {
+    const { session, floorKey } = await stoppedEarly();
+    const goal = session.draft.model.goals.find((g) => g.targets.some((t) => t.key === floorKey))!;
+    const target = goal.targets.find((t) => t.key === floorKey)!;
+    target.measure = 'time';
+    target.unit = null;
+    target.title = 'Hours of reading';
+    const path = `goals.${goal.key}.targets.${floorKey}.floor`;
+    const line = itemsOf(session).find((i) => i.id === path)?.line;
+    expect(line).toBe('In a hard week, how many hours of reading would still count?');
+
+    const out = await mustFill(session, path, '3');
+    const saved = out.session.draft.model.goals.find((g) => g.key === goal.key)!.targets.find((t) => t.key === floorKey)!;
+    expect(saved.floor).toBe(180);
+    expect(lastTwo(out.session)[1].text).toBe('3');
+    expect(out.items.find((i) => i.id === path)).toBeUndefined();
+    const issues = validateDraft({ ...out.session.draft, approved: [...SETUP_CHUNKS] }, out.session.transcript, 'final').issues;
+    expect(issues.filter((i) => i.path === path)).toEqual([]);
+    // The box shows hours, not the stored minutes.
+    const shown = planOf(out.session).all.find((i) => i.id === path);
+    expect(shown?.answer).toBe('3');
+  });
 });
 
 describe('fillQuickPathItem: a unit', () => {

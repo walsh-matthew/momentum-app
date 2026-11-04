@@ -218,6 +218,8 @@ describe('the per-person limit (MOM-165)', () => {
       kind: 'quick_path',
       reason: 'person_cap',
       message: "You've used all 100 of your Claude requests for the last 24 hours, so it can't ask any more. You can ask again in about 19 hours.",
+      // The seconds until the oldest call ages out, so the card can say when Claude is back (test day 1).
+      retryAfterSeconds: 19 * 3600,
     });
     expect(requestTurn).not.toHaveBeenCalled();
     expect(rowsFor(USER)).toHaveLength(SETUP_PERSON_DAILY_CAP);
