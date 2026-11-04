@@ -42,6 +42,9 @@ export interface PlaybackOptions {
   // recap): a date the person chose on their device can be a day away from "today" in the time zone they pick later, so a word
   // that moves with the clock can read wrongly. Left off, a date reads as it always has in the playback.
   absoluteDates?: boolean;
+  // The targets the person chose "any day" for on the set-days card ("goalKey.targetKey", lib/setup/weekCards.ts anyDayTargets): a weekly target
+  // carries no value for it, so the draft's marker says it. The planning playback and the final card name it only for these (MOM-179).
+  anyDay?: ReadonlySet<string>;
 }
 
 // A date in the playback, the one way the app writes dates (MOM-111 round 2, finding 3): "today" or "tomorrow" on their own,
@@ -291,7 +294,12 @@ export function renderPlayback(model: SetupModel, chunk: SetupChunk, options: Pl
             lines.push(`${i.kind === 'habit' ? 'Habit' : 'A step along the way'}: ${title}.`);
           }
         }
-        for (const t of g.targets) lines.push(`${titleOf(t.title)}: ${SOURCE_WORDS(t)}.`);
+        for (const t of g.targets) {
+          // When the person does it, in their words: the set days they chose, or any day (only when they chose it).
+          if (t.period.kind === 'day_slots') lines.push(`${titleOf(t.title)}: on ${listOf(t.period.weekdays.map(weekdayName))}.`);
+          else if (t.period.kind === 'weekly' && options.anyDay?.has(`${g.key}.${t.key}`)) lines.push(`${titleOf(t.title)}: any day, as long as the week's number is met.`);
+          lines.push(`${titleOf(t.title)}: ${SOURCE_WORDS(t)}.`);
+        }
       }
       break;
     }
@@ -347,7 +355,9 @@ export function renderFinal(model: SetupModel, options: PlaybackOptions = {}): s
     const targetLines = g.targets.map((t) => {
       const numbers = goalNumbers(t, options);
       const what = countedWords(t.title, options.said);
-      const counted = numbers ?? `${what}, counted ${describePeriod(t, options, 'each')}`;
+      const base = numbers ?? `${what}, counted ${describePeriod(t, options, 'each')}`;
+      // Set days are already in the period words; "any day" is said when the person chose it (MOM-179).
+      const counted = t.period.kind === 'weekly' && options.anyDay?.has(`${g.key}.${t.key}`) ? `${base}, on any day` : base;
       if (saved || named) return { line: `${counted.charAt(0).toUpperCase()}${counted.slice(1)}.`, things: 1 };
       return { line: `${goalLead(g, several)}: ${counted}.`, things: 1 };
     });

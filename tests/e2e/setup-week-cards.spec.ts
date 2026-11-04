@@ -90,8 +90,8 @@ test.describe('the week cards at 390px', () => {
         if (topic === 'day_end') {
           await expect(page.getByRole('heading', { name: 'When does your day end?' })).toBeVisible();
           await expect(page.getByText(/If your day ends after midnight and before 6 in the morning/)).toBeVisible();
-          // No button until a time is set.
-          await expect(page.getByRole('button', { name: 'Next', exact: true })).toHaveCount(0);
+          // The button is always there and answers nothing until tapped: a time alone sends nothing, and a tap with none shows the callout.
+          await expect(page.getByRole('button', { name: 'Use this time', exact: true })).toBeEnabled();
           await shot(page, 'day-end');
         } else if (topic === 'week_start') {
           await expect(page.getByRole('heading', { name: 'Which day does your week start on?' })).toBeVisible();
@@ -124,7 +124,7 @@ test.describe('the week cards at 390px', () => {
           continue;
         } else if (topic === 'planning_moment') {
           await expect(page.getByRole('heading', { name: 'When would you like to plan your week?' })).toBeVisible();
-          await expect(page.getByRole('button', { name: 'Next', exact: true })).toHaveCount(0);
+          await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
           await shot(page, 'planning-moment');
         }
         await answerCodeCard(page, 'week', person, PERSON_ZONE);
@@ -143,6 +143,8 @@ test.describe('the week cards at 390px', () => {
         // The planning part, played back by code once the last planning answer was in.
         during = await requests();
         await expect(page.getByText(/Your kinds of days: Busy days \(20 minutes\), Usual days \(45 minutes\) and Easy days \(2 hours\)\./)).toBeVisible();
+        // The set days the person chose are said back, one line for the target.
+        await expect(page.getByText('Runs: on Monday, Wednesday and Friday.', { exact: true })).toBeVisible();
         await fits(page, 'the planning playback');
         await shot(page, 'planning-playback');
       }
@@ -159,6 +161,9 @@ test.describe('the week cards at 390px', () => {
       heading = await nextCard(page, heading);
     }
 
+    // The final card carries them too.
+    await expect(page.locator('#setup-final')).toBeVisible();
+    await expect(page.locator('main')).toContainText('Monday, Wednesday and Friday');
     expect(seen, 'the order the week cards came in').toEqual(['day_end', 'week_start', 'capacity', 'slots_or_quota', 'planning_moment']);
     expect(before, 'the sources question was seen').not.toBeNull();
     expect(during, 'the planning playback was seen').not.toBeNull();

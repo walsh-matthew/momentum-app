@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { WEEKDAYS } from '@/lib/setup/fillIn';
-import { WEEK_WORDS, WHAT_TIME, WHICH_DAY, planningLeft, weekCardDetail, type WeekAnswer } from '@/lib/setup/weekCards';
+import { WEEK_WORDS, WHAT_TIME, WHAT_TIME_DAY_ENDS, WHICH_DAY, planningLeft, weekCardDetail, type WeekAnswer } from '@/lib/setup/weekCards';
 import type { AssistantTurn } from '@/types/setup';
-import { Field, FIELD, WeekdayGrid } from './QuickPathFillIn';
+import { FIELD, WeekdayGrid } from './QuickPathFillIn';
 import { SetupButton } from './SetupButton';
 import { DayTimesCard } from './DayTimesCard';
 import { SlotsCard } from './SlotsCard';
@@ -20,28 +20,46 @@ interface WeekCardProps {
   onType: (text: string) => void;
 }
 
+// A time, answered only by a button that is always there (never dimmed, never on change): an iPhone time wheel changes the box on its first scroll,
+// so a change alone sends nothing (the date picker's lesson, MOM-177). A tap with no time shows the callout instead.
+function DayEndControls({ busy, onAnswer }: Pick<WeekCardProps, 'busy' | 'onAnswer'>) {
+  const [time, setTime] = useState('');
+  const [tried, setTried] = useState(false);
+  const tap = () => {
+    if (time === '') setTried(true);
+    else onAnswer({ topic: 'day_end', time });
+  };
+  return (
+    <div className="space-y-3">
+      <input type="time" aria-label="Time your day ends" value={time} disabled={busy} onChange={(event) => setTime(event.target.value)} className={FIELD} />
+      {tried && time === '' && <WeekCallout>{WHAT_TIME_DAY_ENDS}</WeekCallout>}
+      <SetupButton tone="main" busy={busy} onClick={tap}>
+        {WEEK_WORDS.useThisTime}
+      </SetupButton>
+    </div>
+  );
+}
+
 function PlanningControls({ turn, busy, onAnswer }: Pick<WeekCardProps, 'turn' | 'busy' | 'onAnswer'>) {
   const left = planningLeft(turn.draft.model);
   const [weekday, setWeekday] = useState<string | null>(null);
   const [time, setTime] = useState('');
-  const dayDone = !left.weekday || weekday !== null;
-  const timeDone = !left.time || time !== '';
-  const ready = dayDone && timeDone;
+  const [tried, setTried] = useState(false);
+  const missingDay = left.weekday && weekday === null;
+  const missingTime = left.time && time === '';
+  const tap = () => {
+    if (missingDay || missingTime) setTried(true);
+    else onAnswer({ topic: 'planning_moment', ...(left.weekday ? { weekday: Number(weekday) } : {}), ...(left.time ? { time } : {}) });
+  };
   return (
     <div className="space-y-3">
       {left.weekday && <WeekdayGrid choices={WEEKDAYS} answer={weekday} disabled={busy} onPick={setWeekday} />}
       {left.time && <input type="time" aria-label="Time to plan" value={time} disabled={busy} onChange={(event) => setTime(event.target.value)} className={FIELD} />}
-      {/* A missing item is named only once the other is chosen, so the card does not open with a warning. */}
-      {!ready && left.weekday && left.time && (weekday !== null || time !== '') && <WeekCallout>{weekday === null ? WHICH_DAY : WHAT_TIME}</WeekCallout>}
-      {ready && (
-        <SetupButton
-          tone="main"
-          busy={busy}
-          onClick={() => onAnswer({ topic: 'planning_moment', ...(left.weekday ? { weekday: Number(weekday) } : {}), ...(left.time ? { time } : {}) })}
-        >
-          {WEEK_WORDS.next}
-        </SetupButton>
-      )}
+      {tried && missingDay && <WeekCallout>{WHICH_DAY}</WeekCallout>}
+      {tried && missingTime && <WeekCallout>{WHAT_TIME}</WeekCallout>}
+      <SetupButton tone="main" busy={busy} onClick={tap}>
+        {WEEK_WORDS.next}
+      </SetupButton>
     </div>
   );
 }
@@ -52,7 +70,7 @@ export function WeekCard({ turn, said, busy, onAnswer, onType }: WeekCardProps) 
     case 'day_end':
       return (
         <WeekCardFrame topic="day_end" question={WEEK_WORDS.dayEndQuestion} detail={weekCardDetail('day_end')} busy={busy} onType={onType}>
-          <Field label="Time your day ends" type="time" initial={null} disabled={busy} button={WEEK_WORDS.next} onSet={(time) => onAnswer({ topic: 'day_end', time })} />
+          <DayEndControls busy={busy} onAnswer={onAnswer} />
         </WeekCardFrame>
       );
     case 'week_start':

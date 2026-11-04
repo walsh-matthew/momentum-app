@@ -9,7 +9,7 @@ import { ADD_WORDS } from '@/lib/setup/addWords';
 import { startsMidWeek } from '@/lib/setup/addStart';
 import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfTurn, type SettingsAnswers } from '@/lib/setup/cards';
 import { shownModel } from '@/lib/setup/paraphrase';
-import { answerWeekCard, isWeekCard, weekCardDetail, type WeekAnswer } from '@/lib/setup/weekCards';
+import { answerWeekCard, anyDayTargets, isWeekCard, weekCardDetail, type WeekAnswer } from '@/lib/setup/weekCards';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
 import { RETURNING_FIRST_LINE, SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
@@ -523,6 +523,7 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
     said: personWords(session.transcript),
     savedGoalKey: startTarget ? SAVED_GOAL_KEY : undefined,
     adding: adding !== undefined,
+    anyDay: anyDayTargets(turn.draft),
   };
   // The start chosen for the target on this final confirmation. A change after it makes a new final confirmation, which asks again.
   const chosenDate = chosenStart && chosenStart.at === session.transcript.length ? chosenStart.date : null;

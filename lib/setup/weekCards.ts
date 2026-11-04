@@ -44,6 +44,7 @@ export const WEEK_WORDS = {
   planningQuestion: 'When would you like to plan your week?',
   planningReason: 'Your look back at the week happens then too.',
   next: 'Next',
+  useThisTime: 'Use this time',
   noneSaid: "I'll skip these for now.",
   typeAnswer: 'Type your answer',
 } as const;
@@ -53,6 +54,7 @@ export const chooseUnitCallout = (name: string): string => `Choose minutes or ho
 export const addNumberCallout = (name: string): string => `Add a number for ${name}.`;
 export const PICK_A_DAY = 'Pick a day.';
 export const pickDaysCallout = (needed: number, amount: string): string => `Pick at least ${needed} days for ${amount} a week, or choose any day.`;
+export const WHAT_TIME_DAY_ENDS = 'What time does your day end?';
 export const WHICH_DAY = 'Which day?';
 export const WHAT_TIME = 'What time?';
 
@@ -76,6 +78,15 @@ export const needsWeekStart = (model: SetupModel): boolean => model.person.weekS
 export const dayTypesLeft = (model: SetupModel): SetupModel['person']['dayTypes'] => model.person.dayTypes.filter((d) => d.capacityAmount === null);
 
 export const periodPath = (goalKey: string, targetKey: string): string => `goals.${goalKey}.targets.${targetKey}.period`;
+// The targets the person chose "any day" for ("goalKey.targetKey"), read from the markers on the draft, for the playback and the final card.
+export function anyDayTargets(draft: SetupDraft): Set<string> {
+  const out = new Set<string>();
+  for (const { goal, target } of activeTargets(draft.model)) {
+    if (target.period.kind === 'weekly' && draft.said.some((s) => s.path === periodPath(goal.key, target.key))) out.add(`${goal.key}.${target.key}`);
+  }
+  return out;
+}
+
 const slotPath = (goalKey: string, targetKey: string): string => `goals.${goalKey}.targets.${targetKey}.slotWeekdays`;
 
 // The targets that still need "set days or any day": counted by the week (or on set days) and not yet answered. A set-days answer is a

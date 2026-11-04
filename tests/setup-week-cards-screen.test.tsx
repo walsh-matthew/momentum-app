@@ -63,26 +63,40 @@ const mains = () => document.querySelectorAll('[data-tone="main"]');
 const boldLines = () => document.querySelectorAll('[data-slot="card-lead"]');
 
 describe('the day end card', () => {
-  it('asks the owner\'s question with the day-end explanation under it, and has no button until a time is set', () => {
+  it("asks the owner's question with the day-end explanation under it, and has its button from the start", () => {
     show('day_end');
     expect(screen.getByRole('heading', { name: 'When does your day end?' })).toBeTruthy();
     expect(screen.getByText(DAY_END_SAY)).toBeTruthy();
     const time = screen.getByLabelText('Time your day ends') as HTMLInputElement;
     expect(time.type).toBe('time');
     expect(time.value).toBe('');
-    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
-    expect(mains()).toHaveLength(0);
+    const button = screen.getByRole('button', { name: 'Use this time' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(mains()).toHaveLength(1);
     expect(boldLines()).toHaveLength(1);
   });
 
-  it('sends the time when Next is tapped', () => {
-    const { onAnswer } = show('day_end');
-    fireEvent.change(screen.getByLabelText('Time your day ends'), { target: { value: '21:00' } });
-    const next = screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement;
-    expect(next.disabled).toBe(false);
-    expect(mains()).toHaveLength(1);
-    fireEvent.click(next);
+  it("sends nothing when the time changes, however often (a phone's time wheel changes it on the first scroll), and sends it only on the button", () => {
+    const { onAnswer, onType } = show('day_end');
+    const time = screen.getByLabelText('Time your day ends');
+    fireEvent.change(time, { target: { value: '09:00' } });
+    fireEvent.change(time, { target: { value: '21:00' } });
+    fireEvent.blur(time);
+    expect(onAnswer).not.toHaveBeenCalled();
+    expect(onType).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Use this time' }));
+    expect(onAnswer).toHaveBeenCalledTimes(1);
     expect(onAnswer).toHaveBeenCalledWith({ topic: 'day_end', time: '21:00' });
+  });
+
+  it('shows the callout, and sends nothing, when the button is tapped with no time', () => {
+    const { onAnswer } = show('day_end');
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Use this time' }));
+    expect(screen.getByRole('alert').textContent).toContain('What time does your day end?');
+    expect(onAnswer).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Time your day ends'), { target: { value: '21:00' } });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
@@ -213,29 +227,47 @@ describe('the set days or any day card', () => {
 });
 
 describe('the planning moment card', () => {
-  it('has a day and a time, nothing chosen, and no button until both are set', () => {
-    const { onAnswer } = show('planning_moment');
+  it('has a day and a time, nothing chosen, and Next from the start', () => {
+    show('planning_moment');
     expect(screen.getByRole('heading', { name: 'When would you like to plan your week?' })).toBeTruthy();
     expect(screen.getByText('Your look back at the week happens then too.')).toBeTruthy();
     expect(pressed()).toHaveLength(0);
     expect((screen.getByLabelText('Time to plan') as HTMLInputElement).value).toBe('');
-    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
-    // Nothing is called out before anything is chosen.
+    expect((screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(mains()).toHaveLength(1);
+    // Nothing is called out before a tap.
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('sends nothing when the day or the time changes, and sends both only on Next', () => {
+    const { onAnswer } = show('planning_moment');
     fireEvent.click(screen.getByRole('button', { name: 'Sunday' }));
-    expect(screen.getByText('What time?')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Time to plan'), { target: { value: '17:00' } });
     fireEvent.change(screen.getByLabelText('Time to plan'), { target: { value: '18:00' } });
-    expect(screen.queryByText('What time?')).toBeNull();
+    expect(onAnswer).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(onAnswer).toHaveBeenCalledTimes(1);
     expect(onAnswer).toHaveBeenCalledWith({ topic: 'planning_moment', weekday: 7, time: '18:00' });
   });
 
-  it('asks which day when only a time is set', () => {
-    show('planning_moment');
-    fireEvent.change(screen.getByLabelText('Time to plan'), { target: { value: '18:00' } });
+  it('names what is missing after a tap, and sends nothing', () => {
+    const { onAnswer } = show('planning_moment');
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('Which day?')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+    expect(screen.getByText('What time?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Sunday' }));
+    expect(screen.queryByText('Which day?')).toBeNull();
+    expect(screen.getByText('What time?')).toBeTruthy();
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it('asks which day when only a time is set', () => {
+    const { onAnswer } = show('planning_moment');
+    fireEvent.change(screen.getByLabelText('Time to plan'), { target: { value: '18:00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Which day?')).toBeTruthy();
+    expect(screen.queryByText('What time?')).toBeNull();
+    expect(onAnswer).not.toHaveBeenCalled();
   });
 });
 
@@ -283,7 +315,8 @@ describe('in the conversation', () => {
     render(<SetupConversation userId={USER} />);
     expect(await screen.findByRole('heading', { name: 'When does your day end?' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Time your day ends'), { target: { value: '21:00' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(actions.ask).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Use this time' }));
     expect(await screen.findByRole('heading', { name: 'Which day does your week start on?' })).toBeTruthy();
     expect(actions.ask).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Monday' }));

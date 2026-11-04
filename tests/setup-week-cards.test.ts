@@ -14,7 +14,7 @@ import type { RunSetupTurnArgs, SetupTurnResult } from '@/lib/services/llm';
 import { weekCardInPlaceOf } from '@/lib/setup/cardTurns';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval } from '@/lib/setup/evals';
-import { renderPlayback } from '@/lib/setup/playback';
+import { renderFinal, renderPlayback } from '@/lib/setup/playback';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import { MEANING_TEXT } from '@/lib/setup/session';
 import { validateDraft } from '@/lib/setup/validate';
@@ -26,6 +26,7 @@ import {
   answerPlanning,
   answerSlots,
   answerWeekStart,
+  anyDayTargets,
   chooseUnitCallout,
   clockWords,
   dayTimeProblem,
@@ -593,5 +594,53 @@ describe('a time for a kind of day, said in minutes', () => {
     expect(usuallyText('hours', 1.5)).toBe('Usually 1.5 hours');
     expect(usuallyText('sessions', 3)).toBe('Usually 3 sessions');
     expect(usuallyText(null, null)).toBe('No usual time yet');
+  });
+});
+
+describe('the set days or any day, said back in the planning playback and on the final card', () => {
+  // The finished card answers, as the screen holds them, so the marker is the one the card writes.
+  const answeredWith = (answer: Parameters<typeof answerSlots>[1], edit?: (m: SetupModel) => void): SetupSession => {
+    const next = answerSlots(onCard('slots_or_quota', (m) => ((m.goals[0].targets[0].floor = 2), edit?.(m))), answer);
+    if (!next) throw new Error('refused');
+    return next;
+  };
+  const lines = (s: SetupSession) => renderPlayback(s.draft.model, 'planning', { anyDay: anyDayTargets(s.draft) });
+  const final = (s: SetupSession) => renderFinal(s.draft.model, { anyDay: anyDayTargets(s.draft) });
+
+  it("names the set days for a target, in the person's words, one line, in the planning playback", () => {
+    const s = answeredWith({ kind: 'days', weekdays: [1, 3, 5] });
+    expect(lines(s)).toContain('Runs: on Monday, Wednesday and Friday.');
+    expect(lines(s).filter((l) => l.startsWith('Runs: on'))).toHaveLength(1);
+  });
+
+  it('names "any day" for a target the person chose it for, and only then', () => {
+    const s = answeredWith({ kind: 'any' });
+    expect(anyDayTargets(s.draft)).toEqual(new Set(['g1.t1']));
+    expect(lines(s)).toContain("Runs: any day, as long as the week's number is met.");
+    // A weekly target the person never answered says nothing about days.
+    const unanswered = draftWith();
+    expect(renderPlayback(unanswered.model, 'planning', { anyDay: anyDayTargets(unanswered) }).join(' ')).not.toMatch(/any day|on Monday/);
+    expect(anyDayTargets(unanswered).size).toBe(0);
+  });
+
+  it('writes one line for each target that has them', () => {
+    const first = answeredWith({ kind: 'days', weekdays: [2, 4] }, (m) => {
+      m.goals[0].targets.push(target('t2', 'Pages read', { measure: 'quantity', unit: 'pages', floor: 100 }));
+    });
+    const draft = structuredClone(first.draft);
+    draft.said.push({ path: 'goals.g1.targets.t2.period', turn: 1, how: 'said' });
+    const planning = renderPlayback(draft.model, 'planning', { anyDay: anyDayTargets(draft) });
+    expect(planning).toContain('Runs: on Tuesday and Thursday.');
+    expect(planning).toContain("Pages read: any day, as long as the week's number is met.");
+  });
+
+  it('carries them on the final card too: set days in the period words, any day when chosen', () => {
+    const days = answeredWith({ kind: 'days', weekdays: [1, 3, 5] });
+    expect(final(days).join(' ')).toContain('Monday, Wednesday and Friday');
+    const any = answeredWith({ kind: 'any' });
+    expect(final(any).join(' ')).toMatch(/runs a week, on any day/);
+    expect(final(any).length).toBeLessThanOrEqual(6);
+    // Without the choice the final card says nothing about days.
+    expect(renderFinal(draftWith().model).join(' ')).not.toMatch(/any day/);
   });
 });

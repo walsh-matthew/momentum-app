@@ -70,7 +70,7 @@ export async function answerWeekCard(page: Page, line: CardLine): Promise<void> 
   switch (week.topic) {
     case 'day_end':
       await page.getByLabel('Time your day ends', { exact: true }).fill(week.time);
-      await next.click();
+      await page.getByRole('button', { name: 'Use this time', exact: true }).click();
       return;
     case 'week_start':
       await page.getByRole('button', { name: weekdayName(week.weekday), exact: true }).click();
