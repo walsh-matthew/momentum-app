@@ -24,6 +24,9 @@ interface DateAnswerProps {
   initialText?: string;
   // The person's today (YYYY-MM-DD), so a picked date reads "Thu, Nov 12".
   today?: string | null;
+  // "What does this mean?": code's explanation of the question (lib/setup/explain.ts), and whether "Still not clear? Ask Claude" shows.
+  explain?: string | null;
+  askClaude?: boolean;
 }
 
 // The one layout for every date question and every date confirmation (MOM-111 round 2, findings 4, 5 and 9; round 3,
@@ -37,7 +40,7 @@ interface DateAnswerProps {
 // answering on change left no way to choose another date). The picker button then reads the date ("Thu, Nov 12") and can be
 // tapped again to pick another; a main "Use this date" button, which appears only once a date is chosen and is never dimmed,
 // sends it.
-export function DateAnswer({ suggests, others, locked, busy, onAnswer, initialText, today = null }: DateAnswerProps) {
+export function DateAnswer({ suggests, others, locked, busy, onAnswer, initialText, today = null, explain = null, askClaude = false }: DateAnswerProps) {
   const [typing, setTyping] = useState(initialText !== undefined);
   const [picked, setPicked] = useState<string | null>(null);
 
@@ -81,7 +84,7 @@ export function DateAnswer({ suggests, others, locked, busy, onAnswer, initialTe
           initialText={initialText}
           focusOnOpen
           submitTone="main"
-          help={{ onAsk: () => onAnswer(MEANING_TEXT) }}
+          help={{ explain, askClaude, onAsk: () => onAnswer(MEANING_TEXT) }}
         />
       ) : (
         <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
@@ -93,7 +96,7 @@ export function DateAnswer({ suggests, others, locked, busy, onAnswer, initialTe
           >
             {TYPE_INSTEAD}
           </button>
-          <HelpLink disabled={locked} onAsk={() => onAnswer(MEANING_TEXT)} />
+          <HelpLink disabled={locked} explain={explain} askClaude={askClaude} onAsk={() => onAnswer(MEANING_TEXT)} />
         </div>
       )}
     </div>

@@ -44,7 +44,6 @@ const ANSWERS: Partial<Record<SetupTopic, string[]>> = {
   role: ['something I do'],
   floor: ['2'],
   aspiration: ['3, and 5 at most'],
-  expansion: ['no setback plan'],
   source: [SOURCE_REPLY],
 };
 

@@ -3,10 +3,12 @@
 import { Info } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { explanationFor } from '@/lib/setup/explain';
 import { MEANING_TEXT } from '@/lib/setup/session';
 import { WEEK_WORDS } from '@/lib/setup/weekCards';
 import { AnswerBox } from './AnswerBox';
 import { CARD_TEXT, CardLead } from './cardText';
+import { HelpLink } from './HelpLink';
 
 interface WeekCardFrameProps {
   // Which question this is, so a test and a screen reader can find the card.
@@ -24,9 +26,12 @@ interface WeekCardFrameProps {
 }
 
 // What every week card shares (MOM-179): the question, an optional reason, the card's controls, and "Type your answer", which opens the
-// answer box and sends what the person writes to Claude, exactly as on any other question. "What does this mean?" is in that box.
+// answer box and sends what the person writes to Claude, exactly as on any other question. "What does this mean?" sits beside it and shows
+// code's explanation of the topic in place, with no Claude call (MOM-180); the typed answer box still reaches Claude.
 export function WeekCardFrame({ topic, question, detail = null, children, busy, onType }: WeekCardFrameProps) {
   const [typing, setTyping] = useState(false);
+  const explanation = explanationFor(topic);
+  const help = { explain: explanation?.text ?? null, askClaude: explanation?.askClaude ?? false, onAsk: () => onType(MEANING_TEXT) };
   return (
     <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4" data-card="week" data-topic={topic}>
       <div className="space-y-1">
@@ -39,16 +44,19 @@ export function WeekCardFrame({ topic, question, detail = null, children, busy, 
       </div>
       {children}
       {typing ? (
-        <AnswerBox label="Your answer" submitLabel="Send" busy={busy} onSubmit={onType} focusOnOpen help={{ onAsk: () => onType(MEANING_TEXT) }} />
+        <AnswerBox label="Your answer" submitLabel="Send" busy={busy} onSubmit={onType} focusOnOpen help={help} />
       ) : (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => flushSync(() => setTyping(true))}
-          className="block text-sm text-muted underline underline-offset-4 hover:text-foreground disabled:opacity-50"
-        >
-          {WEEK_WORDS.typeAnswer}
-        </button>
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => flushSync(() => setTyping(true))}
+            className="block text-sm text-muted underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+          >
+            {WEEK_WORDS.typeAnswer}
+          </button>
+          <HelpLink disabled={busy} explain={help.explain} askClaude={help.askClaude} onAsk={help.onAsk} />
+        </div>
       )}
     </section>
   );

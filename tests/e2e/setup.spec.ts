@@ -28,7 +28,7 @@ import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPO
 import { acceptsText } from '@/lib/setup/text';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
-import { answerCodeCard, codeCardOn } from './support/codeCards';
+import { answerCodeCard, askWhatItMeans, codeCardOn } from './support/codeCards';
 import { elementsOffScreen } from './support/setupCards';
 import { e2eCase } from './support/setupConversation';
 import { scriptedModel } from '../helpers/setupScript';
@@ -252,7 +252,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           }
           if (line === MEANING_TEXT) {
             askedMeaning = true;
-            await page.getByRole('button', { name: MEANING_LINK }).click();
+            await askWhatItMeans(page);
           } else if (line === PROPOSAL_YES_TEXT && (await yes.count()) > 0) {
             await yes.click();
           } else {

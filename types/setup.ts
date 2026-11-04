@@ -72,7 +72,6 @@ export const SETUP_TOPICS = [
   'floor',
   'aspiration',
   'number_level',
-  'expansion',
   'source',
   'metric',
   'time_zone',

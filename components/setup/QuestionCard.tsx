@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { casualText } from '@/lib/dates/casual';
 import { DATE_TOPICS } from '@/lib/setup/codeTurns';
-import { numberHelp } from '@/lib/setup/numbers';
+import { explanationFor } from '@/lib/setup/explain';
 import { optionsLead } from '@/lib/setup/optionsLead';
 import { MEANING_TEXT, PICK_ONE, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import type { AssistantTurn } from '@/types/setup';
@@ -51,9 +51,11 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
   // A proposal shows Yes first; the text box opens from a small link, so the card keeps one main button.
   const [typing, setTyping] = useState(initialText !== undefined);
 
-  // "What does this mean?": on a number question, code's own words on the fewest and the aim, with the person's counted thing
-  // (round 3b, finding 1); on any other card, it asks Claude to explain.
-  const help = { explain: numberHelp(turn.draft, turn.topic, today), onAsk: () => onAnswer(MEANING_TEXT) };
+  // "What does this mean?": code's own explanation for the question's topic, with no Claude call (MOM-180; a number question carries the
+  // person's counted thing, round 3b finding 1). "Still not clear? Ask Claude" sends the question to Claude, on the concept topics only.
+  // A topic code has no words for asks Claude, as before.
+  const explanation = explanationFor(turn.topic, turn.draft, today);
+  const help = { explain: explanation?.text ?? null, askClaude: explanation?.askClaude ?? false, onAsk: () => onAnswer(MEANING_TEXT) };
   // A card of starting ideas or readings of an answer leads with code's own line, naming what the options are about, then
   // "Pick one or write your own." (round 3c, finding 2). Claude's question and lead-in are then not shown: the lead says it.
   const lead = optionsLead(turn, today, said);
@@ -90,6 +92,8 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
           onAnswer={onAnswer}
           initialText={initialText}
           today={today}
+          explain={help.explain}
+          askClaude={help.askClaude}
         />
       ) : (
         <>
@@ -134,7 +138,7 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
                 >
                   {TYPE_INSTEAD}
                 </button>
-                <HelpLink disabled={locked} explain={help.explain} onAsk={help.onAsk} />
+                <HelpLink disabled={locked} explain={help.explain} askClaude={help.askClaude} onAsk={help.onAsk} />
               </div>
             ) : (
               <AnswerBox

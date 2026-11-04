@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { TIME_ZONE_ASK, TIME_ZONE_OTHER, TIME_ZONE_YES } from '@/lib/setup/cards';
+import { explanationFor } from '@/lib/setup/explain';
 import { AnswerChoice } from './AnswerChoice';
 import { CardLead } from './cardText';
+import { HelpLink } from './HelpLink';
 import { TimeZonePicker } from './TimeZonePicker';
 
 interface TimeZoneCardProps {
@@ -36,6 +38,7 @@ export function TimeZoneCard({ question, deviceZone, busy, onPick }: TimeZoneCar
         </div>
       )}
       {searching && <TimeZonePicker deviceZone={null} answer={null} disabled={busy} onPick={(zone) => onPick(zone, 'said')} />}
+      <HelpLink disabled={busy} explain={explanationFor('time_zone')?.text ?? null} />
     </section>
   );
 }

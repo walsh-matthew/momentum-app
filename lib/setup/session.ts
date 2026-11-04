@@ -17,10 +17,12 @@ export const CHANGE_PROMPT = 'What would you like to change?';
 export const KEEP_IT = 'Keep it as it is';
 
 // The question card's link for a person who is not sure what a question means (MOM-111 finding 1: a small muted link under
-// Send; round 3, finding 4: the same words on every card). It sends MEANING_TEXT as their answer, and Claude explains the
-// question in plainer words (lib/setup/text.ts asksMeaning).
+// Send; round 3, finding 4: the same words on every card). It shows code's explanation (lib/setup/explain.ts, MOM-180). Claude explains
+// the question in plainer words only when MEANING_TEXT is sent as the person's answer (lib/setup/text.ts asksMeaning).
 export const MEANING_LINK = 'What does this mean?';
 export const MEANING_TEXT = 'What do you mean?';
+// Under code's explanation on a concept topic (MOM-180): the only way from the link to Claude. It sends MEANING_TEXT.
+export const ASK_CLAUDE = 'Still not clear? Ask Claude';
 
 // What a proposal's Yes sends for the person: an acceptance (lib/setup/text.ts acceptsText), so the value it showed counts as
 // accepted (MOM-111 finding 8).
