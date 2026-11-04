@@ -4,6 +4,7 @@
 // appending: a draft's provenance points at positions in it, so editing or removing a message would break the draft.
 
 import { emptyDraft } from './draft';
+import { asksMeaning } from './text';
 import { SetupSessionSchema, type AssistantTurn, type SetupSession } from '@/types/setup';
 
 // What the Approve button says for the person. It is an ordinary message of theirs: rule 7 only accepts an approval that
@@ -29,6 +30,8 @@ export const PROPOSAL_YES_TEXT = 'Yes, that works.';
 // small link to type it instead.
 export const PICK_DATE = 'Pick a date';
 export const PICK_OTHER_DATE = 'Pick a different date';
+// The main button that sends a date once one is chosen (choosing a date alone answers nothing).
+export const USE_THIS_DATE = 'Use this date';
 export const TYPE_INSTEAD = 'Type it instead';
 
 // Under the lead line of a card of starting ideas or readings of an answer, in regular weight (MOM-111 round 3c, finding 2).
@@ -201,4 +204,15 @@ export function parseStoredSession(raw: string | null): SetupSession | null {
   } catch {
     return null;
   }
+}
+
+// Whether the person's message just before Claude's newest turn asked what the question means, so that turn is the explanation
+// they asked for (test day 1: a card of ideas hid it).
+export function askedWhatItMeans(transcript: SetupSession['transcript']): boolean {
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    if (transcript[i].role !== 'assistant') continue;
+    const before = transcript[i - 1];
+    return before?.role === 'person' && asksMeaning(before.text);
+  }
+  return false;
 }

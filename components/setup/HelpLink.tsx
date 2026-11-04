@@ -24,7 +24,9 @@ export function HelpLink({ disabled = false, explain = null, onAsk }: HelpLinkPr
         aria-expanded={explain ? open : undefined}
         aria-controls={explain ? id : undefined}
         onClick={() => (explain ? setOpen((o) => !o) : onAsk?.())}
-        className="text-sm text-muted underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+        // `block`: an inline button inside this div sits on the div's text baseline, a few pixels lower than the "Type it instead"
+        // button beside it, which is a flex item itself (test day 1, M2). Both are now boxes of the same height, on one line.
+        className="block text-sm text-muted underline underline-offset-4 hover:text-foreground disabled:opacity-50"
       >
         {MEANING_LINK}
       </button>

@@ -266,7 +266,8 @@ export type SetupTurnResult =
   // `turns` and `spentTokens` are what the caller hands back on the next call.
   | { kind: 'answered'; result: ModelSetupResult; turns: number; spentTokens: number }
   // The call was not made. The screen shows `message`, the playback of the draft so far, and the quick path.
-  | { kind: 'quick_path'; reason: SetupQuickPathReason; message: string }
+  // `retryAfterSeconds` is set for the person's own limit: when their oldest call in the 24 hours ages out (test day 1).
+  | { kind: 'quick_path'; reason: SetupQuickPathReason; message: string; retryAfterSeconds?: number }
   // Two requests within a second of each other. Not a reason to leave the conversation: ask again.
   | { kind: 'wait'; retryAfterSeconds: number; message: string };
 
@@ -355,6 +356,7 @@ export async function runSetupTurn(args: RunSetupTurnArgs, deps: RunSetupTurnDep
           kind: 'quick_path',
           reason: 'person_cap',
           message: `${SETUP_QUICK_PATH_MESSAGES.person_cap} ${dailyRetrySentence('user_daily', budgeted.retryAfterSeconds)}`,
+          retryAfterSeconds: budgeted.retryAfterSeconds,
         };
       }
       return quickPath('shared_cap');

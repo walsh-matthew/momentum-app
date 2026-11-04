@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { quickPathReason, QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
-import type { FillInItem, QuickPathReason, QuickPathState, QuickStep, RecapSection } from '@/types/setupScreen';
+import { quickPathReason, quickPathStuckHelp, QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
+import { resumeSentence } from '@/lib/setup/resume';
+import type { FillInItem, QuickPathReason, QuickPathState, QuickStep, RecapSection, ResumeInfo } from '@/types/setupScreen';
 import { ADD_QUICK_WORDS } from '@/lib/setup/addWords';
 import { CARD_TEXT, CardLead } from './cardText';
 import { NeedsAnswer } from './NeedsAnswer';
@@ -37,6 +38,8 @@ interface QuickPathCardProps {
   onStartOver: () => void;
   // True when the card finishes an addition to a setup that is saved (MOM-132 part 2): the button and the headings say what is added.
   adding?: boolean;
+  // When the person's own Claude allowance frees up (test day 1): said under the reason, while questions are left.
+  resume?: ResumeInfo | null;
 }
 
 const isOpen = (step: QuickStep): boolean => step.items.some((item) => !item.answered);
@@ -53,8 +56,11 @@ const LINK = 'text-sm text-muted underline underline-offset-4 hover:text-foregro
 // step shows at a time ("1 of 3", with Back), with the step before it as one small line above; a wide screen shows every step in
 // one list. The last step's button is "Save my setup"; there is never a dimmed button, because a button that cannot be used is
 // not shown. Start again is a small link that asks first. The reason shows once, only while questions are left.
-export function QuickPathCard({ reason, sections, steps, stuck, saving, error, fillError, filling, deviceZone, today, onFill, onSave, onStartOver, adding = false }: QuickPathCardProps) {
+export function QuickPathCard({ reason, sections, steps, stuck, saving, error, fillError, filling, deviceZone, today, onFill, onSave, onStartOver, adding = false, resume = null }: QuickPathCardProps) {
   const wide = useIsWide();
+  // With no saved time zone the clock time is written here, in the phone's own zone (display only: never saved or sent). It is worked
+  // out once, so it does not move while the card is open.
+  const [resumeLine] = useState(() => (resume ? (resume.sentence ?? resumeSentence(resume.atMs, Date.now()) ?? resume.fallback) : null));
   const [view, setView] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
 
@@ -88,7 +94,7 @@ export function QuickPathCard({ reason, sections, steps, stuck, saving, error, f
 
   const stuckNotes = stuck.map((line) => (
     <NeedsAnswer key={line} id={`stuck-${line}`} question={line} label={QUICK_PATH_WORDS.cantAnswerHere}>
-      <p className={CARD_TEXT.note}>{QUICK_PATH_WORDS.stuckHelp}</p>
+      <p className={CARD_TEXT.note}>{quickPathStuckHelp(reason, resumeLine !== null)}</p>
     </NeedsAnswer>
   ));
 
@@ -175,7 +181,8 @@ export function QuickPathCard({ reason, sections, steps, stuck, saving, error, f
       <CardLead id="setup-quick-path" leads={error === null}>
         {top}
       </CardLead>
-      {!canSave && <p className={CARD_TEXT.body}>{quickPathReason(reason)}</p>}
+      {!canSave && <p className={CARD_TEXT.body}>{quickPathReason(reason, remaining > 0)}</p>}
+      {!canSave && resumeLine && <p className={CARD_TEXT.body}>{resumeLine}</p>}
       {body}
       {fillError && <SetupAlert headline={fillError} />}
       {error && <SetupAlert headline={error} />}

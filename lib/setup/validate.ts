@@ -26,6 +26,7 @@ import {
 } from '@/types/setup';
 import { freeTextLeaves, latestProvenance, provenanceLeaves, type Leaf } from './leaves';
 import { personWords } from './said';
+import { namesHours, namesMinutes } from './timeUnits';
 import {
   acceptsText,
   dateIsIn,
@@ -111,6 +112,14 @@ export function textSaysLeaf(leaf: Leaf, text: string): boolean {
   }
 }
 
+// A bare number answers a question that asked in hours: "3" to "how many hours would still count?" says 180 minutes (test day 1).
+// Only a time amount (kind `minutes`), only when the question the message answered names hours, and not when the message names
+// minutes itself.
+function saysHoursAnswer(leaf: Leaf, text: string, asked: Transcript[number] | undefined): boolean {
+  if (leaf.kind !== 'minutes' || asked?.role !== 'assistant' || namesMinutes(text)) return false;
+  return namesHours(asked.turn.question ?? '') && textSaysLeaf(leaf, `${text} hours`);
+}
+
 // Everything an assistant turn showed the person: its lead-in, question, skip line and options.
 const assistantText = (t: { say: string; question: string | null; skipped: { line: string } | null; options: string[] }): string =>
   [t.say, t.question ?? '', t.skipped?.line ?? '', ...t.options].join(' ');
@@ -140,7 +149,7 @@ function provenanceIssues(draft: SetupDraft, transcript: Transcript): DraftIssue
       continue;
     }
     if (entry.how === 'said') {
-      if (!textSaysLeaf(leaf, message.text)) {
+      if (!textSaysLeaf(leaf, message.text) && !saysHoursAnswer(leaf, message.text, transcript[entry.turn - 1])) {
         issues.push({ path: leaf.path, code: 'not_said', message: "The person's message does not say this value. Ask for it instead of working it out." });
       }
       continue;

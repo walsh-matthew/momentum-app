@@ -8,6 +8,7 @@ import { casualDate } from '@/lib/dates/casual';
 import { EARLY_DAY_END_LIMIT } from '@/lib/engine/constants';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
 import { singularFirstWord, unitCount } from '@/lib/utils/units';
+import { hoursText, minutesAsHours, namesHours, namesMinutes } from './timeUnits';
 import type { GoalDraft, SetupChunk, SetupDraft, SetupModel, TargetDraft, Transcript } from '@/types/setup';
 import { asSaid, itemOf, listOf, restate, titleOf, trimmed } from './restate';
 import { minutesOfClock, timePhrasesIn } from './text';
@@ -99,14 +100,15 @@ export function describePeriod(t: TargetDraft, options: PlaybackOptions, style: 
 }
 
 // An amount of what the target counts: "2", "5000 pounds", "90 minutes", "3 items".
-export function amount(t: Pick<TargetDraft, 'measure' | 'unit'>, n: number): string {
+export function amount(t: Pick<TargetDraft, 'measure' | 'unit'> & { title?: string }, n: number): string {
   switch (t.measure) {
     case 'count':
       return String(n);
     case 'quantity':
       return unitCount(n, t.unit ? itemOf(t.unit) : '');
     case 'time':
-      return plural(n, 'minute', 'minutes');
+      // A time target is stored in minutes; one whose words name hours reads in hours ("3 hours", never "180 minutes").
+      return t.title !== undefined && namesHours(itemOf(t.title)) ? hoursText(n) : plural(n, 'minute', 'minutes');
     case 'checklist':
       return plural(n, 'item', 'items');
   }
@@ -127,7 +129,13 @@ export function amountOf(t: Pick<TargetDraft, 'title' | 'measure' | 'unit'>, n: 
       return stem && thing.toLowerCase().startsWith(stem) ? `${n} ${n === 1 ? singularFirstWord(thing) : thing}` : unitCount(n, unit);
     }
     case 'time':
-      return /\bminutes?\b/i.test(thing) ? `${n} ${n === 1 ? singularFirstWord(thing) : thing}` : `${plural(n, 'minute', 'minutes')} of ${thing}`;
+      // Stored in minutes. Words naming hours read in hours ("3 hours of reading"), words naming minutes as they are, and any other
+      // words after "minutes of". Never "minutes of hours".
+      if (namesHours(thing)) {
+        const hours = minutesAsHours(n);
+        return `${hours} ${hours === 1 ? singularFirstWord(thing) : thing}`;
+      }
+      return namesMinutes(thing) ? `${n} ${n === 1 ? singularFirstWord(thing) : thing}` : `${plural(n, 'minute', 'minutes')} of ${thing}`;
     case 'checklist':
       return `${n} ${n === 1 ? singularFirstWord(thing) : thing}`;
   }

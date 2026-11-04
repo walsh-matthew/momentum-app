@@ -478,7 +478,7 @@ describe('the quick path', () => {
   it('says what only Claude could ask for, offers no Save, and Start again asks first and only the second tap clears', async () => {
     await toQuickPath(quick({ canSave: false, stuck: ['At least one goal.'] }), QUICK_PATH_WORDS.stuckTop);
     expect(screen.getByText('At least one goal.')).toBeTruthy();
-    expect(screen.getByText(QUICK_PATH_WORDS.reasonLimit)).toBeTruthy();
+    expect(screen.getByText(QUICK_PATH_WORDS.reasonLimitNothing)).toBeTruthy();
     expect(screen.queryByRole('button', { name: QUICK_PATH_WORDS.save })).toBeNull();
     // Start again clears everything, so it asks first (MOM-111, quick-path card); only the second tap clears.
     fireEvent.click(screen.getByRole('button', { name: QUICK_PATH_WORDS.startAgain }));

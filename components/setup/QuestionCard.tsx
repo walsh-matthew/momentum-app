@@ -31,6 +31,9 @@ interface QuestionCardProps {
   initialText?: string;
   // Everything the person has said, so the counted thing in an ideas card's lead keeps their capitals (round 3c).
   said?: readonly string[];
+  // This card is the reply to "What does this mean?" (test day 1): Claude's lead-in is the explanation, so it shows even where
+  // code leads the card and the lead-in is otherwise left off.
+  explaining?: boolean;
 }
 
 // One question, and nothing else on screen (docs/DOMAIN_MODEL.md §2.1 rule 1). Claude's words come from the validated turn,
@@ -39,7 +42,7 @@ interface QuestionCardProps {
 // its reason (round 2, finding 1); the answers the person can tap; and the answer box with its one Send (round 2, finding 8).
 // A date question or a date confirmation uses the one date layout (components/setup/DateAnswer.tsx, round 2 findings 4 and
 // 9). Every tap sends the person's own words, as they would type them; the rule checks read them like any other answer.
-export function QuestionCard({ turn, busy, onAnswer, today, pending = null, notice = null, initialText, said = [] }: QuestionCardProps) {
+export function QuestionCard({ turn, busy, onAnswer, today, pending = null, notice = null, initialText, said = [], explaining = false }: QuestionCardProps) {
   const numbered = turn.kind === 'ideas' || turn.kind === 'interpretations';
   const words = (text: string) => casualText(text, today);
   // Nothing can be tapped while an answer waits on its reply, so a second answer can never follow the first.
@@ -64,7 +67,7 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
       <div className="space-y-1">
         {/* Where code's line leads a card of options, Claude's lead-in is not shown: code's line is all that sits above the
             options. */}
-        {turn.say && !lead && <p className={CARD_TEXT.secondary}>{words(turn.say)}</p>}
+        {turn.say && (!lead || explaining) && <p className={CARD_TEXT.secondary}>{words(turn.say)}</p>}
         {heading && (
           <CardLead id="setup-question" leads={!errorLeads}>
             {heading}
@@ -86,6 +89,7 @@ export function QuestionCard({ turn, busy, onAnswer, today, pending = null, noti
           busy={busy}
           onAnswer={onAnswer}
           initialText={initialText}
+          today={today}
         />
       ) : (
         <>
