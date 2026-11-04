@@ -5,7 +5,7 @@
 
 import { AssistantTurnSchema, type AssistantTurn, type HardRuleId, type SetupDraft, type Transcript } from '@/types/setup';
 import { checkTurn, type Violation } from './checks';
-import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfQuestion, type SettingsAnswers } from './cards';
+import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfTurn, type SettingsAnswers } from './cards';
 import { cardStep, cardViolations } from './cardTurns';
 import { dateStep } from './codeTurns';
 import { emptyDraft } from './draft';
@@ -136,7 +136,7 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
     let line = options.reply ? options.reply(turn, index) : c.person[personAt++];
     if (line && isTimeZoneCard(turn)) {
       // The person's tap is applied to the draft here, as the screen does, so the model's next turn starts from a draft that holds it.
-      const shown = zoneOfQuestion(turn.question);
+      const shown = zoneOfTurn(turn);
       const picked = line.zone ?? shown;
       const how = line.zone === undefined && shown !== null ? 'accepted' : 'said';
       const next = picked === null ? null : answerTimeZone({ transcript: [...transcript], draft, spentTokens: 0 }, picked, how);

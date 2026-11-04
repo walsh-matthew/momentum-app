@@ -43,7 +43,8 @@ export function timeZoneCard(s: Script, picked?: string): void {
   s.add({
     kind: 'proposal',
     topic: 'time_zone',
-    question: timeZoneQuestion(DEVICE_ZONE),
+    question: timeZoneQuestion(DEVICE_ZONE) ?? '',
+    options: [DEVICE_ZONE],
     detail: TIME_ZONE_CARD_MARK,
     reply: picked ? { say: picked, zone: picked } : PROPOSAL_YES_TEXT,
   });

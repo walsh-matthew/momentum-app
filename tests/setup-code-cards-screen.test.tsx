@@ -71,6 +71,33 @@ describe('the settings card', () => {
     expect(screen.queryByText(/reminder|check-in|quiet|balance/i)).toBeNull();
   });
 
+  it('starts with nothing chosen in any of the four rows: every choice is unchosen, in its state and in its look', () => {
+    card();
+    const choices = [...document.querySelectorAll('fieldset [data-slot="answer-choice"]')] as HTMLButtonElement[];
+    expect(choices).toHaveLength(11);
+    for (const choice of choices) {
+      expect(choice.getAttribute('aria-pressed'), choice.textContent ?? '').toBe('false');
+      expect(choice.getAttribute('data-selected'), choice.textContent ?? '').toBe('false');
+      // The chosen look is the accent fill and a check; none has it, and none is dimmed.
+      expect(choice.className, choice.textContent ?? '').not.toMatch(/bg-primary/);
+      expect(choice.querySelector('[data-slot="choice-check"]'), choice.textContent ?? '').toBeNull();
+      expect(choice.disabled).toBe(false);
+    }
+    for (const fieldset of document.querySelectorAll('fieldset')) expect(fieldset.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+  });
+
+  it('shows the chosen look on a choice once it is tapped, and only on that one', () => {
+    card();
+    fireEvent.click(screen.getByRole('button', { name: 'Direct' }));
+    const chosen = screen.getByRole('button', { name: 'Direct' });
+    expect(chosen.getAttribute('aria-pressed')).toBe('true');
+    expect(chosen.className).toMatch(/bg-primary/);
+    expect(chosen.querySelector('[data-slot="choice-check"]')).not.toBeNull();
+    expect(pressed()).toHaveLength(1);
+    // The other choices in its row and in the other rows are untouched.
+    for (const name of ['Gentle', 'Plain', 'Low-key', 'Medium', 'Big', 'One sitting']) expect(screen.getByRole('button', { name }).getAttribute('aria-pressed'), name).toBe('false');
+  });
+
   it('has nothing selected, one main button that is never dimmed, and no "What does this mean?" link', () => {
     card();
     expect(pressed()).toHaveLength(0);
@@ -109,8 +136,8 @@ describe('the time zone card', () => {
   const ZONE = 'America/Chicago';
   it('shows the zone and its city, with Yes as the one main button and A different one under it', () => {
     const onPick = vi.fn();
-    render(<TimeZoneCard question={timeZoneQuestion(ZONE)} deviceZone={ZONE} busy={false} onPick={onPick} />);
-    expect(screen.getByRole('heading', { name: 'Your phone is set to America/Chicago (Chicago). Is that your time zone?' })).toBeTruthy();
+    render(<TimeZoneCard question={timeZoneQuestion(ZONE) ?? ''} deviceZone={ZONE} busy={false} onPick={onPick} />);
+    expect(screen.getByRole('heading', { name: 'Your phone is set to Central Time (Chicago). Is that your time zone?' })).toBeTruthy();
     expect(document.querySelectorAll('[data-tone="main"]')).toHaveLength(1);
     expect(within(document.querySelector('[data-tone="main"]') as HTMLElement).queryByText('Yes')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'A different one' })).toBeTruthy();
@@ -121,7 +148,7 @@ describe('the time zone card', () => {
 
   it('opens the search for A different one, and a pick is the person\'s own', () => {
     const onPick = vi.fn();
-    render(<TimeZoneCard question={timeZoneQuestion(ZONE)} deviceZone={ZONE} busy={false} onPick={onPick} />);
+    render(<TimeZoneCard question={timeZoneQuestion(ZONE) ?? ''} deviceZone={ZONE} busy={false} onPick={onPick} />);
     fireEvent.click(screen.getByRole('button', { name: 'A different one' }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search time zones' }), { target: { value: 'denver' } });
     fireEvent.click(within(screen.getByRole('list', { name: 'Matching time zones' })).getAllByRole('button')[0]);
@@ -174,7 +201,7 @@ describe('in the conversation', () => {
     window.sessionStorage.setItem(KEY, JSON.stringify(session));
     actions.ask.mockResolvedValue({ ok: false, error: 'stop here' });
     render(<SetupConversation userId={USER} />);
-    expect(await screen.findByRole('heading', { name: 'Your phone is set to America/Denver (Denver). Is that your time zone?' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Your phone is set to Mountain Time (Denver). Is that your time zone?' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
     await waitFor(() => expect(actions.ask).toHaveBeenCalledTimes(1));
     const sent = actions.ask.mock.calls[0][0] as SetupSession;

@@ -232,7 +232,7 @@ describe('each part, played back in the second person', () => {
     expect(renderFinal(m)).toEqual([
       'Your goal: credits, counted each week.',
       '1 goal set aside for now, with a way back.',
-      "You can't change these after setup yet. That's coming soon.",
+      "You can't change your choices after setup yet. That's coming soon.",
     ]);
   });
 

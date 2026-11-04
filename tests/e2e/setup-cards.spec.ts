@@ -31,7 +31,7 @@ import { READING_CASE_ID, SETUP_CASES, type ScriptedCase } from '../setup-evals/
 import { goal, scriptedModel, target } from '../helpers/setupScript';
 import { expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
-import { answerCodeCard, codeCardOn } from './support/codeCards';
+import { answerCodeCard, codeCardOn, tapSettingsChoices } from './support/codeCards';
 import { CARD, cardOf, cardTypes, elementsOffScreen, headingOf, sectionOf } from './support/setupCards';
 import { dateQuestionCase, e2eCase } from './support/setupConversation';
 
@@ -164,9 +164,28 @@ async function walk(page: Page, scripted: ScriptedCase, shot: (page: Page, name:
     if (code !== null) {
       const cardKind: CardKind = code === 'zone' ? 'time-zone-card' : 'settings-card';
       await fits(page, cardKind);
-      if (opts.everyCard || !seen.has(cardKind)) await shot(page, cardKind);
+      // The pointer is left where the last tap put it, which on this card is over a choice and gives it the hover fill; park it in the corner
+      // so a picture shows the card as it is, with nothing chosen.
+      await page.mouse.move(0, 0);
+      // The choices fade between their looks (transition-colors), so a picture taken at once can catch the hover fill on its way out.
+      await page.waitForTimeout(600);
+      const shoot = opts.everyCard || !seen.has(cardKind);
+      if (shoot) await shot(page, cardKind);
       seen.add(cardKind);
-      await answerCodeCard(page, code, person, 'America/Denver');
+      if (code === 'settings') {
+        // Nothing is chosen until a tap; then the chosen choices show their own look.
+        await expect(page.locator('[data-slot="answer-choice"][data-selected="true"]'), 'nothing is chosen before a tap').toHaveCount(0);
+        // ...and nothing looks chosen: every choice on the card has the same fill.
+        const fills = await page.locator('fieldset [data-slot="answer-choice"]').evaluateAll((els) => [...new Set(els.map((el) => getComputedStyle(el).backgroundColor))]);
+        expect(fills, 'every unchosen choice has one and the same fill').toHaveLength(1);
+        await tapSettingsChoices(page, person);
+        await page.mouse.move(0, 0);
+        await page.waitForTimeout(600);
+        if (shoot) await shot(page, 'settings-card-chosen');
+        await page.getByRole('button', { name: 'Next', exact: true }).click();
+      } else {
+        await answerCodeCard(page, code, person, 'America/Denver');
+      }
       heading = await nextCard(page, heading);
       continue;
     }

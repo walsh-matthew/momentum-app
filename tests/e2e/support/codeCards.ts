@@ -26,8 +26,9 @@ export async function codeCardOn(page: Page): Promise<CodeCard | null> {
 export async function answerCodeCard(page: Page, card: CodeCard, line: CardLine, personZone = 'America/Denver'): Promise<void> {
   if (card === 'zone') {
     const wanted = line.zone ?? personZone;
-    const shown = (await page.locator('#setup-question').textContent()) ?? '';
-    if (line.zone === undefined && shown.includes(wanted)) {
+    // The card carries the zone its Yes accepts (the words say it plainly, never as an id).
+    const offered = await page.locator('[data-card="time-zone"]').getAttribute('data-zone');
+    if (line.zone === undefined && offered === wanted) {
       await page.getByRole('button', { name: 'Yes', exact: true }).click();
       return;
     }
@@ -37,10 +38,15 @@ export async function answerCodeCard(page: Page, card: CodeCard, line: CardLine,
     await page.getByRole('list', { name: 'Matching time zones' }).getByRole('button').filter({ hasText: wanted }).first().click();
     return;
   }
+  await tapSettingsChoices(page, line);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+}
+
+// Taps the choices the scripted person makes on the settings card (and not Next), so a spec can look at the card with them chosen.
+export async function tapSettingsChoices(page: Page, line: CardLine): Promise<void> {
   for (const row of SETTINGS_ROWS) {
     const value = line.settings?.[row.topic];
     const label = row.choices.find((c) => c.value === value)?.label;
     if (label) await page.getByRole('button', { name: label, exact: true }).click();
   }
-  await page.getByRole('button', { name: 'Next', exact: true }).click();
 }

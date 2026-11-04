@@ -15,7 +15,7 @@
 import { CELEBRATION_LEVELS, REVIEW_DEPTHS, REVIEW_PLANNING_MODES, TONES } from '@/types/database.types';
 import { SetupSessionSchema, type AssistantTurn, type SetupDraft, type SetupSession, type SetupSettings, type SetupTopic } from '@/types/setup';
 import { PROPOSAL_YES_TEXT } from './session';
-import { zoneCity } from './timeZones';
+import { plainZoneName, zoneCity } from './timeZones';
 import { isTimeZone } from './validate';
 
 // Every card turn code writes carries one of these in its detail line, so the screen can tell it from one of Claude's, and Claude,
@@ -106,19 +106,22 @@ export const SETTINGS_ROWS: readonly SettingsRow[] = [
 // The rows still to ask: a setting the person already gave (said earlier in the conversation) is theirs and is not asked again.
 export const settingsRowsLeft = (settings: SetupSettings): SettingsRow[] => SETTINGS_ROWS.filter((row) => settings[row.field] === null);
 
-// The time zone question when the device reports a zone: "Your phone is set to America/Chicago (Chicago). Is that your time zone?".
-export function timeZoneQuestion(zone: string): string {
+// The time zone question when the device reports a zone, in the words a person knows the zone by, never the IANA id: the platform's plain
+// name with the city ("Your phone is set to Mountain Time (Denver). Is that your time zone?"); with no plain name, just the city ("Your
+// phone is set to Denver time. ..."). A zone with neither (UTC, an offset zone) has no plain form, so there is no question to ask about it:
+// null, and the card asks "Which time zone are you in?" with the search instead.
+export function timeZoneQuestion(zone: string): string | null {
+  const name = plainZoneName(zone);
   const city = zoneCity(zone);
-  return `Your phone is set to ${zone}${city ? ` (${city})` : ''}. Is that your time zone?`;
+  const phone = name && city ? `${name} (${city})` : (name ?? (city ? `${city} time` : null));
+  return phone === null ? null : `Your phone is set to ${phone}. Is that your time zone?`;
 }
 
-// The zone a time zone card's question shows, or null for the card that shows none.
-export function zoneOfQuestion(question: string | null): string | null {
-  const found = /^Your phone is set to (\S+?)(?: \([^)]*\))?\. Is that your time zone\?$/.exec(question ?? '');
-  return found ? found[1] : null;
-}
+// The zone a time zone card was written for: the one answer the proposal carries beside its words, which the screen never shows. Null
+// for the card that shows none.
+export const zoneOfTurn = (turn: AssistantTurn): string | null => (turn.kind === 'proposal' && turn.options.length === 1 ? turn.options[0] : null);
 
-export const codeTurn = (draft: SetupDraft, over: Pick<AssistantTurn, 'kind' | 'chunk' | 'topic' | 'question' | 'detail'>): AssistantTurn => ({
+export const codeTurn = (draft: SetupDraft, over: Pick<AssistantTurn, 'kind' | 'chunk' | 'topic' | 'question' | 'detail'> & { options?: string[] }): AssistantTurn => ({
   skipped: null,
   say: '',
   options: [],
@@ -143,7 +146,7 @@ export function answerTimeZone(session: SetupSession, zone: string, how: 'said' 
   if (!turn || !isTimeZoneCard(turn)) return null;
   if (!isTimeZone(zone) || !/^[A-Za-z][A-Za-z0-9_+\-/]*$/.test(zone) || zone.length > 64) return null;
   // A yes counts only for the zone the card showed.
-  if (how === 'accepted' && (turn.kind !== 'proposal' || turn.question !== timeZoneQuestion(zone))) return null;
+  if (how === 'accepted' && (zoneOfTurn(turn) !== zone || turn.question !== timeZoneQuestion(zone))) return null;
   const at = session.transcript.length;
   const model = structuredClone(session.draft.model);
   model.person.timeZone = zone;

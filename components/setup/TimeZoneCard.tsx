@@ -7,10 +7,10 @@ import { CardLead } from './cardText';
 import { TimeZonePicker } from './TimeZonePicker';
 
 interface TimeZoneCardProps {
-  // The question code wrote: "Your phone is set to America/Chicago (Chicago). Is that your time zone?" when the phone reports a zone,
-  // otherwise "Which time zone are you in?".
+  // The question code wrote: "Your phone is set to Central Time (Chicago). Is that your time zone?" when the phone reports a zone with a
+  // plain name, otherwise "Which time zone are you in?".
   question: string;
-  // The zone the phone reports and the question shows, or null when it reports none.
+  // The zone the phone reports, which Yes accepts (the question says it in plain words), or null when there is none to offer.
   deviceZone: string | null;
   busy: boolean;
   // `how` is 'accepted' for a yes to the zone shown, and 'said' for one picked from the list.
@@ -23,7 +23,7 @@ interface TimeZoneCardProps {
 export function TimeZoneCard({ question, deviceZone, busy, onPick }: TimeZoneCardProps) {
   const [searching, setSearching] = useState(deviceZone === null);
   return (
-    <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4" data-card="time-zone">
+    <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4" data-card="time-zone" data-zone={deviceZone ?? undefined}>
       <CardLead id="setup-question">{deviceZone === null ? TIME_ZONE_ASK : question}</CardLead>
       {deviceZone !== null && !searching && (
         <div className="space-y-2">

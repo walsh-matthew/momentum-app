@@ -7,7 +7,7 @@ import { addGoalsAction, addTargetsAction, askAddTurn, askSetupTurn, fillQuickPa
 import { casualDate } from '@/lib/dates/casual';
 import { ADD_WORDS } from '@/lib/setup/addWords';
 import { startsMidWeek } from '@/lib/setup/addStart';
-import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfQuestion, type SettingsAnswers } from '@/lib/setup/cards';
+import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfTurn, type SettingsAnswers } from '@/lib/setup/cards';
 import { shownModel } from '@/lib/setup/paraphrase';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
@@ -566,7 +566,7 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
       ) : isSettingsCard(turn) && !waiting ? (
         <SettingsCard key={`settings:${spoken}`} settings={turn.draft.model.settings} busy={saving} onDone={answerCard} />
       ) : isTimeZoneCard(turn) && !waiting && (turn.kind === 'proposal' || allTimeZones().length > 0) ? (
-        <TimeZoneCard key={`zone:${spoken}`} question={turn.question ?? ''} deviceZone={zoneOfQuestion(turn.question)} busy={saving} onPick={answerZone} />
+        <TimeZoneCard key={`zone:${spoken}`} question={turn.question ?? ''} deviceZone={zoneOfTurn(turn)} busy={saving} onPick={answerZone} />
       ) : (
         // Keyed so "Change my answer" opens the card afresh, with the old answer in the box.
         <QuestionCard

@@ -194,7 +194,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           expect(card.id).toBe('setup-question');
           await expect(page.locator('[data-tone="main"]')).toHaveCount(1);
           if (codeCard === 'zone') {
-            if (!UTC_AHEAD) await expect(page.locator('#setup-question')).toHaveText('Your phone is set to America/Denver (Denver). Is that your time zone?');
+            if (!UTC_AHEAD) await expect(page.locator('#setup-question')).toHaveText('Your phone is set to Mountain Time (Denver). Is that your time zone?');
           } else {
             await expect(page.locator('#setup-question')).toHaveText('How should Momentum talk to you?');
             await expect(page.getByText("Skip any you like. You can't change these after setup yet.")).toBeVisible();
@@ -276,7 +276,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       expect(card.id).toBe('setup-final');
       await cardIsReadable(page, width);
       await expect(page.getByText('Nothing is saved until you tap Save.')).toBeVisible();
-      await expect(page.getByText("You can't change these after setup yet. That's coming soon.")).toBeVisible();
+      await expect(page.getByText("You can't change your choices after setup yet. That's coming soon.")).toBeVisible();
       await expect(page.getByText('Everything can be changed on your settings page.')).toHaveCount(0);
       // How many times Claude was asked for this whole setup (MOM-178): counted by the fake model, which the spec's own run never pays.
       const asked = (await fakeLast()).setupRequests - before;

@@ -20,13 +20,16 @@ export function cardStep(transcript: Transcript, draft: SetupDraft, deviceZone: 
 
   if (draft.model.person.timeZone === null && !draft.approved.includes('targets') && approvalFollowsPlayback(ctx, 'targets')) {
     const approved = approve('targets');
+    // The zone is carried beside the words as the one answer Yes accepts; the words themselves never show it (lib/setup/cards.ts).
     const zone = deviceZone !== null && isTimeZone(deviceZone) ? deviceZone : null;
+    const question = zone ? timeZoneQuestion(zone) : null;
     return codeTurn(approved, {
-      kind: zone ? 'proposal' : 'question',
+      kind: zone && question ? 'proposal' : 'question',
       chunk: null,
       topic: 'time_zone',
-      question: zone ? timeZoneQuestion(zone) : TIME_ZONE_ASK,
+      question: question ?? TIME_ZONE_ASK,
       detail: TIME_ZONE_CARD_MARK,
+      options: zone && question ? [zone] : [],
     });
   }
 

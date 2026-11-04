@@ -26,8 +26,7 @@ import {
   isSettingsCard,
   isTimeZoneCard,
   settingsRowsLeft,
-  timeZoneQuestion,
-  zoneOfQuestion,
+  zoneOfTurn,
 } from '@/lib/setup/cards';
 import { cardStep } from '@/lib/setup/cardTurns';
 import { checkSkipAnswered, checkTurn, type TurnContext } from '@/lib/setup/checks';
@@ -104,7 +103,7 @@ describe('the settings card asks only what something reads', () => {
     expect(SETTINGS_HEADING).toBe('How should Momentum talk to you?');
     expect(SETTINGS_SKIP_LINE).toBe("Skip any you like. You can't change these after setup yet.");
     const final = renderFinal(emptyModel());
-    expect(final.at(-1)).toBe("You can't change these after setup yet. That's coming soon.");
+    expect(final.at(-1)).toBe("You can't change your choices after setup yet. That's coming soon.");
     expect(final.join(' ')).not.toMatch(/settings page/);
   });
 
@@ -152,7 +151,7 @@ describe('code writes a card the moment the part before it is approved, and not 
     if (!card) throw new Error('no card');
     expect(isTimeZoneCard(card)).toBe(true);
     expect(card.kind).toBe('proposal');
-    expect(card.question).toBe('Your phone is set to America/Denver (Denver). Is that your time zone?');
+    expect(card.question).toBe('Your phone is set to Mountain Time (Denver). Is that your time zone?');
     expect(card.detail).toBe(TIME_ZONE_CARD_MARK);
     expect(card.draft.approved).toContain('targets');
     expect(card.draft.model.person.timeZone).toBeNull();
@@ -169,11 +168,13 @@ describe('code writes a card the moment the part before it is approved, and not 
     }
   });
 
-  it('writes the question\'s zone back out of its words, and nothing for the card that shows none', () => {
-    expect(zoneOfQuestion(timeZoneQuestion('America/Argentina/Buenos_Aires'))).toBe('America/Argentina/Buenos_Aires');
-    expect(zoneOfQuestion(timeZoneQuestion('Etc/UTC'))).toBe('Etc/UTC');
-    expect(zoneOfQuestion(TIME_ZONE_ASK)).toBeNull();
-    expect(timeZoneQuestion('UTC')).toBe('Your phone is set to UTC. Is that your time zone?');
+  it('carries the zone Yes accepts beside the words, and nothing for the card that shows none (the words are in tests/setup-time-zone-words.test.ts)', async () => {
+    const session = await afterYesTo('targets');
+    const draft = { ...session.draft, model: { ...session.draft.model, person: { ...session.draft.model.person, timeZone: null } } };
+    const shown = cardStep(session.transcript, draft, DENVER);
+    const asked = cardStep(session.transcript, draft, null);
+    expect(shown && zoneOfTurn(shown)).toBe(DENVER);
+    expect(asked && zoneOfTurn(asked)).toBeNull();
   });
 
   it('asks no zone when one is known, and no card for an answer that is not an acceptance', async () => {
@@ -352,7 +353,7 @@ describe('the server answers a card with no call to Claude', () => {
     const result = await takeSetupTurn({ ...session, draft, timeZone: DENVER, today: '2026-11-04' }, { runTurn: s.run });
     expect(s.calls).toHaveLength(0);
     if (!result.ok || result.data.kind !== 'turn') throw new Error('no turn');
-    expect(result.data.turn.question).toBe('Your phone is set to America/Denver (Denver). Is that your time zone?');
+    expect(result.data.turn.question).toBe('Your phone is set to Mountain Time (Denver). Is that your time zone?');
     expect(result.data.turn.draft.approved).toContain('targets');
     expect(result.data.rejected).toBe(0);
   });
