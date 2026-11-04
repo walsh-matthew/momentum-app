@@ -5,7 +5,8 @@
 // the way setup should ask them (MOM-111): everyday words, a reason, and short examples where they help.
 
 import type { SetupEvalCase } from '@/lib/setup/evals';
-import { MEANING_TEXT } from '@/lib/setup/session';
+import { SETTINGS_CARD_MARK, SETTINGS_HEADING, TIME_ZONE_CARD_MARK, timeZoneQuestion, type SettingsAnswers } from '@/lib/setup/cards';
+import { MEANING_TEXT, PROPOSAL_YES_TEXT } from '@/lib/setup/session';
 import { SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
 import { DAY_END_SAY } from '@/lib/setup/steps';
 import type { SavedFacts } from '@/lib/setup/validate';
@@ -33,6 +34,34 @@ const floorQ = (counted: string): string => `In a hard week, how many ${counted}
 
 const done = (c: Omit<SetupEvalCase, 'person'>, s: Script): ScriptedCase => ({ ...c, person: s.person, script: s.turns });
 
+// The two cards code writes (MOM-178). The model is never asked for them: each is a placeholder that holds the turn's place, so the
+// positions of the model's own turns still line up, and the person's line is what they tap.
+// The time zone card comes as soon as the targets part is approved, showing the zone the eval's phone reports (America/Denver); the
+// person says yes to it, or picks another zone from the list. The model's next turn records the zone, as it would after any answer.
+export const DEVICE_ZONE = 'America/Denver';
+export function timeZoneCard(s: Script, picked?: string): void {
+  s.add({
+    kind: 'proposal',
+    topic: 'time_zone',
+    question: timeZoneQuestion(DEVICE_ZONE),
+    detail: TIME_ZONE_CARD_MARK,
+    reply: picked ? { say: picked, zone: picked } : PROPOSAL_YES_TEXT,
+  });
+}
+// What the model's next turn writes into the draft for that answer: the zone, as accepted (a yes) or said (picked from the list).
+export const zoneWrites = (zone: string, picked: boolean) => ({
+  edit: (m: SetupModel) => {
+    m.person.timeZone = zone;
+  },
+  ...(picked ? { said: ['person.timeZone'] } : { accepted: ['person.timeZone'] }),
+});
+// The settings card comes as soon as the planning part is approved; the person taps their choices (none leaves a setting unset), and
+// code plays the part back at once. Both are placeholders; the settings the taps set are written into the script's draft here.
+export function settingsCard(s: Script, answers: SettingsAnswers, fields: Partial<SetupModel['settings']>): void {
+  s.add({ topic: 'tone', question: SETTINGS_HEADING, detail: SETTINGS_CARD_MARK, reply: { say: 'taps', settings: answers } });
+  s.playback('talk', 'Yes.', { edit: (m) => void Object.assign(m.settings, fields) });
+}
+
 // ---------------------------------------------------------------------------
 // A weekly habit goal, with the options the cases vary
 // ---------------------------------------------------------------------------
@@ -56,7 +85,6 @@ interface HabitOptions {
   floor: 'plain' | 'ideas' | 'ambiguous' | 'changeAtApproval' | 'compound' | 'levelAsked';
   // 'whatDoYouMean': the person asks what the day-end question means, and Claude explains it before asking again.
   dayEnd: 'checkin' | 'ambiguousEarly' | 'whatDoYouMean';
-  reminders?: boolean;
   // What the goal is called and why it matters, as the person put it (round 3b, finding 4: a goal that is not exercise).
   goalTitle?: string;
   why?: { reply: string; text: string };
@@ -303,20 +331,20 @@ function habitCase(o: HabitOptions): ScriptedCase {
       break;
   }
 
-  s.add({ topic: 'source', question: 'Where do you track this now, if anywhere?', reply: 'No, I will log it myself.' });
+  timeZoneCard(s);
   s.add({
-    topic: 'time_zone',
-    edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]),
-    skipped: early ? { topic: 'week_start', line: "You told me your week starts Monday, so I'll skip that." } : undefined,
-    question: 'Which time zone are you in?',
-    reply: change ? 'America/Denver. Actually, make it three a week, not two.' : 'America/Denver.',
+    topic: 'source',
+    ...zoneWrites(DEVICE_ZONE, false),
+    question: 'Where do you track this now, if anywhere?',
+    reply: change ? 'No, I will log it myself. Actually, make it three a week, not two.' : 'No, I will log it myself.',
   });
 
   const dayEnd = o.dayEnd === 'ambiguousEarly' ? '02:00' : '21:00';
   s.add({
     topic: 'day_end',
+    skipped: early ? { topic: 'week_start', line: "You told me your week starts Monday, so I'll skip that." } : undefined,
     edit: (m) => {
-      m.person.timeZone = 'America/Denver';
+      targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }];
       // The newest answer replaces the older one, and the approved part is played back again (rule 7).
       if (change) targetOf(m, 'g1', 't1').floor = 3;
     },
@@ -360,18 +388,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
   }
   if (change) s.playback('targets', 'Yes, that is right.');
 
-  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'Gentle, please.' });
-  if (o.reminders) {
-    s.add({
-      topic: 'reminders',
-      edit: (m) => (m.settings.tone = 'gentle'),
-      question: 'Would you like reminders on the days you plan?',
-      reply: 'No reminders for now.',
-    });
-    s.playback('talk', 'Yes.', { edit: (m) => (m.settings.reminders = 'off') });
-  } else {
-    s.playback('talk', 'Yes.', { edit: (m) => (m.settings.tone = 'gentle') });
-  }
+  settingsCard(s, { tone: 'gentle' }, { tone: 'gentle' });
   s.final();
 
   return done({ id: o.id, title: o.title, rules: o.rules, expect: 'clean' }, s);
@@ -486,24 +503,19 @@ function deadlineCase(o: DeadlineOptions): ScriptedCase {
     reply: o.floorReply,
   });
   s.playback('targets', 'Yes.', { edit: (m) => (targetOf(m, 'g1', 't1').floor = o.floor), said: ['goals.g1.targets.t1.floor'] });
-  s.add({ topic: 'source', question: 'Where do you track this now, if anywhere?', reply: 'I will log it by hand.' });
-  s.add({
-    topic: 'time_zone',
-    edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]),
-    question: 'Which time zone are you in?',
-    reply: 'America/Chicago.',
-  });
+  // Their phone says Denver; they pick Chicago from the list.
+  timeZoneCard(s, 'America/Chicago');
+  s.add({ topic: 'source', ...zoneWrites('America/Chicago', true), question: 'Where do you track this now, if anywhere?', reply: 'I will log it by hand.' });
   s.add({
     topic: 'day_end',
-    edit: (m) => (m.person.timeZone = 'America/Chicago'),
+    edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]),
     say: DAY_END_SAY,
     question: 'When does your day end?',
     reply: 'I check in at 9 at night.',
   });
   // Every goal here is a deadline goal, so no week start is asked (MOM-125).
   s.playback('planning', 'Yes.', { edit: (m) => (m.person.dayEnd = '21:00'), said: ['person.dayEnd'] });
-  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'Gentle, please.' });
-  s.playback('talk', 'Yes.', { edit: (m) => (m.settings.tone = 'gentle') });
+  settingsCard(s, { tone: 'gentle' }, { tone: 'gentle' });
   s.final();
   return done({ id: o.id, title: o.title, rules: o.rules, expect: 'clean' }, s);
 }
@@ -596,17 +608,11 @@ function phoneCase(): ScriptedCase {
     },
     said: ['goals.g1.targets.t1.floor'],
   });
-  s.add({ topic: 'source', question: 'Where do you track this now, if anywhere?', reply: 'myself' });
-  s.add({
-    topic: 'time_zone',
-    edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]),
-    say: 'That way your days are counted where you are.',
-    question: 'Which time zone are you in?',
-    reply: 'Denver',
-  });
+  timeZoneCard(s);
+  s.add({ topic: 'source', ...zoneWrites(DEVICE_ZONE, false), question: 'Where do you track this now, if anywhere?', reply: 'myself' });
   s.add({
     topic: 'day_end',
-    edit: (m) => (m.person.timeZone = 'America/Denver'),
+    edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'manual' }]),
     say: DAY_END_SAY,
     question: 'When does your day end?',
     reply: '9pm',
@@ -619,14 +625,8 @@ function phoneCase(): ScriptedCase {
     reply: 'monday',
   });
   s.playback('planning', 'yes', { edit: (m) => (m.person.weekStart = 1), said: ['person.weekStart'] });
-  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct. Momentum talks to you that way.', reply: 'gentle' });
-  s.add({
-    topic: 'reminders',
-    edit: (m) => (m.settings.tone = 'gentle'),
-    question: 'Would you like reminders on the days you plan to do something?',
-    reply: 'no',
-  });
-  s.playback('talk', 'yes', { edit: (m) => (m.settings.reminders = 'off') });
+  // One tap on one row; the others are skipped and stay unset.
+  settingsCard(s, { tone: 'gentle' }, { tone: 'gentle' });
   s.final();
   return done(
     {
@@ -785,12 +785,11 @@ export const SETUP_CASES: ScriptedCase[] = [
   }),
   habitCase({
     id: 'run-b-habit-ideas',
-    title: 'a habit goal: the choice before examples, and asking about reminders',
-    rules: ['choice_before_examples', 'no_announced_reminder', 'one_question'],
+    title: 'a habit goal: the choice before examples',
+    rules: ['choice_before_examples', 'one_question'],
     idea: 'I want to run more.',
     floor: 'ideas',
     dayEnd: 'checkin',
-    reminders: true,
     counted: RUNS,
   }),
   habitCase({
@@ -856,12 +855,11 @@ export const SETUP_CASES: ScriptedCase[] = [
   habitCase({
     id: 'run-i-what-do-you-mean-protected',
     title: 'the person asks "what do you mean?" at the crowd-out question: Claude explains with examples, and setup carries on',
-    rules: ['skip_answered', 'choice_before_examples', 'no_announced_reminder'],
+    rules: ['skip_answered', 'choice_before_examples'],
     idea: 'I want to run more. I run about 2 times a week now.',
     priorities: 'whatDoYouMean',
     floor: 'ideas',
     dayEnd: 'checkin',
-    reminders: true,
     counted: RUNS,
     ideasDetail: 'You said you run about 2 times a week now.',
   }),

@@ -239,7 +239,9 @@ describe('the provenance path forms in the prompt', () => {
   it('match every path in the finished eval drafts, which the validator already accepts', () => {
     for (const c of SETUP_CASES.filter((x) => x.expect === 'clean')) {
       const last = c.script[c.script.length - 1].draft;
-      for (const entry of last.said) expect(formOf(entry.path), `${c.id}: ${entry.path}`).toBeDefined();
+      // The time zone and the settings are recorded by the two cards code writes (lib/setup/cards.ts), never by Claude, so the prompt names
+      // no path for them.
+      for (const entry of last.said.filter((s) => !/^(person.timeZone|settings.[A-Za-z]+)$/.test(s.path))) expect(formOf(entry.path), `${c.id}: ${entry.path}`).toBeDefined();
     }
   });
 

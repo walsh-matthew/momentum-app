@@ -28,6 +28,7 @@ import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPO
 import { acceptsText } from '@/lib/setup/text';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
+import { answerCodeCard, codeCardOn } from './support/codeCards';
 import { elementsOffScreen } from './support/setupCards';
 import { e2eCase } from './support/setupConversation';
 import { scriptedModel } from '../helpers/setupScript';
@@ -133,7 +134,8 @@ async function nextCard(page: Page, previous: string | null): Promise<{ id: stri
 
 for (const [name, width] of Object.entries(WIDTHS)) {
   test.describe(`at ${width}px (${name})`, () => {
-    test.use({ viewport: { width, height: 900 }, ...(UTC_AHEAD ? { timezoneId: 'UTC' } : {}) });
+    // The phone's own zone is what the time zone card suggests (MOM-178): the scripted person's, or UTC in the case CI failed in.
+    test.use({ viewport: { width, height: 900 }, timezoneId: UTC_AHEAD ? 'UTC' : PERSON_ZONE });
     test.beforeEach(async ({ page }) => setBrowserClock(page));
 
     test('setup: a scripted conversation, approved part by part, saved once, and usable', async ({ page, context }) => {
@@ -159,6 +161,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       let reloaded = false;
       let keptAsIs = false;
       let askedMeaning = false;
+      // How many times Claude had been asked when each card appeared: a card code writes is never the answer to a call (MOM-178).
+      let requestsSeen = (await fakeLast()).setupRequests;
+      let cardsAnswered = 0;
 
       for (let k = 0; k < lines.length; k++) {
         // One question on screen, readable on a phone, with no machine date (MOM-111 findings 7 and 13).
@@ -180,7 +185,26 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         }
 
         const line = lines[k].say;
-        if (card.id === 'setup-playback') {
+        const codeCard = await codeCardOn(page);
+        const requestsNow = (await fakeLast()).setupRequests;
+        if (codeCard !== null) {
+          // MOM-178: the time zone card and the settings card are written by code the moment the part before them is approved, so the
+          // approval before each reached no model: the count of requests did not move.
+          expect(requestsNow, `the ${codeCard} card is not the answer to a Claude call`).toBe(requestsSeen);
+          expect(card.id).toBe('setup-question');
+          await expect(page.locator('[data-tone="main"]')).toHaveCount(1);
+          if (codeCard === 'zone') {
+            if (!UTC_AHEAD) await expect(page.locator('#setup-question')).toHaveText('Your phone is set to America/Denver (Denver). Is that your time zone?');
+          } else {
+            await expect(page.locator('#setup-question')).toHaveText('How should Momentum talk to you?');
+            await expect(page.getByText("Skip any you like. You can't change these after setup yet.")).toBeVisible();
+            await expect(page.locator('fieldset')).toHaveCount(4);
+            await expect(page.locator('[aria-pressed="true"]'), 'nothing is pre-selected').toHaveCount(0);
+            await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+          }
+          await answerCodeCard(page, codeCard, lines[k], PERSON_ZONE);
+          cardsAnswered += 1;
+        } else if (card.id === 'setup-playback') {
           // The Approve button sends its own sentence; the scripted person's "yes" must be an acceptance too.
           expect(acceptsText(line), 'the scripted person approves a playback').toBe(true);
           expect(acceptsText(APPROVE_TEXT)).toBe(true);
@@ -240,9 +264,11 @@ for (const [name, width] of Object.entries(WIDTHS)) {
             await send.click();
           }
         }
+        requestsSeen = (await fakeLast()).setupRequests;
         card = await nextCard(page, card.heading);
       }
 
+      expect(cardsAnswered, 'both cards code writes were on screen').toBe(2);
       expect(keptAsIs, 'a playback was approved with "Keep it as it is"').toBe(true);
       expect(askedMeaning, 'the person asked "What do you mean?" with its link').toBe(true);
 
@@ -250,6 +276,12 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       expect(card.id).toBe('setup-final');
       await cardIsReadable(page, width);
       await expect(page.getByText('Nothing is saved until you tap Save.')).toBeVisible();
+      await expect(page.getByText("You can't change these after setup yet. That's coming soon.")).toBeVisible();
+      await expect(page.getByText('Everything can be changed on your settings page.')).toHaveCount(0);
+      // How many times Claude was asked for this whole setup (MOM-178): counted by the fake model, which the spec's own run never pays.
+      const asked = (await fakeLast()).setupRequests - before;
+      test.info().annotations.push({ type: 'claude-requests', description: String(asked) });
+      console.log(`CLAUDE_REQUESTS_FIRST_SETUP=${asked}`);
       const log = await context.newPage();
       await log.goto('/log');
       await expect(log.getByText(/No targets yet/)).toBeVisible();

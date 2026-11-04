@@ -51,6 +51,7 @@ import 'server-only';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { checkTurn, onlyPlainWords, type Violation, type ViolationCode } from '@/lib/setup/checks';
+import { cardStep, cardViolations } from '@/lib/setup/cardTurns';
 import { dateStep, normalizeDateTurn } from '@/lib/setup/codeTurns';
 import { convertHourAnswers, normalizeNumberTurn } from '@/lib/setup/numbers';
 import { OUTPUT_FEEDBACK, failingPaths, retryFeedback, shapeFeedback, shapeIssuesForLog, unsaidNumberFields } from '@/lib/setup/feedback';
@@ -133,6 +134,9 @@ const failed = (why: keyof typeof SETUP_FAILURE_MESSAGES, rejected: number): Set
 const TurnRequestSchema = SetupSessionSchema.extend({
   today: SuggestedDateSchema.optional(),
   locale: PersonLocaleSchema.optional().catch(undefined),
+  // The zone the person's phone reports: only ever offered back to them as a suggestion to tap (lib/setup/cards.ts). One that is not
+  // a usable value is dropped, never a reason to refuse the turn.
+  timeZone: z.string().min(1).max(64).optional().catch(undefined),
 });
 
 const SavedCountsSchema = z.object({ goals: z.number().int(), targets: z.number().int() });
@@ -247,14 +251,14 @@ export async function takeSetupTurn(raw: unknown, deps: SetupDeps = {}): Promise
   const deadlineMs = nowMs() + SETUP_TURN_BUDGET_MS;
   const parsed = TurnRequestSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: BAD_REQUEST };
-  const { today, locale, ...session } = parsed.data;
+  const { today, locale, timeZone, ...session } = parsed.data;
   const last = session.transcript[session.transcript.length - 1];
   // Claude speaks first, and then only after the person has: anything else has nothing to answer.
   if (last !== undefined && last.role !== 'person') return { ok: false, error: BAD_REQUEST };
 
   const user = await signedInUserId();
   if (!user.ok) return user;
-  return { ok: true, data: await runCheckedTurn({ userId: user.data.userId, session, today, locale, deadlineMs }, deps) };
+  return { ok: true, data: await runCheckedTurn({ userId: user.data.userId, session, today, locale, deviceZone: timeZone, deadlineMs }, deps) };
 }
 
 export interface CheckedTurnInput {
@@ -263,6 +267,8 @@ export interface CheckedTurnInput {
   session: SetupSession;
   today?: string;
   locale?: string;
+  // The zone the person's phone reports (from the browser), offered back as the one suggestion on the time zone card.
+  deviceZone?: string;
   // When the turn must have answered by, on the deps clock.
   deadlineMs: number;
   // Set when the person has finished their first setup and is adding to it (MOM-132 part 2): the returning checks, the note Claude
@@ -282,6 +288,14 @@ export async function runCheckedTurn(input: CheckedTurnInput, deps: SetupDeps = 
   // The person's own today: their time zone's date once setup knows it, else their device's (MOM-111 finding 8). A person adding to a
   // finished setup has a saved time zone, which stays on the server (it is never put in the draft or sent to Claude).
   const personDay = personToday(session.draft.model.person.timeZone ?? addition?.savedTimeZone ?? null, today, new Date(nowMs()));
+
+  // The time zone card and the settings card (MOM-178) are written by code the moment the person approves the part before them, with
+  // no call. Never for a person adding to a finished setup: their zone and settings are saved already. The turn is checked like any
+  // other; one that failed would go to Claude instead.
+  if (addition === undefined) {
+    const card = cardStep(session.transcript, session.draft, input.deviceZone ?? null);
+    if (card && cardViolations(card, context).length === 0) return { kind: 'turn', turn: card, spentTokens: session.spentTokens, rejected: 0 };
+  }
 
   // An answer that is only a relative date ("Monday") or a length of time ("two months") is answered by code, with no call:
   // the date as a proposal, or the question again for a vague one. The turn is checked like any other; one that failed
@@ -579,7 +593,7 @@ export async function takeAddTurn(raw: unknown, deps: SetupDeps = {}): Promise<S
   const deadlineMs = nowMs() + SETUP_TURN_BUDGET_MS;
   const parsed = AddTurnRequestSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: BAD_REQUEST };
-  const { today, locale, addition: asked, ...session } = parsed.data;
+  const { today, locale, addition: asked, timeZone: _deviceZone, ...session } = parsed.data;
   const last = session.transcript[session.transcript.length - 1];
   if (last !== undefined && last.role !== 'person') return { ok: false, error: BAD_REQUEST };
 

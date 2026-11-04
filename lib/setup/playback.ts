@@ -361,6 +361,7 @@ export function renderFinal(model: SetupModel, options: PlaybackOptions = {}): s
   const hidden = counted.slice(shown.length).reduce((n, c) => n + c.things, 0);
   if (counted.length > shown.length) lines.push(hidden > 0 ? `And ${plural(hidden, 'more thing', 'more things')} to count.` : 'And more goals with nothing counted yet.');
   if (parked > 0) lines.push(`${plural(parked, 'goal', 'goals')} set aside for now, with a way back.`);
-  if (options.adding !== true) lines.push('Everything can be changed on your settings page.');
+  // MOM-114 has not built the page that changes these yet, so the line says so (owner, 2026-11-04).
+  if (options.adding !== true) lines.push("You can't change these after setup yet. That's coming soon.");
   return lines.slice(0, FINAL_MAX_LINES);
 }

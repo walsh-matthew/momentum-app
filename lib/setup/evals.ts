@@ -5,6 +5,8 @@
 
 import { AssistantTurnSchema, type AssistantTurn, type HardRuleId, type SetupDraft, type Transcript } from '@/types/setup';
 import { checkTurn, type Violation } from './checks';
+import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfQuestion, type SettingsAnswers } from './cards';
+import { cardStep, cardViolations } from './cardTurns';
 import { dateStep } from './codeTurns';
 import { emptyDraft } from './draft';
 import { SAVED_GOAL_KEY, returningDraft, type ReturningContext } from './returning';
@@ -14,6 +16,11 @@ export interface PersonLine {
   say: string;
   // false: this answer does not fit the question just asked, so the next turn must offer interpretations (rule 6).
   fits?: boolean;
+  // The settings card, which code writes (lib/setup/cards.ts): what the person taps on it. The card takes no typed words, so `say` is
+  // unused there. Nothing tapped leaves the setting unset.
+  settings?: SettingsAnswers;
+  // The time zone card: a different zone the person picks from the list. Without it, their answer is yes to the zone the card showed.
+  zone?: string;
 }
 
 export interface SetupEvalCase {
@@ -73,6 +80,8 @@ export interface RunSetupEvalOptions {
   // does (lib/setup/codeTurns.ts), and the model is not asked; a scripted model still has a turn at that position, which is
   // skipped. Without it, every turn is the model's.
   today?: string;
+  // The zone the person's phone reports, which the time zone card shows (null: it reports none). Default America/Denver.
+  deviceZone?: string | null;
 }
 
 export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, options: RunSetupEvalOptions = {}): Promise<EvalReport> {
@@ -93,17 +102,21 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
     ranOutOfPerson: false,
   };
 
+  const deviceZone = options.deviceZone === undefined ? 'America/Denver' : options.deviceZone;
   for (let index = 0; index < MAX_TURNS; index++) {
-    const step = dateStep(transcript, draft, options.today ?? c.today);
-    const byCode = step?.kind === 'turn';
-    const raw = step?.kind === 'turn' ? step.turn : await model({ transcript: [...transcript], draft, dateHint: step?.kind === 'hint' ? step.hint : undefined });
+    // The cards code writes (MOM-178), as the app does: never for a person adding to a finished setup, and only when the turn passes.
+    const card = returning ? null : cardStep(transcript, draft, deviceZone);
+    const cardOk = card !== null && cardViolations(card, { transcript: [...transcript], prevDraft: draft, personFits, returning }).length === 0;
+    const step = cardOk ? null : dateStep(transcript, draft, options.today ?? c.today);
+    const byCode = cardOk || step?.kind === 'turn';
+    const raw = cardOk ? card : step?.kind === 'turn' ? step.turn : await model({ transcript: [...transcript], draft, dateHint: step?.kind === 'hint' ? step.hint : undefined });
     const parsed = AssistantTurnSchema.safeParse(raw);
     if (!parsed.success) {
       report.malformed = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
       break;
     }
     const turn = parsed.data;
-    turns.push({ index, turn, violations: checkTurn(turn, { transcript: [...transcript], prevDraft: draft, personFits, returning }), byCode });
+    turns.push({ index, turn, violations: (cardOk ? cardViolations : checkTurn)(turn, { transcript: [...transcript], prevDraft: draft, personFits, returning }), byCode });
     transcript.push({ role: 'assistant', turn });
     draft = turn.draft;
     report.draft = draft;
@@ -120,7 +133,41 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
       ).issues;
       break;
     }
-    const line = options.reply ? options.reply(turn, index) : c.person[personAt++];
+    let line = options.reply ? options.reply(turn, index) : c.person[personAt++];
+    if (line && isTimeZoneCard(turn)) {
+      // The person's tap is applied to the draft here, as the screen does, so the model's next turn starts from a draft that holds it.
+      const shown = zoneOfQuestion(turn.question);
+      const picked = line.zone ?? shown;
+      const how = line.zone === undefined && shown !== null ? 'accepted' : 'said';
+      const next = picked === null ? null : answerTimeZone({ transcript: [...transcript], draft, spentTokens: 0 }, picked, how);
+      if (!next) {
+        report.malformed = 'the time zone card could not be answered';
+        break;
+      }
+      transcript.push(next.transcript[next.transcript.length - 1]);
+      draft = next.draft;
+      report.draft = draft;
+      personFits = line.fits;
+      continue;
+    }
+    if (line && isSettingsCard(turn)) {
+      // The settings card answered by taps, and the part played back by code at once: two more turns, no model.
+      const next = answerSettings({ transcript: [...transcript], draft, spentTokens: 0 }, line.settings ?? {});
+      if (!next) {
+        report.malformed = 'the settings card could not be answered';
+        break;
+      }
+      const [said, played] = next.transcript.slice(-2);
+      transcript.push(said);
+      if (played.role === 'assistant') {
+        index += 1;
+        turns.push({ index, turn: played.turn, violations: checkTurn(played.turn, { transcript: [...transcript], prevDraft: draft, personFits, returning }), byCode: true });
+        transcript.push(played);
+        draft = next.draft;
+        report.draft = draft;
+        line = options.reply ? options.reply(played.turn, index) : c.person[personAt++];
+      }
+    }
     if (!line) {
       report.ranOutOfPerson = true;
       break;

@@ -245,7 +245,8 @@ describe('every example question in a step summary passes the hard rules on its 
   const examples = SETUP_STEPS.flatMap((s) => s.examples.map((e) => ({ step: s.n, ...e })));
 
   it('has examples for every step that asks something', () => {
-    for (const s of SETUP_STEPS) expect(s.examples.length > 0, `step ${s.n}`).toBe(s.n !== 12);
+    // Step 11 is the screen's card (MOM-178), so Claude asks nothing in it, as in step 12.
+    for (const s of SETUP_STEPS) expect(s.examples.length > 0, `step ${s.n}`).toBe(s.n !== 11 && s.n !== 12);
   });
 
   it.each(examples)('step $step, $topic: "$question"', (e) => {
@@ -274,21 +275,21 @@ describe('rule 5: skip what is already answered', () => {
   it('stops asking a person fact that is already in the draft or was already asked', () => {
     expect(rules(checkSkipAnswered(turn({ topic: 'time_zone', question: 'Which time zone are you in?' }), ctx([], { prevDraft: answered })))).toEqual(['skip_answered']);
     const history: Transcript = [
-      asked({ topic: 'tone', question: 'How direct?' }),
+      asked({ topic: 'week_start', question: 'Which day does your week start on?' }),
       said('Gentle.'),
-      asked({ topic: 'reminders', question: 'Reminders?' }),
+      asked({ topic: 'day_end', question: 'When does your day end?' }),
       said('No.'),
     ];
-    expect(rules(checkSkipAnswered(turn({ topic: 'tone', question: 'How direct would you like me to be?' }), ctx(history)))).toEqual(['skip_answered']);
+    expect(rules(checkSkipAnswered(turn({ topic: 'week_start', question: 'Which day does your week start on?' }), ctx(history)))).toEqual(['skip_answered']);
   });
 
   // MOM-111: a person fact asked twice in a row stays rare. A follow-up straight after the reply passes only while the reply
   // has not settled it: once this turn records the fact, asking it again is a repeat.
   it('stops a one-value person fact asked again straight after the turn recorded it', () => {
-    const history: Transcript = [asked({ topic: 'tone', question: 'How direct?' }), said('Gentle.')];
+    const history: Transcript = [asked({ topic: 'week_start', question: 'Which day does your week start on?' }), said('Gentle.')];
     const recorded = emptyDraft();
-    recorded.model.settings.tone = 'gentle';
-    expect(rules(checkSkipAnswered(turn({ topic: 'tone', question: 'How direct would you like me to be?', draft: recorded }), ctx(history)))).toEqual(['skip_answered']);
+    recorded.model.person.weekStart = 1;
+    expect(rules(checkSkipAnswered(turn({ topic: 'week_start', question: 'Which day does your week start on?', draft: recorded }), ctx(history)))).toEqual(['skip_answered']);
   });
 
   it('lets a one-value person fact be explained after "what do you mean?", while the draft still lacks it', () => {
@@ -296,7 +297,7 @@ describe('rule 5: skip what is already answered', () => {
     expect(checkSkipAnswered(turn({ topic: 'day_end', say: 'I mean when you usually wrap up.', question: 'When do you usually wrap up for the day?' }), ctx(history))).toEqual([]);
   });
 
-  it.each(['priorities', 'day_types', 'quiet_times', 'capacity', 'idea', 'breakup'] as const)(
+  it.each(['priorities', 'day_types', 'planning_moment', 'capacity', 'idea', 'breakup'] as const)(
     'lets a follow-up on "%s" through straight after the reply, even once the draft holds an answer',
     (topic) => {
       const history: Transcript = [asked({ topic, question: 'What else matters to you?' }), said('Family')];
@@ -326,8 +327,8 @@ describe('rule 5: skip what is already answered', () => {
   });
 
   it('allows a clarifying turn on the topic just asked', () => {
-    const history: Transcript = [asked({ topic: 'tone', question: 'How direct?' }), said('Whatever')];
-    expect(checkSkipAnswered(turn({ kind: 'interpretations', topic: 'tone', options: ['a', 'b'], question: 'Which one?' }), ctx(history))).toEqual([]);
+    const history: Transcript = [asked({ topic: 'week_start', question: 'Which day does your week start on?' }), said('Whatever')];
+    expect(checkSkipAnswered(turn({ kind: 'interpretations', topic: 'week_start', options: ['a', 'b'], question: 'Which one?' }), ctx(history))).toEqual([]);
   });
 
   // Production, MOM-111: "Is getting in shape one goal, or several?" / "2 goals" / "What are the two goals?" was thrown

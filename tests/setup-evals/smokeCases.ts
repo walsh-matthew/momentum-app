@@ -23,7 +23,7 @@ import type { SetupEvalCase } from '@/lib/setup/evals';
 import { PROPOSAL_YES_TEXT } from '@/lib/setup/session';
 import { DAY_END_SAY } from '@/lib/setup/steps';
 import { Script, goal, goalOf, item, target, targetOf } from '../helpers/setupScript';
-import type { ScriptedCase } from './cases';
+import { settingsCard, timeZoneCard, zoneWrites, DEVICE_ZONE, type ScriptedCase } from './cases';
 
 // A Tuesday. The coming Monday is 2026-11-02.
 export const SMOKE_TODAY = '2026-10-27';
@@ -114,23 +114,25 @@ function phonePaths(src: PhoneSource): ScriptedCase {
     },
     said: ['goals.g1.targets.t1.aspiration'],
   });
+  // Their phone's time zone, asked by code the moment they approve what they count (MOM-178).
+  timeZoneCard(s, 'America/Los_Angeles');
   s.add({
     topic: 'expansion',
+    ...zoneWrites('America/Los_Angeles', true),
     question: 'What should happen to this goal when life gets in the way?',
     detail: "Say you're sick or work gets busy: it could pause, drop to your minimum, or keep going as planned.",
     reply: 'no setback plan',
   });
   s.add({ topic: 'source', question: SOURCE_Q, detail: SOURCE_DETAIL, reply: src.reply });
   s.add({
-    topic: 'time_zone',
+    topic: 'day_end',
     // One target, two sources: Hevy for the lifts and the person's own logging for the runs, with no label of which is which.
     edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'synced', provider: 'hevy', metric: null }, { kind: 'manual' }]),
     say: src.say,
-    question: 'Which time zone are you in?',
-    detail: 'Your days start and end where you are.',
-    reply: 'America/Los_Angeles.',
+    detail: DAY_END_SAY,
+    question: 'When does your day end?',
+    reply: 'Around 9 at night.',
   });
-  s.add({ topic: 'day_end', edit: (m) => (m.person.timeZone = 'America/Los_Angeles'), say: DAY_END_SAY, question: 'When does your day end?', reply: 'Around 9 at night.' });
   s.add({
     topic: 'week_start',
     edit: (m) => (m.person.dayEnd = '21:00'),
@@ -139,8 +141,7 @@ function phonePaths(src: PhoneSource): ScriptedCase {
     reply: 'Monday.',
   });
   s.playback('planning', 'Yes.', { edit: (m) => (m.person.weekStart = 1), said: ['person.weekStart'] });
-  s.add({ topic: 'tone', question: 'How direct would you like me to be?', detail: 'Anywhere from gentle to direct.', reply: 'Gentle, please.' });
-  s.playback('talk', 'Yes.', { edit: (m) => (m.settings.tone = 'gentle') });
+  settingsCard(s, { tone: 'gentle' }, { tone: 'gentle' });
   s.final();
   return done({ id: src.id, title: src.title, rules: ['assume_nothing', 'no_math', 'choice_before_examples'], expect: 'clean', today: SMOKE_TODAY }, s);
 }

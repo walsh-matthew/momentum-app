@@ -9,6 +9,7 @@ import { changeLine } from '@/components/review/wording';
 import { emptyDraft } from '@/lib/setup/draft';
 import { amount, amountOf, dayKindWords, renderPlayback } from '@/lib/setup/playback';
 import { recapSections } from '@/lib/setup/quickRecap';
+import { SETTINGS_ROWS } from '@/lib/setup/cards';
 import { SETUP_STEPS } from '@/lib/setup/steps';
 import { plainZoneName, zoneLine } from '@/lib/setup/timeZones';
 import { singularFirstWord, singularUnit, unitCount, unitFor } from '@/lib/utils/units';
@@ -214,11 +215,12 @@ describe('part 8: the time zone in plain words', () => {
   });
 });
 
-describe('part 11: the tone question runs gentle to direct', () => {
-  it('the example detail line is the approved one, and says nothing about "blunt"', () => {
-    const step = SETUP_STEPS.find((s) => s.id === 'how_momentum_talks');
-    const tone = step?.examples.find((e) => e.topic === 'tone');
-    expect(tone?.detail).toBe('Anywhere from gentle to direct. Momentum talks to you that way.');
-    expect(tone?.detail).not.toMatch(/blunt/i);
+describe('part 11: the tone row runs gentle to direct', () => {
+  it('is the approved question and reason, with the choices in order, and says nothing about "blunt"', () => {
+    const tone = SETTINGS_ROWS.find((r) => r.topic === 'tone');
+    expect(tone?.question).toBe('How direct should Momentum be?');
+    expect(tone?.reason).toBe('Your progress and weekly look-back are worded that way.');
+    expect(tone?.choices.map((c) => c.label)).toEqual(['Gentle', 'Plain', 'Direct']);
+    expect(JSON.stringify(tone)).not.toMatch(/blunt/i);
   });
 });

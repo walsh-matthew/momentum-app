@@ -353,7 +353,7 @@ describe('finding 5: the final recap names what is counted and the numbers, in w
       'Run more: at least 2 runs a week, aiming for 3.',
       'Read more: nothing is counted yet.',
       '1 goal set aside for now, with a way back.',
-      'Everything can be changed on your settings page.',
+      "You can't change these after setup yet. That's coming soon.",
     ]);
   });
 
