@@ -696,6 +696,13 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner's phone run (a "Thinking" pause after a tap).
 - **Led to:** The call map at the design stop of MOM-180 part B2, and tests in part B3 that list the exact Claude calls a scripted setup makes.
 
+### F-102 · 2026-11-05 · build tool
+- **Asked:** Short browser-only setup cases for the step cards (MOM-180 part B2).
+- **What went wrong:** A bulk text replace in the shared case file also removed a scripted reply from a different case (adding a goal), so 11 unit tests failed.
+- **Why:** The replace matched every identical line in the file, not only the one in the new case.
+- **Caught by:** The full unit test run, before the commit.
+- **Led to:** A fix this session (the reply restored, MOM-180). No new rule: the full run did its job.
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
