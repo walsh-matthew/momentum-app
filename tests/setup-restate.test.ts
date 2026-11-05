@@ -31,6 +31,11 @@ describe('restating the person\'s words', () => {
     ['because I want to', 'you want to'],
     ["It's good for me", "it's good for you"],
     ['The doctor said so', 'the doctor said so'],
+    // A thing wanted, not a clause (MOM-180 B3 review): "because more energy" read oddly.
+    ['more energy', 'you want more energy'],
+    ['More time with my kids', 'you want more time with your kids'],
+    ['less stress', 'you want less stress'],
+    ['Better sleep', 'you want better sleep'],
   ])('"%s" reads "%s" after "because"', (said, restated) => {
     expect(restate(said, 'clause')).toBe(restated);
   });

@@ -200,7 +200,7 @@ describe('playback is written by code, and the latest answer wins', () => {
     const turn = script[at];
     actions.ask.mockResolvedValueOnce(turnView(turn)).mockResolvedValueOnce(turnView(script[at + 1]));
     await start();
-    await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
+    await screen.findByRole('heading', { name: /your plan: did I get this right\?/i });
     // Every line of the playback is the code's rendering of the validated draft, its dates read against the device's today.
     for (const line of renderPlayback(turn.draft.model, 'targets', { today: deviceToday() })) {
       expect(screen.getByText(line.trim(), { exact: false })).toBeTruthy();
@@ -223,7 +223,7 @@ describe('playback is written by code, and the latest answer wins', () => {
 
     actions.ask.mockResolvedValueOnce(turnView(first)).mockResolvedValueOnce(turnView(changed));
     await start();
-    await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
+    await screen.findByRole('heading', { name: /your plan: did I get this right\?/i });
     expect(screen.getByText(`at least ${oldFloor}`, { exact: false })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
@@ -241,7 +241,7 @@ describe('changing your mind about changing something (production, 2026-10-29)',
     const at = script.findIndex((t) => t.kind === 'playback' && t.chunk === 'targets');
     actions.ask.mockResolvedValueOnce(turnView(script[at])).mockResolvedValueOnce(turnView(script[at + 1]));
     await start();
-    await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
+    await screen.findByRole('heading', { name: /your plan: did I get this right\?/i });
 
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
     const box = screen.getByLabelText('What would you like to change?') as HTMLTextAreaElement;
@@ -284,7 +284,7 @@ describe('changing your mind about changing something (production, 2026-10-29)',
     const at = script.findIndex((t) => t.kind === 'playback' && t.chunk === 'targets');
     actions.ask.mockResolvedValueOnce(turnView(script[at])).mockResolvedValueOnce(turnView(script[at + 1]));
     await start();
-    await screen.findByRole('heading', { name: /what you'll count: did I get this right\?/i });
+    await screen.findByRole('heading', { name: /your plan: did I get this right\?/i });
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
     fireEvent.change(screen.getByLabelText('What would you like to change?'), { target: { value: 'No changes' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send the change' }));

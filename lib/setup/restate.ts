@@ -109,7 +109,9 @@ export function restate(words: string, place: RestatePlace): string | null {
   let wants = false;
   if (place === 'clause') {
     text = text.replace(/^(because|cause|'cause|bc)\b,?\s*/i, '');
-    if (/^to\s/i.test(text)) {
+    // "To stay healthy" and "More energy" are things wanted, not reasons said as a clause, so they play back as "you want
+    // to stay healthy" and "you want more energy" (owner, MOM-180 B3 review, 2026-11-05: "because more energy" read oddly).
+    if (/^(to|more|less|fewer|better)\s/i.test(text)) {
       wants = true;
       text = lowerFirst(text);
     }
