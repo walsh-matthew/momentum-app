@@ -133,6 +133,8 @@ test.describe('the week cards at 390px', () => {
       }
 
       if (code !== null) {
+        // Since MOM-180 B2 the source question is a card code writes right after the time zone tap, so the count starts there; the person types the answer.
+        if (code === 'step' && /Where do you track/.test(heading)) before = await requests();
         await answerCodeCard(page, code, person, PERSON_ZONE);
         heading = await nextCard(page, heading);
         continue;

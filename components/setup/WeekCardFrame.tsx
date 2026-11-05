@@ -5,6 +5,7 @@ import { useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { explanationFor } from '@/lib/setup/explain';
 import { MEANING_TEXT } from '@/lib/setup/session';
+import type { SetupDraft } from '@/types/setup';
 import { WEEK_WORDS } from '@/lib/setup/weekCards';
 import { AnswerBox } from './AnswerBox';
 import { CARD_TEXT, CardLead } from './cardText';
@@ -17,8 +18,12 @@ interface WeekCardFrameProps {
   question: string;
   // Regular weight under it, when the card has a reason to give; null for none.
   detail?: string | null;
-  // Which family of cards this is, for a test and a screen reader: the week cards (MOM-179) or the goal cards (MOM-180).
-  card?: 'week' | 'goal';
+  // Which family of cards this is, for a test and a screen reader: the week cards (MOM-179), the goal cards (MOM-180 B1) or the step cards (B2).
+  card?: 'week' | 'goal' | 'step';
+  // The draft, for a card whose explanation carries the person's own counted thing (the number cards, lib/setup/numbers.ts).
+  draft?: SetupDraft;
+  // The person's today, for a number question about a deadline.
+  today?: string | null;
   // The card's own controls.
   children: ReactNode;
   // Nothing can be tapped while a reply is on its way.
@@ -30,9 +35,9 @@ interface WeekCardFrameProps {
 // What every week card shares (MOM-179): the question, an optional reason, the card's controls, and "Type your answer", which opens the
 // answer box and sends what the person writes to Claude, exactly as on any other question. "What does this mean?" sits beside it and shows
 // code's explanation of the topic in place, with no Claude call (MOM-180); the typed answer box still reaches Claude.
-export function WeekCardFrame({ topic, question, detail = null, card = 'week', children, busy, onType }: WeekCardFrameProps) {
+export function WeekCardFrame({ topic, question, detail = null, card = 'week', draft, today = null, children, busy, onType }: WeekCardFrameProps) {
   const [typing, setTyping] = useState(false);
-  const explanation = explanationFor(topic);
+  const explanation = explanationFor(topic, draft ?? null, today);
   const help = { explain: explanation?.text ?? null, askClaude: explanation?.askClaude ?? false, onAsk: () => onType(MEANING_TEXT) };
   return (
     <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4" data-card={card} data-topic={topic}>

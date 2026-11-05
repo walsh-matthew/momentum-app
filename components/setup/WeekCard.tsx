@@ -35,7 +35,7 @@ function DayEndControls({ busy, onAnswer }: Pick<WeekCardProps, 'busy' | 'onAnsw
     <div className="space-y-3">
       <PickTimeButton ariaLabel="Time your day ends" value={time} disabled={busy} onPick={setTime} />
       {tried && time === '' && <WeekCallout>{WHAT_TIME_DAY_ENDS}</WeekCallout>}
-      <SetupButton tone="main" busy={busy} onClick={tap}>
+      <SetupButton tone="main" size="answer" busy={busy} onClick={tap}>
         {WEEK_WORDS.useThisTime}
       </SetupButton>
     </div>
@@ -59,7 +59,7 @@ function PlanningControls({ turn, busy, onAnswer }: Pick<WeekCardProps, 'turn' |
       {left.time && <PickTimeButton ariaLabel="Time to plan" value={time} disabled={busy} onPick={setTime} />}
       {tried && missingDay && <WeekCallout>{WHICH_DAY}</WeekCallout>}
       {tried && missingTime && <WeekCallout>{WHAT_TIME}</WeekCallout>}
-      <SetupButton tone="main" busy={busy} onClick={tap}>
+      <SetupButton tone="main" size="answer" busy={busy} onClick={tap}>
         {WEEK_WORDS.next}
       </SetupButton>
     </div>

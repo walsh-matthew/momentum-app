@@ -18,6 +18,7 @@ import {
 import { SETTINGS_CARD_MARK, TIME_ZONE_CARD_MARK } from '@/lib/setup/cards';
 import { WEEK_CARD_MARK } from '@/lib/setup/weekCards';
 import { GOAL_CARD_MARK } from '@/lib/setup/goalCards';
+import { STEP_CARD_MARK } from '@/lib/setup/stepCards';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval, violationsOf } from '@/lib/setup/evals';
 import { RETRY_FEEDBACK, failingPaths, retryFeedback } from '@/lib/setup/feedback';
@@ -71,8 +72,8 @@ describe('the owner\'s phone paths (run-m-phone-paths)', () => {
 
   it('has code, not the model, answer "next week", "Monday" and "two months from now", with exactly the turns the script expects', async () => {
     const report = await runSetupEval(phone, scriptedModel(phone.script));
-    // The date turns (and, since MOM-178 and MOM-180, the cards code writes, which are not in this list: their words are in lib/setup/cards.ts).
-    const byCode = report.turns.filter((t) => t.byCode && t.turn.detail !== TIME_ZONE_CARD_MARK && t.turn.detail !== SETTINGS_CARD_MARK && t.turn.detail !== WEEK_CARD_MARK && !t.turn.detail?.startsWith(GOAL_CARD_MARK) && t.turn.kind !== 'playback');
+    // The date turns (and, since MOM-178 and MOM-180, the cards code writes, the step cards of B2 among them, which are not in this list: their words are in lib/setup/cards.ts).
+    const byCode = report.turns.filter((t) => t.byCode && t.turn.detail !== TIME_ZONE_CARD_MARK && t.turn.detail !== SETTINGS_CARD_MARK && t.turn.detail !== WEEK_CARD_MARK && !t.turn.detail?.startsWith(GOAL_CARD_MARK) && !t.turn.detail?.startsWith(STEP_CARD_MARK) && t.turn.kind !== 'playback');
     expect(byCode.map((t) => t.turn.question)).toEqual([PHONE_CODE_TURNS.askDay, PHONE_CODE_TURNS.start, PHONE_CODE_TURNS.stretch]);
     for (const t of byCode) expect(t.turn).toEqual(phone.script[t.index]);
     // The two cards are code's too: the time zone card the moment what counts is approved, the settings card the moment the planning is.
@@ -111,7 +112,7 @@ describe('the owner\'s phone paths (run-m-phone-paths)', () => {
   it('without the person\'s today, every turn is the model\'s', async () => {
     const report = await runSetupEval({ ...phone, today: undefined }, scriptedModel(phone.script));
     // Only the cards, which need no date: no date turn is code's.
-    expect(report.turns.filter((t) => t.byCode && t.turn.detail !== TIME_ZONE_CARD_MARK && t.turn.detail !== SETTINGS_CARD_MARK && t.turn.detail !== WEEK_CARD_MARK && !t.turn.detail?.startsWith(GOAL_CARD_MARK) && t.turn.kind !== 'playback')).toEqual([]);
+    expect(report.turns.filter((t) => t.byCode && t.turn.detail !== TIME_ZONE_CARD_MARK && t.turn.detail !== SETTINGS_CARD_MARK && t.turn.detail !== WEEK_CARD_MARK && !t.turn.detail?.startsWith(GOAL_CARD_MARK) && !t.turn.detail?.startsWith(STEP_CARD_MARK) && t.turn.kind !== 'playback')).toEqual([]);
   });
 });
 

@@ -22,7 +22,7 @@ export const EXPLANATIONS: Partial<Record<SetupTopic, string>> = {
   sequencing: 'Together means every goal is in your plan from the start. One first means the others wait until you bring them back.',
   parked_return: 'This is how a goal you set aside finds its way back into your plan.',
   priorities: 'These are the things in your life, besides this goal, that your plan should not crowd out.',
-  starting_point: 'This is where you are with it today. If none of the choices fit, say it in your own words.',
+  starting_point: 'If none of the choices fit, say it in your own words.',
   shape: 'Some goals keep going with no end date, some run until a date you set, and some have a deadline they must be done by.',
   start_date: 'This is the day your plan starts. You can give an earlier day if you already started.',
   end_date: 'This is the day your goal ends. Your plan runs up to it.',

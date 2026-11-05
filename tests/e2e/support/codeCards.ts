@@ -6,10 +6,11 @@ import { expect, type Page } from '@playwright/test';
 import { SETTINGS_ROWS, type SettingsAnswers } from '../../../lib/setup/cards';
 import { MEANING_LINK, MEANING_TEXT, TYPE_INSTEAD } from '../../../lib/setup/session';
 import { weekdayName } from '../../../lib/setup/playback';
+import type { NumbersAnswer } from '../../../lib/setup/stepCards';
 import type { WeekAnswer } from '../../../lib/setup/weekCards';
 import { FAKE_MODEL_PORT } from './localStack';
 
-export type CodeCard = 'zone' | 'settings' | 'week' | 'goal';
+export type CodeCard = 'zone' | 'settings' | 'week' | 'goal' | 'step';
 
 const setupRequests = async (): Promise<number> => ((await (await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}/__fake/last`)).json()) as { setupRequests: number }).setupRequests;
 
@@ -38,6 +39,9 @@ export interface CardLine {
   week?: WeekAnswer;
   // A goal card (MOM-180): the words of the person's tap ("It keeps going.", "8 weeks."). Without it, `say` is typed in the card's answer box.
   goal?: string;
+  // A step card (MOM-180 B2): the words of the tap ("A few goals.", "Something I do.", "I'll log it myself.", a picked day), or the number boxes. Without it, `say`
+  // is typed in the card's answer box.
+  step?: string | NumbersAnswer;
 }
 
 // The card on screen, if it is one of the two code writes.
@@ -46,6 +50,7 @@ export async function codeCardOn(page: Page): Promise<CodeCard | null> {
   if ((await page.locator('[data-card="settings"]').count()) > 0) return 'settings';
   if ((await page.locator('[data-card="week"]').count()) > 0) return 'week';
   if ((await page.locator('[data-card="goal"]').count()) > 0) return 'goal';
+  if ((await page.locator('[data-card="step"]').count()) > 0) return 'step';
   return null;
 }
 
@@ -72,6 +77,10 @@ export async function answerCodeCard(page: Page, card: CodeCard, line: CardLine,
   }
   if (card === 'goal') {
     await answerGoalButtons(page, line);
+    return;
+  }
+  if (card === 'step') {
+    await answerStepButtons(page, line);
     return;
   }
   await tapSettingsChoices(page, line);
@@ -155,4 +164,28 @@ export async function tapSettingsChoices(page: Page, line: CardLine): Promise<vo
     const label = row.choices.find((c) => c.value === value)?.label;
     if (label) await page.getByRole('button', { name: label, exact: true }).click();
   }
+}
+
+// What a tap says, as the button reads: "A few goals." is the button "A few goals", and the level card's two buttons are named for the choice, not the number.
+export function stepButtonLabel(say: string): string {
+  if (/is the least that counts\.$/.test(say)) return 'The least that counts';
+  if (/is what I'm aiming for\.$/.test(say)) return "What I'm aiming for";
+  return say.replace(/\.$/, '');
+}
+
+// A step card (MOM-180 B2) answered the way the scripted person does: by the tap or the number boxes when the line has them, else typed in the card's answer box.
+export async function answerStepButtons(page: Page, line: CardLine): Promise<void> {
+  const step = line.step;
+  if (step === undefined || line.say === MEANING_TEXT) {
+    await answerWeekCard(page, { ...line, week: undefined });
+    return;
+  }
+  if (typeof step === 'object') {
+    if (step.floor !== undefined) await page.locator('[data-field="floor"]').fill(step.floor);
+    if (step.aspiration !== undefined) await page.locator('[data-field="aspiration"]').fill(step.aspiration);
+    if (step.unit) await page.getByRole('button', { name: step.unit === 'minutes' ? 'Minutes' : 'Hours', exact: true }).click();
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    return;
+  }
+  await page.getByRole('button', { name: stepButtonLabel(step), exact: true }).click();
 }
