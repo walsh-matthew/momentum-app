@@ -22,12 +22,14 @@ import { checkDateLeadIn, checkOptionList, checkTurn } from '@/lib/setup/checks'
 import { DATE_TOPICS, normalizeDateTurn, showsDateAndAsks } from '@/lib/setup/codeTurns';
 import { emptyDraft } from '@/lib/setup/draft';
 import { RETRY_FEEDBACK } from '@/lib/setup/feedback';
+import { ASK_CLAUDE_TOPICS, explanationFor } from '@/lib/setup/explain';
 import { NUMBER_TOPICS, countedTarget, normalizeNumberTurn, numberHelp, numberQuestion } from '@/lib/setup/numbers';
 import { renderFinal } from '@/lib/setup/playback';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import {
   CHANGE_ANSWER,
   ERROR_COPY,
+  ASK_CLAUDE,
   MEANING_LINK,
   MEANING_TEXT,
   PICK_DATE,
@@ -135,7 +137,15 @@ describe('finding 1: a number question names the counted thing and whether it is
       expect(words.textContent).not.toMatch(/fewest|\baim\b/i);
       expect(words.textContent).toBe(numberHelp(draft, topic, TODAY));
     } else {
-      expect(onAnswer).toHaveBeenCalledWith(MEANING_TEXT);
+      // MOM-180: code's explanation of the topic, in place; "Still not clear? Ask Claude" only on a concept topic.
+      expect(onAnswer).not.toHaveBeenCalled();
+      expect(document.querySelector('[data-slot="help-explain"]')?.textContent).toContain(explanationFor(topic, draft, TODAY)?.text ?? '(none)');
+      const ask = screen.queryByRole('button', { name: ASK_CLAUDE });
+      expect(ask !== null).toBe(ASK_CLAUDE_TOPICS.has(topic));
+      if (ask) {
+        fireEvent.click(ask);
+        expect(onAnswer).toHaveBeenCalledWith(MEANING_TEXT);
+      }
     }
   });
 

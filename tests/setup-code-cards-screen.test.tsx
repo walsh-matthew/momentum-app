@@ -18,7 +18,8 @@ import { SETTINGS_SKIP_LINE, TIME_ZONE_ASK, answerTimeZone, timeZoneQuestion } f
 import { cardStep } from '@/lib/setup/cardTurns';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval } from '@/lib/setup/evals';
-import { setupStorageKey } from '@/lib/setup/session';
+import { EXPLANATIONS } from '@/lib/setup/explain';
+import { ASK_CLAUDE, setupStorageKey } from '@/lib/setup/session';
 import type { SetupSession } from '@/types/setup';
 import { SETUP_CASES } from './setup-evals/cases';
 import { scriptedModel } from './helpers/setupScript';
@@ -98,13 +99,18 @@ describe('the settings card', () => {
     for (const name of ['Gentle', 'Plain', 'Low-key', 'Medium', 'Big', 'One sitting']) expect(screen.getByRole('button', { name }).getAttribute('aria-pressed'), name).toBe('false');
   });
 
-  it('has nothing selected, one main button that is never dimmed, and no "What does this mean?" link', () => {
+  it('has nothing selected, one main button that is never dimmed, and a code-written "What does this mean?" under each row (MOM-180)', () => {
     card();
     expect(pressed()).toHaveLength(0);
     const next = screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement;
     expect(next.disabled).toBe(false);
     expect(document.querySelectorAll('[data-tone="main"]')).toHaveLength(1);
-    expect(screen.queryByText('What does this mean?')).toBeNull();
+    // One link for each of the four rows; each opens that row's words in place, with no Ask Claude link (a settings row is a simple topic).
+    const links = screen.getAllByRole('button', { name: 'What does this mean?' });
+    expect(links).toHaveLength(4);
+    fireEvent.click(links[0]);
+    expect(document.querySelector('[data-slot="help-explain"]')?.textContent).toBe(EXPLANATIONS.tone);
+    expect(screen.queryByRole('button', { name: ASK_CLAUDE })).toBeNull();
   });
 
   it('sends only what was tapped, one choice a row, and a second tap takes a choice back', () => {

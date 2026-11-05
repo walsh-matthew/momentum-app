@@ -101,6 +101,18 @@ export function numberHelp(draft: SetupDraft, topic: SetupTopic | null, today: s
   );
 }
 
+// "What does this mean?" under the question that asks which level a number the person gave is (MOM-180): the least that counts or what
+// they are aiming for, with their own counted thing. Null when the draft holds no target yet.
+export function numberLevelHelp(draft: SetupDraft, today: string | null): string | null {
+  const t = countedTarget(draft, 'floor');
+  if (!t) return null;
+  const thing = countedThing(t);
+  const due = dueWords(t, today);
+  return due
+    ? `The least that counts is how many ${thing} by ${due} would still count as on track. What you are aiming for is how many you are hoping for, if you want one.`
+    : `The least that counts is how many ${thing} would still count in a hard week: a week at it is still a good week. What you are aiming for is how many you are hoping for, if you want one.`;
+}
+
 // An idea button for a number names the counted thing (MOM-111 round 3d): "At least 2 a week" becomes "At least 2 workouts a
 // week", "Aiming for 3 a week" becomes "Aiming for 3 workouts a week". The thing goes right after the number, and only when
 // the button has none of its own and the number is followed by a period or a date ("a week", "by Friday, Nov 20", or

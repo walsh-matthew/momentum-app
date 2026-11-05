@@ -10,7 +10,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SetupConversation } from '@/components/setup/SetupConversation';
 import { renderFinal, renderPlayback } from '@/lib/setup/playback';
-import { APPROVE_TEXT, ERROR_COPY, MEANING_LINK, MEANING_TEXT, errorText, setupStorageKey } from '@/lib/setup/session';
+import { EXPLANATIONS } from '@/lib/setup/explain';
+import { APPROVE_TEXT, ASK_CLAUDE, ERROR_COPY, MEANING_LINK, MEANING_TEXT, errorText, setupStorageKey } from '@/lib/setup/session';
 
 // The error card's headline and line, as the alert reads them (round 3b, finding 6).
 const alertWords = (cause: keyof typeof ERROR_COPY): string => `${ERROR_COPY[cause].headline}${ERROR_COPY[cause].line ?? ''}`;
@@ -257,12 +258,19 @@ describe('changing your mind about changing something (production, 2026-10-29)',
 });
 
 describe('asking what a question means (MOM-111)', () => {
-  it('offers "Not sure what I mean?" on every question and sends "What do you mean?" as the person\'s answer', async () => {
+  it('answers "What does this mean?" with code\'s words, with no call, and sends "What do you mean?" only when the person types it', async () => {
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockResolvedValueOnce(turnView(script[1]));
     await start();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     expect((screen.getByLabelText('Your answer') as HTMLTextAreaElement).placeholder).toBe('Type your answer');
     fireEvent.click(screen.getByRole('button', { name: MEANING_LINK }));
+    // The first question is about the idea: a simple topic, so the explanation alone, and no call to Claude.
+    expect(screen.getByText(EXPLANATIONS.idea ?? '')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: ASK_CLAUDE })).toBeNull();
+    expect(actions.ask).toHaveBeenCalledTimes(1);
+    // The typed answer box still reaches Claude.
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: MEANING_TEXT } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(actions.ask).toHaveBeenCalledTimes(2));
     expect(sent(1).transcript.at(-1)).toEqual({ role: 'person', text: MEANING_TEXT });
   });

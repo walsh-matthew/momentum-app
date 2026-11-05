@@ -31,7 +31,7 @@ import { READING_CASE_ID, SETUP_CASES, type ScriptedCase } from '../setup-evals/
 import { goal, scriptedModel, target } from '../helpers/setupScript';
 import { expect, signUpAndConfirm, test } from './fixtures';
 import { FAKE_MODEL_PORT } from './support/localStack';
-import { answerCodeCard, codeCardOn, tapSettingsChoices } from './support/codeCards';
+import { answerCodeCard, askWhatItMeans, codeCardOn, tapSettingsChoices } from './support/codeCards';
 import { CARD, cardOf, cardTypes, elementsOffScreen, headingOf, sectionOf } from './support/setupCards';
 import { dateQuestionCase, e2eCase } from './support/setupConversation';
 
@@ -114,7 +114,7 @@ async function answer(page: Page, line: string): Promise<void> {
     return;
   }
   const yes = page.getByRole('button', { name: 'Yes', exact: true });
-  if (line === MEANING_TEXT) await page.getByRole('button', { name: MEANING_LINK }).click();
+  if (line === MEANING_TEXT) await askWhatItMeans(page);
   else if (line === PROPOSAL_YES_TEXT && (await yes.count()) > 0) await yes.click();
   else {
     if ((await page.getByLabel('Your answer').count()) === 0) await page.getByRole('button', { name: TYPE_INSTEAD }).click();

@@ -20,7 +20,7 @@ interface AnswerBoxProps {
   secondary?: { label: string; onClick: () => void };
   // "What does this mean?" under Send, small and muted (components/setup/HelpLink.tsx): code's own explanation, shown in
   // place, or a way to ask Claude.
-  help?: { explain?: string | null; onAsk?: () => void };
+  help?: { explain?: string | null; askClaude?: boolean; onAsk?: () => void };
   // Words already in the box when it opens: the person's last answer, put back to edit ("Change my answer").
   initialText?: string;
   // Focus the box as it opens, with any words in it selected, so a phone shows its keyboard (round 2, finding 13). The tap
@@ -113,7 +113,7 @@ export function AnswerBox({
           </SetupButton>
         )}
       </div>
-      {help && <HelpLink disabled={busy} explain={help.explain} onAsk={help.onAsk} />}
+      {help && <HelpLink disabled={busy} explain={help.explain} askClaude={help.askClaude} onAsk={help.onAsk} />}
     </form>
   );
 }

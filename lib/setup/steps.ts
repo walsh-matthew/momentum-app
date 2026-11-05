@@ -165,16 +165,10 @@ export const SETUP_STEPS: readonly SetupStep[] = [
     id: 'expansion',
     title: 'Expansion questions',
     summary:
-      'Ask a few questions that bring up things worth deciding now for this kind of goal, starting with what should happen to it when life gets in the way. Its detail may hold a few short examples; a list of suggested goals, numbers or steps still needs the offer of ideas first (rule 4).',
+      'Ask nothing here. Nothing reads or saves answers to extra questions about this kind of goal yet, so go straight on to the next step. Do not ask what should happen when life gets in the way.',
     reason: null,
-    examples: [
-      {
-        topic: 'expansion',
-        question: 'What should happen to this goal when life gets in the way?',
-        detail: "Say you're sick or work gets busy: it could pause, drop to your minimum, or keep going as planned.",
-      },
-    ],
-    topics: ['expansion'],
+    examples: [],
+    topics: [],
     playbackAfter: null,
   },
   {
@@ -340,7 +334,7 @@ export const SINGLE_VALUE_FACTS: ReadonlySet<SetupTopic> = new Set<SetupTopic>([
 
 // Topics the draft has no place for, so a skip of one cannot be checked against the draft. Such a skip is accepted once the
 // person has said something; the prompt tells Claude to skip only what they already told it.
-export const UNRECORDED_TOPICS: ReadonlySet<SetupTopic> = new Set<SetupTopic>(['starting_point', 'expansion']);
+export const UNRECORDED_TOPICS: ReadonlySet<SetupTopic> = new Set<SetupTopic>(['starting_point']);
 
 // Topics about the person, not a goal: asked once, on the first goal only (§2.2 step 10), so a second ask is a question
 // that should have been skipped (rule 5). Topics about a goal (its shape, dates, targets, floor, source) are asked again

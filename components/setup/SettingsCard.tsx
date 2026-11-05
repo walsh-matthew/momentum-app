@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { SETTINGS_HEADING, SETTINGS_NEXT, SETTINGS_SKIP_LINE, settingsRowsLeft, type SettingsAnswers, type SettingsRow } from '@/lib/setup/cards';
+import { explanationFor } from '@/lib/setup/explain';
 import type { SetupSettings } from '@/types/setup';
 import { AnswerChoice } from './AnswerChoice';
 import { CARD_TEXT, CardLead } from './cardText';
+import { HelpLink } from './HelpLink';
 import { SetupButton } from './SetupButton';
 
 interface SettingsCardProps {
@@ -39,6 +41,7 @@ export function SettingsCard({ settings, busy, onDone }: SettingsCardProps) {
         <fieldset key={row.topic} className="min-w-0 space-y-2">
           <legend className={`${CARD_TEXT.body} mb-1`}>{row.question}</legend>
           <p className={CARD_TEXT.note}>{row.reason}</p>
+          <HelpLink disabled={busy} explain={explanationFor(row.topic)?.text ?? null} />
           <div className="flex flex-col gap-2">
             {row.choices.map((choice) => (
               <AnswerChoice key={choice.value} disabled={busy} selected={chosen[row.topic] === choice.value} onClick={() => pick(row, choice.value)}>

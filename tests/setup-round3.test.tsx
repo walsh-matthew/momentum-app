@@ -30,6 +30,7 @@ import { FINAL_MAX_LINES, renderFinal } from '@/lib/setup/playback';
 import { SETUP_SYSTEM_PROMPT } from '@/lib/setup/prompt';
 import {
   CHANGE_ANSWER,
+  ASK_CLAUDE,
   MEANING_LINK,
   MEANING_TEXT,
   PICK_DATE,
@@ -42,6 +43,7 @@ import {
   errorText,
   type RetryCause,
 } from '@/lib/setup/session';
+import { ASK_CLAUDE_TOPICS, explanationFor } from '@/lib/setup/explain';
 import { SETUP_STEPS } from '@/lib/setup/steps';
 import type { AssistantTurn, SetupTopic, Transcript, TurnKind } from '@/types/setup';
 import { goal, item, target } from './helpers/setupScript';
@@ -306,8 +308,17 @@ describe('finding 4: the help link reads "What does this mean?" on every card', 
     if (typeIt) fireEvent.click(typeIt);
     expect(screen.getAllByRole('button', { name: 'What does this mean?' })).toHaveLength(1);
     expect(container.textContent).not.toContain('Not sure what I mean');
+    // MOM-180: the link shows code's explanation of the topic and makes no call; Claude is reached only through "Still not clear? Ask Claude",
+    // which shows on the concept topics alone (the shape topic here, for the kinds of card; the date topics have none).
     fireEvent.click(screen.getByRole('button', { name: 'What does this mean?' }));
-    expect(onAnswer).toHaveBeenCalledWith(MEANING_TEXT);
+    expect(onAnswer).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-slot="help-explain"]')?.textContent).toContain(explanationFor(t.topic)?.text ?? '(no explanation)');
+    const ask = screen.queryByRole('button', { name: ASK_CLAUDE });
+    expect(ask !== null).toBe(ASK_CLAUDE_TOPICS.has(t.topic as SetupTopic));
+    if (ask) {
+      fireEvent.click(ask);
+      expect(onAnswer).toHaveBeenCalledWith(MEANING_TEXT);
+    }
   });
 });
 

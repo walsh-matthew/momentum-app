@@ -16,7 +16,7 @@ import { renderFinal, renderPlayback } from '@/lib/setup/playback';
 import { optionsLead } from '@/lib/setup/optionsLead';
 import { recapSections } from '@/lib/setup/quickRecap';
 import { quickProps } from './helpers/quickPath';
-import { MEANING_LINK, MEANING_TEXT, PICK_DATE, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
+import { ASK_CLAUDE, MEANING_LINK, MEANING_TEXT, PICK_DATE, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import { SETUP_CHUNKS, type AssistantTurn, type TurnKind } from '@/types/setup';
 import { goal, item, target } from './helpers/setupScript';
 
@@ -99,10 +99,12 @@ describe('the question card, on every kind of asking turn (findings 1 to 3)', ()
     expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
   });
 
-  it('sends "What do you mean?" from the help link, and an answer\'s words from a tap', () => {
+  it('shows code\'s explanation from the help link, sends "What do you mean?" only from "Still not clear? Ask Claude", and an answer\'s words from a tap', () => {
     const onAnswer = vi.fn();
     render(<QuestionCard turn={forKind('interpretations')} busy={false} onAnswer={onAnswer} today={TODAY} />);
     fireEvent.click(screen.getByRole('button', { name: MEANING_LINK }));
+    expect(onAnswer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: ASK_CLAUDE }));
     fireEvent.click(screen.getByRole('button', { name: '2. Three a week' }));
     expect(onAnswer.mock.calls).toEqual([[MEANING_TEXT], ['Option 2']]);
   });

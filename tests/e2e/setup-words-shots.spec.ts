@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { CHANGE_PROMPT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, TYPE_INSTEAD } from '@/lib/setup/session';
 import { WIDTHS, expect, signUpAndConfirm, test } from './fixtures';
-import { answerCodeCard, codeCardOn, type CardLine } from './support/codeCards';
+import { answerCodeCard, askWhatItMeans, codeCardOn, type CardLine } from './support/codeCards';
 import { FAKE_MODEL_PORT } from './support/localStack';
 import { e2eCase } from './support/setupConversation';
 
@@ -59,7 +59,7 @@ async function answer(page: Page, card: { id: string }, line: string, person?: C
   }
   const yes = page.getByRole('button', { name: 'Yes', exact: true });
   if (line === MEANING_TEXT) {
-    await page.getByRole('button', { name: MEANING_LINK }).click();
+    await askWhatItMeans(page);
   } else if (line === PROPOSAL_YES_TEXT && (await yes.count()) > 0) {
     await yes.click();
   } else {

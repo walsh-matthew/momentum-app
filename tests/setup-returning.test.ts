@@ -82,7 +82,7 @@ describe('what a returning conversation starts from', () => {
     expect(skippedTopics('add_goal')).toEqual(SAVED_FACT_TOPICS);
     expect(skippedTopics('add_target')).toEqual([...SAVED_FACT_TOPICS, ...SAVED_GOAL_TOPICS]);
     // The questions a target still needs are not skipped.
-    for (const topic of ['target', 'role', 'floor', 'aspiration', 'source', 'metric', 'deadline_date', 'date_can_move', 'slots_or_quota', 'starting_point', 'expansion'] as const) {
+    for (const topic of ['target', 'role', 'floor', 'aspiration', 'source', 'metric', 'deadline_date', 'date_can_move', 'slots_or_quota', 'starting_point'] as const) {
       expect(skippedTopics('add_target')).not.toContain(topic);
     }
     // Neither mode skips "planning_moment" by accident of the lists: it is a saved fact.

@@ -15,7 +15,8 @@ import { SetupConversation } from '@/components/setup/SetupConversation';
 import { WeekCard } from '@/components/setup/WeekCard';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval } from '@/lib/setup/evals';
-import { MEANING_TEXT, setupStorageKey } from '@/lib/setup/session';
+import { EXPLANATIONS } from '@/lib/setup/explain';
+import { ASK_CLAUDE, MEANING_TEXT, setupStorageKey } from '@/lib/setup/session';
 import { DAY_END_SAY } from '@/lib/setup/steps';
 import { weekCard, type WeekAnswer, type WeekCardTopic } from '@/lib/setup/weekCards';
 import type { AssistantTurn, SetupDraft, SetupModel, SetupSession } from '@/types/setup';
@@ -290,10 +291,26 @@ describe('every week card keeps a way to type', () => {
     });
   }
 
-  it('asks Claude what a question means from the box', () => {
+  it.each(['day_end', 'week_start', 'capacity', 'slots_or_quota', 'planning_moment'] as const)(
+    'explains a %s card in code\'s words, with no call to Claude and no Ask Claude link (MOM-180)',
+    (topic) => {
+      const { onType, onAnswer } = show(topic, topic === 'capacity' ? withKinds : undefined);
+      fireEvent.click(screen.getByRole('button', { name: 'What does this mean?' }));
+      expect(document.querySelector('[data-slot="help-explain"]')?.textContent).toBe(EXPLANATIONS[topic]);
+      expect(screen.queryByRole('button', { name: ASK_CLAUDE })).toBeNull();
+      // The same link inside the typed answer box.
+      fireEvent.click(screen.getByRole('button', { name: 'Type your answer' }));
+      expect(screen.getAllByRole('button', { name: 'What does this mean?' })).toHaveLength(1);
+      expect(onType).not.toHaveBeenCalled();
+      expect(onAnswer).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still reaches Claude from the typed box, so nobody is trapped', () => {
     const { onType } = show('day_end');
     fireEvent.click(screen.getByRole('button', { name: 'Type your answer' }));
-    fireEvent.click(screen.getByRole('button', { name: 'What does this mean?' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: MEANING_TEXT } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(onType).toHaveBeenCalledWith(MEANING_TEXT);
   });
 });

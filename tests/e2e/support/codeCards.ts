@@ -2,13 +2,32 @@
 // what counts is approved, and the settings card the moment the planning is. Neither asks Claude, so the scripted person's line for each is
 // what they tap, not what they type: a yes to the zone the phone reports (or another zone from the search), and the choices on the card.
 
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { SETTINGS_ROWS, type SettingsAnswers } from '../../../lib/setup/cards';
-import { MEANING_LINK, MEANING_TEXT } from '../../../lib/setup/session';
+import { MEANING_LINK, MEANING_TEXT, TYPE_INSTEAD } from '../../../lib/setup/session';
 import { weekdayName } from '../../../lib/setup/playback';
 import type { WeekAnswer } from '../../../lib/setup/weekCards';
+import { FAKE_MODEL_PORT } from './localStack';
 
 export type CodeCard = 'zone' | 'settings' | 'week';
+
+const setupRequests = async (): Promise<number> => ((await (await fetch(`http://127.0.0.1:${FAKE_MODEL_PORT}/__fake/last`)).json()) as { setupRequests: number }).setupRequests;
+
+// The scripted person who is not sure what a question means (MOM-180). "What does this mean?" shows code's explanation in place and makes
+// no call to Claude, so the count of the fake model's requests must not move; a simple topic has no "Still not clear? Ask Claude", so
+// the person who still wants Claude's words types the question in the card's answer box, which always reaches Claude.
+export async function askWhatItMeans(page: Page): Promise<void> {
+  const before = await setupRequests();
+  await page.getByRole('button', { name: MEANING_LINK }).click();
+  await expect(page.locator('[data-slot="help-explain"]')).toBeVisible();
+  expect(await setupRequests(), '"What does this mean?" makes no call to Claude').toBe(before);
+  if ((await page.getByLabel('Your answer').count()) === 0) {
+    const instead = page.getByRole('button', { name: TYPE_INSTEAD });
+    await (((await instead.count()) > 0 ? instead : page.getByRole('button', { name: 'Type your answer' })).first()).click();
+  }
+  await page.getByLabel('Your answer').fill(MEANING_TEXT);
+  await page.getByRole('button', { name: 'Send' }).click();
+}
 
 // What the scripted person gives each card (the eval case's person lines, lib/setup/evals.ts PersonLine).
 export interface CardLine {
@@ -59,7 +78,7 @@ export async function answerWeekCard(page: Page, line: CardLine): Promise<void> 
   if (!week) {
     await page.getByRole('button', { name: 'Type your answer' }).click();
     if (line.say === MEANING_TEXT) {
-      await page.getByRole('button', { name: MEANING_LINK }).click();
+      await askWhatItMeans(page);
       return;
     }
     await page.getByLabel('Your answer').fill(line.say);

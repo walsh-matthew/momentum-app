@@ -7,7 +7,7 @@
 // - run-m-phone-paths: the paths the owner took on the phone, end to end and clean: one goal, "physical fitness", a voice-to-
 //   text why ("wanna"), "next week" then "Monday" for the start date (code asks for the day, then proposes it), "any
 //   recommendations?" at the first stretch of a habit (a research-backed proposal) answered "two months from now" (round 2
-//   finding 7: code counts it from the start date and proposes whole weeks), floor 2 and aim 3, the setbacks question
+//   finding 7: code counts it from the start date and proposes whole weeks), floor 2 and aim 3, the setbacks question (no longer asked since MOM-180)
 //   (round 2 finding 10), and "Heavy for lifts and I'll log my runs myself" (round 2: voice-to-text for Hevy, and one target
 //   with a synced source and a manual one).
 // - run-m-apple-watch: the same, with "Hevy for lifts and my Apple Watch for runs": Hevy for lifts, the runs logged by hand,
@@ -116,14 +116,8 @@ function phonePaths(src: PhoneSource): ScriptedCase {
   });
   // Their phone's time zone, asked by code the moment they approve what they count (MOM-178).
   timeZoneCard(s, 'America/Los_Angeles');
-  s.add({
-    topic: 'expansion',
-    ...zoneWrites('America/Los_Angeles', true),
-    question: 'What should happen to this goal when life gets in the way?',
-    detail: "Say you're sick or work gets busy: it could pause, drop to your minimum, or keep going as planned.",
-    reply: 'no setback plan',
-  });
-  s.add({ topic: 'source', question: SOURCE_Q, detail: SOURCE_DETAIL, reply: src.reply });
+  // No expansion question is asked (DOMAIN_MODEL §2.2 step 8): the model goes straight to the source after the zone.
+  s.add({ topic: 'source', ...zoneWrites('America/Los_Angeles', true), question: SOURCE_Q, detail: SOURCE_DETAIL, reply: src.reply });
   s.add({
     topic: 'day_end',
     // One target, two sources: Hevy for the lifts and the person's own logging for the runs, with no label of which is which.

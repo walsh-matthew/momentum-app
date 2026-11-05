@@ -204,7 +204,7 @@ describe('rule 4: offer the choice before examples', () => {
   });
 
   // MOM-111: rule 4 narrowed. A few short examples inside any other question are fine; they are what made the tabletops clear.
-  it.each(['priorities', 'starting_point', 'breakup', 'target', 'role', 'day_types', 'expansion', 'tone'] as const)(
+  it.each(['priorities', 'starting_point', 'breakup', 'target', 'role', 'day_types', 'tone'] as const)(
     'lets a few short examples through in a "%s" question',
     (topic) => {
       expect(checkChoiceBeforeExamples(turn({ topic, question: 'What else matters to you, for example family time or your health?' }), ctx())).toEqual([]);
@@ -246,7 +246,7 @@ describe('every example question in a step summary passes the hard rules on its 
 
   it('has examples for every step that asks something', () => {
     // Step 11 is the screen's card (MOM-178), so Claude asks nothing in it, as in step 12.
-    for (const s of SETUP_STEPS) expect(s.examples.length > 0, `step ${s.n}`).toBe(s.n !== 11 && s.n !== 12);
+    for (const s of SETUP_STEPS) expect(s.examples.length > 0, `step ${s.n}`).toBe(s.n !== 8 && s.n !== 11 && s.n !== 12);
   });
 
   it.each(examples)('step $step, $topic: "$question"', (e) => {
