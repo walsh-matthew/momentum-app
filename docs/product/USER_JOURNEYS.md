@@ -1,4 +1,4 @@
-Template: Google critical user journeys · Last updated: 2026-11-02 (`main` at 64c9d84, after pull requests #82 to #117; third day-end step D of the day) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 34, listed at the end
+Template: Google critical user journeys · Last updated: 2026-11-04 (`main` at 016bd84, after pull requests #82 to #124; day-end step D covering Tue 2026-11-03 and Wed 2026-11-04) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 37, listed at the end
 
 # Momentum user journeys
 
@@ -203,11 +203,12 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 
 ### 5. Known gaps
 
-*Sources: Jira MOM-117, MOM-136, MOM-98; `docs/INTEGRATIONS_SPEC.md` §3D and §4; `components/integrations/ConnectionControls.tsx`.*
+*Sources: Jira MOM-117, MOM-136, MOM-98, MOM-182; `docs/INTEGRATIONS_SPEC.md` §3D and §4; `components/integrations/ConnectionControls.tsx`.*
 
 | Step | Gap |
 | --- | --- |
 | All | Gap 15 (no phone-run evidence) |
+| 2 Connect Hevy | Gap 43 (Hevy connects with a pasted key and needs Hevy Pro; account sign-in wherever offered is MOM-182) |
 | 3 Sync now | Gap 19 (the Sync control is on the Hevy card only) |
 | 3 Sync now | Gap 18 (no webhooks: MOM-98; sync happens only on a tap) |
 | 6 Unsupported app | Gap 16 (no "request this integration" control) |
@@ -262,7 +263,7 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 
 ### 5. Known gaps
 
-*Sources: Jira MOM-113, MOM-114, MOM-146, MOM-148; `app/settings/page.tsx`; `docs/plans/archive/2026-10-30.md` ("MOM-114 ships as 'defaults only' for the trial").*
+*Sources: Jira MOM-113, MOM-114, MOM-146, MOM-148, MOM-175; `app/settings/page.tsx`; `lib/config/privacy.ts`; `docs/plans/archive/2026-10-30.md` ("MOM-114 ships as 'defaults only' for the trial").*
 
 | Step | Gap |
 | --- | --- |
@@ -270,6 +271,7 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 | 1 See the notice | Gap 2 (MOM-148: `/review` has no navigation link of its own) |
 | 4 Decide the adjustment | Gap 21 (MOM-146: "change" edits a target's numbers only); Gap 27 (MOM-151: the review still says "floor" and "aspiration" in places) |
 | 2 Read the recap | Gap 22 (**Open settings** leads to a page with only Account and Appearance; MOM-114) |
+| 3 Ask for a one-line look back | Gap 44 (the privacy notice says "the tone you chose", but a skipped tone sends "middle"; MOM-175) |
 
 ## J5 See where I stand
 
@@ -319,11 +321,13 @@ MOM-110 is still To Do in Jira. Its five acceptance criteria are met on `main` e
 | --- | --- |
 | All | Gap 23 (no phone-run evidence) |
 | 1 Open home | Gap 35 (MOM-167 part 16: a goal's card does not open the goal) |
-| 4 Change what the forecast rests on | Gap 29 (MOM-138 follow-ups) |
+| 4 Change what the forecast rests on | Gap 29 (MOM-138 follow-ups); Gap 45 (`/plan/kinds` shows 20 minutes as 0.33 hours and saves 19.8 minutes back; MOM-162) |
 
 ## Open gaps
 
-*Sources: the sections above; `BACKLOG.md`; Jira MOM-110, MOM-111, MOM-114, MOM-132, MOM-138, MOM-146, MOM-151, MOM-159, MOM-160, MOM-161, MOM-162, MOM-163, MOM-166, MOM-167, MOM-168, MOM-169, MOM-170, MOM-171, MOM-172, MOM-173, MOM-174, MOM-175.*
+*Sources: the sections above; `BACKLOG.md`; Jira MOM-110, MOM-111, MOM-114, MOM-132, MOM-138, MOM-146, MOM-151, MOM-159, MOM-160, MOM-161, MOM-162, MOM-163, MOM-166, MOM-167, MOM-168, MOM-169, MOM-170, MOM-171, MOM-172, MOM-173, MOM-174, MOM-175, MOM-176, MOM-177, MOM-178, MOM-179, MOM-180, MOM-182.*
+
+Stale: Gaps 37 and 39 say "before the freeze" and Gap 41 waits on a test; at the 2026-11-04 day-end MOM-170, MOM-172 and MOM-174 were carried to after the trial, unbuilt (Jira comments 2026-11-04).
 
 Gap numbers stay as first assigned, so a number that is missing below was closed (listed under the gaps).
 
@@ -361,5 +365,8 @@ Gap numbers stay as first assigned, so a number that is missing below was closed
 40. J1 steps 2 and 6: one bumpy setup can use a tester's whole daily allowance, because every try counts toward the per-person cap of 100 calls in 24 hours (up to 3 per turn, resends, Try again); the standing smoke-test account reached it on 2026-11-02 (100 calls, 96 ok). For the trial the cap stays at 100 and retries still count (owner); the design comes after the trial (MOM-173, `risk`). The quick path card now says when Claude is back ("You can use Claude for setup again after about 9:15 AM.", in the saved time zone, else the phone's own, else "in about N hours"; MOM-177). When the stop is a limit that lifts, the "Can't be answered here" callout says to come back to this tab after that time, reload and tap Send it again (what was said is kept in the tab, which a browser test checks across a reload); it no longer says "these last answers finish it" when nothing on the card can be answered.
 41. J1 step 2: a date given with the wrong weekday ("Thursday, Dec 25", a Friday in 2026) must be asked back with both readings, never silently picked; not yet tested (MOM-174).
 42. J1 step 2: extra detail inside an answer was not used: the first answer "I want to run three days a week" lost its target and its 3, and the recap said a thing to count was missing. Fixed in PR #117 (replay tests, eval cases `run-n-compound-answer` and `run-o-first-answer-holds-target`); open until the owner's phone recheck passes (MOM-168). Its follow-ups are MOM-175.
+43. J3 step 2: Hevy connects with a pasted key and needs Hevy Pro; Hevy appears to offer no account sign-in (unverified, a web search on 2026-11-04). The rule is account sign-in wherever a provider offers it; next, ask Hevy about partner access, or else a guided key step that says "Hevy Pro needed" up front (MOM-182).
+44. J4 step 3: the review line's privacy notice says "the tone you chose", but since MOM-178 a person can skip the tone, and then "middle" is sent (MOM-175).
+45. J5 step 4: `/plan/kinds` edits a kind of day's time in hours to 2 decimals, so 20 minutes saved by setup shows as 0.33 and is saved back as 19.8 minutes if left as it is (MOM-162, from MOM-179).
 
 **Closed since the first fill.** Gap 2's header and Sign out (MOM-148, PR #89); Gap 4, adding a goal or target after setup (MOM-132, PRs #94 and #99); Gap 5, the quick path that made a person start again (MOM-111, PR #87); Gap 24, the older feed below the scoreboard (MOM-115, PR #88); Gap 25, updates beside "Saving…" (MOM-147, PR #93); Gap 30, the sign-in and sign-up words (MOM-163; the production resend window is 60 seconds, so "Wait a minute" stays); Gap 31, a deadline goal past its date (MOM-166, PR #111; the owner's production check passed on 2026-11-02); Gap 33, the "Check your email" card's way on, and the parts of Gap 32 that named the raw time zone id, "1 hours" and "gentle to blunt" (MOM-167 parts 8, 9, 11 and 15; the playback now reads "You're on Pacific Time.", a count of one reads "1 hour", the tone line runs gentle to direct); Gap 36, a request left hanging after an iPhone app switch (MOM-169 Closed: on the owner's check the next card came).

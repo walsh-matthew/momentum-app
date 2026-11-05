@@ -661,6 +661,41 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The owner's production setup on the standing smoke-test account.
 - **Led to:** A fix this session (PR #115: a replay test, `tests/setup-title-replay.test.ts`, whose fake model writes sentence-shaped plain entries; it fails 4 of 8 without the fix) and a rule: a fake model in a test must include the worst realistic output for the rule under test.
 
+### F-097 · 2026-11-03 · build tool (project thread)
+- **Asked:** Whether setup should ask for more than one answer at a time, to save Claude calls.
+- **What went wrong:** The advising thread said the "one question per turn" rule came from the phone tests. It came from setup tabletop run 2 (2026-10-25), which the design record cites.
+- **Why:** It named a source without reading the design record.
+- **Caught by:** The owner asked which test it came from.
+- **Led to:** A fix this session (the message was corrected).
+
+### F-098 · 2026-11-03 · build tool (project thread)
+- **Asked:** Options to cut the cost of setup's Claude calls.
+- **What went wrong:** "92% of a setup's cost is input" restated a 92% share of tokens as a share of cost. With output priced at 5 times input, input is about 71% of the cost.
+- **Why:** No price arithmetic was done before the share was called a cost.
+- **Caught by:** The thread itself, while ranking the options.
+- **Led to:** A fix this session, and the low-effort arm of MOM-156.
+
+### F-099 · 2026-11-04 · build tool (project thread)
+- **Asked:** A step-by-step test plan for the live app (test day 1).
+- **What went wrong:** Step J3 told the tester to change the day end and the week start in Settings, which is a stub page.
+- **Why:** The steps were written from the user-journeys doc without checking the pages in the code.
+- **Caught by:** The tester's run (J3 failed).
+- **Led to:** A rule: check every test step against the current code before handing the plan over.
+
+### F-100 · 2026-11-04 · build tool
+- **Asked:** A plain explanation for every setup card (MOM-180 part A).
+- **What went wrong:** 22 of the 31 explanations repeated words from their own card's subtitle or lead-in. The owner spotted 2 on the phone.
+- **Why:** Each explanation was written alone, with no check against the card text around it.
+- **Caught by:** The owner's phone run, then a full sweep of every card.
+- **Led to:** A fix this session (22 reworded, MOM-180) and a test that fails when an explanation shares 4 or more words in a row with its card.
+
+### F-101 · 2026-11-04 · build tool
+- **Asked:** The setup week questions as cards written by code (MOM-179).
+- **What went wrong:** A tap on the phone's time zone is answered by code, but the move to the next step still called Claude every time.
+- **Why:** Claude calls were checked step by step, not at the moves between steps.
+- **Caught by:** The owner's phone run (a "Thinking" pause after a tap).
+- **Led to:** The call map at the design stop of MOM-180 part B2, and tests in part B3 that list the exact Claude calls a scripted setup makes.
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).

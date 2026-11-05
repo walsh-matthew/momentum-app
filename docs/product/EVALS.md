@@ -1,4 +1,4 @@
-Template: AI eval plan with error-analysis loop · Last updated: 2026-11-02 (`main` at 64c9d84, after pull requests #82 to #117; third day-end step D of the day) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 10, listed at the end
+Template: AI eval plan with error-analysis loop · Last updated: 2026-11-04 (`main` at 016bd84, after pull requests #82 to #124; day-end step D covering Tue 2026-11-03 and Wed 2026-11-04) · Filled by: MOM-144 first fill, kept current by MOM-164 · Open gaps: 11, listed at the end
 
 # Momentum evals
 
@@ -99,6 +99,8 @@ Only rows with a source. A row says what went wrong, its category, and what it b
 
 *Sources: `npm test` run on `main` plus the MOM-164 branch on 2026-11-02, and on the day-end's stack (the remote main with MOM-165, MOM-163, MOM-120 and MOM-164 merged in that order); the second day-end's runs that day, on `main` at 52d65a5 and on the stack with MOM-166 and MOM-167 merged in that order; `BACKLOG.md` (setup live-run item and adding-to-goals follow-ups); `tests/live/setup-add.live.ts`; MOM-111 and MOM-132 comments 2026-10-29 to 2026-11-02.*
 
+Stale: the 2026-11-04 day-end's runs are not folded in below: on `origin/main` at 016bd84 with MOM-180 part A merged, 177 files and 5,729 tests passed; with part B1 on top, 182 files and 5,797. Scripted first setup, Claude calls: main 20, part A 20, B1 16 (MOM-180 comment 10359). No live run was made on Tue or Wed.
+
 - **Unit and component tests, my own run** (`main` at dd25ba0 with the MOM-164 branch): `npm test` passed, 158 test files and 5,252 tests, no network call. The 2026-11-02 day-end's stacked run (with MOM-165, MOM-163 and MOM-120): 160 files and 5,284 tests passed. The second day-end that day: `main` at 52d65a5, 160 files and 5,290 tests (5 of 5 full runs passed); with MOM-166, 161 files and 5,322 tests (22 setup cases); with MOM-166 and MOM-167, 165 files and 5,382 tests (3 of 3 full runs passed). The first fill's run was 113 files and 4,152 tests, on `main` at 7d30531; the 2026-10-30 update's was 130 files and 4,555 tests.
 - **Last live runs the repo records** (`BACKLOG.md`, setup live-run item): round 2 (20 turns, 24 calls), round 3 (19 turns, 20 calls) and round 3b (16 turns, 15 calls, stopped by its cap before the source answer). In each, every turn produced a usable reply; thrown-away replies were retried (7, 4 and 2).
 - **Newest live runs, on Jira only** (MOM-111 comment 2026-10-30): 19 turns and 21 calls; it reached both number cards and both ideas cards, and five replies were thrown away. The floor ideas card was shown after its plain-words retry still held `plain.unquoted_source`. MOM-132's live run of adding a target is on its Jira comments and summarised in `BACKLOG.md` (about 21 turns).
@@ -112,7 +114,7 @@ See the list below. The main ones: no simulated person and no three-model run ye
 
 ## Open gaps
 
-*Sources: the sections above; Jira MOM-166, MOM-168, MOM-175; `docs/FAILURE_LOG.md` F-096.*
+*Sources: the sections above; Jira MOM-156, MOM-166, MOM-168, MOM-175; `docs/FAILURE_LOG.md` F-096; PR #120.*
 
 1. There is no simulated person: the scripted stand-in answers by position, and a live run answers from the case's replies with a neutral filler when the case has none (`BACKLOG.md`, setup live-run item (a) and (c)).
 2. The 8 full cases have not been run on the setup model and on the two smaller models, and the smaller-model trial has not been run (`BACKLOG.md`, setup live-run item (a); design record §6.2 step 3).
@@ -124,3 +126,4 @@ See the list below. The main ones: no simulated person and no three-model run ye
 8. The adding conversations (MOM-132) have scripted cases and a live runner, but no recorded pass rate: the live run took about 21 turns and the model asked for items the script had no line for, so the scripted cases do not yet predict a live run (`BACKLOG.md`, "Setup, adding to goals"; `USER_JOURNEYS.md` Gap 28).
 9. The `math.number` rejections from the 2026-11-02 deadline run are unclassed (the log named no text); the next one will name the field that held the number. A lead-in that repeats a date the person accepted as a proposal ("Nov 20", for "next Friday") would trip `math.number`; not fixed, now MOM-175 (a). (Live Claude does get past "can the date move?": the owner's production check passed on 2026-11-02, closing that part of this gap and `USER_JOURNEYS.md` Gap 31.)
 10. The scripted fake model mostly writes the output each check hopes for. Since F-096 the rule is that a fake model in a test includes the worst realistic output for the rule under test; the title replay (PR #115), the deadline replay (MOM-166) and the extra-detail replay (MOM-168) do, but the older scripted cases have not been swept for it, so a check can still pass every scripted case and fail live.
+11. With prompt caching on (PR #120), only the pilot's live runner (`tests/live/setup-pilot.live.ts`) prices cache read and cache write; the other setup live runners estimate their stop-loss cost without cache tokens, so they undercount it (MOM-156, before its paid runs on Tue Nov 10).
