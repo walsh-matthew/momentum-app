@@ -390,8 +390,8 @@ describe('the order the cards are asked in', () => {
     };
     session = record(answerDayEnd(session, '21:00'));
     session = record(answerWeekStart(session, 1));
-    // Claude's turn: the kinds of days are recorded, and the next question is the time for each.
-    session = { ...session, transcript: [...session.transcript, { role: 'assistant', turn: { ...(weekCard('day_end', draftWith()) as AssistantTurn), topic: 'day_types', detail: null, draft: session.draft } }, { role: 'person', text: 'Busy days and easy days.' }] };
+    // Code asks the kinds of days in fixed words (MOM-180 B3); Claude reads the answer, records them, and the next question is the time for each.
+    session = { ...session, transcript: [...session.transcript, { role: 'person', text: 'Busy days and easy days.' }] };
     const named = structuredClone(session.draft);
     withKinds(named.model);
     const card = weekCard('capacity', named) as AssistantTurn;
@@ -399,7 +399,7 @@ describe('the order the cards are asked in', () => {
     session = record(answerDayTimes(session, { 'busy days': { amount: '20', unit: 'minutes' }, 'easy days': { amount: '2', unit: 'hours' } }));
     session = record(answerSlots(session, { kind: 'days', weekdays: [1, 3, 5] }));
     session = record(answerPlanning(session, { weekday: 7, time: '18:00' }));
-    expect(topics).toEqual(['week_start', 'claude', 'slots_or_quota', 'planning_moment', 'playback:planning']);
+    expect(topics).toEqual(['week_start', 'day_types', 'slots_or_quota', 'planning_moment', 'playback:planning']);
     expect(issuesOf(session)).toEqual([]);
   });
 });
@@ -515,9 +515,9 @@ describe('the server and the whole first setup', () => {
     expect(report.turns.flatMap((t) => t.violations)).toEqual([]);
     const topics = report.turns.filter((t) => t.turn.detail === WEEK_CARD_MARK).map((t) => t.turn.topic);
     expect(topics).toEqual(['day_end', 'week_start', 'capacity', 'slots_or_quota', 'planning_moment']);
-    // The kinds of days are the one question left to Claude, and the planning playback is code's.
+    // The kinds of days are the one answer left to Claude; code asks the question in fixed words (MOM-180 B3), and the planning playback is code's.
     const step10 = report.turns.filter((t) => ['day_types'].includes(t.turn.topic ?? ''));
-    expect(step10.map((t) => t.byCode)).toEqual([false]);
+    expect(step10.map((t) => t.byCode)).toEqual([true]);
     expect(report.turns.filter((t) => t.turn.kind === 'playback' && t.turn.chunk === 'planning').map((t) => t.byCode)).toEqual([true]);
     const draft = report.draft.model.person;
     expect(draft).toMatchObject({ dayEnd: '21:00', weekStart: 1, planning: { weekday: 7, time: '18:00' } });
@@ -530,10 +530,10 @@ describe('the server and the whole first setup', () => {
     const typed = await run({ ...WEEK_CARDS_CASE, person: WEEK_CARDS_CASE.person.map(({ week: _week, ...line }) => line) });
     expect(typed.report.finished).toBe(true);
     expect(typed.report.finalIssues).toEqual([]);
-    // Day end, week start, kinds of days, time, set days, when to plan, and the planning playback, each a call; against the day end, the kinds
-    // of days, and the time (the first and last are swapped for a card on the way out).
-    expect(typed.calls - cards.calls).toBe(4);
-    expect(cards.calls).toBe(typed.calls - 4);
+    // Day end, week start, kinds of days, time, set days, when to plan, and the planning playback, each a call; against the day end and the kinds
+    // of days' answer (the day end is swapped for a card on the way out, and code asks the kinds of days in fixed words since MOM-180 B3).
+    expect(typed.calls - cards.calls).toBe(5);
+    expect(cards.calls).toBe(typed.calls - 5);
   });
 
   it('puts the day end card in place of Claude\'s question with no further call, and writes nothing for a card the draft has answered', async () => {

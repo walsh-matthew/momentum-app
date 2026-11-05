@@ -1,4 +1,4 @@
-// MOM-180 parts B1 and B2: how many times Claude is asked in one whole first setup, counted by the eval runner with the scripted model (no paid call). The
+// MOM-180 parts B1, B2 and B3: how many times Claude is asked in one whole first setup, counted by the eval runner with the scripted model (no paid call). The
 // same case is run for the person who taps the cards and for the same person typing every answer. The same file and cases run on main (after B1) to give its
 // counts: set TURN_COUNT_OUT to a path prefix and each case writes `<prefix>.<case id>.json` instead of pinning the count.
 //   GOAL_CARDS_CASE (B1): two goals, every goal step the goal cards cover, then the week questions as cards.
@@ -22,9 +22,10 @@ const run = async (c: typeof GOAL_CARDS_CASE) => {
   return { report, calls };
 };
 
-// Measured 2026-11-05 on these same cases. GOAL_CARDS_CASE: main (after B1) 16; this branch 15, because the time zone tap is followed by the source card, which
-// code writes, instead of a question of Claude's. STEP_CARDS_CASE: this branch 13 tapping (see the close-out for main's count of the same conversation).
-const PINNED: Record<string, number> = { [GOAL_CARDS_CASE.id]: 15, [STEP_CARDS_CASE.id]: 13 };
+// Measured 2026-11-05 on these same cases. GOAL_CARDS_CASE: main (after B1) 16; B2 15, because the time zone tap is followed by the source card, which
+// code writes, instead of a question of Claude's. STEP_CARDS_CASE: B2 13 tapping. B3 (code writes the idea and why, the three fixed questions, the goals and
+// targets playbacks and the final card): 9 and 5. Each call is listed in tests/setup-exact-calls.test.ts.
+const PINNED: Record<string, number> = { [GOAL_CARDS_CASE.id]: 9, [STEP_CARDS_CASE.id]: 5 };
 
 describe.each([GOAL_CARDS_CASE, STEP_CARDS_CASE])('how many times Claude is asked in the extended first setup: $id', (c) => {
   it('reaches the end, clean, and counts the calls', async () => {

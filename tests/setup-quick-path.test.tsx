@@ -29,6 +29,7 @@ import type { QuickPathReason, QuickPathState, QuickStep, SetupTurnView } from '
 import { SETUP_CASES } from './setup-evals/cases';
 import { WEEKDAY_CHOICES, item, quickProps, section, step, type CardProps } from './helpers/quickPath';
 import { scriptedModel } from './helpers/setupScript';
+import { throughOpening } from './helpers/setupOpening';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const KEY = setupStorageKey(USER);
@@ -650,6 +651,7 @@ describe('"your answers stay in this tab and setup picks up where it stopped": p
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockResolvedValueOnce(limitView('shared_cap'));
     render(<SetupConversation userId={USER} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+    await throughOpening();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Run more' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -658,8 +660,9 @@ describe('"your answers stay in this tab and setup picks up where it stopped": p
     await screen.findByRole('heading', { name: TOP });
     expect(screen.getAllByText(QUICK_PATH_WORDS.reasonWait)).toHaveLength(1);
     const stored: SetupSession = JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null');
-    expect(stored.transcript).toHaveLength(2);
-    expect(stored.transcript[1]).toEqual({ role: 'person', text: 'Run more' });
+    // Code's idea and why questions and their answers come first (MOM-180 B3).
+    expect(stored.transcript).toHaveLength(6);
+    expect(stored.transcript[5]).toEqual({ role: 'person', text: 'Run more' });
     expect(stored.draft).toEqual(script[0].draft);
 
     // The reload: nothing of the page survives but this tab's storage.
@@ -681,13 +684,14 @@ describe('"your answers stay in this tab and setup picks up where it stopped": p
     expect(sentSession.transcript).toEqual(stored.transcript);
     expect(sentSession.draft).toEqual(stored.draft);
     expect(sentSession.spentTokens).toBe(stored.spentTokens);
-    await waitFor(() => expect((JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null') as SetupSession).transcript).toHaveLength(3));
+    await waitFor(() => expect((JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null') as SetupSession).transcript).toHaveLength(7));
   });
 
   it('a spent budget is the same card after a reload, and it is the question-limit line, not the wait line', async () => {
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockResolvedValue(limitView('over_turns'));
     render(<SetupConversation userId={USER} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+    await throughOpening();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Run more' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));

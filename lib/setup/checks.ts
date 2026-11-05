@@ -24,6 +24,7 @@ import {
 } from '@/types/setup';
 import { unsaidActivities } from './activities';
 import { SETTINGS_CARD_MARK, SETTINGS_ROWS, UNUSED_SETTING_TOPICS } from './cards';
+import { asksFixedAgain } from './fixedQuestions';
 import { IN_PASSING_TOPICS, answeredTopics, changedLeafPaths, chunkSlice, freeTextLeaves } from './leaves';
 import { FINAL_MAX_LINES, renderFinal } from './playback';
 import { answerWords, latestAnswer, personWords, type PersonAnswer } from './said';
@@ -322,6 +323,10 @@ export function checkSkipAnswered(turn: AssistantTurn, ctx: TurnContext): Violat
   const clarifying = turn.kind === 'ideas' || turn.kind === 'interpretations' || (followsReply && !settled);
   // Only the person's own facts are asked once; a goal's shape, dates and targets are asked again for the next goal.
   if (turn.topic && turn.question && ASKED_ONCE_TOPICS.has(turn.topic) && answered.has(turn.topic) && !clarifying) {
+    out.push(v('skip_answered', 'skip.repeat', `"${turn.topic}" is already answered; skip it in one line instead of asking again.`));
+  } else if (asksFixedAgain(turn, ctx.transcript)) {
+    // The screen asked the idea and the why itself (MOM-180 B3) and the draft holds the answer: asking it again is a repeat, even straight after
+    // the reply, unless the person asked what it means.
     out.push(v('skip_answered', 'skip.repeat', `"${turn.topic}" is already answered; skip it in one line instead of asking again.`));
   }
   if (turn.skipped) {

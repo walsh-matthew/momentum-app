@@ -23,6 +23,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { MACHINE_DATE, dateInZone } from '@/lib/dates/casual';
 import { runSetupEval } from '@/lib/setup/evals';
+import { FIXED_WORDS } from '@/lib/setup/fixedQuestions';
 import { personToday } from '@/lib/setup/relativeDates';
 import { APPROVE_TEXT, CHANGE_PROMPT, KEEP_IT, MEANING_LINK, MEANING_TEXT, PROPOSAL_YES_TEXT, SETUP_STORAGE_PREFIX, TYPE_INSTEAD, errorCopy } from '@/lib/setup/session';
 import { acceptsText } from '@/lib/setup/text';
@@ -340,27 +341,19 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await signUpAndConfirm(page, `setup-slow-${width}`);
       await page.goto('/setup');
       await page.getByRole('button', { name: 'Start' }).click();
-      const first = scripted.script[0].question ?? '';
-      const question = page.getByRole('heading', { name: first });
-      await expect(question).toBeVisible();
+      // MOM-180 B3: code asks the idea and then the why, with no request; the why answer is the first one Claude reads, so the waits below
+      // are on the why question.
+      await expect(page.getByRole('heading', { name: FIXED_WORDS.ideaQuestion })).toBeVisible();
+      await page.getByLabel('Your answer').fill(scripted.person[0].say);
+      await page.getByRole('button', { name: 'Send' }).click();
+      const second = page.getByRole('heading', { name: FIXED_WORDS.whyQuestion });
+      await expect(second).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0);
       try {
-        // Slow: the question, the answer just sent, and Thinking, the whole time. Each send waits out the spacing limit (a
-        // second between one person's calls).
+        // Each send waits out the spacing limit (a second between one person's calls).
         const spaced = () => page.waitForTimeout(1200);
-        await fakeControl('/__fake/slow?ms=2500');
-        await spaced();
-        await page.getByLabel('Your answer').fill(scripted.person[0].say);
-        await page.getByRole('button', { name: 'Send' }).click();
-        await expect(page.getByRole('status')).toHaveText('Thinking…');
-        for (let i = 0; i < 5; i++) {
-          await expect(question).toBeVisible();
-          await expect(page.getByText(scripted.person[0].say, { exact: true })).toBeVisible();
-          await page.waitForTimeout(300);
-        }
-        expect((await nextCard(page, first)).heading).toBe(scripted.script[1].question ?? '');
 
         // Thrown away three times: the question stays, with only Change my answer (round 3, finding 6).
-        const second = page.getByRole('heading', { name: scripted.script[1].question ?? '' });
         // Each fake answer waits a little, so the tries inside the turn are not refused by the spacing limit (that "wait" is
         // a technical card with only Try again).
         await fakeControl('/__fake/slow?ms=1100');
@@ -380,12 +373,17 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         await page.getByRole('button', { name: 'Change my answer' }).click();
         await expect(page.getByLabel('Your answer')).toHaveValue('First try at this');
 
-        // Cut off by a reload while the reply is in flight.
-        await fakeControl('/__fake/slow?ms=4000');
+        // Slow, then cut off by a reload while the reply is in flight: the question, the answer just sent, and Thinking, the whole time.
+        await fakeControl('/__fake/slow?ms=6000');
         await spaced();
         await page.getByLabel('Your answer').fill(scripted.person[1].say);
         await page.getByRole('button', { name: 'Send' }).click();
-        await page.waitForTimeout(800);
+        await expect(page.getByRole('status')).toHaveText('Thinking…');
+        for (let i = 0; i < 5; i++) {
+          await expect(second).toBeVisible();
+          await expect(page.getByText(scripted.person[1].say, { exact: true })).toBeVisible();
+          await page.waitForTimeout(300);
+        }
         await page.reload();
         await expect(second).toBeVisible();
         await expect(page.getByRole('heading', { name: 'You have a setup in progress' })).toHaveCount(0);
@@ -394,7 +392,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         await spaced();
         await page.getByRole('button', { name: 'Send it again' }).click();
         // The cut-off call may still count against the spacing limit, so a "wait" is answered as the person would.
-        const next = await nextCard(page, scripted.script[1].question ?? '');
+        const next = await nextCard(page, FIXED_WORDS.whyQuestion);
         expect(next.heading).toBe(scripted.script[2].question ?? '');
       } finally {
         await fakeControl('/__fake/slow?ms=0');
@@ -416,8 +414,11 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       await signUpAndConfirm(page, `setup-app-switch-${width}`);
       await page.goto('/setup');
       await page.getByRole('button', { name: 'Start' }).click();
-      const first = scripted.script[0].question ?? '';
-      await expect(page.getByRole('heading', { name: first })).toBeVisible();
+      // MOM-180 B3: code asks the idea and then the why, with no request; the why answer is the one cut off.
+      await expect(page.getByRole('heading', { name: FIXED_WORDS.ideaQuestion })).toBeVisible();
+      await page.getByLabel('Your answer').fill(scripted.person[0].say);
+      await page.getByRole('button', { name: 'Send' }).click();
+      await expect(page.getByRole('heading', { name: FIXED_WORDS.whyQuestion })).toBeVisible();
 
       let cutOff = 0;
       let release!: () => void;
@@ -435,7 +436,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
       try {
         await page.waitForTimeout(1200);
         const before = (await fakeLast()).setupRequests;
-        await page.getByLabel('Your answer').fill(scripted.person[0].say);
+        await page.getByLabel('Your answer').fill(scripted.person[1].say);
         await page.getByRole('button', { name: 'Send' }).click();
         await expect(page.getByRole('status')).toHaveText('Thinking…');
         // Away in another app, then back; the request fails the way Safari fails it.
@@ -448,7 +449,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         release();
 
         // The next card arrives with no error card on the way.
-        await expect(page.getByRole('heading', { name: scripted.script[1].question ?? '' })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole('heading', { name: scripted.script[2].question ?? '' })).toBeVisible({ timeout: 30_000 });
         await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
         await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
         expect(cutOff, 'the first request was cut off').toBe(1);
@@ -459,7 +460,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
           const key = Object.keys(window.sessionStorage).find((k) => k.startsWith(prefix));
           return key ? (JSON.parse(window.sessionStorage.getItem(key) ?? '{}') as { transcript: { role: string; text?: string }[] }) : null;
         }, SETUP_STORAGE_PREFIX);
-        expect(stored?.transcript.filter((m) => m.role === 'person' && m.text === scripted.person[0].say)).toHaveLength(1);
+        expect(stored?.transcript.filter((m) => m.role === 'person' && m.text === scripted.person[1].say)).toHaveLength(1);
       } finally {
         release();
         await page.unroute('**/setup');

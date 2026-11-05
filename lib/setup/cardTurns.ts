@@ -6,6 +6,7 @@ import { approvalFollowsPlayback, checkTurn, type Violation } from './checks';
 import { SETTINGS_CARD_MARK, SETTINGS_HEADING, TIME_ZONE_ASK, TIME_ZONE_CARD_MARK, codeTurn, isSettingsCard, settingsRowsLeft, timeZoneQuestion } from './cards';
 import { personWords } from './said';
 import { asksMeaning } from './text';
+import { finalTurn, openingTurn, prioritiesCard } from './fixedQuestions';
 import { WEEK_CARD_TOPICS, weekCardFrom, type WeekCardTopic } from './weekCards';
 import { isTimeZone } from './validate';
 
@@ -17,9 +18,31 @@ import { isTimeZone } from './validate';
 //   asked: the settings card (or, when every row is already answered, the playback of the settings), with that part marked approved. A
 //   part changed and waiting to be played back again keeps Claude's turn until it is approved.
 // `deviceZone` is the zone the person's phone reports, or null. Never used for a person adding to a finished setup (the caller).
-export function cardStep(transcript: Transcript, draft: SetupDraft, deviceZone: string | null): AssistantTurn | null {
+// MOM-180 B3 adds three more, all written by code with no call:
+// - Start, and the person's answer to the idea: the idea question, then the why question (lib/setup/fixedQuestions.ts openingTurn);
+// - the person has just accepted the goals playback: "what else matters", with the goals part marked approved (when the draft holds no
+//   priorities yet; otherwise Claude takes the turn as before);
+// - the person has just accepted the playback of how Momentum talks, with every other part approved: the final card.
+// `opening` false leaves the opening to Claude: only the eval runner passes it, for a scripted case written before the screen asked the idea and
+// the why itself (lib/setup/evals.ts).
+export function cardStep(transcript: Transcript, draft: SetupDraft, deviceZone: string | null, opening = true): AssistantTurn | null {
   const ctx = { transcript, prevDraft: draft };
   const approve = (chunk: SetupChunk): SetupDraft => ({ ...structuredClone(draft), approved: [...draft.approved, chunk] });
+
+  const opened = opening ? openingTurn(transcript, draft) : null;
+  if (opened) return opened;
+
+  if (!draft.approved.includes('goals') && approvalFollowsPlayback(ctx, 'goals')) {
+    return prioritiesCard(approve('goals'));
+  }
+
+  if (
+    !draft.approved.includes('talk') &&
+    (['goals', 'targets', 'planning'] as const).every((chunk) => draft.approved.includes(chunk)) &&
+    approvalFollowsPlayback(ctx, 'talk')
+  ) {
+    return finalTurn(approve('talk'));
+  }
 
   if (draft.model.person.timeZone === null && !draft.approved.includes('targets') && approvalFollowsPlayback(ctx, 'targets')) {
     const approved = approve('targets');

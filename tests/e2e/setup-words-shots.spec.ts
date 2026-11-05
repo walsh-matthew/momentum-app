@@ -178,7 +178,11 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       await signUpAndConfirm(page, `words-shots-switch-${THEME}-${width}`);
       await page.goto('/setup');
       await page.getByRole('button', { name: 'Start' }).click();
+      // MOM-180 B3: code asks the idea and then the why, with no request; the why answer is the one cut off.
       await expect(page.getByRole('heading', { name: scripted.script[0].question ?? '' })).toBeVisible();
+      await page.getByLabel('Your answer').fill(scripted.person[0].say);
+      await page.getByRole('button', { name: 'Send' }).click();
+      await expect(page.getByRole('heading', { name: scripted.script[1].question ?? '' })).toBeVisible();
 
       let cutOff = 0;
       let release!: () => void;
@@ -196,7 +200,7 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       try {
         await fakeControl('/__fake/slow?ms=3000');
         await page.waitForTimeout(1200);
-        await page.getByLabel('Your answer').fill(scripted.person[0].say);
+        await page.getByLabel('Your answer').fill(scripted.person[1].say);
         await page.getByRole('button', { name: 'Send' }).click();
         await expect(page.getByRole('status')).toHaveText('Thinking…');
         await page.evaluate(() => {
@@ -208,7 +212,7 @@ for (const [label, width] of Object.entries(WIDTHS)) {
         // The screen on return, while the request is sent again: the same as while it waited.
         await shot(page, 6, 'back-from-another-app');
         release();
-        await expect(page.getByRole('heading', { name: scripted.script[1].question ?? '' })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole('heading', { name: scripted.script[2].question ?? '' })).toBeVisible({ timeout: 30_000 });
       } finally {
         release();
         await fakeControl('/__fake/slow?ms=0');

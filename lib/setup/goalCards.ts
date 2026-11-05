@@ -18,6 +18,7 @@ import { casualDate } from '@/lib/dates/casual';
 import { SetupSessionSchema, type AssistantTurn, type GoalDraft, type SetupDraft, type SetupSession, type SetupTopic, type Transcript } from '@/types/setup';
 import type { GoalShape } from '@/types/database.types';
 import { codeTurn } from './cards';
+import { targetCard, targetsPlayback } from './fixedQuestions';
 import { AFTER_START_LINE, isoOfWritten, lengthProposal, plainLengthSaid } from './codeTurns';
 import { PROPOSAL_YES_TEXT, pickedDateText } from './session';
 import { asksMeaning, datesIn } from './text';
@@ -179,10 +180,20 @@ export function goalCardInPlaceOf(turn: AssistantTurn, transcript: Transcript, t
 
 // ---- Answering a card ------------------------------------------------------------------------------------------------------------------
 
-// The conversation after a card was answered: the person's message, then the next card when a goal still needs one, or nothing more when the
-// next thing is Claude's (the caller then asks Claude).
+// What comes next (MOM-180 B3) once the goals part is approved and every goal's shape and dates are in, when no active goal has a deadline (a
+// deadline goal is Claude's after its start date: its deadline task needs words only the person's goal can give): what to count for the first
+// active goal with nothing counted, or, when a typed answer already gave every target its least that counts, the targets playback.
+const countingNext = (draft: SetupDraft): AssistantTurn | null =>
+  draft.approved.includes('goals') &&
+  draft.model.goals.every((g) => nextNeed(g) === null) &&
+  draft.model.goals.every((g) => g.state !== 'active' || (g.shape !== null && g.shape !== 'project'))
+    ? (targetCard(draft) ?? targetsPlayback(draft))
+    : null;
+
+// The conversation after a card was answered: the person's message, then the next card when a goal still needs one, then code's fixed question on
+// what to count (MOM-180 B3), or nothing more when the next thing is Claude's (the caller then asks Claude).
 export function withNextGoalTurn(session: SetupSession, today: string | null): SetupSession {
-  const turn = goalCardFor(session.draft, session.transcript, today);
+  const turn = goalCardFor(session.draft, session.transcript, today) ?? (goalWithNeed(session.draft) === null ? countingNext(session.draft) : null);
   if (turn === null) return session;
   const grown: SetupSession = { ...session, transcript: [...session.transcript, { role: 'assistant', turn }] };
   const parsed = SetupSessionSchema.safeParse(grown);

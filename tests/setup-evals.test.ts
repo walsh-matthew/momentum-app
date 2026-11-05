@@ -148,16 +148,17 @@ describe('setup clarity (MOM-111): the cases from the owner\'s live setup', () =
     expect(report.finished).toBe(true);
   });
 
-  it('a long first message (on a computer): the why is recorded from it, and the why and the starting point are skipped in one line each', async () => {
+  it('a long first message (on a computer): the why is recorded, code still asks it once, and the starting point is skipped in one line', async () => {
     const c = byId('run-k-long-first-message');
     const report = await run(c);
     expect(c.person[0].say.split(' ').length).toBeGreaterThan(15);
     expect(report.draft.model.goals[0].why).toBe('it clears my head');
     const skipped = report.turns.flatMap((t) => (t.turn.skipped ? [t.turn.skipped] : []));
-    expect(skipped.map((x) => x.topic)).toEqual(['why', 'starting_point']);
+    expect(skipped.map((x) => x.topic)).toEqual(['starting_point']);
     for (const x of skipped) expect(x.line.split(/[.!?]\s/).length).toBe(1);
-    // Neither is asked.
-    expect(report.turns.filter((t) => t.turn.topic === 'why' || t.turn.topic === 'starting_point')).toEqual([]);
+    // MOM-180 B3: code asks the why at Start, once, since it cannot read the first message; Claude asks neither.
+    expect(report.turns.filter((t) => t.turn.topic === 'why').map((t) => t.byCode)).toEqual([true]);
+    expect(report.turns.filter((t) => t.turn.topic === 'starting_point')).toEqual([]);
     expect(report.finished).toBe(true);
   });
 
@@ -213,10 +214,11 @@ describe('what the eval set would catch if the model did it', () => {
   });
 
   it('approves parts that were never played back', async () => {
-    const report = await withTurn('run-a-deadline-only', 4, (t) => {
+    // Turn 5 is the model's first after code's "what else matters" (MOM-180 B3).
+    const report = await withTurn('run-a-deadline-only', 5, (t) => {
       t.draft.approved = ['goals', 'targets'];
     });
-    expect(report.turns[4].violations.map((v) => v.rule)).toContain('chunked_playback');
+    expect(report.turns[5].violations.map((v) => v.rule)).toContain('chunked_playback');
   });
 
   it('saves a weekly target without ever having the week start', async () => {
@@ -235,7 +237,8 @@ describe('what the eval set would catch if the model did it', () => {
     const c = byId('run-a-deadline-only');
     const report = await runSetupEval(c, () => ({ nonsense: true }) as unknown as AssistantTurn);
     expect(report.malformed).not.toBeNull();
-    expect(report.turns).toHaveLength(0);
+    // Only code's two opening questions came before the model's first turn (MOM-180 B3).
+    expect(report.turns.map((t) => t.byCode)).toEqual([true, true]);
   });
 });
 

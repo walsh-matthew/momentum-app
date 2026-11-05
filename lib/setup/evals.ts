@@ -11,6 +11,7 @@ import { answerWeekCard, isWeekCard, type WeekAnswer } from './weekCards';
 import { answerGoalCard, goalCardInPlaceOf, isGoalCard } from './goalCards';
 import { answerStepCard, isStepCard, stepCardInPlaceOf, withNextSourceOrWeekTurn, type NumbersAnswer } from './stepCards';
 import { dateStep } from './codeTurns';
+import { isFixedQuestion } from './fixedQuestions';
 import { emptyDraft } from './draft';
 import { SAVED_GOAL_KEY, returningDraft, type ReturningContext } from './returning';
 import { validateDraft, type DraftIssue, type SavedFacts } from './validate';
@@ -45,6 +46,10 @@ export interface SetupEvalCase {
   expect: 'clean' | { violations: { turn: number; rule: Violation['rule'] }[] };
   // The person's today, for a case where code answers a relative date itself (lib/setup/codeTurns.ts, MOM-111 finding 8).
   today?: string;
+  // Who writes the idea and why questions. 'code' (the default) is the app since MOM-180 B3: the screen asks both and one call reads both answers.
+  // 'claude' keeps a short case written before that, whose deliberately bad turn comes right after Claude's own idea question (the rule fixtures):
+  // what it tests is the check on that turn, not the opening.
+  opening?: 'code' | 'claude';
   // A person adding to a finished setup (MOM-132 part 2): the conversation starts from the returning draft, every turn is also held to
   // the returning checks, and the final validation reads `saved` for the anchors the draft does not hold.
   returning?: ReturningContext & { saved: SavedFacts };
@@ -117,7 +122,7 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
   const deviceZone = options.deviceZone === undefined ? 'America/Denver' : options.deviceZone;
   for (let index = 0; index < MAX_TURNS; index++) {
     // The cards code writes (MOM-178), as the app does: never for a person adding to a finished setup, and only when the turn passes.
-    const card = returning ? null : cardStep(transcript, draft, deviceZone);
+    const card = returning ? null : cardStep(transcript, draft, deviceZone, c.opening !== 'claude');
     const cardOk = card !== null && cardViolations(card, { transcript: [...transcript], prevDraft: draft, personFits, returning }).length === 0;
     const step = cardOk ? null : dateStep(transcript, draft, options.today ?? c.today);
     const byCode = cardOk || step?.kind === 'turn';
@@ -176,7 +181,7 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
       if (chained.transcript.length === next.transcript.length || follow?.role !== 'assistant') continue;
       index += 1;
       const ctxFollow = { transcript: [...transcript], prevDraft: draft, personFits, returning };
-      turns.push({ index, turn: follow.turn, violations: isWeekCard(follow.turn) || isStepCard(follow.turn) ? cardViolations(follow.turn, ctxFollow) : checkTurn(follow.turn, ctxFollow), byCode: true });
+      turns.push({ index, turn: follow.turn, violations: isWeekCard(follow.turn) || isStepCard(follow.turn) || isFixedQuestion(follow.turn) ? cardViolations(follow.turn, ctxFollow) : checkTurn(follow.turn, ctxFollow), byCode: true });
       transcript.push(follow);
       draft = chained.draft;
       report.draft = draft;
@@ -227,7 +232,7 @@ export async function runSetupEval(c: SetupEvalCase, model: SetupModelFn, option
       }
       index += 1;
       const ctxNext = { transcript: [...transcript], prevDraft: draft, personFits, returning };
-      turns.push({ index, turn: follow.turn, violations: isWeekCard(follow.turn) || isGoalCard(follow.turn) || isStepCard(follow.turn) ? cardViolations(follow.turn, ctxNext) : checkTurn(follow.turn, ctxNext), byCode: true });
+      turns.push({ index, turn: follow.turn, violations: isWeekCard(follow.turn) || isGoalCard(follow.turn) || isStepCard(follow.turn) || isFixedQuestion(follow.turn) ? cardViolations(follow.turn, ctxNext) : checkTurn(follow.turn, ctxNext), byCode: true });
       transcript.push(follow);
       shownTurn = follow.turn;
       line = options.reply ? options.reply(follow.turn, index) : c.person[personAt++];
