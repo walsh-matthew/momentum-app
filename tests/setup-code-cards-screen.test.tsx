@@ -6,10 +6,10 @@
 // 2. The time zone card: "Your phone is set to <zone> (<city>). Is that your time zone?" with Yes (the one main button) and A different one;
 //    Yes sends the zone as accepted; A different one opens the search, and a pick is said; with no zone from the phone, only the search.
 // 3. In the conversation: the card the person is on survives a reload, and answering the settings card shows the part played back with no
-//    request to the server at all; answering the zone card sends one request, for Claude's next question, with the zone already in the draft.
+//    request to the server at all; answering the zone card makes no request when the next step is a card (MOM-180 B2), with the zone already in the draft.
 // The server actions are stubs: no Claude call, no network.
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsCard } from '@/components/setup/SettingsCard';
 import { SetupConversation } from '@/components/setup/SetupConversation';
@@ -202,17 +202,20 @@ describe('in the conversation', () => {
     expect(stored.transcript.at(-2)).toEqual({ role: 'person', text: 'Tone: Gentle.' });
   });
 
-  it('answers the zone card with one request, for Claude\'s next question, and the zone already in the draft', async () => {
+  it('answers the zone card with no request at all when the next step is a card (MOM-180 B2): the source card, with the zone already in the draft', async () => {
     const session = await sessionAt('targets');
     window.sessionStorage.setItem(KEY, JSON.stringify(session));
     actions.ask.mockResolvedValue({ ok: false, error: 'stop here' });
     render(<SetupConversation userId={USER} />);
     expect(await screen.findByRole('heading', { name: 'Your phone is set to Mountain Time (Denver). Is that your time zone?' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
-    await waitFor(() => expect(actions.ask).toHaveBeenCalledTimes(1));
-    const sent = actions.ask.mock.calls[0][0] as SetupSession;
-    expect(sent.draft.model.person.timeZone).toBe('America/Denver');
-    expect(sent.transcript.at(-1)).toEqual({ role: 'person', text: 'Yes, that works.' });
+    // Where a target is tracked is the next step, and it is code's: the card is on the screen, and Claude was not asked.
+    expect(await screen.findByRole('heading', { name: /^Where do you track .* now, if anywhere\?$/ })).toBeTruthy();
+    expect(screen.queryByText('Thinking…')).toBeNull();
+    expect(actions.ask).not.toHaveBeenCalled();
+    const stored = JSON.parse(window.sessionStorage.getItem(KEY) ?? '{}') as SetupSession;
+    expect(stored.draft.model.person.timeZone).toBe('America/Denver');
+    expect(stored.transcript.at(-2)).toEqual({ role: 'person', text: 'Yes, that works.' });
     expect(answerTimeZone(session, 'America/Denver', 'accepted')?.draft.said.at(-1)).toMatchObject({ path: 'person.timeZone', how: 'accepted' });
   });
 });

@@ -329,10 +329,13 @@ describe('a first answer that holds what they count and how often (MOM-168)', ()
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', rejected: 0 } });
     expect(stub.calls).toHaveLength(1);
     if (!result.ok || result.data.kind !== 'turn') throw new Error('expected a turn');
-    // Code does not turn the level question into "how many": it is shown as Claude wrote it, with the number quoted above it.
+    // Code does not turn the level question into "how many": it is still the question of which level the number is. Since MOM-180 B2 it goes out as the
+    // card, which quotes the one number Claude quoted in its own words, and the skip line stays.
     expect(result.data.turn.topic).toBe('number_level');
-    expect(result.data.turn.question).toBe(LEVEL_Q);
-    expect(result.data.turn.say).toBe(LEVEL_SAY);
+    expect(LEVEL_SAY).toContain('3');
+    expect(LEVEL_Q).toContain('least that counts');
+    expect(result.data.turn.question).toBe("Is 3 the least that counts, or what you're aiming for?");
+    expect(result.data.turn.say).toBe('');
     expect(result.data.turn.skipped?.topic).toBe('target');
   });
 

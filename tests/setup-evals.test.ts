@@ -63,7 +63,8 @@ describe('the eval set', () => {
     expect(report.turns.filter((t) => t.turn.topic === 'floor' || t.turn.topic === 'aspiration')).toEqual([]);
     const level = report.turns.filter((t) => t.turn.topic === 'number_level');
     expect(level).toHaveLength(1);
-    expect(level[0].turn.say).toContain('3');
+    // The card quotes the number in its question (MOM-180 B2); the draft still holds none until the person says which level it is.
+    expect(level[0].turn.question).toContain('3');
     expect(level[0].turn.draft.model.goals[0].targets[0].floor).toBeNull();
     expect(report.draft.model.goals[0].targets[0].floor).toBe(3);
     expect(report.draft.said.find((s) => s.path === 'goals.g1.targets.t1.floor')).toMatchObject({ turn: 1, how: 'said' });

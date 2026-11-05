@@ -7,6 +7,7 @@ import { SETTINGS_ROWS, SETTINGS_SKIP_LINE } from '@/lib/setup/cards';
 import { emptyDraft } from '@/lib/setup/draft';
 import { EXPLANATIONS, explanationFor } from '@/lib/setup/explain';
 import { GOAL_WORDS } from '@/lib/setup/goalCards';
+import { STEP_WORDS, metricQuestion, roleQuestion, sourceQuestion } from '@/lib/setup/stepCards';
 import { DAY_END_SAY, SETUP_STEPS } from '@/lib/setup/steps';
 import { WEEK_WORDS } from '@/lib/setup/weekCards';
 import type { SetupTopic } from '@/types/setup';
@@ -42,6 +43,13 @@ function subtitles(): Map<SetupTopic, string[]> {
   add('start_date', GOAL_WORDS.startReason);
   add('block_length', GOAL_WORDS.blockReason);
   add('end_date', GOAL_WORDS.endReason);
+  // MOM-180 B2: the step cards' lines, and each card's own question (a lead-in the explanation must not echo).
+  add('breakup', STEP_WORDS.breakupReason, STEP_WORDS.namesReason, STEP_WORDS.breakupQuestion, STEP_WORDS.namesQuestion);
+  add('sequencing', STEP_WORDS.sequencingQuestion);
+  add('role', STEP_WORDS.roleReason, roleQuestion('Runs'));
+  add('source', STEP_WORDS.sourceReason, sourceQuestion('runs'));
+  add('metric', metricQuestion('pounds lifted', 'Hevy'));
+  add('starting_point', GOAL_WORDS.startingQuestion);
   return out;
 }
 

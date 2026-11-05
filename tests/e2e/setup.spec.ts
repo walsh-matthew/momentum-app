@@ -187,9 +187,9 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         const line = lines[k].say;
         const codeCard = await codeCardOn(page);
         const requestsNow = (await fakeLast()).setupRequests;
-        if (codeCard === 'week' || codeCard === 'goal') {
+        if (codeCard === 'week' || codeCard === 'goal' || codeCard === 'step') {
           // MOM-179: a week card comes in place of a question of Claude's, or straight after another card, so the count of requests may or may not
-          // have moved. It is answered the way the scripted person does: typed in its answer box, which goes to Claude as always.
+          // have moved. A step card (MOM-180 B2) is the same, and the source card now comes straight after the time zone tap. It is answered the way the scripted person does: typed in its answer box, which goes to Claude as always.
           expect(card.id).toBe('setup-question');
           await answerCodeCard(page, codeCard, lines[k], PERSON_ZONE);
         } else if (codeCard !== null) {

@@ -11,6 +11,7 @@ import { answerSettings, answerTimeZone, isSettingsCard, isTimeZoneCard, zoneOfT
 import { shownModel } from '@/lib/setup/paraphrase';
 import { answerWeekCard, anyDayTargets, isWeekCard, weekCardDetail, type WeekAnswer } from '@/lib/setup/weekCards';
 import { answerGoalCard, goalCardDetail, isGoalCard } from '@/lib/setup/goalCards';
+import { aimHeldFrom, answerStepCard, isNamesCard, isStepCard, stepCardDetail, withNextSourceOrWeekTurn, type StepAnswer } from '@/lib/setup/stepCards';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
 import { personWords } from '@/lib/setup/said';
 import { RETURNING_FIRST_LINE, SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
@@ -36,6 +37,7 @@ import { SettingsCard } from './SettingsCard';
 import { TimeZoneCard } from './TimeZoneCard';
 import { WeekCard } from './WeekCard';
 import { GoalCard, choicesFor } from './GoalCard';
+import { StepCard } from './StepCard';
 import { allTimeZones } from './TimeZonePicker';
 import { QuickPathCard } from './QuickPathCard';
 import type { FillHow } from './QuickPathFillIn';
@@ -251,13 +253,16 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
 
   // The time zone card's answer (MOM-178): a tap, recorded in the draft as theirs, and then Claude's next question. No call is made for the
   // card itself; the one that follows is Claude's, as after any answer.
+  // After the tap, code writes what follows when it knows it (MOM-180 B2): the card for where a target is tracked, then the week cards. Claude is asked only
+  // when the next step is Claude's (the kinds of days, or a target the person has to describe).
   const answerZone = (zone: string, how: 'said' | 'accepted') => {
-    const next = answerTimeZone(session, zone, how);
-    if (!next) return;
+    const tapped = answerTimeZone(session, zone, how);
+    if (!tapped) return;
+    const next = withNextSourceOrWeekTurn(tapped);
     setDraftAnswer(undefined);
     setSession(next);
     storeSession(storageId, next);
-    void ask(next);
+    if (awaitsClaude(next)) void ask(next);
   };
 
   // The settings card's answer: the choices become the person's own message and the draft's settings, and the part is played back by
@@ -286,6 +291,20 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
     const next = answerGoalCard(session, text, localDate());
     if (!next) {
       answer(text);
+      return;
+    }
+    setDraftAnswer(undefined);
+    setSession(next);
+    storeSession(storageId, next);
+    if (awaitsClaude(next)) void ask(next);
+  };
+
+  // A step card's answer (MOM-180 B2): a tap, or the number boxes, is the person's own message and the draft's value, and code writes what follows (the next
+  // card) at once. Claude is asked only when the next thing is Claude's.
+  const answerStep = (stepAnswer: StepAnswer) => {
+    const next = answerStepCard(session, stepAnswer, localDate());
+    if (!next) {
+      if (stepAnswer.kind === 'text') answer(stepAnswer.text);
       return;
     }
     setDraftAnswer(undefined);
@@ -601,6 +620,8 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
         <WeekCard key={`week:${spoken}`} turn={turn} said={playbackOptions.said} busy={saving} onAnswer={answerWeek} onType={answer} />
       ) : isGoalCard(turn) && !waiting && choicesFor(turn) !== null ? (
         <GoalCard key={`goal:${spoken}`} turn={turn} busy={saving} onAnswer={answerGoal} onType={answer} />
+      ) : isStepCard(turn) && !isNamesCard(turn) && !waiting ? (
+        <StepCard key={`step:${spoken}`} turn={turn} busy={saving} today={today} said={playbackOptions.said} heldAim={aimHeldFrom(session.transcript)?.value ?? null} onAnswer={answerStep} onType={answer} />
       ) : (
         // Keyed so "Change my answer" opens the card afresh, with the old answer in the box.
         <QuestionCard
@@ -611,9 +632,11 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
               ? { ...turn, detail: weekCardDetail(turn.topic) }
               : isGoalCard(turn)
                 ? { ...turn, detail: goalCardDetail(turn) }
-                : isTimeZoneCard(turn) || isSettingsCard(turn)
-                  ? { ...turn, detail: null }
-                  : turn
+                : isStepCard(turn)
+                  ? { ...turn, detail: stepCardDetail(turn) }
+                  : isTimeZoneCard(turn) || isSettingsCard(turn)
+                    ? { ...turn, detail: null }
+                    : turn
           }
           busy={busy}
           onAnswer={isGoalCard(turn) ? answerGoal : answer}

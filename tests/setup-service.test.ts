@@ -165,9 +165,9 @@ describe('takeSetupTurn: replies that are thrown away', () => {
 
   it('asks again after a reply that is not a turn or that breaks a hard rule, counts them, and shows the person only the good one', async () => {
     const full = await fullCase();
-    const good = full.script[2];
+    const good = full.script[1];
     const stub = stubTurn([{ raw: { kind: 'question' } }, { raw: badQuestion(good) }, { raw: good }]);
-    const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    const result = await takeSetupTurn(sessionBefore(full, 1), { runTurn: stub.run });
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', rejected: 2, spentTokens: 3000 } });
     if (!result.ok || result.data.kind !== 'turn') throw new Error('expected a turn');
     expect(result.data.turn).toEqual(good);
@@ -333,9 +333,9 @@ describe('takeSetupTurn: a retry is told what went wrong, in code\'s own words',
   // MOM-111 addition a: the plain-words checks never dead-end the person.
   it('gives a reply that breaks only the plain-words checks one retry, then shows it and logs the rule names', async () => {
     const full = await fullCase();
-    const good = full.script[2];
+    const good = full.script[1];
     const stub = stubTurn([{ raw: preview(good) }, { raw: preview(good) }, { raw: good }]);
-    const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    const result = await takeSetupTurn(sessionBefore(full, 1), { runTurn: stub.run });
     expect(stub.calls).toHaveLength(2);
     expect(stub.calls[1].retryFeedback).toEqual([RETRY_FEEDBACK['plain.lead_in']]);
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', turn: preview(good), rejected: 1 } });
@@ -344,9 +344,9 @@ describe('takeSetupTurn: a retry is told what went wrong, in code\'s own words',
 
   it('shows a plain-words-only reply on the last try, and never ends in "try again" for one', async () => {
     const full = await fullCase();
-    const good = full.script[2];
+    const good = full.script[1];
     const stub = stubTurn([{ raw: badQuestion(good) }, { raw: {} }, { raw: preview(good) }]);
-    const result = await takeSetupTurn(sessionBefore(full, 2), { runTurn: stub.run });
+    const result = await takeSetupTurn(sessionBefore(full, 1), { runTurn: stub.run });
     expect(stub.calls).toHaveLength(3);
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', turn: preview(good), rejected: 2 } });
   });

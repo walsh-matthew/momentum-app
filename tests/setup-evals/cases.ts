@@ -9,6 +9,7 @@ import { SETTINGS_CARD_MARK, SETTINGS_HEADING, TIME_ZONE_CARD_MARK, timeZoneQues
 import { MEANING_TEXT, PROPOSAL_YES_TEXT } from '@/lib/setup/session';
 import { SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
 import { DAY_END_SAY } from '@/lib/setup/steps';
+import { STEP_CARD_MARK, STEP_WORDS, returnQuestion } from '@/lib/setup/stepCards';
 import { WEEK_CARD_MARK, WEEK_WORDS, slotsQuestion } from '@/lib/setup/weekCards';
 import type { SavedFacts } from '@/lib/setup/validate';
 import type { AssistantTurn, HardRuleId, SetupModel } from '@/types/setup';
@@ -92,6 +93,9 @@ interface HabitOptions {
   // MOM-180 B1: the goal questions as cards the person taps (starting point, shape, start date, first stretch, and the same for the second goal).
   // The person's typed words are the words of the tap, so a conversation where Claude asks every one of them is the same conversation.
   goalCards?: boolean;
+  // MOM-180 B2: steps 3, 7 and 9 as cards the person taps (one goal or a few and the goals' names, together or one first, when a goal set aside comes back, something
+  // I do or a result, the number boxes, and where it is tracked). Needs two goals, goal cards and week cards.
+  stepCards?: boolean;
   // What the goal is called and why it matters, as the person put it (round 3b, finding 4: a goal that is not exercise).
   goalTitle?: string;
   why?: { reply: string; text: string };
@@ -119,32 +123,71 @@ function habitCase(o: HabitOptions): ScriptedCase {
   s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: o.idea });
   if (o.goals === 'two') {
     s.add({ topic: 'why', edit: (m) => m.goals.push(goal('g1', 'Get healthy')), question: 'Why does this matter to you?', reply: 'I want more energy.' });
-    s.add({
-      topic: 'breakup',
-      edit: (m) => (goalOf(m, 'g1').why = 'more energy'),
-      question: 'Is this one goal, or a few separate ones?',
-      reply: 'Two, lifting weights and cooking at home.',
-    });
-    s.add({
-      topic: 'sequencing',
-      edit: (m) => {
-        goalOf(m, 'g1').title = 'Lift weights';
-        m.goals.push(goal('g2', 'Cook at home'));
-      },
-      say: 'Starting fewer goals usually works better, though that is only a suggestion.',
-      question: 'Do you want to take them together, or one first?',
-      reply: 'One first: lifting.',
-    });
-    s.add({
-      topic: 'parked_return',
-      edit: (m) => (goalOf(m, 'g2').state = 'parked'),
-      question: 'When should cooking come back?',
-      // Not a season: with the person's today known, code would take "in the spring" for a vague date and ask the day itself.
-      reply: o.goalCards ? 'Only when I ask.' : 'In the spring.',
-    });
-    s.playback('goals', 'Yes, that is right.', {
-      edit: (m) => (goalOf(m, 'g2').returnWhen = o.goalCards ? { kind: 'on_request' } : { kind: 'condition', note: 'in the spring' }),
-    });
+    if (o.stepCards) {
+      // MOM-180 B2: "one goal or a few" is a card (the person taps "A few goals."), code asks for the names (the model's next turn would be the same question, so
+      // the placeholder holds its place), the names are typed, and the model's sequencing question goes out as the card; the tap parks the other goal, and code
+      // writes the card for when it comes back.
+      s.add({
+        topic: 'breakup',
+        edit: (m) => (goalOf(m, 'g1').why = 'more energy'),
+        question: 'Is this one goal, or a few separate ones?',
+        reply: { say: 'Two, lifting weights and cooking at home.', step: `${STEP_WORDS.aFew}.` },
+      });
+      s.add({
+        topic: 'breakup',
+        question: STEP_WORDS.namesQuestion,
+        detail: STEP_CARD_MARK,
+        reply: 'Lifting weights and cooking at home.',
+      });
+      s.add({
+        topic: 'sequencing',
+        edit: (m) => {
+          goalOf(m, 'g1').title = 'Lift weights';
+          m.goals.push(goal('g2', 'Cook at home'));
+        },
+        question: STEP_WORDS.sequencingQuestion,
+        reply: { say: 'One first: lifting.', step: '"Lift weights" first.' },
+      });
+      s.add({
+        topic: 'parked_return',
+        edit: (m) => (goalOf(m, 'g2').state = 'parked'),
+        said: ['goals.g2.state'],
+        question: returnQuestion('Cook at home'),
+        detail: STEP_CARD_MARK,
+        reply: { say: 'Only when I ask.', step: 'Only when I ask.' },
+      });
+      s.playback('goals', 'Yes, that is right.', {
+        edit: (m) => (goalOf(m, 'g2').returnWhen = { kind: 'on_request' }),
+        said: ['goals.g2.returnWhen'],
+      });
+    } else {
+      s.add({
+        topic: 'breakup',
+        edit: (m) => (goalOf(m, 'g1').why = 'more energy'),
+        question: 'Is this one goal, or a few separate ones?',
+        reply: 'Two, lifting weights and cooking at home.',
+      });
+      s.add({
+        topic: 'sequencing',
+        edit: (m) => {
+          goalOf(m, 'g1').title = 'Lift weights';
+          m.goals.push(goal('g2', 'Cook at home'));
+        },
+        say: 'Starting fewer goals usually works better, though that is only a suggestion.',
+        question: 'Do you want to take them together, or one first?',
+        reply: 'One first: lifting.',
+      });
+      s.add({
+        topic: 'parked_return',
+        edit: (m) => (goalOf(m, 'g2').state = 'parked'),
+        question: 'When should cooking come back?',
+        // Not a season: with the person's today known, code would take "in the spring" for a vague date and ask the day itself.
+        reply: o.goalCards ? 'Only when I ask.' : 'In the spring.',
+      });
+      s.playback('goals', 'Yes, that is right.', {
+        edit: (m) => (goalOf(m, 'g2').returnWhen = o.goalCards ? { kind: 'on_request' } : { kind: 'condition', note: 'in the spring' }),
+      });
+    }
   } else if (o.longFirst) {
     // The first message already said why, so this turn records it and skips the question in one line.
     s.add({
@@ -292,7 +335,25 @@ function habitCase(o: HabitOptions): ScriptedCase {
   switch (o.floor) {
     case 'plain':
     case 'changeAtApproval':
-      s.add({ topic: 'floor', edit: addTarget, question: floorQ(counted.word), reply: 'Two a week.' });
+      if (o.stepCards) {
+        // MOM-180 B2: Claude asks whether it is something they do (the card goes out in its place); the tap is "Something I do.", and code writes the
+        // number boxes (a placeholder holds the place), where the person gives the least that counts.
+        s.add({
+          topic: 'role',
+          edit: addTarget,
+          question: 'Is that something you do, or a result outside your control?',
+          reply: { say: 'Something I do.', step: `${STEP_WORDS.somethingIDo}.` },
+        });
+        s.add({
+          topic: 'floor',
+          said: ['goals.g1.targets.t1.role'],
+          question: floorQ(counted.word),
+          detail: STEP_CARD_MARK,
+          reply: { say: 'Two a week.', step: { floor: '2' } },
+        });
+      } else {
+        s.add({ topic: 'floor', edit: addTarget, question: floorQ(counted.word), reply: 'Two a week.' });
+      }
       s.playback('targets', 'Yes.', { edit: finishTarget(2), said: floorPath });
       break;
     case 'compound':
@@ -358,7 +419,7 @@ function habitCase(o: HabitOptions): ScriptedCase {
     topic: 'source',
     ...zoneWrites(DEVICE_ZONE, false),
     question: 'Where do you track this now, if anywhere?',
-    reply: change ? 'No, I will log it myself. Actually, make it three a week, not two.' : 'No, I will log it myself.',
+    reply: change ? 'No, I will log it myself. Actually, make it three a week, not two.' : o.stepCards ? { say: `${STEP_WORDS.logMyself}.`, step: `${STEP_WORDS.logMyself}.` } : 'No, I will log it myself.',
   });
 
   if (o.weekCards) {
@@ -874,6 +935,109 @@ export const GOAL_CARDS_CASE: ScriptedCase = withToday(habitCase({
   weekCards: true,
   goalCards: true,
 }));
+
+// MOM-180 B2: the same two goals with steps 3, 7 and 9 as cards: one goal or a few and the names, together or one first, when the goal set aside comes back,
+// something I do, the number boxes, and where it is tracked (the time zone tap is followed by the source card, then the day end card, with no call).
+// tests/setup-step-cards.test.ts runs it, and tests/setup-turn-count.test.ts counts the model's calls on it (the same case runs on main).
+export const STEP_CARDS_CASE: ScriptedCase = withToday(habitCase({
+  id: 'run-s-step-cards',
+  title: 'two goals, the goal questions, what counts and where it is tracked as cards, and the week questions as cards',
+  rules: ['skip_answered', 'assume_nothing', 'chunked_playback'],
+  idea: 'I want to get fit and strong.',
+  goals: 'two',
+  priorities: 'plain',
+  floor: 'plain',
+  dayEnd: 'checkin',
+  counted: RUNS,
+  weekCards: true,
+  goalCards: true,
+  stepCards: true,
+}));
+
+// MOM-180 B2: three short conversations for the browser spec only (tests/e2e/setup-step-cards.spec.ts). Like DEADLINE_90_CASE they are not whole
+// conversations: each stops at the card the spec photographs, and the fake model serves the turns before it.
+// - which level a number is, for a time counted in hours: the card quotes "2 hours", and "aiming for" asks the least that counts in hours;
+// - the number boxes for a time counted in hours, both boxes;
+// - an app with more than one number: the source card, then which number counts, then the day end card, with no call between them.
+const hoursGoal = (m: SetupModel, goalTitle: string, targetTitle: string): void => {
+  m.goals.push(goal('g1', goalTitle));
+  goalOf(m, 'g1').targets.push(target('t1', targetTitle, { measure: 'time' }));
+};
+
+export const LEVEL_HOURS_CASE: ScriptedCase = (() => {
+  const s = new Script();
+  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to do more reading, two hours a week.' });
+  s.add({
+    topic: 'number_level',
+    edit: (m) => hoursGoal(m, 'Read more', 'Hours of reading'),
+    say: 'You said 2 hours a week.',
+    question: "Is that the least that counts, or what you're aiming for?",
+    reply: { say: "That's what I'm aiming for.", step: "2 hours is what I'm aiming for." },
+  });
+  // After "what I'm aiming for" nothing is written: the number is held in the tap's message, and the box asks the least that counts.
+  s.add({
+    topic: 'floor',
+    question: 'In a hard week, how many hours of reading would still count?',
+    detail: STEP_CARD_MARK,
+    reply: { say: 'One hour.', step: { floor: '1' } },
+  });
+  // Both are written once the least that counts is given: the aim was said in the tap (the reply to turn 1), the least that counts in the reply to turn 2.
+  s.add({
+    topic: 'why',
+    edit: (m) => Object.assign(targetOf(m, 'g1', 't1'), { floor: 60, aspiration: 120 }),
+    said: ['goals.g1.targets.t1.floor', 'goals.g1.targets.t1.aspiration@1'],
+    question: 'Why does this matter to you?',
+  });
+  return done({ id: 'run-t-level-hours', title: 'which level a number is, for a time counted in hours', rules: ['assume_nothing'], expect: 'clean' }, s);
+})();
+
+export const NUMBERS_HOURS_CASE: ScriptedCase = (() => {
+  const s = new Script();
+  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to practice the piano more.' });
+  s.add({
+    topic: 'floor',
+    edit: (m) => hoursGoal(m, 'Practice piano', 'Hours of practice'),
+    question: 'In a hard week, how many hours of practice would still count?',
+    reply: { say: 'Two, and three if I can.', step: { floor: '2', aspiration: '3' } },
+  });
+  s.add({
+    topic: 'why',
+    edit: (m) => Object.assign(targetOf(m, 'g1', 't1'), { floor: 120, aspiration: 180 }),
+    said: ['goals.g1.targets.t1.floor', 'goals.g1.targets.t1.aspiration'],
+    question: 'Why does this matter to you?',
+  });
+  return done({ id: 'run-u-numbers-hours', title: 'the number boxes for a time counted in hours', rules: ['assume_nothing'], expect: 'clean' }, s);
+})();
+
+export const METRIC_CASE: ScriptedCase = (() => {
+  const s = new Script();
+  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to lift heavier weights.' });
+  s.add({
+    topic: 'source',
+    edit: (m) => {
+      m.goals.push(goal('g1', 'Lift heavier'));
+      goalOf(m, 'g1').targets.push(target('t1', 'Weight lifted', { measure: 'quantity', unit: 'pounds' }));
+    },
+    question: 'Where do you track this now, if anywhere?',
+    reply: { say: 'Hevy.', step: 'Hevy.' },
+  });
+  s.add({
+    topic: 'metric',
+    edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'synced', provider: 'hevy', metric: null }]),
+    said: ['goals.g1.targets.t1.sources'],
+    question: 'Which number counts for weight lifted in Hevy?',
+    detail: STEP_CARD_MARK,
+    reply: { say: 'Pounds lifted.', step: 'pounds lifted.' },
+  });
+  s.add({
+    topic: 'day_end',
+    edit: (m) => (targetOf(m, 'g1', 't1').sources = [{ kind: 'synced', provider: 'hevy', metric: 'volume_lbs' }]),
+    said: ['goals.g1.targets.t1.metric'],
+    question: WEEK_WORDS.dayEndQuestion,
+    detail: WEEK_CARD_MARK,
+  });
+  return done({ id: 'run-v-metric', title: 'an app that counts more than one number: the source, the number that counts, and the day end card, with no call between', rules: ['assume_nothing'], expect: 'clean' }, s);
+})();
 
 // MOM-180 B1: a goal with a deadline whose first message says how long it has ("in 90 days"). Not a whole conversation: it stops at the deadline question,
 // which code answers with "Done by <date>?" counted from the start date. Only the browser spec (tests/e2e/setup-goal-cards.spec.ts) runs it.
