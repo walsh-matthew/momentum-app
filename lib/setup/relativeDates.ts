@@ -149,19 +149,55 @@ const DURATION = new RegExp(`\\b${AMOUNT}\\s+(days?|weeks?|months?|years?)\\b`, 
 const HOW_OFTEN_BEFORE = /\b(times|x|once|twice|per|each|every|other)\s+$/;
 const COUNT_BEFORE_A = /\b\w+s\s+$/;
 
-// The first length of time in a text, or null.
-export function durationIn(text: string): Duration | null {
+// Every length of time in a text, with the words just before and after it.
+interface FoundDuration {
+  duration: Duration;
+  // The amount as the person wrote it ("90", "three", "a").
+  amountText: string;
+  before: string;
+  after: string;
+}
+function scanDurations(text: string): FoundDuration[] {
   const t = text.toLowerCase().replace(/[’‘]/g, "'");
+  const out: FoundDuration[] = [];
   for (const m of t.matchAll(DURATION)) {
     const before = t.slice(0, m.index);
     if (HOW_OFTEN_BEFORE.test(before)) continue;
     if ((m[1] === 'a' || m[1] === 'an') && COUNT_BEFORE_A.test(before)) continue;
     const amount = AMOUNT_WORDS[m[1]] ?? numbersIn(m[1])[0];
     if (amount === undefined || amount <= 0) continue;
-    return { phrase: m[0], amount, unit: m[2].replace(/s$/, '') as Duration['unit'] };
+    out.push({
+      duration: { phrase: m[0], amount, unit: m[2].replace(/s$/, '') as Duration['unit'] },
+      amountText: m[1],
+      before,
+      after: t.slice((m.index ?? 0) + m[0].length),
+    });
   }
-  return null;
+  return out;
 }
+
+// The first length of time in a text, or null.
+export function durationIn(text: string): Duration | null {
+  return scanDurations(text)[0]?.duration ?? null;
+}
+
+// A plain number and unit ("90 days", "12 weeks", "3 months", "three months"): digits, or a number word from one to twelve (or "a" /
+// "an"), and a unit, and nothing that makes it a guess ("about 90 days", "8 to 12 weeks", "a couple of weeks"). Code works a date out
+// from a length only when it is this plain (MOM-180 B1); anything else goes to Claude.
+const PLAIN_AMOUNT = /^(\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a|an)$/;
+const GUESS_BEFORE = /\b(about|around|roughly|approximately|approx|almost|nearly|over|under|maybe|up to|at least|at most|more than|less than|to|or)\s+$|[-–]\s*$/;
+const GUESS_AFTER = /^\s*(or so\b|ish\b|to\b|or\b|[-–])/;
+
+// The one length in a text, when there is exactly one and it is plain; null for none, several, or a guess.
+export function plainDurationIn(text: string): Duration | null {
+  const found = scanDurations(text);
+  if (found.length !== 1) return null;
+  const [one] = found;
+  return PLAIN_AMOUNT.test(one.amountText) && !GUESS_BEFORE.test(one.before) && !GUESS_AFTER.test(one.after) ? one.duration : null;
+}
+
+// How many lengths of time a text holds (the same reading as durationIn).
+export const durationCount = (text: string): number => scanDurations(text).length;
 
 // Words that carry nothing of their own beside a length ("two months from now", "for about 8 weeks").
 const DURATION_FILLER = /\b(from|now|today|for|about|around|roughly|maybe|let'?s|lets|do|make|it|a|the|first|stretch|long|total|in|within|say|how about|i guess|i think|probably|please|ok|okay|so|then|just|like|yes|yeah|sure|that|is|be|should|would|could|we|i|i'?d|i'?ll)\b/g;

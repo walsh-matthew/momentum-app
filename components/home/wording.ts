@@ -10,12 +10,24 @@ import type { ForecastView, HeroHeadline, MilestoneView, PatternView, TargetCard
 import type { ForecastOption, LocalDate } from '@/types/scoreboard';
 import { casualDate, type CasualDateOptions } from '@/lib/dates/casual';
 import { unitFor } from '@/lib/utils/units';
+import { hoursText, readsInHours } from '@/lib/setup/timeUnits';
 
 // 1 decimal at most, no trailing zero: 8.5, 15.
 export const formatNumber = (n: number): string => String(Math.round(n * 10) / 10);
 
 // The person's unit after a number as formatNumber shows it, with a space: " pounds", or " pound" when the number reads 1 (MOM-167 part 9). Nothing without a unit.
 export const unitAfter = (n: number, unit: string | null): string => (unit ? ` ${unitFor(Math.round(n * 10) / 10, unit)}` : '');
+
+// An amount of a target, with its unit. A time target is stored in minutes and has no unit text of its own, so a bare 120 read as "Floor 120 a
+// week" (test day 1). It reads the way the setup playback reads it: in hours when the person's words for it name hours ("hours of
+// reading"), or when the amount is a whole number of hours ("2 hours", "1 hour"); otherwise in minutes ("45 minutes"). Words that name
+// minutes and not hours keep minutes. A time target that carries a unit text of its own keeps it. Display only: the stored number is unchanged. Any other target is the number and its unit, as before.
+export function amountText(card: Pick<TargetCardView, 'measure' | 'unit' | 'title'>, n: number): string {
+  if (card.measure !== 'time' || card.unit) return `${formatNumber(n)}${unitAfter(n, card.unit)}`;
+  if (readsInHours(card.title, n)) return hoursText(n);
+  const minutes = Math.round(n * 10) / 10;
+  return `${formatNumber(n)} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
 
 // "A", "A and B", "A, B and C": every title named, in the order given.
 export function joinTitles(titles: string[]): string {
@@ -87,7 +99,7 @@ export function levelChip(card: TargetCardView, today: LocalDate | null = null):
       if (!card.graded || card.level === null) return { label: 'Tracked, not judged', tone: 'plain' };
       if (card.level === 'aspiration') return { label: 'Aspiration reached', tone: 'accent' };
       if (card.level === 'floor') return { label: 'Floor met', tone: 'accent' };
-      if (card.level === 'partway') return { label: `Partway · ${formatNumber(card.remainingToFloor ?? 0)}${unitAfter(card.remainingToFloor ?? 0, card.unit)} to floor`, tone: 'plain' };
+      if (card.level === 'partway') return { label: `Partway · ${amountText(card, card.remainingToFloor ?? 0)} to floor`, tone: 'plain' };
       return { label: 'Not started', tone: 'plain' };
     }
   }
@@ -97,9 +109,9 @@ export function levelChip(card: TargetCardView, today: LocalDate | null = null):
 export function levelsText(card: TargetCardView, today: LocalDate | null = null): string | null {
   if (card.floor === null) return null;
   const per = card.period === 'weekly' ? ' a week' : card.period === 'deadline' && card.dueOn ? ` by ${formatDay(card.dueOn, today)}` : '';
-  const aspiration = card.aspiration === null ? '' : ` · aspiration ${formatNumber(card.aspiration)}${unitAfter(card.aspiration, card.unit)}`;
+  const aspiration = card.aspiration === null ? '' : ` · aspiration ${amountText(card, card.aspiration)}`;
   const floorWhat = card.period === 'day_slots' ? ' of your named days' : '';
-  return `Floor ${formatNumber(card.floor)}${unitAfter(card.floor, card.unit)}${floorWhat}${per}${aspiration}`;
+  return `Floor ${amountText(card, card.floor)}${floorWhat}${per}${aspiration}`;
 }
 
 // The line that lives on a target's own card, never on the hero: what is left to the aspiration. Only a graded target
@@ -107,7 +119,7 @@ export function levelsText(card: TargetCardView, today: LocalDate | null = null)
 export function toAspirationLine(card: TargetCardView): string | null {
   if (card.status !== 'counted' || !card.graded || card.level !== 'floor' || card.remainingToAspiration === null) return null;
   if (!(card.remainingToAspiration > 0)) return null;
-  return `${formatNumber(card.remainingToAspiration)}${unitAfter(card.remainingToAspiration, card.unit)} more to reach your aspiration`;
+  return `${amountText(card, card.remainingToAspiration)} more to reach your aspiration`;
 }
 
 // What is left to the aspiration in a week that has closed (the weekly review's recap): said as how far short it was,
@@ -115,7 +127,7 @@ export function toAspirationLine(card: TargetCardView): string | null {
 export function toSettledAspirationLine(card: TargetCardView): string | null {
   if (card.status !== 'counted' || !card.graded || card.level !== 'floor' || card.remainingToAspiration === null) return null;
   if (!(card.remainingToAspiration > 0)) return null;
-  return `${formatNumber(card.remainingToAspiration)}${unitAfter(card.remainingToAspiration, card.unit)} short of your aspiration that week`;
+  return `${amountText(card, card.remainingToAspiration)} short of your aspiration that week`;
 }
 
 export interface PatternLine {

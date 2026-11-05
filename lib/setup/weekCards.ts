@@ -42,7 +42,7 @@ export const WEEK_WORDS = {
   anyDay: "Any day, as long as the week's number is met",
   setDaysPrompt: 'Which days?',
   planningQuestion: 'When would you like to plan your week?',
-  planningReason: 'Your look back at the week happens then too.',
+  planningReason: "This is when you'll plan the week ahead.",
   next: 'Next',
   useThisTime: 'Use this time',
   noneSaid: "I'll skip these for now.",

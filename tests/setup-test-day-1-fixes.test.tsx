@@ -354,7 +354,7 @@ describe('d. words that name a time unit take no "minutes of"', () => {
     expect(numberAbout('aspiration', reading, TODAY)).toBe("The number of hours of reading a week you're hoping for.");
     const d = emptyDraft();
     d.model.goals.push({ ...goal('g1', 'Read'), targets: [reading] });
-    expect(numberHelp(d, 'floor', TODAY)).toContain('how many hours of reading would still count');
+    expect(numberHelp(d, 'floor', TODAY)).toContain('the least hours of reading that still counts');
     expect(numberHelp(d, 'floor', TODAY)).not.toMatch(/minutes of hours/);
   });
 

@@ -187,7 +187,7 @@ for (const [name, width] of Object.entries(WIDTHS)) {
         const line = lines[k].say;
         const codeCard = await codeCardOn(page);
         const requestsNow = (await fakeLast()).setupRequests;
-        if (codeCard === 'week') {
+        if (codeCard === 'week' || codeCard === 'goal') {
           // MOM-179: a week card comes in place of a question of Claude's, or straight after another card, so the count of requests may or may not
           // have moved. It is answered the way the scripted person does: typed in its answer box, which goes to Claude as always.
           expect(card.id).toBe('setup-question');

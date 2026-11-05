@@ -209,7 +209,7 @@ export const SETUP_STEPS: readonly SetupStep[] = [
         question: 'Would you rather do this on set days, or any time?',
         detail: "Any time means any day works, as long as the week's number is met.",
       },
-      { topic: 'planning_moment', question: 'When would you like to plan your week?', detail: 'Your look back at the week happens then too.' },
+      { topic: 'planning_moment', question: 'When would you like to plan your week?', detail: "This is when you'll plan the week ahead." },
     ],
     topics: ['time_zone', 'day_end', 'week_start', 'day_types', 'capacity', 'slots_or_quota', 'planning_moment'],
     playbackAfter: 'planning',

@@ -132,7 +132,7 @@ describe('finding 1: a number question names the counted thing and whether it is
     fireEvent.click(links[0]);
     if (NUMBER_TOPICS.has(topic)) {
       expect(onAnswer).not.toHaveBeenCalled();
-      const words = screen.getByText(/The first number is how many workouts would still count in a hard week/);
+      const words = screen.getByText(/The first number is the least workouts that still counts/);
       expect(words.textContent).toContain("The second is how many you're hoping for");
       expect(words.textContent).not.toMatch(/fewest|\baim\b/i);
       expect(words.textContent).toBe(numberHelp(draft, topic, TODAY));

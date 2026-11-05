@@ -8,7 +8,7 @@ import { casualDate } from '@/lib/dates/casual';
 import { EARLY_DAY_END_LIMIT } from '@/lib/engine/constants';
 import { INTEGRATION_CATALOG } from '@/lib/integrations/catalog';
 import { capacityWords, singularFirstWord, unitCount } from '@/lib/utils/units';
-import { hoursText, minutesAsHours, namesHours, namesMinutes } from './timeUnits';
+import { hoursText, minutesAsHours, namesHours as namesHoursIn, namesMinutes, readsInHours } from './timeUnits';
 import type { GoalDraft, SetupChunk, SetupDraft, SetupModel, TargetDraft, Transcript } from '@/types/setup';
 import { asSaid, itemOf, listOf, restate, titleOf, trimmed } from './restate';
 import { minutesOfClock, timePhrasesIn } from './text';
@@ -110,8 +110,9 @@ export function amount(t: Pick<TargetDraft, 'measure' | 'unit'> & { title?: stri
     case 'quantity':
       return unitCount(n, t.unit ? itemOf(t.unit) : '');
     case 'time':
-      // A time target is stored in minutes; one whose words name hours reads in hours ("3 hours", never "180 minutes").
-      return t.title !== undefined && namesHours(itemOf(t.title)) ? hoursText(n) : plural(n, 'minute', 'minutes');
+      // A time target is stored in minutes; one whose words name hours reads in hours ("3 hours", never "180 minutes"), and so does a whole number of
+      // hours (120 minutes is "2 hours"; lib/setup/timeUnits.ts readsInHours, the rule Home uses too).
+      return readsInHours(t.title === undefined ? '' : itemOf(t.title), n) ? hoursText(n) : plural(n, 'minute', 'minutes');
     case 'checklist':
       return plural(n, 'item', 'items');
   }
@@ -134,9 +135,10 @@ export function amountOf(t: Pick<TargetDraft, 'title' | 'measure' | 'unit'>, n: 
     case 'time':
       // Stored in minutes. Words naming hours read in hours ("3 hours of reading"), words naming minutes as they are, and any other
       // words after "minutes of". Never "minutes of hours".
-      if (namesHours(thing)) {
+      if (readsInHours(thing, n)) {
         const hours = minutesAsHours(n);
-        return `${hours} ${hours === 1 ? singularFirstWord(thing) : thing}`;
+        // Words that name hours keep them ("3 hours of reading"); any other words follow "hours of" (120 minutes of writing is "2 hours of writing").
+        return namesHoursIn(thing) ? `${hours} ${hours === 1 ? singularFirstWord(thing) : thing}` : `${hoursText(n)} of ${thing}`;
       }
       return namesMinutes(thing) ? `${n} ${n === 1 ? singularFirstWord(thing) : thing}` : `${plural(n, 'minute', 'minutes')} of ${thing}`;
     case 'checklist':

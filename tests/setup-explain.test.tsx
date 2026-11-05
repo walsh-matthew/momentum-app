@@ -54,14 +54,15 @@ describe('the explanations', () => {
     expect(ASKED).toEqual(expect.arrayContaining(['idea', 'why', 'breakup', 'sequencing', 'parked_return', 'shape', 'target', 'floor', 'time_zone', 'tone']));
   });
 
-  it('are the owner\'s words, including the four he changed on 2026-11-04', () => {
-    expect(EXPLANATIONS.priorities).toBe(
-      'These are the things in your life, besides this goal, that your plan should not crowd out, like family time, your health, or something you enjoy.',
-    );
-    expect(EXPLANATIONS.capacity).toBe('This is about how much time each kind of day usually has for this. Skip any you like.');
-    expect(EXPLANATIONS.planning_moment).toBe('This is when you would like to plan your week.');
-    expect(EXPLANATIONS.sequencing).toBe('You can start your goals together, or begin with one. It is up to you.');
-    expect(EXPLANATIONS.day_end).toBe(DAY_END_SAY);
+  it('are the owner\'s words: the four he changed on 2026-11-04, and the ones reworded in MOM-180 B1 (Jira comment 10358) so none repeats its card', () => {
+    expect(EXPLANATIONS.priorities).toBe('These are the things in your life, besides this goal, that your plan should not crowd out.');
+    expect(EXPLANATIONS.capacity).toBe('This is about how much time each kind of day usually has for this.');
+    expect(EXPLANATIONS.planning_moment).toBe('Pick the day and the time that suit you best.');
+    expect(EXPLANATIONS.sequencing).toBe('Together means every goal is in your plan from the start. One first means the others wait until you bring them back.');
+    expect(EXPLANATIONS.idea).toBe('This is the goal you want to work on. It can be anything you would like to change, build or keep up.');
+    expect(EXPLANATIONS.target).toBe('This is the thing you will count to know it is going well. It can be anything you can add up.');
+    expect(EXPLANATIONS.day_end).toBe('This is the time you would say your day is done.');
+    expect(DAY_END_SAY).toMatch(/midnight/);
   });
 
   it('name no day, time or number the person has not said (principle 1), except the day-end rule\'s own words', () => {
@@ -87,15 +88,14 @@ describe('the explanations', () => {
 
   it('carry the person\'s own counted thing on the number questions, and read the same for a deadline', () => {
     const floor = explanationFor('floor', counting('Pages'), TODAY);
-    expect(floor?.text).toContain('how many pages would still count in a hard week');
+    expect(floor?.text).toContain('the least pages that still counts');
     expect(floor?.text).not.toMatch(/fewest|\baim\b|floor|aspiration/i);
     expect(explanationFor('aspiration', counting('Pages'), TODAY)?.text).toBe(floor?.text);
     const level = explanationFor('number_level', counting('Pages'), TODAY);
-    expect(level?.text).toContain('The least that counts is how many pages would still count in a hard week');
-    expect(level?.text).toContain('What you are aiming for is how many you are hoping for');
+    expect(level?.text).toBe('The number of pages you could settle for in a hard week is one answer. The number you are aiming for is the other.');
     // Nothing counted yet: plain words with no thing and no number.
-    expect(explanationFor('floor')?.text).toBe('A week at this number still counts as a good week.');
-    expect(explanationFor('number_level')?.text).toMatch(/^The least that counts is the number for a hard week/);
+    expect(explanationFor('floor')?.text).toBe('This is the number you could settle for in a hard week.');
+    expect(explanationFor('number_level')?.text).toBe('A number you could settle for in a hard week is one answer. A number you are aiming for is the other.');
   });
 });
 

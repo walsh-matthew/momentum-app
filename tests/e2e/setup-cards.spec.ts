@@ -117,7 +117,11 @@ async function answer(page: Page, line: string): Promise<void> {
   if (line === MEANING_TEXT) await askWhatItMeans(page);
   else if (line === PROPOSAL_YES_TEXT && (await yes.count()) > 0) await yes.click();
   else {
-    if ((await page.getByLabel('Your answer').count()) === 0) await page.getByRole('button', { name: TYPE_INSTEAD }).click();
+    if ((await page.getByLabel('Your answer').count()) === 0) {
+      // A goal card of buttons (MOM-180) opens its box from "Type your answer"; the date layout from "Type it instead".
+      const instead = page.getByRole('button', { name: TYPE_INSTEAD });
+      await (((await instead.count()) > 0 ? instead : page.getByRole('button', { name: 'Type your answer' })).first()).click();
+    }
     await page.getByLabel('Your answer').fill(line);
     await page.getByRole('button', { name: 'Send' }).click();
   }

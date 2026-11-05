@@ -17,6 +17,8 @@ interface WeekCardFrameProps {
   question: string;
   // Regular weight under it, when the card has a reason to give; null for none.
   detail?: string | null;
+  // Which family of cards this is, for a test and a screen reader: the week cards (MOM-179) or the goal cards (MOM-180).
+  card?: 'week' | 'goal';
   // The card's own controls.
   children: ReactNode;
   // Nothing can be tapped while a reply is on its way.
@@ -28,12 +30,12 @@ interface WeekCardFrameProps {
 // What every week card shares (MOM-179): the question, an optional reason, the card's controls, and "Type your answer", which opens the
 // answer box and sends what the person writes to Claude, exactly as on any other question. "What does this mean?" sits beside it and shows
 // code's explanation of the topic in place, with no Claude call (MOM-180); the typed answer box still reaches Claude.
-export function WeekCardFrame({ topic, question, detail = null, children, busy, onType }: WeekCardFrameProps) {
+export function WeekCardFrame({ topic, question, detail = null, card = 'week', children, busy, onType }: WeekCardFrameProps) {
   const [typing, setTyping] = useState(false);
   const explanation = explanationFor(topic);
   const help = { explain: explanation?.text ?? null, askClaude: explanation?.askClaude ?? false, onAsk: () => onType(MEANING_TEXT) };
   return (
-    <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4" data-card="week" data-topic={topic}>
+    <section aria-labelledby="setup-question" className="channel-card min-w-0 space-y-4 p-4" data-card={card} data-topic={topic}>
       <div className="space-y-1">
         <CardLead id="setup-question">{question}</CardLead>
         {detail && (

@@ -82,7 +82,7 @@ describe('the weekly floor question and the make/makes helper (finding a)', () =
     const t = target('t1', title);
     const thing = countedThing(t);
     expect(numberQuestion('floor', t, TODAY)).toBe(`In a hard week, how many ${thing} would still count?`);
-    expect(numberHelp(draftWith(t), 'floor', TODAY)).toContain(`The first number is how many ${thing} would still count in a hard week`);
+    expect(numberHelp(draftWith(t), 'floor', TODAY)).toContain(`The first number is the least ${thing} that still counts`);
   });
 
   it('reads the owner\'s examples', () => {

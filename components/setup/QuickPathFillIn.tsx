@@ -5,6 +5,7 @@ import { casualDate } from '@/lib/dates/casual';
 import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
 import type { FillInChoice, FillInItem } from '@/types/setupScreen';
 import { AnswerChoice, ChoiceMark, choiceClasses } from './AnswerChoice';
+import { PickTimeButton } from './PickTimeButton';
 import { SetupButton } from './SetupButton';
 import { TimeZonePicker } from './TimeZonePicker';
 
@@ -47,7 +48,12 @@ export function Field({ label, type, inputMode, initial, disabled, button, onSet
   };
   return (
     <form onSubmit={submit} className="flex min-w-0 flex-col gap-2 sm:flex-row" noValidate>
-      <input type={type} inputMode={inputMode} aria-label={label} value={value} disabled={disabled} onChange={(event) => setValue(event.target.value)} className={FIELD} />
+      {type === 'time' ? (
+        // A time is a full-width "Pick a time" button with the phone's input laid over it, not a bare box that ran past the card (MOM-180 B1).
+        <PickTimeButton ariaLabel={label} value={value} disabled={disabled} onPick={setValue} />
+      ) : (
+        <input type={type} inputMode={inputMode} aria-label={label} value={value} disabled={disabled} onChange={(event) => setValue(event.target.value)} className={FIELD} />
+      )}
       {ready && (
         <SetupButton tone={button ? 'main' : 'second'} type="submit" disabled={disabled}>
           {button ?? QUICK_PATH_WORDS.setItem}

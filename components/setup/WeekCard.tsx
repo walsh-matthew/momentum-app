@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { WEEKDAYS } from '@/lib/setup/fillIn';
 import { WEEK_WORDS, WHAT_TIME, WHAT_TIME_DAY_ENDS, WHICH_DAY, planningLeft, weekCardDetail, type WeekAnswer } from '@/lib/setup/weekCards';
 import type { AssistantTurn } from '@/types/setup';
-import { FIELD, WeekdayGrid } from './QuickPathFillIn';
+import { PickTimeButton } from './PickTimeButton';
+import { WeekdayGrid } from './QuickPathFillIn';
 import { SetupButton } from './SetupButton';
 import { DayTimesCard } from './DayTimesCard';
 import { SlotsCard } from './SlotsCard';
@@ -21,7 +22,8 @@ interface WeekCardProps {
 }
 
 // A time, answered only by a button that is always there (never dimmed, never on change): an iPhone time wheel changes the box on its first scroll,
-// so a change alone sends nothing (the date picker's lesson, MOM-177). A tap with no time shows the callout instead.
+// so a change alone sends nothing (the date picker's lesson, MOM-177). The time is picked with a full-width "Pick a time" button that reads the
+// chosen time (components/setup/PickTimeButton.tsx, MOM-180 B1); a tap on "Use this time" with no time picked shows the callout instead.
 function DayEndControls({ busy, onAnswer }: Pick<WeekCardProps, 'busy' | 'onAnswer'>) {
   const [time, setTime] = useState('');
   const [tried, setTried] = useState(false);
@@ -31,7 +33,7 @@ function DayEndControls({ busy, onAnswer }: Pick<WeekCardProps, 'busy' | 'onAnsw
   };
   return (
     <div className="space-y-3">
-      <input type="time" aria-label="Time your day ends" value={time} disabled={busy} onChange={(event) => setTime(event.target.value)} className={FIELD} />
+      <PickTimeButton ariaLabel="Time your day ends" value={time} disabled={busy} onPick={setTime} />
       {tried && time === '' && <WeekCallout>{WHAT_TIME_DAY_ENDS}</WeekCallout>}
       <SetupButton tone="main" busy={busy} onClick={tap}>
         {WEEK_WORDS.useThisTime}
@@ -54,7 +56,7 @@ function PlanningControls({ turn, busy, onAnswer }: Pick<WeekCardProps, 'turn' |
   return (
     <div className="space-y-3">
       {left.weekday && <WeekdayGrid choices={WEEKDAYS} answer={weekday} disabled={busy} onPick={setWeekday} />}
-      {left.time && <input type="time" aria-label="Time to plan" value={time} disabled={busy} onChange={(event) => setTime(event.target.value)} className={FIELD} />}
+      {left.time && <PickTimeButton ariaLabel="Time to plan" value={time} disabled={busy} onPick={setTime} />}
       {tried && missingDay && <WeekCallout>{WHICH_DAY}</WeekCallout>}
       {tried && missingTime && <WeekCallout>{WHAT_TIME}</WeekCallout>}
       <SetupButton tone="main" busy={busy} onClick={tap}>

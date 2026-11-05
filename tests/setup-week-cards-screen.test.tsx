@@ -231,7 +231,7 @@ describe('the planning moment card', () => {
   it('has a day and a time, nothing chosen, and Next from the start', () => {
     show('planning_moment');
     expect(screen.getByRole('heading', { name: 'When would you like to plan your week?' })).toBeTruthy();
-    expect(screen.getByText('Your look back at the week happens then too.')).toBeTruthy();
+    expect(screen.getByText("This is when you'll plan the week ahead.")).toBeTruthy();
     expect(pressed()).toHaveLength(0);
     expect((screen.getByLabelText('Time to plan') as HTMLInputElement).value).toBe('');
     expect((screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(false);

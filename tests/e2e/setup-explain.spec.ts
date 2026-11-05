@@ -96,7 +96,7 @@ test.describe('"What does this mean?" at 390px', () => {
       }
       if (!week && code === 'week' && /When does your day end/.test(heading)) {
         week = true;
-        expect(await openExplanation(page, 'If your day ends after midnight'), 'a week card has no Ask Claude').toBe(false);
+        expect(await openExplanation(page, 'the time you would say your day is done'), 'a week card has no Ask Claude').toBe(false);
       }
 
       if (code !== null) {

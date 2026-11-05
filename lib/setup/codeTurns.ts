@@ -14,11 +14,13 @@
 import { casualDate } from '@/lib/dates/casual';
 import type { AssistantTurn, GoalDraft, SetupDraft, SetupTopic, Transcript } from '@/types/setup';
 import {
+  durationCount,
   durationEnd,
   durationIn,
   durationWeeks,
   isOnlyDuration,
   isOnlyRelativeDate,
+  plainDurationIn,
   proposalDate,
   relativeDateIn,
   stretchLastDay,
@@ -68,7 +70,7 @@ export type DateStep =
   // Claude takes the turn, told what code read the date or the length as.
   | { kind: 'hint'; hint: string };
 
-const codeTurn = (draft: SetupDraft, over: Pick<AssistantTurn, 'kind' | 'question' | 'topic' | 'options'> & { detail?: string | null }): AssistantTurn => ({
+const codeTurn = (draft: SetupDraft, over: Pick<AssistantTurn, 'kind' | 'question' | 'topic' | 'options'> & { detail?: string | null; say?: string }): AssistantTurn => ({
   chunk: null,
   skipped: null,
   say: '',
@@ -122,6 +124,57 @@ function lengthSaid(transcript: Transcript): Duration | null {
   return null;
 }
 
+// The one plain length the person said about the plan (MOM-180 B1): "90 days", "12 weeks", "3 months". Null when none was said, when two
+// different ones were, or when the one said is a guess ("about 90 days", "8 to 12 weeks", "a couple of weeks"): then Claude takes the turn,
+// as before. Read from the person's messages anywhere in the conversation, because the draft holds no length and a said entry only names a
+// saved value; the same rules as lengthSaid leave out answers about the past.
+export function plainLengthSaid(transcript: Transcript): Duration | null {
+  let found: Duration | null = null;
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    const m = transcript[i];
+    if (m.role !== 'person') continue;
+    const before = transcript[i - 1];
+    if (before?.role === 'assistant' && before.turn.topic !== null && PAST_TOPICS.has(before.turn.topic)) continue;
+    if (durationCount(m.text) === 0 || PAST_WORDS.test(m.text.toLowerCase())) continue;
+    const d = plainDurationIn(m.text);
+    if (!d) return null;
+    if (found && (found.amount !== d.amount || found.unit !== d.unit)) return null;
+    found = d;
+  }
+  return found;
+}
+
+// The goal a deadline date would fill: the newest project goal with a start date and no deadline yet (no deadline task with a date, no
+// deadline target).
+function goalForDeadline(draft: SetupDraft): GoalDraft | null {
+  for (let i = draft.model.goals.length - 1; i >= 0; i--) {
+    const g = draft.model.goals[i];
+    if (!g.startDate || g.shape !== 'project') continue;
+    const has = g.items.some((it) => it.kind === 'deadline_task' && it.dueDate !== null) || g.targets.some((t) => t.period.kind === 'deadline');
+    if (!has) return g;
+  }
+  return null;
+}
+
+// The goal an end date or a deadline date is about, or null when the draft has none waiting for it.
+export function goalForDateTopic(draft: SetupDraft, topic: SetupTopic): GoalDraft | null {
+  return topic === 'end_date' ? goalForLength(draft, 'end_date') : topic === 'deadline_date' ? goalForDeadline(draft) : null;
+}
+
+// The date an answer gives, as YYYY-MM-DD: a day written out ("Thursday, Nov 12, 2026"), or a relative one ("today", "yesterday"). Null
+// when the answer holds no single date.
+function answerDate(text: string, today: string): string | null {
+  const written = datesIn(text).map((d) => isoOfWritten(d, today));
+  if (written.length === 1) return written[0];
+  if (written.length > 1) return null;
+  const found = relativeDateIn(text, today, { allowPast: true });
+  return found?.kind === 'date' ? found.iso : null;
+}
+
+// Why an end or a deadline date on or before the start date is not taken (MOM-180 B1, test day 1): one plain line, then the same question
+// again. No date in it: a date question's lead-in shows none (showsDateAndAsks).
+export const AFTER_START_LINE = 'Pick a day after your start date.';
+
 // A note for Claude when a length was said and a goal has a start date to count it from (finding 7).
 function lengthHint(transcript: Transcript, draft: SetupDraft, today: string): string | null {
   const d = lengthSaid(transcript);
@@ -166,7 +219,7 @@ const realDate = (iso: string): boolean => {
 };
 
 // A written-out date as YYYY-MM-DD: its own year, or the next time that day comes round from today.
-function isoOfWritten(d: MentionedDate, today: string): string | null {
+export function isoOfWritten(d: MentionedDate, today: string): string | null {
   const on = (year: number): string => `${year}-${pad2(d.month)}-${pad2(d.day)}`;
   if (d.year !== null) return realDate(on(d.year)) ? on(d.year) : null;
   const year = Number(today.slice(0, 4));
@@ -223,11 +276,12 @@ export function suggestedDate(topic: SetupTopic, transcript: Transcript, draft: 
   const last = transcript[transcript.length - 1];
   if (last?.role === 'person' && answeredTopic(transcript, transcript.length - 1) === topic && !asksMeaning(last.text)) return null;
   if (topic === 'start_date') return today;
+  // An end or deadline date is counted from the goal's start, so a date said on or before it is never suggested (MOM-180 B1).
+  const goal = goalForDateTopic(draft, topic);
   const said = saidDate(topic, transcript, draft, today);
-  if (said) return said;
-  if (topic === 'end_date') {
-    const d = lengthSaid(transcript);
-    const goal = goalForLength(draft, 'end_date');
+  if (said && (!goal?.startDate || said > goal.startDate)) return said;
+  if (topic === 'end_date' || topic === 'deadline_date') {
+    const d = plainLengthSaid(transcript);
     if (d && goal?.startDate) return durationEnd(goal.startDate, d);
   }
   return null;
@@ -252,11 +306,14 @@ export const showsDateAndAsks = (turn: AssistantTurn): boolean =>
 // Friday, Oct 30?", "Done by Friday, Nov 20?"), otherwise Claude's question, in code's words when it asked for an "exact
 // date" or showed a date; a lead-in with a date is dropped; a date proposal's other answers keep no repeat of the picker. Any
 // other turn is returned as it is. The service shows the result only when it passes the checks (lib/services/setup.ts).
-export function normalizeDateTurn(turn: AssistantTurn, transcript: Transcript, draft: SetupDraft, today: string | undefined): AssistantTurn {
-  if (turn.topic === null || !DATE_TOPICS.has(turn.topic) || !today) return turn;
+export function normalizeDateTurn(given: AssistantTurn, transcript: Transcript, draft: SetupDraft, today: string | undefined): AssistantTurn {
+  if (given.topic === null || !DATE_TOPICS.has(given.topic) || !today) return given;
+  // "A few ways to read your answer" is never the card for a date (MOM-180 B1, test day 1): the date question, or code's suggestion, is.
+  const turn: AssistantTurn = given.kind === 'interpretations' ? { ...given, kind: 'question', say: '', options: [] } : given;
   if (turn.kind !== 'question' && turn.kind !== 'proposal') return turn;
-  const ask = ASK_THE_DAY[turn.topic];
-  const proposal = PROPOSAL_WORDS[turn.topic];
+  const topic = given.topic;
+  const ask = ASK_THE_DAY[topic];
+  const proposal = PROPOSAL_WORDS[topic];
   if (!ask || !proposal) return turn;
   const say = hasDate(turn.say) ? '' : turn.say;
   if (turn.kind === 'proposal') {
@@ -265,7 +322,7 @@ export function normalizeDateTurn(turn: AssistantTurn, transcript: Transcript, d
   }
   // Claude's reason, unless it has none, asks for an "exact date" or shows a date: then code's.
   const detail = turn.detail !== null && !EXACT_DATE.test(turn.detail) && !hasDate(turn.detail) ? turn.detail : ask.detail;
-  const date = suggestedDate(turn.topic, transcript, draft, today);
+  const date = suggestedDate(topic, transcript, draft, today);
   if (date) {
     // Written the casual way with its weekday, which is also how the person's yes is read as accepting it
     // (lib/setup/validate.ts reads the month and day); "today, " in front keeps the weekday on screen (lib/dates/casual.ts).
@@ -291,6 +348,17 @@ export function dateStep(transcript: Transcript, draft: SetupDraft, today: strin
     if (goal?.startDate && d) {
       const words = lengthProposal(goal.startDate, d, lengthTopic, today);
       return { kind: 'turn', turn: codeTurn(draft, { kind: 'proposal', topic: lengthTopic, question: words.question, detail: words.detail, options: [] }) };
+    }
+  }
+
+  // An end or deadline date on or before the start date is refused here, with no call to Claude (MOM-180 B1): the question again, with the
+  // reason in one line. The draft is untouched.
+  if (topic === 'end_date' || topic === 'deadline_date') {
+    const start = goalForDateTopic(draft, topic)?.startDate ?? null;
+    const given = start ? answerDate(answer.text, today) : null;
+    const ask = ASK_THE_DAY[topic];
+    if (start && given && given <= start && ask) {
+      return { kind: 'turn', turn: codeTurn(draft, { kind: 'question', topic, say: AFTER_START_LINE, question: ask.question, detail: ask.detail, options: [] }) };
     }
   }
 
