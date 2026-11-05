@@ -11,7 +11,9 @@ import type { DraftIssue } from './validate';
 
 export const CHUNK_TITLES: Record<SetupChunk, string> = {
   goals: 'Your goals',
-  targets: "What you'll count",
+  // "Your plan", not "What you'll count": this card also plays back what else matters and each goal's stretch (owner, MOM-180
+  // B3 review, 2026-11-05).
+  targets: 'Your plan',
   planning: 'Your days and weeks',
   talk: 'How Momentum talks to you',
 };

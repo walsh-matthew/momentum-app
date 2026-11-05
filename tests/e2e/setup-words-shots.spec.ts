@@ -89,7 +89,7 @@ for (const [label, width] of Object.entries(WIDTHS)) {
       let card = await nextCard(page, null);
       for (const person of scripted.person) {
         await expect(page.locator(CARD)).toHaveCount(1);
-        if (onTargets && card.id === 'setup-playback' && /what you'll count/i.test(card.heading)) {
+        if (onTargets && card.id === 'setup-playback' && /your plan/i.test(card.heading)) {
           await onTargets(page);
           return;
         }
