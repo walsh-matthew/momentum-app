@@ -19,6 +19,7 @@ import {
   addTargetCase,
   type ScriptedCase,
 } from '../../setup-evals/cases';
+import { EXACT_CALL_CASES } from '../../setup-evals/exactCallCases';
 import type { FakeScript } from './fakeAnthropic';
 
 export const E2E_CASE_ID = 'run-i-what-do-you-mean-protected';
@@ -74,7 +75,7 @@ function onThePersonsDay(turns: readonly AssistantTurn[]): AssistantTurn[] {
 // The scripts the fake model serves, picked by the person's first answer; the first is the default.
 export function fakeScripts(goalTitleForTarget: string = SEEDED_GOAL_TITLE): FakeScript[] {
   // The reading case (MOM-111 round 3b, finding 4): a goal that is not exercise, photographed as its own set.
-  const first = [e2eCase(), dateQuestionCase(), caseById(READING_CASE_ID), WEEK_CARDS_CASE, GOAL_CARDS_CASE, STEP_CARDS_CASE, DEADLINE_90_CASE, LEVEL_HOURS_CASE, NUMBERS_HOURS_CASE, METRIC_CASE].map((c) => ({ firstAnswer: c.person[0].say, turns: onThePersonsDay(c.script) }));
+  const first = [e2eCase(), dateQuestionCase(), caseById(READING_CASE_ID), WEEK_CARDS_CASE, GOAL_CARDS_CASE, STEP_CARDS_CASE, DEADLINE_90_CASE, LEVEL_HOURS_CASE, NUMBERS_HOURS_CASE, METRIC_CASE, ...EXACT_CALL_CASES].map((c) => ({ firstAnswer: c.person[0].say, turns: onThePersonsDay(c.script) }));
   const adding: FakeScript[] = [
     { mode: 'add_goal', firstAnswer: addGoalCase().person[0].say, turns: addGoalCase().script },
     { mode: 'add_target', firstAnswer: addTargetFor(goalTitleForTarget).person[0].say, turns: addTargetFor(goalTitleForTarget).script },

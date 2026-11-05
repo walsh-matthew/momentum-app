@@ -29,6 +29,7 @@ import {
   zoneOfTurn,
 } from '@/lib/setup/cards';
 import { cardStep } from '@/lib/setup/cardTurns';
+import { isFixedQuestion } from '@/lib/setup/fixedQuestions';
 import { checkSkipAnswered, checkTurn, type TurnContext } from '@/lib/setup/checks';
 import { emptyDraft } from '@/lib/setup/draft';
 import { runSetupEval } from '@/lib/setup/evals';
@@ -379,11 +380,16 @@ describe('the server answers a card with no call to Claude', () => {
     expect(s.calls).toHaveLength(0);
   });
 
-  it('leaves any other answer to Claude, as before', async () => {
+  it('a yes to the goals playback is followed by code\'s "what else matters" (MOM-180 B3), and any other answer goes to Claude, as before', async () => {
     const session = await afterYesTo('goals');
     const s = stub();
-    await takeSetupTurn({ ...session, timeZone: DENVER }, { runTurn: s.run });
-    expect(s.calls).toHaveLength(1);
+    const yes = await takeSetupTurn({ ...session, timeZone: DENVER }, { runTurn: s.run });
+    expect(s.calls).toHaveLength(0);
+    expect(yes.ok && yes.data.kind === 'turn' ? [yes.data.turn.topic, isFixedQuestion(yes.data.turn), yes.data.turn.draft.approved] : null).toEqual(['priorities', true, ['goals']]);
+    const changed = { ...session, transcript: [...session.transcript.slice(0, -1), { role: 'person' as const, text: 'Call it Running instead.' }] };
+    const other = stub();
+    await takeSetupTurn({ ...changed, timeZone: DENVER }, { runTurn: other.run });
+    expect(other.calls).toHaveLength(1);
   });
 
   it('writes no card for a person adding to a finished setup: their zone and settings are saved already', async () => {

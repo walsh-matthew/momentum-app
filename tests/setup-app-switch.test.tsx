@@ -15,6 +15,7 @@ import type { AssistantTurn, SetupSession } from '@/types/setup';
 import type { SetupTurnView } from '@/types/setupScreen';
 import { SETUP_CASES } from './setup-evals/cases';
 import { scriptedModel } from './helpers/setupScript';
+import { OPENING_IDEA, OPENING_WHY, throughOpening } from './helpers/setupOpening';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -54,6 +55,7 @@ async function startAndAnswer() {
   actions.ask.mockResolvedValueOnce(turnView(script[0]));
   render(<SetupConversation userId={USER} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await throughOpening();
   await screen.findByRole('heading', { name: script[0].question ?? '' });
   fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'I want to run more' } });
 }
@@ -101,15 +103,15 @@ describe('a request cut off by an app switch', () => {
     holding.resolve();
     await screen.findByRole('heading', { name: script[1].question ?? '' });
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
-    // Three calls in all: the first question, the cut-off answer, and its resend. The answer is in the conversation once, and the
+    // Three calls in all: the first question (after code's idea and why, MOM-180 B3), the cut-off answer, and its resend. The answer is in the conversation once, and the
     // resend carries exactly what the cut-off one did.
     expect(actions.ask).toHaveBeenCalledTimes(3);
-    expect(peopleSaid(2)).toEqual(['I want to run more']);
+    expect(peopleSaid(2)).toEqual([OPENING_IDEA, OPENING_WHY, 'I want to run more']);
     expect(sent(2).transcript).toEqual(sent(1).transcript);
     expect(sent(2).spentTokens).toBe(sent(1).spentTokens);
     // The conversation kept in the tab holds the answer once, followed by Claude's next turn.
     const stored = JSON.parse(window.sessionStorage.getItem(setupStorageKey(USER)) ?? '{}') as SetupSession;
-    expect(stored.transcript.filter((m) => m.role === 'person')).toHaveLength(1);
+    expect(stored.transcript.filter((m) => m.role === 'person').map((m) => m.text)).toEqual([OPENING_IDEA, OPENING_WHY, 'I want to run more']);
   });
 
   it('is sent again only once: when the resend fails too, the card shows and nothing more is sent', async () => {
@@ -126,7 +128,7 @@ describe('a request cut off by an app switch', () => {
     expect(actions.ask).toHaveBeenCalledTimes(3);
     expect(actions.pause).toHaveBeenCalledTimes(1);
     // Still the one answer, kept for the person's own tap.
-    expect(peopleSaid(2)).toEqual(['I want to run more']);
+    expect(peopleSaid(2)).toEqual([OPENING_IDEA, OPENING_WHY, 'I want to run more']);
   });
 
   it('is not sent again when the page never left: a lost connection shows the card, as before', async () => {
@@ -165,7 +167,7 @@ describe('a request cut off by an app switch', () => {
     await screen.findByRole('heading', { name: script[1].question ?? '' });
     expect(actions.pause.mock.calls.map((c) => c[0])).toEqual([RESEND_AFTER_MS, 2 * 1000 + RESEND_MARGIN_MS]);
     expect(actions.ask).toHaveBeenCalledTimes(4);
-    expect(peopleSaid(3)).toEqual(['I want to run more']);
+    expect(peopleSaid(3)).toEqual([OPENING_IDEA, OPENING_WHY, 'I want to run more']);
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
@@ -200,6 +202,7 @@ describe('the playback after a change (part 2)', () => {
     actions.ask.mockResolvedValueOnce(turnView(script[at])).mockResolvedValueOnce(turnView(script[at]));
     render(<SetupConversation userId={USER} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+    await throughOpening();
     await screen.findByRole('heading', { name: /did I get this right\?/i });
 
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
@@ -222,6 +225,7 @@ describe('the playback after a change (part 2)', () => {
     actions.ask.mockResolvedValueOnce(turnView(script[at])).mockResolvedValueOnce(turnView(script[at]));
     render(<SetupConversation userId={USER} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+    await throughOpening();
     await screen.findByRole('heading', { name: 'Ready to save?' });
     fireEvent.click(screen.getByRole('button', { name: 'Change something' }));
     fireEvent.change(screen.getByLabelText('What would you like to change?'), { target: { value: 'One more change' } });

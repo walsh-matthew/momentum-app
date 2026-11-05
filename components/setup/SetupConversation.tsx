@@ -13,6 +13,7 @@ import { answerWeekCard, anyDayTargets, isWeekCard, weekCardDetail, type WeekAns
 import { answerGoalCard, goalCardDetail, isGoalCard } from '@/lib/setup/goalCards';
 import { aimHeldFrom, answerStepCard, isNamesCard, isStepCard, stepCardDetail, withNextSourceOrWeekTurn, type StepAnswer } from '@/lib/setup/stepCards';
 import { renderFinal, renderPlayback, spokenTimes } from '@/lib/setup/playback';
+import { fixedQuestionDetail, isFixedQuestion, openingSession, withOpeningTurn } from '@/lib/setup/fixedQuestions';
 import { personWords } from '@/lib/setup/said';
 import { RETURNING_FIRST_LINE, SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
 import {
@@ -44,7 +45,7 @@ import type { FillHow } from './QuickPathFillIn';
 import { RetryNotice } from './RetryNotice';
 import { SetupAlert } from './SetupAlert';
 import { SetupButton, setupButtonClasses } from './SetupButton';
-import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
+import { QUICK_PATH_WORDS, playbackTitle } from '@/lib/setup/quickPath';
 import { CARD_TEXT, CardLead } from './cardText';
 import { pauseBeforeResend } from './resendPause';
 import { clearStoredSession, loadStoredSession, storeSession } from './setupStorage';
@@ -236,19 +237,25 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
     setBusy(false);
   };
 
+  // A first setup opens on code's idea question, with no call (MOM-180 B3); an addition opens on Claude's first turn, as before.
   const start = () => {
     const fresh = freshSession();
-    setSession(fresh);
+    const opened = adding ? fresh : openingSession(fresh);
+    setSession(opened);
     setPhase('running');
-    void ask(fresh);
+    if (adding || awaitsClaude(opened)) void ask(opened);
+    else storeSession(storageId, opened);
   };
 
+  // An answer goes to Claude, except the answer to code's idea question, which is followed by code's why question (MOM-180 B3): one call then
+  // reads both.
   const answer = (text: string) => {
-    const next = withPersonMessage(session, text);
+    const said = withPersonMessage(session, text);
+    const next = adding ? said : withOpeningTurn(said);
     setDraftAnswer(undefined);
     setSession(next);
     storeSession(storageId, next);
-    void ask(next);
+    if (awaitsClaude(next)) void ask(next);
   };
 
   // The time zone card's answer (MOM-178): a tap, recorded in the draft as theirs, and then Claude's next question. No call is made for the
@@ -589,7 +596,7 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
           // main answer, not in the change box of the one it replaced (MOM-167 part 2).
           key={`playback:${spoken}`}
           chunk={turn.chunk}
-          title={adding && turn.chunk === 'planning' ? ADD_WORDS.planningTitle : undefined}
+          title={adding && turn.chunk === 'planning' ? ADD_WORDS.planningTitle : playbackTitle(turn.chunk, turn.draft.model.goals.length)}
           lines={renderPlayback(shownModel(turn.draft, session.transcript), turn.chunk, playbackOptions)}
           busy={busy || waiting}
           onApprove={answer}
@@ -634,7 +641,9 @@ export function SetupConversation({ userId, adding }: SetupConversationProps) {
                 ? { ...turn, detail: goalCardDetail(turn) }
                 : isStepCard(turn)
                   ? { ...turn, detail: stepCardDetail(turn) }
-                  : isTimeZoneCard(turn) || isSettingsCard(turn)
+                  : isFixedQuestion(turn)
+                    ? { ...turn, detail: fixedQuestionDetail(turn) }
+                    : isTimeZoneCard(turn) || isSettingsCard(turn)
                     ? { ...turn, detail: null }
                     : turn
           }

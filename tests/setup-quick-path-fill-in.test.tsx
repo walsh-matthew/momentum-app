@@ -26,6 +26,7 @@ import type { FillInItem, QuickPathState, QuickStep, RecapSection, SetupTurnView
 import { SETUP_CASES } from './setup-evals/cases';
 import { WEEKDAY_CHOICES, item, quickProps, section, step, type CardProps } from './helpers/quickPath';
 import { scriptedModel } from './helpers/setupScript';
+import { throughOpening } from './helpers/setupOpening';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const KEY = setupStorageKey(USER);
@@ -439,6 +440,7 @@ describe('on the screen', () => {
     actions.ask.mockResolvedValueOnce(turnView(script[0])).mockResolvedValueOnce(limit(state));
     render(<SetupConversation userId={USER} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+    await throughOpening();
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Run more' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));

@@ -22,6 +22,7 @@ import { weekCard, type WeekAnswer, type WeekCardTopic } from '@/lib/setup/weekC
 import type { AssistantTurn, SetupDraft, SetupModel, SetupSession } from '@/types/setup';
 import { goal, scriptedModel, target } from './helpers/setupScript';
 import { WEEK_CARDS_CASE } from './setup-evals/cases';
+import { FIXED_WORDS } from '@/lib/setup/fixedQuestions';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const KEY = setupStorageKey(USER);
@@ -326,7 +327,7 @@ async function sessionAtDayEnd(): Promise<SetupSession> {
 }
 
 describe('in the conversation', () => {
-  it('answers the cards by tap with no request, until the kinds of days, which are Claude\'s', async () => {
+  it('answers the cards by tap with no request; code asks the kinds of days in fixed words, and only their answer goes to Claude', async () => {
     window.sessionStorage.setItem(KEY, JSON.stringify(await sessionAtDayEnd()));
     actions.ask.mockResolvedValue({ ok: false, error: 'stop here' });
     render(<SetupConversation userId={USER} />);
@@ -337,12 +338,18 @@ describe('in the conversation', () => {
     expect(await screen.findByRole('heading', { name: 'Which day does your week start on?' })).toBeTruthy();
     expect(actions.ask).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Monday' }));
-    // The next question is Claude's: one request, with both answers already in the draft as the person's own.
+    // The kinds of days: code's own question, with no request (MOM-180 B3); the answer is Claude's to read.
+    expect(await screen.findByRole('heading', { name: FIXED_WORDS.dayTypesQuestion })).toBeTruthy();
+    expect(actions.ask).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Busy days and easy days.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    // One request, with both taps already in the draft as the person's own.
     await waitFor(() => expect(actions.ask).toHaveBeenCalledTimes(1));
     const sent = actions.ask.mock.calls[0][0] as SetupSession;
     expect(sent.draft.model.person).toMatchObject({ dayEnd: '21:00', weekStart: 1 });
-    expect(sent.transcript.at(-1)).toEqual({ role: 'person', text: 'My week starts on Monday.' });
-    expect(sent.transcript.at(-3)).toEqual({ role: 'person', text: 'My day ends at 9:00 PM.' });
+    expect(sent.transcript.at(-1)).toEqual({ role: 'person', text: 'Busy days and easy days.' });
+    expect(sent.transcript.at(-3)).toEqual({ role: 'person', text: 'My week starts on Monday.' });
+    expect(sent.transcript.at(-5)).toEqual({ role: 'person', text: 'My day ends at 9:00 PM.' });
   });
 
   it('sends a typed answer to Claude as it always has', async () => {

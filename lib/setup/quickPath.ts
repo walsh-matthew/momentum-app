@@ -16,6 +16,9 @@ export const CHUNK_TITLES: Record<SetupChunk, string> = {
   talk: 'How Momentum talks to you',
 };
 
+// The title of a playback card: "Your goal" when the draft holds one goal (owner, MOM-180 B3, 2026-11-05), else the part's usual title.
+export const playbackTitle = (chunk: SetupChunk, goalCount: number): string => (chunk === 'goals' && goalCount === 1 ? 'Your goal' : CHUNK_TITLES[chunk]);
+
 // Every part, in the order setup plays them back.
 export function quickPathSections(model: SetupModel, options: PlaybackOptions = {}): PlaybackSection[] {
   return SETUP_CHUNKS.map((chunk) => ({ chunk, title: CHUNK_TITLES[chunk], lines: renderPlayback(model, chunk, options) }));

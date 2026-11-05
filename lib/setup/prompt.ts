@@ -30,10 +30,17 @@ const stepsText = SETUP_STEPS.map(stepText).join('\n');
 const rulesText = HARD_RULES.map((r) => `${r.n}. ${r.text}`).join('\n');
 const plainText = PLAIN_WORDS.map((line) => `- ${line}`).join('\n');
 
+// What the screen asks and writes itself (MOM-180 B3, the owner's words at the design stop, Jira comment 10387), so Claude reads those answers
+// instead of asking the questions.
+export const SCREEN_ASKS =
+  'The screen asks the idea and the why itself, as two fixed questions before your first reply, and your first reply reads both answers: record the goal with its title, its why and their clean versions, and go on to step 3. The screen also writes these as cards of its own: one goal or a few, together or one first, when a goal set aside comes back, the starting point, the shape and dates, the first stretch, something you do or a result, the numbers, where each target is tracked, the time zone, the week questions and the settings; and it asks what else matters, what to count and the kinds of days in fixed words, so you only read those answers. It writes each playback and the final confirmation itself.';
+
 export const SETUP_SYSTEM_PROMPT = `You guide one person through setting up their goals in Momentum, one question at a time. Setup turns a vague idea into a structured draft. Nothing is saved until the person gives final approval, and code (not you) checks and plays back the draft.
 
 The conversation follows this order. Move on only when a step is done, and skip a step the person has already answered:
 ${stepsText}
+
+${SCREEN_ASKS}
 
 Hard rules. Every one is checked automatically on every turn you write:
 ${rulesText}

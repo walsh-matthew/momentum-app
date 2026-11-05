@@ -68,6 +68,15 @@ function sessionBefore(full: Awaited<ReturnType<typeof fullCase>>, n: number): S
   return { transcript: full.transcript.slice(0, 2 * n), draft, spentTokens: 0 };
 }
 
+// A conversation whose opening Claude wrote (one in progress from before MOM-180 B3, when Claude asked the idea): after the person's idea, waiting for
+// Claude's why question, which no card replaces. Code's opening only follows its own idea question.
+function claudeOpened(full: Awaited<ReturnType<typeof fullCase>>): SetupSession {
+  const opener = full.script[0];
+  const idea = full.transcript[1];
+  if (idea.role !== 'person') throw new Error('expected the idea answer');
+  return { transcript: [{ role: 'assistant', turn: opener }, idea], draft: opener.draft, spentTokens: 0 };
+}
+
 const completeSession = (full: Awaited<ReturnType<typeof fullCase>>): SetupSession => ({ transcript: full.transcript, draft: full.draft, spentTokens: 0 });
 
 type Reply = { raw: unknown } | { reason: 'refused' | 'rate_limited' | 'unavailable' | 'bad_output' | 'not_configured' } | SetupTurnResult;
@@ -129,7 +138,7 @@ describe('takeSetupTurn: what it accepts', () => {
     const full = await fullCase();
     resetFakeSave(null);
     const stub = stubTurn([]);
-    const result = await takeSetupTurn(sessionBefore(full, 1), { runTurn: stub.run });
+    const result = await takeSetupTurn(claudeOpened(full), { runTurn: stub.run });
     expect(result).toEqual({ ok: false, error: 'Sign in to set up your goals.' });
     expect(stub.calls).toHaveLength(0);
   });
@@ -143,11 +152,12 @@ describe('takeSetupTurn: what it accepts', () => {
     expect(stub.calls[0]).toMatchObject({ userId: ME, spentTokens: 5000, today: '2026-10-28' });
   });
 
-  it('starts with an empty conversation', async () => {
+  it('starts with an empty conversation: code\'s idea question, with no call to Claude (MOM-180 B3)', async () => {
     const full = await fullCase();
     const stub = stubTurn([{ raw: full.script[0] }]);
     const result = await takeSetupTurn({ transcript: [], draft: emptyDraft(), spentTokens: 0 }, { runTurn: stub.run });
-    expect(result).toMatchObject({ ok: true, data: { kind: 'turn' } });
+    expect(result).toMatchObject({ ok: true, data: { kind: 'turn', turn: { topic: 'idea', question: 'What would you like to work on?' } } });
+    expect(stub.calls).toHaveLength(0);
   });
 
   it('takes the browser\'s locale with a turn, and drops one that is not a locale instead of refusing the turn (MOM-111)', async () => {
@@ -167,7 +177,7 @@ describe('takeSetupTurn: replies that are thrown away', () => {
     const full = await fullCase();
     const good = full.script[1];
     const stub = stubTurn([{ raw: { kind: 'question' } }, { raw: badQuestion(good) }, { raw: good }]);
-    const result = await takeSetupTurn(sessionBefore(full, 1), { runTurn: stub.run });
+    const result = await takeSetupTurn(claudeOpened(full), { runTurn: stub.run });
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', rejected: 2, spentTokens: 3000 } });
     if (!result.ok || result.data.kind !== 'turn') throw new Error('expected a turn');
     expect(result.data.turn).toEqual(good);
@@ -335,7 +345,7 @@ describe('takeSetupTurn: a retry is told what went wrong, in code\'s own words',
     const full = await fullCase();
     const good = full.script[1];
     const stub = stubTurn([{ raw: preview(good) }, { raw: preview(good) }, { raw: good }]);
-    const result = await takeSetupTurn(sessionBefore(full, 1), { runTurn: stub.run });
+    const result = await takeSetupTurn(claudeOpened(full), { runTurn: stub.run });
     expect(stub.calls).toHaveLength(2);
     expect(stub.calls[1].retryFeedback).toEqual([RETRY_FEEDBACK['plain.lead_in']]);
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', turn: preview(good), rejected: 1 } });
@@ -346,7 +356,7 @@ describe('takeSetupTurn: a retry is told what went wrong, in code\'s own words',
     const full = await fullCase();
     const good = full.script[1];
     const stub = stubTurn([{ raw: badQuestion(good) }, { raw: {} }, { raw: preview(good) }]);
-    const result = await takeSetupTurn(sessionBefore(full, 1), { runTurn: stub.run });
+    const result = await takeSetupTurn(claudeOpened(full), { runTurn: stub.run });
     expect(stub.calls).toHaveLength(3);
     expect(result).toMatchObject({ ok: true, data: { kind: 'turn', turn: preview(good), rejected: 2 } });
   });

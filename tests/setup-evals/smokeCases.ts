@@ -238,10 +238,6 @@ export const SMOKE_CASES: ScriptedCase[] = [
     reply: 'Hevy for lifts and my Apple Watch for runs',
     say: "Apple Watch can't be read yet, so you'll log your runs yourself for now.",
   }),
-  workoutsAsked(),
-  workoutsGuessed(),
-  ideasFromInterpretations(),
-  leadInPreview(),
-  newActivity(),
-  recommendationUnasked(),
+  // Short cases written as Claude's own opening and then the turn under test (MOM-180 B3: the app's opening is code's).
+  ...[workoutsAsked(), workoutsGuessed(), ideasFromInterpretations(), leadInPreview(), newActivity(), recommendationUnasked()].map((c): ScriptedCase => ({ ...c, opening: 'claude' })),
 ];

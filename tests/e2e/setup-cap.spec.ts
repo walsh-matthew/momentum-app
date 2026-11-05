@@ -44,6 +44,10 @@ test.describe('the limit message at 390px', () => {
     if ((await page.getByLabel('Your answer').count()) === 0) await page.getByRole('button', { name: 'Type it instead' }).click();
     await page.getByLabel('Your answer').fill('I want to run more');
     await page.getByRole('button', { name: 'Send' }).click();
+    // MOM-180 B3: code asks the why next, with no request; its answer is the first request, which meets the limit.
+    await expect(page.getByRole('heading', { name: 'Why does this matter to you?' })).toBeVisible();
+    await page.getByLabel('Your answer').fill('It clears my head');
+    await page.getByRole('button', { name: 'Send' }).click();
 
     const quick = page.locator('section[aria-labelledby="setup-quick-path"]');
     await expect(quick).toBeVisible({ timeout: 30_000 });

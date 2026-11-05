@@ -8,6 +8,7 @@ import { emptyDraft } from '@/lib/setup/draft';
 import { EXPLANATIONS, explanationFor } from '@/lib/setup/explain';
 import { GOAL_WORDS } from '@/lib/setup/goalCards';
 import { STEP_WORDS, metricQuestion, roleQuestion, sourceQuestion } from '@/lib/setup/stepCards';
+import { FIXED_WORDS, targetQuestionFor } from '@/lib/setup/fixedQuestions';
 import { DAY_END_SAY, SETUP_STEPS } from '@/lib/setup/steps';
 import { WEEK_WORDS } from '@/lib/setup/weekCards';
 import type { SetupTopic } from '@/types/setup';
@@ -50,6 +51,12 @@ function subtitles(): Map<SetupTopic, string[]> {
   add('source', STEP_WORDS.sourceReason, sourceQuestion('runs'));
   add('metric', metricQuestion('pounds lifted', 'Hevy'));
   add('starting_point', GOAL_WORDS.startingQuestion);
+  // MOM-180 B3: code's fixed questions and their lines.
+  add('idea', FIXED_WORDS.ideaQuestion, FIXED_WORDS.ideaLine);
+  add('why', FIXED_WORDS.whyQuestion);
+  add('priorities', FIXED_WORDS.prioritiesQuestion, FIXED_WORDS.prioritiesQuestionMany, FIXED_WORDS.prioritiesLine);
+  add('target', FIXED_WORDS.targetQuestion, targetQuestionFor('Run more'), FIXED_WORDS.targetLine);
+  add('day_types', FIXED_WORDS.dayTypesQuestion, FIXED_WORDS.dayTypesQuestionMany, FIXED_WORDS.dayTypesLine);
   return out;
 }
 

@@ -13,6 +13,7 @@
 import { CAPACITY_UNITS } from '@/types/database.types';
 import { SetupSessionSchema, type AssistantTurn, type GoalDraft, type SetupDraft, type SetupModel, type SetupSession, type TargetDraft } from '@/types/setup';
 import { codeTurn } from './cards';
+import { dayTypesCard } from './fixedQuestions';
 import { countedWords, weekdayName } from './playback';
 import { personWords } from './said';
 import { DAY_END_SAY } from './steps';
@@ -170,7 +171,15 @@ export const planningPlayback = (draft: SetupDraft): AssistantTurn => codeTurn(d
 // already approved.
 export function withNextWeekTurn(session: SetupSession, from: OrderTopic): SetupSession {
   const next = weekCardFrom(session.draft, from, personWords(session.transcript));
-  const turn = next.kind === 'card' ? next.turn : next.kind === 'done' && !session.draft.approved.includes('planning') ? planningPlayback(session.draft) : null;
+  // The kinds of days are Claude's to read; code asks them in fixed words (MOM-180 B3), so the call reads the answer instead of writing the question.
+  const turn =
+    next.kind === 'card'
+      ? next.turn
+      : next.kind === 'claude'
+        ? dayTypesCard(session.draft)
+        : next.kind === 'done' && !session.draft.approved.includes('planning')
+          ? planningPlayback(session.draft)
+          : null;
   if (turn === null) return session;
   const grown: SetupSession = { ...session, transcript: [...session.transcript, { role: 'assistant', turn }] };
   const parsed = SetupSessionSchema.safeParse(grown);

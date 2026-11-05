@@ -221,7 +221,8 @@ test.describe('the step cards at 390px', () => {
     test.setTimeout(240_000);
     const shot = shotter(page);
     let heading = await start(page, 'level-hours-390');
-    for (const person of LEVEL_HOURS_CASE.person.slice(0, 1)) {
+    // The idea and the why: code's two questions (MOM-180 B3); the why answer is the one Claude reads.
+    for (const person of LEVEL_HOURS_CASE.person.slice(0, 2)) {
       await answerTyped(page, person.say);
       heading = await nextCard(page, heading);
     }
@@ -245,15 +246,17 @@ test.describe('the step cards at 390px', () => {
     await expect(page.getByText('Your aim can\'t be lower than the least that counts.')).toBeVisible();
     await page.locator('[data-field="floor"]').fill('1');
     await page.getByRole('button', { name: 'Next', exact: true }).click();
-    expect(await nextCard(page, heading)).toBe('Why does this matter to you?');
+    expect(await nextCard(page, heading)).toBe('Is this one goal, or a few separate ones?');
   });
 
   test('the number boxes for a time counted in hours: both numbers, asked in hours', async ({ page }) => {
     test.setTimeout(240_000);
     const shot = shotter(page);
     let heading = await start(page, 'numbers-hours-390');
-    await answerTyped(page, NUMBERS_HOURS_CASE.person[0].say);
-    heading = await nextCard(page, heading);
+    for (const person of NUMBERS_HOURS_CASE.person.slice(0, 2)) {
+      await answerTyped(page, person.say);
+      heading = await nextCard(page, heading);
+    }
     expect(heading).toBe('In a hard week, how many hours of practice would still count?');
     await expect(page.getByText('How many hours of practice a week are you hoping for?')).toBeVisible();
     // The words name hours, so there is no minutes or hours to choose.
@@ -263,15 +266,17 @@ test.describe('the step cards at 390px', () => {
     await page.locator('[data-field="floor"]').fill('2');
     await page.locator('[data-field="aspiration"]').fill('3');
     await page.getByRole('button', { name: 'Next', exact: true }).click();
-    expect(await nextCard(page, heading)).toBe('Why does this matter to you?');
+    expect(await nextCard(page, heading)).toBe('Is this one goal, or a few separate ones?');
   });
 
   test('an app that counts more than one number asks which counts, and the day end card follows with no call', async ({ page }) => {
     test.setTimeout(240_000);
     const shot = shotter(page);
     let heading = await start(page, 'metric-390');
-    await answerTyped(page, METRIC_CASE.person[0].say);
-    heading = await nextCard(page, heading);
+    for (const person of METRIC_CASE.person.slice(0, 2)) {
+      await answerTyped(page, person.say);
+      heading = await nextCard(page, heading);
+    }
     expect(heading).toBe('Where do you track weight lifted now, if anywhere?');
     await expect(page.getByText('An app can count it for you, or you can log it yourself with a tap.')).toBeVisible();
     await fits(page, 'the source card');

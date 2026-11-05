@@ -169,9 +169,10 @@ test.describe('the week cards at 390px', () => {
     expect(seen, 'the order the week cards came in').toEqual(['day_end', 'week_start', 'capacity', 'slots_or_quota', 'planning_moment']);
     expect(before, 'the sources question was seen').not.toBeNull();
     expect(during, 'the planning playback was seen').not.toBeNull();
-    // From the answer to "where do you track this" to the planning playback: the day end, the kinds of days and the time for each.
+    // From the answer to "where do you track this" to the planning playback: the day end and the answer to the kinds of days (code asks that
+    // question in fixed words since MOM-180 B3).
     const calls = (during as number) - (before as number);
     console.log(`CLAUDE_REQUESTS_STEP_10_WEEK_CARDS=${calls}`);
-    expect(calls, "Claude's calls from the sources answer to the planning playback").toBe(3);
+    expect(calls, "Claude's calls from the sources answer to the planning playback").toBe(2);
   });
 });

@@ -21,6 +21,7 @@ import { INTEGRATION_CATALOG, quantityMetricsOf } from '@/lib/integrations/catal
 import type { QuantityMetric } from '@/types/database.types';
 import { SetupSessionSchema, type AssistantTurn, type GoalDraft, type SetupDraft, type SetupModel, type SetupSession, type SetupTopic, type TargetDraft, type Transcript } from '@/types/setup';
 import { codeTurn } from './cards';
+import { afterTargetTurn, goalsPlayback } from './fixedQuestions';
 import { isoOfWritten } from './codeTurns';
 import { countedThing, countedTarget, numberQuestion } from './numbers';
 import { countedWords } from './playback';
@@ -61,6 +62,8 @@ export const STEP_WORDS = {
   next: 'Next',
   pickDayAfterToday: 'Pick a day after today.',
   aimBelowLeast: "Your aim can't be lower than the least that counts.",
+  // The owner's words for a number hoped for that is not a number (MOM-180 comment 10384).
+  addAim: "Add the number you're hoping for, or leave it empty.",
   leastBox: 'The least that counts',
 } as const;
 
@@ -428,14 +431,16 @@ function applied(session: SetupSession, topics: readonly StepCardTopic[], take: 
 
 const goalIn = (model: SetupModel, key: string): GoalDraft | undefined => model.goals.find((g) => g.key === key);
 
-// Step 3: one goal or a few. "Just one goal" writes nothing and leaves the next step to Claude; "A few goals" asks for the names (Claude reads them).
+// Step 3: one goal or a few. "Just one goal" writes nothing, and step 3 is done: code plays the goals back (MOM-180 B3). "A few goals" asks for
+// the names (Claude reads them).
 export function answerBreakup(session: SetupSession, text: string): SetupSession | null {
   const turn = lastAssistant(session);
   if (!turn || isNamesCard(turn)) return null;
   const choice = BREAKUP_CHOICES.find((c) => c.say === text);
   if (!choice) return null;
   const next = applied(session, ['breakup'], { text: choice.say, paths: [], change: () => true });
-  return next && choice.value === 'few' ? grown(next, namesCard(next.draft)) : next;
+  if (!next) return null;
+  return grown(next, choice.value === 'few' ? namesCard(next.draft) : goalsPlayback(next.draft));
 }
 
 // Step 3: together or one first. One first sets the others aside (parked), and the card for the way back of each follows.
@@ -455,7 +460,7 @@ export function answerSequencing(session: SetupSession, text: string): SetupSess
       return true;
     },
   });
-  return next ? grown(next, returnCard(next.draft)) : null;
+  return next ? grown(next, returnCard(next.draft) ?? goalsPlayback(next.draft)) : null;
 }
 
 // Why a day is refused as the way back of a goal set aside: it must come after the person's own today.
@@ -487,7 +492,7 @@ export function answerReturn(session: SetupSession, text: string, today: string 
       return true;
     },
   });
-  return next ? grown(next, returnCard(next.draft)) : null;
+  return next ? grown(next, returnCard(next.draft) ?? goalsPlayback(next.draft)) : null;
 }
 
 // Step 7: something I do, or a result. For something the person does, the number boxes follow when the draft has no number yet; a result is Claude's
@@ -561,7 +566,7 @@ export function numbersProblem(draft: SetupDraft, answer: NumbersAnswer, said: r
   const floorValue = typedFloor === '' ? null : readAmount(typedFloor);
   const aimValue = typedAim === '' ? null : readAmount(typedAim);
   if (needsFloor && (floorValue === null || floorValue <= 0)) return addNumberCallout('the least that counts');
-  if (needsAim && typedAim !== '' && (aimValue === null || aimValue <= 0)) return addNumberCallout('the number you are hoping for');
+  if (needsAim && typedAim !== '' && (aimValue === null || aimValue <= 0)) return STEP_WORDS.addAim;
   if (kind === 'ask' && unit === null && ((needsFloor && typedFloor !== '') || (needsAim && typedAim !== ''))) return chooseUnitCallout(name);
   const floorStored = needsFloor ? amountOf(floorValue as number, unit).value : target.floor;
   if (needsAim && aimValue !== null && floorStored !== null && amountOf(aimValue, unit).value < floorStored) return STEP_WORDS.aimBelowLeast;
@@ -601,10 +606,12 @@ export function answerNumbers(session: SetupSession, answer: NumbersAnswer): Set
       return true;
     },
   });
-  if (!next || !held) return next;
+  if (!next) return null;
   // The held number was said in the message of the tap, so that is its source, not this message.
   const path = targetPath(goal, target, 'aspiration');
-  return { ...next, draft: { ...next.draft, said: [...next.draft.said.filter((e) => e.path !== path), { path, turn: held.at, how: 'said' }] } };
+  const taken = held ? { ...next, draft: { ...next.draft, said: [...next.draft.said.filter((e) => e.path !== path), { path, turn: held.at, how: 'said' as const }] } } : next;
+  // What follows (MOM-180 B3): what to count for the next goal with nothing counted, else the targets playback, both code's; Claude only when neither is due.
+  return grown(taken, afterTargetTurn(taken.draft));
 }
 
 // What follows a source or a metric answer, and the time zone tap: the next source or metric card, then the week cards (the day end first); Claude is asked only

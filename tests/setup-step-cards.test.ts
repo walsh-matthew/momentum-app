@@ -33,6 +33,7 @@ import {
   withNextSourceOrWeekTurn,
   type StepAnswer,
 } from '@/lib/setup/stepCards';
+import { FIXED_WORDS, isFixedQuestion } from '@/lib/setup/fixedQuestions';
 import { validateDraft } from '@/lib/setup/validate';
 import { WEEK_CARD_MARK } from '@/lib/setup/weekCards';
 import type { AssistantTurn, SetupDraft, SetupSession, Transcript } from '@/types/setup';
@@ -104,13 +105,14 @@ describe('step 3: one goal or a few, together or one first, and when a goal set 
     expect(stepChoices(card)?.map((c) => c.label)).toEqual(['Just one goal', 'A few goals']);
   });
 
-  it('"Just one goal" is the person\'s message and nothing else; Claude carries on', () => {
+  it('"Just one goal" is the person\'s message and changes nothing; step 3 is done, so code plays the goals back with no call (B3)', () => {
     const d = draftWith(goal('g1', 'Get healthy'));
-    const next = answerStepCard(onCard(breakupCard(d)), text('Just one goal.'), TODAY);
+    const next = answerStepCard(onCard(breakupCard(d)), text('Just one goal.'), TODAY) as SetupSession;
     expect(next).not.toBeNull();
-    expect(lastText(next as SetupSession)).toBe('Just one goal.');
-    expect(awaitsClaude(next as SetupSession)).toBe(true);
-    expect((next as SetupSession).draft).toEqual(d);
+    expect(next.transcript[1]).toEqual({ role: 'person', text: 'Just one goal.' });
+    expect(awaitsClaude(next)).toBe(false);
+    expect(lastTurn(next)).toMatchObject({ kind: 'playback', chunk: 'goals', say: '', question: null });
+    expect(next.draft).toEqual(d);
   });
 
   it('"A few goals" makes code ask for the names, with no call; the typed names are Claude\'s to read', () => {
@@ -145,7 +147,9 @@ describe('step 3: one goal or a few, together or one first, and when a goal set 
   it('"All together" changes no goal; "<goal> first" sets the others aside, records each as said, and the way back follows with no call', () => {
     const together = answerStepCard(onCard(sequencingCard(twoGoals())), text('All together.'), TODAY) as SetupSession;
     expect(together.draft.model.goals.map((g) => g.state)).toEqual(['active', 'active']);
-    expect(awaitsClaude(together)).toBe(true);
+    // Nothing is set aside, so step 3 is done: code plays the goals back (B3).
+    expect(awaitsClaude(together)).toBe(false);
+    expect(lastTurn(together)).toMatchObject({ kind: 'playback', chunk: 'goals' });
 
     const first = answerStepCard(onCard(sequencingCard(twoGoals())), text('"Lift weights" first.'), TODAY) as SetupSession;
     expect(first.draft.model.goals.map((g) => g.state)).toEqual(['active', 'parked']);
@@ -166,7 +170,9 @@ describe('step 3: one goal or a few, together or one first, and when a goal set 
     const asked = answerStepCard(onCard(card), text('Only when I ask.'), TODAY) as SetupSession;
     expect(asked.draft.model.goals[1].returnWhen).toEqual({ kind: 'on_request' });
     expect(asked.draft.said).toContainEqual({ path: 'goals.g2.returnWhen', turn: 1, how: 'said' });
-    expect(awaitsClaude(asked)).toBe(true);
+    // The last goal set aside has its way back: code plays the goals back (B3).
+    expect(awaitsClaude(asked)).toBe(false);
+    expect(lastTurn(asked)).toMatchObject({ kind: 'playback', chunk: 'goals' });
 
     const onDay = answerStepCard(onCard(card), text(pickedDateText('2027-03-01')), TODAY) as SetupSession;
     expect(onDay.draft.model.goals[1].returnWhen).toEqual({ kind: 'date', date: '2027-03-01' });
@@ -184,7 +190,7 @@ describe('step 3: one goal or a few, together or one first, and when a goal set 
     const first = answerStepCard(onCard(returnCard(d) as AssistantTurn), text('Only when I ask.'), TODAY) as SetupSession;
     expect(lastTurn(first).question).toBe('When should "C" come back?');
     const second = answerStepCard(first, text('Only when I ask.'), TODAY) as SetupSession;
-    expect(awaitsClaude(second)).toBe(true);
+    expect(lastTurn(second)).toMatchObject({ kind: 'playback', chunk: 'goals' });
     expect(returnCard(second.draft)).toBeNull();
     expect(swapped(second.draft, 'parked_return', 'When should it come back?')).toBeNull();
   });
@@ -316,7 +322,7 @@ describe('step 7: something I do or a result, which level a number is, and the n
     expect(numbersProblem(d, { floor: '' })).toBe('Add a number for the least that counts.');
     expect(numbersProblem(d, { floor: 'two' })).toBe('Add a number for the least that counts.');
     expect(numbersProblem(d, { floor: '0' })).toBe('Add a number for the least that counts.');
-    expect(numbersProblem(d, { floor: '2', aspiration: 'lots' })).toBe('Add a number for the number you are hoping for.');
+    expect(numbersProblem(d, { floor: '2', aspiration: 'lots' })).toBe("Add the number you're hoping for, or leave it empty.");
     expect(numbersProblem(d, { floor: '4', aspiration: '3' })).toBe("Your aim can't be lower than the least that counts.");
     expect(numbersProblem(d, { floor: '2', aspiration: '3' })).toBeNull();
     expect(answerNumbers(onCard(card), { floor: '4', aspiration: '3' })).toBeNull();
@@ -448,14 +454,15 @@ describe('the time zone tap makes no Claude call when the next step is a card', 
     expect(lastTurn(next).topic).toBe('day_end');
   });
 
-  it('the next step is Claude\'s (the kinds of days) only when the day end and week start are already held', () => {
+  it('with the day end and week start already held, code asks the kinds of days in fixed words, and only the answer is Claude\'s (B3)', () => {
     const held = withTarget({ sources: [{ kind: 'manual' }] });
     held.model.person.dayEnd = '21:00';
     held.model.person.weekStart = 1;
-    const session = afterZone(held);
-    const next = withNextSourceOrWeekTurn(session);
-    expect(next).toBe(session);
-    expect(awaitsClaude(next)).toBe(true);
+    const next = withNextSourceOrWeekTurn(afterZone(held));
+    expect(awaitsClaude(next)).toBe(false);
+    const asked = lastTurn(next);
+    expect(isFixedQuestion(asked)).toBe(true);
+    expect(asked).toMatchObject({ topic: 'day_types', question: FIXED_WORDS.dayTypesQuestion });
   });
 });
 
@@ -496,7 +503,8 @@ describe('the short conversations the browser spec photographs', () => {
 
   it('the app that counts more than one number: source, then which number, then the day end card, all by code', async () => {
     const report = await runSetupEval(METRIC_CASE, scriptedModel(METRIC_CASE.script));
-    expect(report.turns.filter((t) => t.byCode).map((t) => t.turn.topic)).toEqual(['source', 'metric', 'day_end']);
+    // The idea and the why are code's too since B3.
+    expect(report.turns.filter((t) => t.byCode).map((t) => t.turn.topic)).toEqual(['idea', 'why', 'source', 'metric', 'day_end']);
     expect(report.draft.model.goals[0].targets[0].sources).toEqual([{ kind: 'synced', provider: 'hevy', metric: 'volume_lbs' }]);
   });
 });

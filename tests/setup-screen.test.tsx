@@ -21,6 +21,8 @@ import { QUICK_PATH_WORDS } from '@/lib/setup/quickPath';
 import type { RecapSection, SetupTurnView } from '@/types/setupScreen';
 import { SETUP_CASES } from './setup-evals/cases';
 import { scriptedModel } from './helpers/setupScript';
+import { OPENING_IDEA, OPENING_WHY, throughOpening } from './helpers/setupOpening';
+import { FIXED_WORDS } from '@/lib/setup/fixedQuestions';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const KEY = setupStorageKey(USER);
@@ -62,9 +64,11 @@ const deviceToday = () => new Date(new Date().getTime() - new Date().getTimezone
 
 const sent = (call = 0) => actions.ask.mock.calls[call][0] as SetupSession & { today: string };
 
+// Start, then code's idea and why questions (MOM-180 B3): the why answer is the first request, so the first stubbed turn is Claude's first.
 async function start() {
   render(<SetupConversation userId={USER} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await throughOpening();
 }
 
 function answerWith(text: string) {
@@ -80,24 +84,55 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('starting', () => {
-  it('asks Claude nothing until the person taps Start, then sends an empty conversation and the date on their device', async () => {
-    actions.ask.mockResolvedValue(turnView(script[0]));
+  it('asks Claude nothing until the idea and the why are answered (code asks both, MOM-180 B3), then sends both and the date on their device', async () => {
+    actions.ask.mockResolvedValue(turnView(script[2]));
     render(<SetupConversation userId={USER} />);
     expect(await screen.findByRole('heading', { name: /set up your goals/i })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'privacy notice' }).getAttribute('href')).toBe('/privacy');
     expect(actions.ask).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
-    await screen.findByRole('heading', { name: script[0].question ?? '' });
+    // Code's idea question at once: no "Starting…", no request.
+    await screen.findByRole('heading', { name: FIXED_WORDS.ideaQuestion });
+    expect(screen.getByText(FIXED_WORDS.ideaLine)).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+    answerWith(OPENING_IDEA);
+    await screen.findByRole('heading', { name: FIXED_WORDS.whyQuestion });
+    expect(actions.ask).not.toHaveBeenCalled();
+    answerWith(OPENING_WHY);
+    await screen.findByRole('heading', { name: script[2].question ?? '' });
     expect(actions.ask).toHaveBeenCalledTimes(1);
     const first = sent();
-    expect(first.transcript).toEqual([]);
+    expect(first.transcript.filter((m) => m.role === 'person')).toEqual([
+      { role: 'person', text: OPENING_IDEA },
+      { role: 'person', text: OPENING_WHY },
+    ]);
+    expect(first.transcript.map((m) => (m.role === 'assistant' ? m.turn.topic : m.role))).toEqual(['idea', 'person', 'why', 'person']);
     expect(first.spentTokens).toBe(0);
     // The browser's own date, YYYY-MM-DD, as a suggestion.
     expect(first.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(first.today).toBe(
       new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10),
     );
+  });
+});
+
+describe('the goals playback heading (MOM-180 B3, owner 2026-11-05)', () => {
+  it('says "Your goal" for one goal and "Your goals" for two', async () => {
+    const one = structuredClone(script[firstOf('playback')]);
+    expect(one.chunk).toBe('goals');
+    one.draft.model.goals = one.draft.model.goals.slice(0, 1);
+    actions.ask.mockResolvedValueOnce(turnView(one));
+    await start();
+    expect(await screen.findByRole('heading', { name: 'Your goal: did I get this right?' })).toBeTruthy();
+    cleanup();
+    window.sessionStorage.clear();
+
+    const two = structuredClone(one);
+    two.draft.model.goals.push({ ...structuredClone(one.draft.model.goals[0]), key: 'g2', title: 'Cook at home' });
+    actions.ask.mockResolvedValueOnce(turnView(two));
+    await start();
+    expect(await screen.findByRole('heading', { name: 'Your goals: did I get this right?' })).toBeTruthy();
   });
 });
 
@@ -115,9 +150,10 @@ describe('one question at a time', () => {
     expect(screen.getAllByRole('textbox')).toHaveLength(1);
 
     const second = sent(1);
-    expect(second.transcript).toHaveLength(2);
-    expect(second.transcript[0]).toMatchObject({ role: 'assistant' });
-    expect(second.transcript[1]).toEqual({ role: 'person', text: 'I want to run more' });
+    // Code's idea and why questions and their answers come first (MOM-180 B3).
+    expect(second.transcript).toHaveLength(6);
+    expect(second.transcript[4]).toMatchObject({ role: 'assistant' });
+    expect(second.transcript[5]).toEqual({ role: 'person', text: 'I want to run more' });
     // Claude's draft is carried, and so are the tokens.
     expect(second.draft).toEqual(script[0].draft);
     expect(second.spentTokens).toBe(1000);
@@ -377,7 +413,7 @@ describe('when a turn does not come', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await screen.findByRole('heading', { name: script[1].question ?? '' });
     const retried = sent(2);
-    expect(retried.transcript.filter((m) => m.role === 'person')).toEqual([{ role: 'person', text: 'Run more' }]);
+    expect(retried.transcript.filter((m) => m.role === 'person').map((m) => m.text)).toEqual([OPENING_IDEA, OPENING_WHY, 'Run more']);
   });
 
   // MOM-111 finding 10: the error keeps the question on screen, and "Change my answer" puts the answer back in the box.
@@ -399,11 +435,11 @@ describe('when a turn does not come', () => {
     expect(box.value).toBe('Run more, maybe');
     expect(screen.queryByRole('alert')).toBeNull();
     // The taken-back answer is gone from the stored conversation too: nothing is waiting on Claude.
-    expect(JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null').transcript).toHaveLength(1);
+    expect(JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null').transcript).toHaveLength(5);
     fireEvent.change(box, { target: { value: 'Run more' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await screen.findByRole('heading', { name: script[1].question ?? '' });
-    expect(sent(2).transcript.filter((m) => m.role === 'person')).toEqual([{ role: 'person', text: 'Run more' }]);
+    expect(sent(2).transcript.filter((m) => m.role === 'person').map((m) => m.text)).toEqual([OPENING_IDEA, OPENING_WHY, 'Run more']);
   });
 
   it('says so when the server cannot be reached, and keeps the conversation', async () => {
@@ -505,7 +541,8 @@ describe('this tab keeps a setup in progress', () => {
     await screen.findByRole('heading', { name: script[0].question ?? '' });
     const stored = JSON.parse(window.sessionStorage.getItem(KEY) ?? 'null');
     expect(stored.spentTokens).toBe(1500);
-    expect(stored.transcript).toHaveLength(1);
+    // Code's idea and why questions, their answers, and Claude's first turn.
+    expect(stored.transcript).toHaveLength(5);
     expect(stored.draft).toEqual(script[0].draft);
   });
 

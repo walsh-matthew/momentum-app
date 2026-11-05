@@ -9,6 +9,7 @@ import { SETTINGS_CARD_MARK, SETTINGS_HEADING, TIME_ZONE_CARD_MARK, timeZoneQues
 import { MEANING_TEXT, PROPOSAL_YES_TEXT } from '@/lib/setup/session';
 import { SAVED_GOAL_KEY, returningDraft, type ReturningMode } from '@/lib/setup/returning';
 import { DAY_END_SAY } from '@/lib/setup/steps';
+import { FIXED_QUESTION_MARK, FIXED_WORDS } from '@/lib/setup/fixedQuestions';
 import { STEP_CARD_MARK, STEP_WORDS, returnQuestion } from '@/lib/setup/stepCards';
 import { WEEK_CARD_MARK, WEEK_WORDS, slotsQuestion } from '@/lib/setup/weekCards';
 import type { SavedFacts } from '@/lib/setup/validate';
@@ -189,11 +190,12 @@ function habitCase(o: HabitOptions): ScriptedCase {
       });
     }
   } else if (o.longFirst) {
-    // The first message already said why, so this turn records it and skips the question in one line.
+    // The first message already said why. Code asks the why at Start all the same (MOM-180 B3: code cannot read the first message), so the person says it
+    // again in a few words; the model's first turn reads both and records the goal and its why.
+    s.add({ topic: 'why', question: FIXED_WORDS.whyQuestion, detail: FIXED_QUESTION_MARK, reply: 'Like I said, it clears my head.' });
     s.add({
       topic: 'breakup',
       edit: (m) => m.goals.push(goal('g1', title, { why: why.text })),
-      skipped: { topic: 'why', line: "You told me why it matters, so I'll skip that." },
       question: 'Is this one goal, or a few separate ones?',
       reply: 'Just this one.',
     });
@@ -220,7 +222,10 @@ function habitCase(o: HabitOptions): ScriptedCase {
     s.playback('goals');
   }
 
-  if (o.priorities) {
+  if (!o.priorities) {
+    // Code asks "what else matters" as soon as the goals are approved (MOM-180 B3), so every case answers it; this person keeps nothing else in view.
+    s.add({ topic: 'priorities', question: FIXED_WORDS.prioritiesQuestion, detail: FIXED_QUESTION_MARK, reply: 'Nothing else right now.' });
+  } else {
     if (o.priorities === 'whatDoYouMean') {
       s.add({ topic: 'priorities', say: PRIORITIES_SAY, question: PRIORITIES_Q, detail: PRIORITIES_DETAIL, reply: MEANING_TEXT });
       // Asked what it means, Claude explains in plainer words with a few examples, then asks again: a clarification.
@@ -806,7 +811,8 @@ function phoneCase(): ScriptedCase {
 function fixture(id: HardRuleId, title: string, build: (s: Script) => void, turn: number): ScriptedCase {
   const s = new Script();
   build(s);
-  return done({ id: `fx-${id}`, title, rules: [id], expect: { violations: [{ turn, rule: id }] } }, s);
+  // Written as Claude's own opening and then the bad turn, so the check is held to the turn at that place (MOM-180 B3: the app's opening is code's).
+  return done({ id: `fx-${id}`, title, rules: [id], expect: { violations: [{ turn, rule: id }] }, opening: 'claude' }, s);
 }
 
 const FIXTURES: ScriptedCase[] = [
@@ -959,17 +965,24 @@ export const STEP_CARDS_CASE: ScriptedCase = withToday(habitCase({
 // - which level a number is, for a time counted in hours: the card quotes "2 hours", and "aiming for" asks the least that counts in hours;
 // - the number boxes for a time counted in hours, both boxes;
 // - an app with more than one number: the source card, then which number counts, then the day end card, with no call between them.
-const hoursGoal = (m: SetupModel, goalTitle: string, targetTitle: string): void => {
-  m.goals.push(goal('g1', goalTitle));
+const hoursGoal = (m: SetupModel, goalTitle: string, targetTitle: string, why: string): void => {
+  m.goals.push(goal('g1', goalTitle, { why }));
   goalOf(m, 'g1').targets.push(target('t1', targetTitle, { measure: 'time' }));
 };
 
+// MOM-180 B3: code asks the idea and the why at Start, so a scripted conversation's first two turns are placeholders holding their places (the model is
+// never asked for them), and the model's first turn reads both answers.
+export function opening(s: Script, idea: string, why: string): void {
+  s.add({ topic: 'idea', question: FIXED_WORDS.ideaQuestion, detail: FIXED_QUESTION_MARK, reply: idea });
+  s.add({ topic: 'why', question: FIXED_WORDS.whyQuestion, detail: FIXED_QUESTION_MARK, reply: why });
+}
+
 export const LEVEL_HOURS_CASE: ScriptedCase = (() => {
   const s = new Script();
-  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to do more reading, two hours a week.' });
+  opening(s, 'I want to do more reading, two hours a week.', 'It helps me unwind.');
   s.add({
     topic: 'number_level',
-    edit: (m) => hoursGoal(m, 'Read more', 'Hours of reading'),
+    edit: (m) => hoursGoal(m, 'Read more', 'Hours of reading', 'it helps me unwind'),
     say: 'You said 2 hours a week.',
     question: "Is that the least that counts, or what you're aiming for?",
     reply: { say: "That's what I'm aiming for.", step: "2 hours is what I'm aiming for." },
@@ -981,41 +994,41 @@ export const LEVEL_HOURS_CASE: ScriptedCase = (() => {
     detail: STEP_CARD_MARK,
     reply: { say: 'One hour.', step: { floor: '1' } },
   });
-  // Both are written once the least that counts is given: the aim was said in the tap (the reply to turn 1), the least that counts in the reply to turn 2.
+  // Both are written once the least that counts is given: the aim was said in the tap (the reply to turn 2), the least that counts in the reply to turn 3.
   s.add({
-    topic: 'why',
+    topic: 'breakup',
     edit: (m) => Object.assign(targetOf(m, 'g1', 't1'), { floor: 60, aspiration: 120 }),
-    said: ['goals.g1.targets.t1.floor', 'goals.g1.targets.t1.aspiration@1'],
-    question: 'Why does this matter to you?',
+    said: ['goals.g1.targets.t1.floor', 'goals.g1.targets.t1.aspiration@2'],
+    question: 'Is this one goal, or a few separate ones?',
   });
   return done({ id: 'run-t-level-hours', title: 'which level a number is, for a time counted in hours', rules: ['assume_nothing'], expect: 'clean' }, s);
 })();
 
 export const NUMBERS_HOURS_CASE: ScriptedCase = (() => {
   const s = new Script();
-  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to practice the piano more.' });
+  opening(s, 'I want to practice the piano more.', 'It helps me unwind.');
   s.add({
     topic: 'floor',
-    edit: (m) => hoursGoal(m, 'Practice piano', 'Hours of practice'),
+    edit: (m) => hoursGoal(m, 'Practice piano', 'Hours of practice', 'it helps me unwind'),
     question: 'In a hard week, how many hours of practice would still count?',
     reply: { say: 'Two, and three if I can.', step: { floor: '2', aspiration: '3' } },
   });
   s.add({
-    topic: 'why',
+    topic: 'breakup',
     edit: (m) => Object.assign(targetOf(m, 'g1', 't1'), { floor: 120, aspiration: 180 }),
     said: ['goals.g1.targets.t1.floor', 'goals.g1.targets.t1.aspiration'],
-    question: 'Why does this matter to you?',
+    question: 'Is this one goal, or a few separate ones?',
   });
   return done({ id: 'run-u-numbers-hours', title: 'the number boxes for a time counted in hours', rules: ['assume_nothing'], expect: 'clean' }, s);
 })();
 
 export const METRIC_CASE: ScriptedCase = (() => {
   const s = new Script();
-  s.add({ topic: 'idea', question: 'What would you like to work on?', detail: IDEA_DETAIL, reply: 'I want to lift heavier weights.' });
+  opening(s, 'I want to lift heavier weights.', 'I want to feel strong.');
   s.add({
     topic: 'source',
     edit: (m) => {
-      m.goals.push(goal('g1', 'Lift heavier'));
+      m.goals.push(goal('g1', 'Lift heavier', { why: 'I want to feel strong' }));
       goalOf(m, 'g1').targets.push(target('t1', 'Weight lifted', { measure: 'quantity', unit: 'pounds' }));
     },
     question: 'Where do you track this now, if anywhere?',
