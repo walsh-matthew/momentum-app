@@ -703,6 +703,20 @@ The log is seeded from this project's sessions (2026-10-21 onward). Week 1 notes
 - **Caught by:** The full unit test run, before the commit.
 - **Led to:** A fix this session (the reply restored, MOM-180). No new rule: the full run did its job.
 
+### F-103 · 2026-11-05 · build tool
+- **Asked:** Run the day-end from the owner's project thread, reporting each stop there.
+- **What went wrong:** Long stop messages asked for approvals in several places, and new asks (a tool install, a sign-in) arrived before the owner had answered the open one, so the owner lost track of which approvals were waiting.
+- **Why:** Each message was written as a full report with its questions inline, and an answer to a side question was treated as a reason to add another ask.
+- **Caught by:** The owner, in the thread.
+- **Led to:** A rule: every stop ends with one "Needs you:" block of numbered asks, nothing to answer elsewhere, and no new ask while one is open (applied from this session; the day-loop commands could carry it, owner's call).
+
+### F-104 · 2026-11-05 · build tool
+- **Asked:** Show setup's playbacks written by code (MOM-180 part B3) in the owner's screenshot review.
+- **What went wrong:** A why naming a thing wanted ("more energy") played back as "because more energy", and the targets playback was headed "What you'll count" although it also holds what else matters and each goal's first stretch.
+- **Why:** Once code wrote every playback, its restatement was the only one left, and it had been checked with whys that start with "to" or a verb; the card's heading was kept from before it held more than what is counted.
+- **Caught by:** The owner, reviewing the B3 screenshots in the project thread, after the build's own look review had passed.
+- **Led to:** A fix that session (PR #133: "because you want more energy", the heading "Your plan", a DOMAIN_MODEL §2.1 change-log line, and a restate test case).
+
 ## In-product failures
 
 The plan generator and rebalance have passed their live smoke tests. Their failure paths are not yet tested in production (see `docs/RAID_LOG.md` I-01).
