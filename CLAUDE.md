@@ -98,6 +98,11 @@ Rules the commands follow: git steps run one at a time and stop on the first err
 - **Security:** Maintain strict RLS policies in Supabase. Never expose service role keys on the client.
 - **Environment Files:** Ensure `.env.local` remains explicitly ignored in `.gitignore`.
 - **UI Design System:** Clean 3-column desktop layout collapsing to single-column mobile execution cards. Focus on high contrast, low clutter, and rapid feedback loops.
+- **Screen checklist:** every change to a screen is held to it twice, in the build session's own check before commit and in the review before merge: needed-first, no repeated text, missing items as callouts with a plain question, no disabled primary button, no empty sections, labels match what was asked, and matches the wireframe's styling (colour tokens, component colours and icons, headings).
+  - **Styling check:** open the approved wireframe side by side with the build. The wireframe is the v0 export kept outside the repo (`C:\Users\matth\momentum-samples\momentum-core-responsive-dashboard\`: its `app/globals.css` tokens and `components/momentum-dashboard.tsx`) and its live page (https://momentum-teal-phi.vercel.app). Compare colour tokens (dark against the wireframe; light against the MOM-30 palette, because the wireframe is dark only), component colours and icons, headings and labels, and decorations such as underlines and borders.
+  - **Name every divergence**, even a deliberate one. Never drop or change an element of the wireframe to fix something else (for example repeated words) without saying it departs from the wireframe and getting the owner's OK.
+  - **Known departures** (approved; cite once, don't re-list): the ring shows floors met, not velocity (MOM-112); no streak badge yet (MOM-78); no Review Milestones or date line (MOM-77); MOM-30's card surface and card-title style; the light palette (MOM-30). Add to this list only with the owner's OK.
+  - **No wireframe for the screen:** compare it with the closest approved screen's styling and name the gap.
 ---
 
 ## RAID and Failure Logs (MOM-92, lighter rule MOM-133)
